@@ -116,3 +116,23 @@ requirement is only that the installer must not claim an install is what will ru
   guidance is in [docs/OPERATIONS.md](../OPERATIONS.md).
 - **Follow-ups:** Decide whether `maintainer_support` should be allowed to exceed the verification
   state.
+
+## Amended 2026-09-09
+
+The decision itself stands — `agent-hosts.yaml` is still the canonical, evidence-gated host-identity
+source, `VERIFIED` still requires a dated `RUNTIME` evidence entry, and `github-copilot` is still
+`UNVERIFIED` exactly as described above. One factual claim has been overtaken:
+
+- **"Every host is `UNVERIFIED`" is no longer true.** `claude` was runtime-verified on 2026-09-07 (see
+  `agent-hosts.yaml`'s `claude` entry: `verification: VERIFIED`, one dated `RUNTIME` evidence entry
+  recording a real `scripts/install.sh --agent claude-project` run and read-back from inside a live
+  Claude Code session). `cursor` and `kiro` remain `UNVERIFIED`; `github-copilot` remains `UNVERIFIED`
+  by design (documentation-only evidence). Read `agent-hosts.yaml` itself (or `host_registry.py`'s
+  parsed view of it) for the current per-host verification state rather than treating this ADR's
+  original "every host" phrasing as still accurate.
+
+  This drifted silently for two days: the `github-copilot` entry's own inline comment
+  ("...matching every other host here...all equally UNVERIFIED") was corrected in the same commit as
+  this amendment, but nothing else in `agent-hosts.yaml` or this ADR flagged the earlier drift
+  automatically. `host_registry.py`'s schema validates each host's fields, not this file's or this
+  ADR's *prose claims about the aggregate* — a real gap, out of scope to close here.

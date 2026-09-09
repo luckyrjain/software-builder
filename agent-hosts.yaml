@@ -128,14 +128,16 @@ hosts:
         observed_at: "2026-09-07"
     maintainer_support: BEST_EFFORT
 
-  # verification stays UNVERIFIED and capabilities stay UNKNOWN, matching every other host here:
-  # the evidence below is DOCUMENTATION-kind only (GitHub's own published discovery mechanism),
-  # not RUNTIME evidence -- host_registry.py's own schema requires RUNTIME evidence before
-  # verification may become VERIFIED (spec Section 26), and this repo has not run Copilot to
-  # confirm the documented behavior actually holds. maintainer_support is BEST_EFFORT rather than
-  # the FIRST_CLASS spec Section 27 would technically permit for a documented host, to stay
-  # consistent with cursor/claude/kiro's own baseline above rather than introduce an unexplained
-  # inconsistency across hosts that are all equally UNVERIFIED.
+  # verification stays UNVERIFIED and capabilities stay UNKNOWN: the evidence below is
+  # DOCUMENTATION-kind only (GitHub's own published discovery mechanism), not RUNTIME evidence --
+  # host_registry.py's own schema requires RUNTIME evidence before verification may become
+  # VERIFIED (spec Section 26), and this repo has not run Copilot to confirm the documented
+  # behavior actually holds. maintainer_support is BEST_EFFORT rather than the FIRST_CLASS spec
+  # Section 27 would technically permit for a documented host, to stay consistent with the other
+  # still-unverified hosts (cursor, kiro) rather than introduce an unexplained inconsistency among
+  # hosts nobody has runtime-verified. (claude above is the one host that HAS been runtime-verified
+  # since 2026-09-07 -- "equally UNVERIFIED" no longer describes every host in this file, only the
+  # still-unverified ones this comment is actually reasoning about.)
   - id: github-copilot
     surfaces:
       - kind: LOCAL
