@@ -38,11 +38,10 @@ bug-diagnosis:
     external_services: None — reads repository and caller-provided context only
   routing:
     patterns:
-    - \bdiagnose\b.*\b(this|the)\b.*\b(bug|failure|regression)\b
+    - \bdiagnose\b.*\b(this|the)\b.*\b(bug|failure|regression|test)\b
     - \bwhy is\b.*\bfailing\b
     - \broot cause\b.*\b(test failure|bug)\b
     - \breproduce\b.*\bthis\b.*\bbug\b
     exclude_patterns:
-    - \b(production|live)\b.*\bincident\b
     - \boutage\b|\berror spike\b
-    - \bfix (it|this)\b
+    - \bjust fix (it|this)\b

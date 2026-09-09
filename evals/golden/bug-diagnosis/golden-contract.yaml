@@ -1,0 +1,48 @@
+schema_version: 1
+skill: bug-diagnosis
+case_id: golden-contract
+tier: 3
+description: >
+  A confirmed repro plus falsification-tested hypotheses produce a report-only root cause, never a
+  fix. Also covers an unconfirmed repro (reported as such, not guessed) and a hypothesis that fails
+  falsification (rejected, listed with its rejecting evidence).
+recorded_output:
+  artifact: bug_diagnosis_report
+  repository_write_action: none
+  automatic_downstream_invocation: false
+  symptom: "test_checkout_total fails with AssertionError: 9.99 != 10.99"
+  repro_status: confirmed
+  hypotheses_tested:
+    - candidate: "Rounding applied twice in tax calculation"
+      result: rejected
+      evidence: "tax.py:42 rounds once; traced value matches expected before the discount step"
+    - candidate: "Discount applied after tax instead of before"
+      result: survived
+      evidence: "checkout.py:88 applies discount after calling calculate_tax(), confirmed via trace"
+  root_cause: "Discount applied after tax instead of before, per checkout.py:88"
+  root_cause_confidence: HIGH
+assertions:
+  - type: field_equals
+    path: artifact
+    value: bug_diagnosis_report
+  - type: field_equals
+    path: repository_write_action
+    value: none
+  - type: forbid_field_value
+    path: repository_write_action
+    value: apply_patch
+  - type: field_equals
+    path: automatic_downstream_invocation
+    value: false
+  - type: field_equals
+    path: repro_status
+    value: confirmed
+  - type: require_pattern
+    path: hypotheses_tested
+    pattern: rejected
+  - type: require_pattern
+    path: root_cause
+    pattern: Discount applied after tax
+  - type: field_equals
+    path: root_cause_confidence
+    value: HIGH

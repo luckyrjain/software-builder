@@ -2618,14 +2618,13 @@ skills:
       external_services: None — reads repository and caller-provided context only
     routing:
       patterns:
-      - \bdiagnose\b.*\b(this|the)\b.*\b(bug|failure|regression)\b
+      - \bdiagnose\b.*\b(this|the)\b.*\b(bug|failure|regression|test)\b
       - \bwhy is\b.*\bfailing\b
       - \broot cause\b.*\b(test failure|bug)\b
       - \breproduce\b.*\bthis\b.*\bbug\b
       exclude_patterns:
-      - \b(production|live)\b.*\bincident\b
       - \boutage\b|\berror spike\b
-      - \bfix (it|this)\b
+      - \bjust fix (it|this)\b
   capacity-planner:
     path: skills/capacity-planner
     category: platform
@@ -3498,8 +3497,9 @@ skills:
       external_services: Datadog MCP, Jira MCP, KubeSense CLI (optional)
     routing:
       patterns:
-      - \b(RCA|root cause|postmortem|production incident|incident investigation)\b
+      - \b(RCA|postmortem|production incident|incident investigation)\b
       - \b(5xx|error|latency)\b.*\b(spike|incident|production)\b
+      - \broot cause\b.*\b(incident|outage|postmortem|production)\b
   incident-triage-agent:
     path: skills/incident-triage-agent
     category: incident
