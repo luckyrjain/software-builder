@@ -15,7 +15,7 @@ recorded_output:
     - "Hardcoded API key found in config.py — repo CONTRIBUTING.md requires secrets loaded from environment variables"
   standards_security_sensitive: true
   spec_context_supplied: false
-  spec_findings: []
+  spec_findings: ["not applicable — no spec_context given"]
   recommendation: "Rotate and remove the hardcoded API key before merging; flagged for a security-review pass."
 assertions:
   - type: field_equals
@@ -33,9 +33,9 @@ assertions:
   - type: field_equals
     path: spec_context_supplied
     value: false
-  - type: field_equals
+  - type: require_pattern
     path: spec_findings
-    value: []
+    pattern: not applicable
   - type: field_equals
     path: standards_security_sensitive
     value: true

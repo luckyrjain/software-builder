@@ -26,3 +26,13 @@ def test_numbered_pr_does_not_route_to_local_diff_review() -> None:
 def test_existing_codebase_architecture_does_not_route_to_local_diff_review() -> None:
     result = _dispatch("Review this existing codebase's architecture for refactoring opportunities.")
     assert result.owner != "local-diff-review"
+
+
+def test_local_diff_review_pattern_excludes_numbered_pr() -> None:
+    result = _dispatch("Please do a local diff review of this for PR #42.")
+    assert result.owner != "local-diff-review"
+
+
+def test_uncommitted_changes_pattern_excludes_numbered_pr() -> None:
+    result = _dispatch("Review my uncommitted changes for PR #42.")
+    assert result.owner != "local-diff-review"

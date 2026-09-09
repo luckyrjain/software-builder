@@ -169,7 +169,6 @@ Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local
 | domain-modeling crystallizes a decision needing an architecture-wide risk/scale/trade-off verdict | architecture-review receives the `domain_model_update` ADR draft and rejected alternatives | "Review the proposed architecture decision for `{scope}` using the attached decision record" |
 | domain-modeling finds contested alternatives blocking ADR readiness | engineering-decision-discovery receives the `domain_model_update` contested terms/alternatives and evidence refs | "Grill me on the unresolved decision for `{scope}` using the attached evidence" |
 | local-diff-review flags a security-sensitive Standards finding | security-review receives the finding and evidence | "Security review of `{finding}` flagged during local diff review" |
-| Caller wants a diff local-diff-review reviewed once it's posted as a real PR/MR | pr-review receives the diff scope and spec context | "Review MR !{iid} for `{project}`" |
 
 ## 3. Handoff block (required fields)
 
