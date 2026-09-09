@@ -16,6 +16,8 @@ skills:
     external_services: None — reads supplied PRD/design content and repository only
   backlog-runner:
     external_services: Jira or GitHub Issues API, loop-task-implementer
+  bug-diagnosis:
+    external_services: None — reads repository and caller-provided context only
   capacity-planner:
     external_services: None — reads supplied historical demand data only
   change-impact-analyzer:

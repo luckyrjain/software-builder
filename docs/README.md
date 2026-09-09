@@ -36,6 +36,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **api-test-creator** | [api-test-creator/README.md](../skills/api-test-creator/README.md) | [api-test-creator/SKILL.md](../skills/api-test-creator/SKILL.md) | [api-test-creator/SETUP.md](../skills/api-test-creator/SETUP.md) |
 | **architecture-review** | [architecture-review/README.md](../skills/architecture-review/README.md) | [architecture-review/SKILL.md](../skills/architecture-review/SKILL.md) | [architecture-review/SETUP.md](../skills/architecture-review/SETUP.md) |
 | **backlog-runner** | [backlog-runner/README.md](../skills/backlog-runner/README.md) | [backlog-runner/SKILL.md](../skills/backlog-runner/SKILL.md) | [backlog-runner/SETUP.md](../skills/backlog-runner/SETUP.md) |
+| **bug-diagnosis** | [bug-diagnosis/README.md](../skills/bug-diagnosis/README.md) | [bug-diagnosis/SKILL.md](../skills/bug-diagnosis/SKILL.md) | [bug-diagnosis/SETUP.md](../skills/bug-diagnosis/SETUP.md) |
 | **capacity-planner** | [capacity-planner/README.md](../skills/capacity-planner/README.md) | [capacity-planner/SKILL.md](../skills/capacity-planner/SKILL.md) | [capacity-planner/SETUP.md](../skills/capacity-planner/SETUP.md) |
 | **change-impact-analyzer** | [change-impact-analyzer/README.md](../skills/change-impact-analyzer/README.md) | [change-impact-analyzer/SKILL.md](../skills/change-impact-analyzer/SKILL.md) | [change-impact-analyzer/SETUP.md](../skills/change-impact-analyzer/SETUP.md) |
 | **codebase-architecture-review** | [codebase-architecture-review/README.md](../skills/codebase-architecture-review/README.md) | [codebase-architecture-review/SKILL.md](../skills/codebase-architecture-review/SKILL.md) | [codebase-architecture-review/SETUP.md](../skills/codebase-architecture-review/SETUP.md) |
@@ -195,6 +196,9 @@ Skills reference each other when a finding belongs in another workflow:
 | production-readiness-review | Production readiness review needs exact-head PR/MR code-review evidence | pr-review |
 | local-diff-review | A Standards finding is security-sensitive | security-review |
 | local-diff-review | Caller wants this diff reviewed once it's posted as a real PR/MR | pr-review |
+| bug-diagnosis | Root cause is confirmed and ready to fix | loop-task-implementer |
+| bug-diagnosis | Evidence reveals this is actually a live production incident | incident-rca |
+| bug-diagnosis | Root cause is structural, not a local bug | codebase-architecture-review |
 <!-- cross-skill-routing:end -->
 
 Full symmetric matrix (forward + reverse escalations):

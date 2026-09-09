@@ -58,6 +58,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Resilience review, failure-mode review, timeout budgets, retries, circuit breakers, load shedding, backpressure, queues, idempotency, partial failure, recovery or reconciliation | **resilience-review** | incident-rca (live incident diagnosis), capacity-planner (demand/headroom forecasting), pr-review (generic correctness/regression review) |
 | Implementation plan, implementation planning, task decomposition, dependency-aware implementation DAG, execution waves, plan traceability | **implementation-planner** | loop-task-implementer (executes the plan), system-design (creates the design), pr-review (reviews the resulting code) |
 | Is this PR/MR production ready, ready to release, ready to deploy, go/no-go for one/this change (aggregated across CI/review/policy/specialists), production readiness review for one exact PR/MR/release candidate | **production-readiness-review** | pr-review (generic correctness review only), release-readiness-checker (release-wide go/no-go across multiple services), deployment-risk-review/change-impact-analyzer (single-dimension analysis, not the aggregated readiness rollup) |
+| Diagnose this bug, why is this failing, root cause of a test failure, performance regression diagnosis (non-incident), reproduce this bug | **bug-diagnosis** | incident-rca (a live production incident with a time window), loop-task-implementer (applying an already-diagnosed fix) |
 
 ## Disambiguation rules
 
@@ -86,6 +87,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 23. **Existing-code architecture friction or refactoring opportunities** → codebase-architecture-review; **proposed architecture correctness** → architecture-review; **system/component/API/event/data implementation design** → system-design; **one code-level module/interface/seam/package/test surface** → module-design; **caller-supplied debt backlog ranking** → tech-debt-assessor; **current-state domain reconstruction** → domain-comprehension.
 24. **A term/decision under active discussion this session, sharpening or an ADR draft** → domain-modeling directly; **reconstructing an entire unfamiliar domain from scratch, no session-scoped term** → domain-comprehension directly; **that crystallized decision is really one module's contract/seam** → module-design; **that crystallized decision needs an architecture-wide risk/scale verdict** → architecture-review.
 25. **A fixed point (commit/branch/tag/merge-base) with no PR/MR number** → local-diff-review directly; **a PR/MR identified by number** → pr-review directly.
+26. **A bug/test failure/perf regression with no active production time window** → bug-diagnosis directly; **an active production incident with a time window** → incident-rca directly.
 
 ## Ambiguous requests — ask
 

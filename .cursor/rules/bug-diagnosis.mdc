@@ -1,0 +1,9 @@
+---
+description: Diagnose a non-incident bug, test failure, or performance regression: confirm a minimal repro, form candidate root causes and actively try to falsify each one with evidence, report the confirmed root cause. Use when a bug or regression needs its root cause found before it can be fixed, outside a live production incident. Keywords: diagnose this bug, why is this failing, root cause of this test failure, performance regression diagnosis, reproduce this bug. Not for a live production incident with a time window (incident-rca), or applying the fix once the cause is known (loop-task-implementer).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the bug-diagnosis skill. Read `skills/bug-diagnosis/SKILL.md` and follow it.
+Phase index: `skills/bug-diagnosis/reference/phase-index.md` when present under the skill directory.

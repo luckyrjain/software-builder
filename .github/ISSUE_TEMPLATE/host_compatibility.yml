@@ -28,6 +28,7 @@ body:
         - api-test-creator
         - architecture-review
         - backlog-runner
+        - bug-diagnosis
         - capacity-planner
         - change-impact-analyzer
         - codebase-architecture-review

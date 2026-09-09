@@ -19,7 +19,7 @@ artifact_types:
 - system_design_spec
 - module_design_spec
 - domain_model_update
-- local_diff_review
+- bug_diagnosis_report
 - codebase_architecture_report
 - api_design_review_report
 - database_review_report
@@ -194,15 +194,18 @@ artifact_schemas:
     - proposed_adr
     - unresolved_questions
     - recommendation
-  local_diff_review:
+  bug_diagnosis_report:
     fields:
     - title
-    - diff_scope
-    - standards_findings
-    - spec_findings
+    - symptom
+    - repro_status
+    - hypotheses_tested
+    - root_cause
+    - confidence
+    - evidence_refs
     - repository_write_action
     - automatic_downstream_invocation
-    - recommendation
+    - unresolved_questions
   codebase_architecture_report:
     fields:
     - title
@@ -464,6 +467,11 @@ skills:
     - implementation_pr
     consumes:
     - implementation_task
+    write_authority: read-only
+  bug-diagnosis:
+    produces:
+    - bug_diagnosis_report
+    consumes: []
     write_authority: read-only
   capacity-planner:
     produces:
@@ -761,11 +769,6 @@ skills:
     - k8s_rightsizing_report
     consumes:
     - mr_context
-    write_authority: read-only
-  local-diff-review:
-    produces:
-    - local_diff_review
-    consumes: []
     write_authority: read-only
   loop-task-implementer:
     produces:

@@ -18,6 +18,16 @@ routes:
   backlog-runner:
     patterns:
     - \b(backlog|tickets?)\b.*\b(overnight|scheduled|nightly|queue runner)\b
+  bug-diagnosis:
+    patterns:
+    - \bdiagnose\b.*\b(this|the)\b.*\b(bug|failure|regression)\b
+    - \bwhy is\b.*\bfailing\b
+    - \broot cause\b.*\b(test failure|bug)\b
+    - \breproduce\b.*\bthis\b.*\bbug\b
+    exclude_patterns:
+    - \b(production|live)\b.*\bincident\b
+    - \boutage\b|\berror spike\b
+    - \bfix (it|this)\b
   capacity-planner:
     patterns:
     - \b(capacity plan(?:ning)?|capacity forecast|scaling requirements)\b
