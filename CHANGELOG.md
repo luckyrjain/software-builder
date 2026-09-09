@@ -43,6 +43,22 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Fix schema_version bool-aliasing across the shared registry/eval validators (2026-09-09)
+
+- **A `schema_version: yes`/`true` document was silently accepted as valid.** Python's `bool` is an
+  `int` subclass (`True == 1`), and YAML's plain-scalar resolver parses `yes`/`true` as Python `True`,
+  so the prevailing `value != 1` check across `scripts/registry/`, `scripts/evals/`, and two packaged
+  skills' own validators (incident-rca's causal-graph checker, migration-program-manager's
+  `MIGRATION_STATUS.yaml` parser) let a malformed boolean `schema_version` through instead of
+  rejecting it. Anyone hand-editing one of the YAML files these validators cover (registry fragments,
+  eval scenario files, host-parity/degraded-behavior config, or the two skills' own inputs) and
+  quoting `schema_version` as `yes`/`true` by mistake now gets a clear rejection instead of silent
+  acceptance.
+- Added `scripts.yaml_safety.is_valid_schema_version` as the one canonical predicate, replacing ~15
+  duplicated (and inconsistently-guarded) `!= 1` checks across the shared registry/eval code; the two
+  packaged skills' own validators got a matching inline guard instead of a new cross-package import,
+  consistent with their existing bare-environment tolerance.
+
 ### Move all skill directories into skills/ (2026-09-08)
 
 - **Every skill directory now lives under `skills/`** instead of at the repository root (`pr-review/`

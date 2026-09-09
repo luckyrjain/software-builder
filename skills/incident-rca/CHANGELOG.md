@@ -1,5 +1,15 @@
 # Changelog — incident-rca
 
+## 2026-09-09 — dependency installer retries its third network call, causal-graph schema_version hardened
+
+- `scripts/install-incident-rca-deps.sh`'s bounded retry (added for transient npm/GitHub hiccups)
+  covered `npm pack` and `git fetch` but not `npx --package=<tarball> skills add`, which still
+  resolves the verified CLI's own transitive npm dependencies over the network before running --
+  the same failure mode the other two calls were already retried for. Now retried too.
+- `scripts/validate_causal_graph.py`'s `schema_version` check no longer silently accepts a boolean
+  value (`schema_version: yes`/`true`) as if it were `1` -- see the root `CHANGELOG.md`'s
+  cross-cutting `schema_version` bool-aliasing entry for the shared root cause.
+
 ## 2026-08-10 — workflow-contract.yaml + safe rendered-output boundary
 
 - **`workflow-contract.yaml`** (new) — formalizes the genuine caller-input-driven cross-phase branch

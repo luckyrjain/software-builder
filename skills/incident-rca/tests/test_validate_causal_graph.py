@@ -175,6 +175,16 @@ def test_missing_top_level_field():
     assert any("trigger_status" in e for e in errors)
 
 
+def test_schema_version_boolean_rejected():
+    # YAML's plain-scalar resolver parses `schema_version: yes`/`true` as Python True, and
+    # Python's bool is an int subclass where True == 1 -- an unguarded `!= 1` check would
+    # silently accept this malformed document instead of rejecting it.
+    graph, evidence = load()
+    graph["schema_version"] = True
+    errors = validate_causal_graph(graph, evidence)
+    assert any("schema_version" in e for e in errors)
+
+
 def test_observability_sources_responded_string_rejected():
     graph, evidence = load()
     graph["observability_sources_responded"] = "1"

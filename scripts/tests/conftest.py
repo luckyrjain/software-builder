@@ -24,6 +24,7 @@ outside the repository so it never needs a .gitignore entry or shows up in `git 
 from __future__ import annotations
 
 import fcntl
+import os
 import tempfile
 from pathlib import Path
 
@@ -32,13 +33,28 @@ import pytest
 _LOCK_PATH = Path(tempfile.gettempdir()) / "software-builder-pytest-registry-root.lock"
 
 
+def _open_lock_fd() -> int:
+    """Open (creating if needed) the lock file, refusing to follow a symlink at that path.
+
+    The lock path is predictable (a fixed name under the shared system temp directory), so
+    another local account could pre-create it as a symlink before this suite runs; a plain
+    `open()` would then transparently lock whatever it points at instead. `O_NOFOLLOW` makes
+    the `open` syscall itself fail closed on that final path component -- race-free, unlike a
+    separate `Path.is_symlink()` check-then-open (see package_skill.py's dest-symlink guard for
+    the same distinction: a static pre-check on this kind of path is known to be racy).
+    """
+    return os.open(_LOCK_PATH, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+
+
 @pytest.fixture(autouse=True)
 def _serialize_against_repository_root_mutation(request: pytest.FixtureRequest):
     exclusive = request.node.get_closest_marker("mutates_repository_root") is not None
-    _LOCK_PATH.touch(exist_ok=True)
-    with open(_LOCK_PATH) as handle:
-        fcntl.flock(handle, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+    fd = _open_lock_fd()
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
         try:
             yield
         finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
