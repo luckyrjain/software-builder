@@ -982,7 +982,8 @@ lint-framework:
 		"production-readiness-review:workflow/inputs.md" \
 		"prd-architect:workflow/inputs.md" \
 		"module-design:workflow/inputs.md" \
-		"codebase-architecture-review:workflow/scope.md"; do \
+		"codebase-architecture-review:workflow/scope.md" \
+		"research-brief:workflow/inputs.md"; do \
 		skill=$${pair%%:*}; file=$${pair#*:}; \
 		if ! grep -qiE 'untrusted|prompt-injection' $(SKILLS_DIR)/$$skill/$$file; then \
 			echo "error: $(SKILLS_DIR)/$$skill/$$file must declare untrusted-content guard" >&2; fail=1; \

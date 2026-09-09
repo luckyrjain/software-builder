@@ -40,24 +40,34 @@ def test_research_question_routes_to_research_brief() -> None:
 
 
 def test_current_state_domain_question_does_not_route_to_research_brief() -> None:
+    """Mirrors evals/negative/cases.yaml's research-brief row.
+
+    Asserted against `candidates`, not `owner`: `DispatchResult.owner` is None for anything
+    but a single-candidate `selected` result, so `owner != "research-brief"` passed
+    vacuously whenever this prompt went `ambiguous` *with research-brief among the
+    candidates* -- exactly the regression this test exists to catch.
+    """
     result = _dispatch("Understand the existing payments service and its current-state domain and bounded contexts.")
-    assert result.owner != "research-brief"
+    assert "research-brief" not in result.candidates, result
+    assert result.status == "selected" and result.owner == "domain-comprehension", result
 
 
 @pytest.mark.parametrize(
     "prompt",
     [
-        # Anchor after the trigger phrase, and before it.
+        # Anchor after the trigger phrase, and before it, for each of the three wrappers.
         "Find out whether SameSite=Lax is now the browser default, citing sources.",
         "Citing sources, find out whether SameSite=Lax is now the browser default.",
         "Investigate this question and cite your sources: does gRPC stream bidirectionally over HTTP/2?",
-        "Research this question: is JWT rotation still recommended?",
+        "Cite your sources and investigate this question: does gRPC stream bidirectionally over HTTP/2?",
+        "Research this question, citing the relevant RFCs: is JWT rotation still recommended?",
+        "Citing primary sources, research the question of whether JWT rotation is still recommended.",
         "What does the ORM's documentation say about connection pool defaults?",
         "Find out whether there is prior art for this approach.",
     ],
 )
 def test_cited_research_phrasings_still_route_to_research_brief(prompt: str) -> None:
-    """The skill's documented keywords keep working when a research anchor is present."""
+    """The skill's documented keywords keep working when a citation anchor is present."""
     result = _dispatch_cached(prompt)
     assert "research-brief" in result.candidates, result
 
@@ -67,15 +77,24 @@ def test_cited_research_phrasings_still_route_to_research_brief(prompt: str) -> 
     [
         "Find out whether the deploy finished.",
         "Investigate this question about yesterday's rollout.",
+        "Research this question: did last night's rollout finish?",
         "Find out whether anyone renamed the staging bucket.",
+        # Vocabulary that was in the anchor list until it was proved to collide with the
+        # rest of the registry's own evidence-driven phrasing. A wrapper plus one of
+        # these words is still just a wrapper; re-adding any of them fails here first.
+        "Find out whether this query follows database best practices.",
+        "Investigate this question against the vendor's documentation and the docs we vendored.",
+        "Find out whether we are following the platform team's guidance here.",
+        "Investigate this question by tracing through the source code of the payment client.",
+        "Research this question: does the state of the art still favour server-side sessions?",
     ],
 )
 def test_bare_wrapper_phrasing_alone_does_not_route_to_research_brief(prompt: str) -> None:
     """Topic-free English wrappers must not claim ownership on their own.
 
-    "find out whether" and "investigate ... question" say nothing about *this* skill's
-    domain without a co-occurring citation/sourcing anchor -- see the sweep below for what
-    happens registry-wide when they do fire bare.
+    "research this/the question", "find out whether" and "investigate ... question" say
+    nothing about *this* skill's domain without a co-occurring citation anchor -- see the
+    sweep below for what happens registry-wide when they do fire bare.
     """
     result = _dispatch_cached(prompt)
     assert "research-brief" not in result.candidates, result
@@ -101,6 +120,10 @@ def _wrapped(prompt: str, template: str) -> str:
 WRAPPERS = (
     "find-out-whether-prefix::Find out whether {lowered}.",
     "investigate-this-question-prefix::Investigate this question: {prompt}",
+    # Round 2 found this one missing, which is exactly why the `research ... this/the
+    # ... question` pattern stayed unanchored through round 1's fix: no sweep prompt
+    # ever exercised it. Every documented wrapper keyword needs a template here.
+    "research-this-question-prefix::Research this question: {prompt}",
     "find-out-whether-suffix::{prompt} Find out whether that is the right call.",
 )
 
@@ -117,11 +140,17 @@ def test_research_brief_does_not_capture_other_skills_wrapped_prompts(skill: str
 
     research-brief's documented keywords are generic English framings, so any other skill's
     real trigger phrase can be restated inside one. With bare `\\bfind out whether\\b` and
-    `\\binvestigate\\b.*\\bquestion\\b` patterns, 126 of these 129 wrapped prompts stopped
-    resolving to their real owner and went `ambiguous` with research-brief instead. Driving
-    the sweep off evals/positive/cases.yaml rather than a frozen list means a skill added
-    later is covered the day its positive case lands, which is what keeps this a
+    `\\binvestigate\\b.*\\bquestion\\b` patterns, 126 of the wrapped prompts stopped resolving
+    to their real owner and went `ambiguous` with research-brief instead; anchoring only those
+    two left `\\bresearch\\b.*\\b(this|the)\\b.*\\bquestion\\b` bare, which cost 42 of the 43
+    `research-this-question-prefix` prompts their owner until that wrapper was added here.
+    Driving the sweep off evals/positive/cases.yaml rather than a frozen list means a skill
+    added later is covered the day its positive case lands, which is what keeps this a
     registry-wide guard rather than a snapshot of the seven skills first noticed.
+
+    Asserts on `candidates`, never on `owner`: an `ambiguous` DispatchResult's `owner` is
+    None, so `owner != "research-brief"` would pass even when research-brief is one of the
+    wrongly-surfaced candidates.
     """
     result = _dispatch_cached(prompt)
     assert "research-brief" not in result.candidates, result

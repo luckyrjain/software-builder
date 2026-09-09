@@ -189,15 +189,13 @@ routes:
     - \bgo[- /]?no[- ]?go\b.*\bdeployment risk\b
   research-brief:
     patterns:
-    - \bresearch\b.*\b(this|the)\b.*\bquestion\b
-    - \bfind out whether\b.*\b(cit(?:e|es|ed|ing|ations?)|sources?|best[- ]practices?|prior
-      art|state of the art|research|doc(?:s|umentation)?|guidance)\b
-    - \b(cit(?:e|es|ed|ing|ations?)|sources?|best[- ]practices?|prior art|state of
-      the art|research|doc(?:s|umentation)?|guidance)\b.*\bfind out whether\b
-    - \binvestigate\b.*\bquestion\b.*\b(cit(?:e|es|ed|ing|ations?)|sources?|best[-
-      ]practices?|prior art|state of the art|research|doc(?:s|umentation)?|guidance)\b
-    - \b(cit(?:e|es|ed|ing|ations?)|sources?|best[- ]practices?|prior art|state of
-      the art|research|doc(?:s|umentation)?|guidance)\b.*\binvestigate\b.*\bquestion\b
+    - \bresearch\b.*\b(this|the)\b.*\bquestion\b.*\b(cit(?:e|es|ed|ing|ations?)|prior
+      art)\b
+    - \b(cit(?:e|es|ed|ing|ations?)|prior art)\b.*\bresearch\b.*\b(this|the)\b.*\bquestion\b
+    - \bfind out whether\b.*\b(cit(?:e|es|ed|ing|ations?)|prior art)\b
+    - \b(cit(?:e|es|ed|ing|ations?)|prior art)\b.*\bfind out whether\b
+    - \binvestigate\b.*\bquestion\b.*\b(cit(?:e|es|ed|ing|ations?)|prior art)\b
+    - \b(cit(?:e|es|ed|ing|ations?)|prior art)\b.*\binvestigate\b.*\bquestion\b
     - \bwhat does\b.*\bdocumentation\b.*\bsay\b
     exclude_patterns:
     - \b(current[- ]state domain|bounded contexts?|existing .* service)\b

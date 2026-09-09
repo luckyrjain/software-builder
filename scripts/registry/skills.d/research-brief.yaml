@@ -46,24 +46,40 @@ research-brief:
   setup_freshness:
     external_services: Web search/fetch (optional) — degrades to repository-only research when unavailable
   routing:
-    # "find out whether" and "investigate ... question" are this skill's documented
-    # keywords, but on their own they are topic-free English wrappers: any other
-    # skill's real trigger phrase can be restated inside one ("Find out whether PR
-    # #123 is production ready"), which made every such prompt ambiguous between
-    # that skill and this one. Both therefore require a co-occurring
-    # citation/sourcing anchor -- the same "generic verb + domain anchor" shape
-    # incident-rca and resilience-review already use -- so the wrapper alone no
-    # longer routes here. See scripts/tests/test_research_brief_routing.py.
+    # "research this/the question", "find out whether" and "investigate ... question"
+    # are this skill's documented keywords, but on their own they are topic-free
+    # English wrappers: any other skill's real trigger phrase can be restated inside
+    # one ("Find out whether PR #123 is production ready"), which made every such
+    # prompt ambiguous between that skill and this one. All three therefore require a
+    # co-occurring citation anchor -- the same "generic verb + domain anchor" shape
+    # incident-rca and resilience-review already use -- so a wrapper alone no longer
+    # routes here. See scripts/tests/test_research_brief_routing.py.
     #
-    # The anchor list is deliberately reference-material vocabulary only. `document`
-    # was tried and dropped: it collides with prd-architect ("product requirements
-    # document"), which is the same over-matching failure this comment exists about.
+    # The anchor is deliberately just the `cite` family and `prior art`. Two wider
+    # anchor lists were tried and both collided, because "evidence-driven" vocabulary
+    # is exactly what the rest of this registry's skills are written in:
+    #   * `document` collided with prd-architect ("product requirements document");
+    #   * `docs`/`documentation` collides the same way with every skill that says
+    #     "check the docs"/"read the documentation";
+    #   * `sources?` collides with "source code"/"trace through the source"
+    #     (bug-diagnosis, pr-review, local-diff-review phrasing);
+    #   * `best[- ]practices?` collides with security/database/API-design reviews;
+    #   * `guidance` collides with "follow the vendor's guidance";
+    #   * bare `research` is the wrapper verb in the first pattern, not a safe
+    #     co-anchor for the others;
+    #   * `state of the art` was dropped as unverifiable rather than proven safe.
+    # Do not re-widen this list without re-running the registry-wide wrapper sweep in
+    # scripts/tests/test_research_brief_routing.py: each widening above looked
+    # obviously safe and was not.
     patterns:
-    - \bresearch\b.*\b(this|the)\b.*\bquestion\b
-    - \bfind out whether\b.*\b(cit(?:e|es|ed|ing|ations?)|sources?|best[- ]practices?|prior art|state of the art|research|doc(?:s|umentation)?|guidance)\b
-    - \b(cit(?:e|es|ed|ing|ations?)|sources?|best[- ]practices?|prior art|state of the art|research|doc(?:s|umentation)?|guidance)\b.*\bfind out whether\b
-    - \binvestigate\b.*\bquestion\b.*\b(cit(?:e|es|ed|ing|ations?)|sources?|best[- ]practices?|prior art|state of the art|research|doc(?:s|umentation)?|guidance)\b
-    - \b(cit(?:e|es|ed|ing|ations?)|sources?|best[- ]practices?|prior art|state of the art|research|doc(?:s|umentation)?|guidance)\b.*\binvestigate\b.*\bquestion\b
+    - \bresearch\b.*\b(this|the)\b.*\bquestion\b.*\b(cit(?:e|es|ed|ing|ations?)|prior art)\b
+    - \b(cit(?:e|es|ed|ing|ations?)|prior art)\b.*\bresearch\b.*\b(this|the)\b.*\bquestion\b
+    - \bfind out whether\b.*\b(cit(?:e|es|ed|ing|ations?)|prior art)\b
+    - \b(cit(?:e|es|ed|ing|ations?)|prior art)\b.*\bfind out whether\b
+    - \binvestigate\b.*\bquestion\b.*\b(cit(?:e|es|ed|ing|ations?)|prior art)\b
+    - \b(cit(?:e|es|ed|ing|ations?)|prior art)\b.*\binvestigate\b.*\bquestion\b
+    # Structurally specific rather than a bare word, and verified separately: it needs
+    # all three of "what does", "documentation" and "say" in that order.
     - \bwhat does\b.*\bdocumentation\b.*\bsay\b
     exclude_patterns:
     - \b(current[- ]state domain|bounded contexts?|existing .* service)\b

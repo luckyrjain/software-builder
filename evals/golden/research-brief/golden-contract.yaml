@@ -54,6 +54,17 @@ assertions:
   - type: require_pattern
     path: findings
     pattern: "'evidence_status': 'UNKNOWN', 'source': 'none'"
+  # CAVEAT: the require_pattern above proves the correct spelling of "no source" but says
+  # nothing about the near-misses: swapping `source: none` for `null`, `""`, `N/A` or `TBD`
+  # left the fixture green while defeating its intent, because the required literal is the
+  # only spelling it knows. Enumerated here rather than expressed as a lookahead
+  # ((?!none) after 'source': ) -- no fixture in this repository uses regex lookahead and
+  # this is not the place to introduce it. `null` needs the unquoted alternative: YAML
+  # parses it to Python None, whose repr carries no quotes, while `none` stays the string
+  # 'none'. Add any further placeholder spelling to this list as it is encountered.
+  - type: forbid_pattern
+    path: findings
+    pattern: "'evidence_status': 'UNKNOWN', 'source': (?:None|'(?:null|N/A|TBD|)')"
   # report-format.md's core rule, stated negatively so it also fires on findings this
   # fixture does not enumerate: no claim is asserted at a non-UNKNOWN status while
   # carrying no source.

@@ -11,12 +11,12 @@ never edit source, tests, configuration, or docs, or implement anything automati
 
 | # | Caller sends | Resolves to | Notes |
 |---|-----------------|---------------|-------|
-| 1 | "Research this question: does our rate limiter apply per IP address or per API key, based on the code?" | Inputs → Gather → Report; repository evidence alone answers the question, cited to the code | Happy path |
-| 2 | "Find out whether the upstream Stripe API still supports the legacy webhook signature scheme — check their current docs." | Inputs → Gather → Report; Gather fetches the vendor's current docs via `host.web.fetch` and cites the URL | External-research path |
-| 3 | "Investigate this question: does the vendor's SDK documentation still confirm TLS 1.1 support? Web access isn't available this session, so rely on whatever's vendored in the repo." | Inputs → Gather → Report; degraded mode recorded explicitly, external-dependent claims marked `UNKNOWN` | Degraded-mode path |
+| 1 | "Research this question, citing the relevant code: does our rate limiter apply per IP address or per API key?" | Inputs → Gather → Report; repository evidence alone answers the question, cited to the code | Happy path |
+| 2 | "Find out whether the upstream Stripe API still supports the legacy webhook signature scheme — cite their current docs." | Inputs → Gather → Report; Gather fetches the vendor's current docs via `host.web.fetch` and cites the URL | External-research path |
+| 3 | "Investigate this question: does the vendor's SDK documentation still confirm TLS 1.1 support? Web access isn't available this session, so cite whatever's vendored in the repo." | Inputs → Gather → Report; degraded mode recorded explicitly, external-dependent claims marked `UNKNOWN` | Degraded-mode path |
 | 4 | "I need you to investigate a question for our team, but let me get back to you on the specifics." | Inputs HARD STOP — ask what the actual research question is | Boundary rule |
 | 5 | "Investigate our current-state domain and map out the bounded contexts across the order and payment services." | Wrong scope — offer `domain-comprehension` | Wrong-skill row |
-| 6 | "Investigate this question: should we retry on 5xx responses from the billing API, or back off entirely? I found conflicting guidance in the code and the vendor's docs." | Inputs → Gather → Report; Findings mark the guidance `CONFLICTED`; Report offers `engineering-decision-discovery` | Escalation offered |
+| 6 | "Investigate this question: should we retry on 5xx responses from the billing API, or back off entirely? Cite the conflicting guidance you find in the code and the vendor's docs." | Inputs → Gather → Report; Findings mark the guidance `CONFLICTED`; Report offers `engineering-decision-discovery` | Escalation offered |
 | 7 | "Help me decide which option is best: Postgres or DynamoDB for our new service." | Wrong scope — offer `engineering-decision-discovery` | Wrong-skill row |
 | 8 | "What does the ORM library's documentation say about connection pool sizing, and does our own config match that guidance?" | Inputs → Gather → Report; repository config cross-checked against the library's fetched documentation | Happy path (repo + external) |
 
