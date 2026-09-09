@@ -22,13 +22,13 @@ weekly-squad-digest:
     - cost-optimization-sprint-planner
     consumes:
     - migration_status_rollup
-    - cost_sweep_rollup
+    - cost_optimization_sprint_rollup
     consume_fields:
       migration_status_rollup:
       - items
       - generated_at
       - source_revision
-      cost_sweep_rollup:
+      cost_optimization_sprint_rollup:
       - items
       - generated_at
       - source_revision

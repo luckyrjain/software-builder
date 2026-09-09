@@ -72,7 +72,7 @@ contracts:
       - squad_map
       - ownership_lookup
       - migration_status_rollup
-      - cost_sweep_rollup
+      - cost_optimization_sprint_rollup
       - implementation_pr
       - digest_report
       - test_suite
@@ -103,7 +103,7 @@ contracts:
         squad_map: 1
         ownership_lookup: 1
         migration_status_rollup: 1
-        cost_sweep_rollup: 1
+        cost_optimization_sprint_rollup: 1
         implementation_pr: 1
         digest_report: 1
         test_suite: 1
@@ -134,7 +134,7 @@ contracts:
         squad_map: current_state
         ownership_lookup: current_state
         migration_status_rollup: current_state
-        cost_sweep_rollup: current_state
+        cost_optimization_sprint_rollup: current_state
         implementation_pr: proposed_state
         digest_report: current_state
         test_suite: proposed_state
@@ -223,7 +223,7 @@ contracts:
           items: list
           generated_at: string
           source_revision: string
-        cost_sweep_rollup:
+        cost_optimization_sprint_rollup:
           items: list
           generated_at: string
           source_revision: string
@@ -979,7 +979,7 @@ contracts:
         mode: canonical
         owners:
         - migration-program-manager
-      cost_sweep_rollup:
+      cost_optimization_sprint_rollup:
         mode: canonical
         owners:
         - cost-optimization-sprint-planner
@@ -1097,7 +1097,7 @@ contracts:
     - squad_map
     - ownership_lookup
     - migration_status_rollup
-    - cost_sweep_rollup
+    - cost_optimization_sprint_rollup
     - implementation_task
     - implementation_pr
     - digest_report
@@ -1175,7 +1175,7 @@ contracts:
         - items
         - generated_at
         - source_revision
-      cost_sweep_rollup:
+      cost_optimization_sprint_rollup:
         fields:
         - items
         - generated_at
@@ -1589,7 +1589,7 @@ contracts:
         write_authority: repository-write
       cost-optimization-sprint-planner:
         produces:
-        - cost_sweep_rollup
+        - cost_optimization_sprint_rollup
         consumes: []
         write_authority: read-only
       database-review:
@@ -2207,13 +2207,13 @@ contracts:
         - digest_report
         consumes:
         - migration_status_rollup
-        - cost_sweep_rollup
+        - cost_optimization_sprint_rollup
         consume_fields:
           migration_status_rollup:
           - items
           - generated_at
           - source_revision
-          cost_sweep_rollup:
+          cost_optimization_sprint_rollup:
           - items
           - generated_at
           - source_revision
@@ -2748,7 +2748,7 @@ skills:
       merge: false
     output_contract:
       produces:
-      - cost_sweep_rollup
+      - cost_optimization_sprint_rollup
     dependencies:
     - k8s-overprovisioning-datadog
     - squad-map
@@ -5051,13 +5051,13 @@ skills:
       - cost-optimization-sprint-planner
       consumes:
       - migration_status_rollup
-      - cost_sweep_rollup
+      - cost_optimization_sprint_rollup
       consume_fields:
         migration_status_rollup:
         - items
         - generated_at
         - source_revision
-        cost_sweep_rollup:
+        cost_optimization_sprint_rollup:
         - items
         - generated_at
         - source_revision

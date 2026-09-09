@@ -174,7 +174,7 @@ artifact_ownership:
     mode: canonical
     owners:
     - migration-program-manager
-  cost_sweep_rollup:
+  cost_optimization_sprint_rollup:
     mode: canonical
     owners:
     - cost-optimization-sprint-planner
