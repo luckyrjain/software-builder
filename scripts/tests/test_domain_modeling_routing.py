@@ -36,6 +36,17 @@ def test_decision_crystallization_routes_to_domain_modeling() -> None:
     assert result.owner == "domain-modeling"
 
 
+def test_decision_crystallization_with_since_clause_routes_to_domain_modeling() -> None:
+    # "because" is not the only natural way to state a decision's justification --
+    # this guards against re-narrowing the pattern back down to one connective word.
+    result = _dispatch(
+        "We just decided refunds should always go to the original payment method, since store"
+        " credit caused a reconciliation gap."
+    )
+    assert result.status == "selected", result
+    assert result.owner == "domain-modeling"
+
+
 def test_edge_case_scenario_routes_to_domain_modeling() -> None:
     result = _dispatch(
         "Stress-test the Cancellation term with an edge case: what happens if a Customer cancels an"
