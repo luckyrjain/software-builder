@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.yaml_safety import load_unique_yaml_file, require_mapping
+from scripts.yaml_safety import is_valid_schema_version, load_unique_yaml_file, require_mapping
 
 SUPPORT = {"full", "degraded", "unsupported"}
 CAPABILITIES = {
@@ -126,7 +126,7 @@ def validate_host_adapter_identities(root: Path) -> list[str]:
         expected = require_mapping(load_unique_yaml_file(expected_path), "host parity expected")
         snapshots = require_mapping(expected.get("hosts"), "host parity expected hosts")
         errors: list[str] = []
-        if expected.get("schema_version") != 1:
+        if not is_valid_schema_version(expected.get("schema_version")):
             errors.append("error: host parity expected schema_version must be 1")
         for label, mapping in (("hosts", host_map), ("host parity expected hosts", snapshots)):
             if any(not isinstance(key, str) for key in mapping):
@@ -151,7 +151,7 @@ def validate_host_adapter_interface(root: Path) -> list[str]:
     try:
         contracts = _contracts(root)
         errors: list[str] = []
-        if contracts.get("schema_version") != 1:
+        if not is_valid_schema_version(contracts.get("schema_version")):
             errors.append("error: host_contracts.schema_version must be 1")
         families = contracts.get("capability_families")
         if not isinstance(families, list) or set(families) != CAPABILITIES or len(families) != len(set(families)):

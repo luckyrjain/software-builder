@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
 from scripts.git_paths import tracked_relative_paths
 from scripts.registry.canonical_manifest import load_canonical_manifest
 from scripts.registry.schema import load_registry_raw
-from scripts.yaml_safety import FRONTMATTER_RE, load_unique_yaml, load_unique_yaml_file
+from scripts.yaml_safety import FRONTMATTER_RE, is_valid_schema_version, load_unique_yaml, load_unique_yaml_file
 
 POLICY_PATH = ROOT / "scripts" / "operational_upkeep.yaml"
 GENERATOR_VERSION = "1.3"
@@ -222,7 +222,7 @@ def _registered_skills(root: Path) -> dict[str, Any]:
 def validate_policy(root: Path = ROOT) -> list[str]:
     policy = load_policy(root / "scripts" / "operational_upkeep.yaml")
     errors: list[str] = []
-    if policy.get("schema_version") != 1:
+    if not is_valid_schema_version(policy.get("schema_version")):
         errors.append("error: operational-upkeep: unsupported schema_version")
     for key in ("policy_version", "prompt_bundle_version", "evaluator_version"):
         if not isinstance(policy.get(key), str) or not policy[key].strip():

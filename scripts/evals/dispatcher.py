@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.registry.schema import Registry
-from scripts.yaml_safety import load_unique_yaml_file, require_mapping
+from scripts.yaml_safety import is_valid_schema_version, load_unique_yaml_file, require_mapping
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,7 @@ def load_routing_rules(root: Path, registry: Registry) -> dict[str, RoutingRule]
         load_unique_yaml_file(root / "scripts" / "registry" / "routing_rules.yaml"),
         "routing rules",
     )
-    if raw.get("schema_version") != 1:
+    if not is_valid_schema_version(raw.get("schema_version")):
         raise ValueError("routing_rules.schema_version must be 1")
     routes = require_mapping(raw.get("routes"), "routing rules.routes")
     registered = set(registry.skills)

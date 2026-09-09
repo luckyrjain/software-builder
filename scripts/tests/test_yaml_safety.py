@@ -9,6 +9,7 @@ import yaml
 
 from scripts.yaml_safety import (
     DuplicateKeyError,
+    is_valid_schema_version,
     load_unique_frontmatter,
     load_unique_yaml,
     load_unique_yaml_file,
@@ -130,3 +131,27 @@ def test_load_unique_frontmatter_rejects_duplicate_key(tmp_path: Path) -> None:
     path.write_text("---\nname: demo\nname: other\n---\nbody\n", encoding="utf-8")
     with pytest.raises(DuplicateKeyError, match="duplicate YAML mapping key 'name'"):
         load_unique_frontmatter(path)
+
+
+def test_is_valid_schema_version_accepts_matching_int() -> None:
+    assert is_valid_schema_version(1) is True
+
+
+def test_is_valid_schema_version_rejects_bool_even_though_true_equals_one() -> None:
+    # YAML's plain-scalar resolver parses `schema_version: yes`/`true` as Python True, and
+    # `True == 1` -- an unguarded `value != 1` would silently accept this malformed document.
+    assert is_valid_schema_version(True) is False
+    assert is_valid_schema_version(False) is False
+
+
+def test_is_valid_schema_version_rejects_wrong_type_or_value() -> None:
+    assert is_valid_schema_version("1") is False
+    assert is_valid_schema_version(1.0) is False
+    assert is_valid_schema_version(2) is False
+    assert is_valid_schema_version(None) is False
+
+
+def test_is_valid_schema_version_accepts_a_set_of_expected_versions() -> None:
+    assert is_valid_schema_version(2, expected=frozenset({1, 2})) is True
+    assert is_valid_schema_version(3, expected=frozenset({1, 2})) is False
+    assert is_valid_schema_version(True, expected=frozenset({1, 2})) is False

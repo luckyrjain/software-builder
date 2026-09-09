@@ -13,6 +13,7 @@ from scripts.registry.assessment_target import canonical_payload_digest, normali
 from scripts.registry.semantic_document import is_sha256_digest
 from scripts.registry.skill_result import SkillResult
 from scripts.registry.validation_primitives import non_empty_str, string_list
+from scripts.yaml_safety import is_valid_schema_version
 
 
 PLAN_FIELDS = {
@@ -1107,7 +1108,7 @@ def validate_plan_execution_state(
         errors.append("error: plan_execution_state contains undeclared fields: " + ", ".join(map(str, unknown)))
     if missing:
         errors.append("error: plan_execution_state missing fields: " + ", ".join(missing))
-    if state.get("schema_version") != 1:
+    if not is_valid_schema_version(state.get("schema_version")):
         errors.append("error: plan_execution_state.schema_version must be 1")
     if state.get("plan_id") != plan.get("plan_id"):
         errors.append("error: plan_execution_state.plan_id does not match implementation_plan")

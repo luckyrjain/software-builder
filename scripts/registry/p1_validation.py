@@ -15,7 +15,13 @@ from scripts.registry.envelope_contract import (
 from scripts.registry.host_adapter import validate_host_adapter_interface
 from scripts.registry.models import Registry
 from scripts.registry.schema import parse_registry
-from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_frontmatter, load_unique_yaml_file, require_mapping
+from scripts.yaml_safety import (
+    YAML_SAFETY_ERRORS,
+    is_valid_schema_version,
+    load_unique_frontmatter,
+    load_unique_yaml_file,
+    require_mapping,
+)
 
 RUNTIME_DOCS = {"runtime-contract.md", "host-adapter-contract.md", "eval-contract.md"}
 PERMISSION_FIELDS = {"repository", "external_actions", "unattended", "merge"}
@@ -32,7 +38,7 @@ def _strings(value: Any, label: str) -> set[str]:
 
 
 def _require_v1(data: dict[str, Any], label: str) -> None:
-    if data.get("schema_version") != 1:
+    if not is_valid_schema_version(data.get("schema_version")):
         raise ValueError(f"{label}.schema_version must be 1")
 
 
