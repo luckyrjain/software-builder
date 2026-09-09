@@ -10,13 +10,13 @@ inspect the diff, emit findings, and never write source, tests, configuration, o
 
 | # | Caller sends | Resolves to | Notes |
 |---|-----------------|---------------|-------|
-| 1 | "Review my branch against main — does it match the naming convention in CONTRIBUTING.md?" | Inputs → Standards → Spec → Report: Standards findings for naming violations | Happy path |
-| 2 | "Check this diff against the ticket: we need to add retry logic to the payment service and update the docs." | Inputs → Standards → Spec → Report: Spec findings for each ticket requirement | Spec path |
-| 3 | "Diff since main, but I have no issue text yet — just check conventions." | Inputs → Standards → Spec → Report: Standards findings; Spec marked "not applicable" | No spec path |
+| 1 | "Review my changes since the main branch — does it match the naming convention in CONTRIBUTING.md?" | Inputs → Standards → Spec → Report: Standards findings for naming violations | Happy path |
+| 2 | "Review this diff since the main branch, against the ticket: we need to add retry logic to the payment service and update the docs." | Inputs → Standards → Spec → Report: Spec findings for each ticket requirement | Spec path |
+| 3 | "Review the diff since the main branch, but I have no issue text yet — just check conventions." | Inputs → Standards → Spec → Report: Standards findings; Spec marked "not applicable" | No spec path |
 | 4 | "Review my uncommitted changes." | HARD STOP — ask for a `diff_scope` (commit, branch, tag, or merge-base) | Boundary rule |
-| 5 | "I found a potential security issue in this diff — should I be worried?" | Inputs → Standards → Spec → Report: if a Standards finding is marked security-sensitive, offers `security-review` | Escalation |
-| 6 | "Review my PR #42 to see if it matches the ticket." | Wrong scope — this diff is already a live PR/MR; use `pr-review` instead | Wrong-skill row |
-| 7 | "This diff has a security-sensitive Standards finding." | Report offers `security-review` escalation; caller decides whether to hand off | Escalation |
+| 5 | "Review the diff since the main branch for security issues — I found a potential problem, should I be worried?" | Inputs → Standards → Spec → Report: if a Standards finding is marked security-sensitive, offers `security-review` | Escalation |
+| 6 | "Review the diff since the main branch for PR #42 — does it match the ticket?" | Wrong scope — this diff is already a live PR/MR; use `pr-review` instead | Wrong-skill row |
+| 7 | "Please do a local diff review — this one might have a security-sensitive Standards finding." | Report offers `security-review` escalation; caller decides whether to hand off | Escalation |
 | 8 | "Audit the entire codebase against our conventions — we've drifted." | Wrong scope — offer `codebase-architecture-review` for a full audit | Wrong-skill row |
 
 ## Example: Standards violation surfaces naming conflict

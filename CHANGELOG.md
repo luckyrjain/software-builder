@@ -43,6 +43,15 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Add local-diff-review skill (2026-09-09)
+
+- Added a new framework-compliant, ambient, read-only skill: `local-diff-review` (reviews the diff
+  since an arbitrary fixed point — commit, branch, tag, or merge-base — along two independent axes:
+  Standards, this repo's documented conventions, and Spec, whether the diff matches a supplied
+  issue/ticket text). Report-only: never edits source, never posts a comment, never opens a PR.
+  Distinguishes itself from `pr-review` (a live PR/MR identified by number) and
+  `codebase-architecture-review` (existing-codebase friction, not one diff).
+
 ### Add domain-modeling skill (2026-09-09)
 
 - Added a new framework-compliant, ambient, read-only skill: `domain-modeling` (challenges session

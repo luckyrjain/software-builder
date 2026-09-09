@@ -19,7 +19,7 @@ def test_review_since_commit_routes_to_local_diff_review() -> None:
 
 
 def test_numbered_pr_does_not_route_to_local_diff_review() -> None:
-    result = _dispatch("Review PR #482 for correctness and regressions.")
+    result = _dispatch("Review the diff since the main branch for PR #482 — does it match the ticket?")
     assert result.owner != "local-diff-review"
 
 
