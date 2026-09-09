@@ -42,7 +42,8 @@ bug-diagnosis:
     - \bwhy is(n't)?\b.*\bfailing\b
     - \broot[ -]cause\b.*\b(test failure|bug)\b|\b(test failure|bug)\b.*\broot[ -]cause\b
     - \breproduce\b.*\bthis\b.*\bbug\b
-    - \b(regression|performance regression)\b.*\bdiagnos\w*\b|\bdiagnos\w*\b.*\bregression\b
+    - \bregression\b.*\bdiagnos\w*\b|\bdiagnos\w*\b.*\bregression\b
     exclude_patterns:
     - \boutage\b|\berror spike\b
     - \bjust fix (it|this)\b
+    - \b(right now|currently)\b.*\bproduction\b|\bproduction\b.*\b(right now|currently)\b

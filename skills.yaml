@@ -2666,10 +2666,11 @@ skills:
       - \broot[ -]cause\b.*\b(test failure|bug)\b|\b(test failure|bug)\b.*\broot[
         -]cause\b
       - \breproduce\b.*\bthis\b.*\bbug\b
-      - \b(regression|performance regression)\b.*\bdiagnos\w*\b|\bdiagnos\w*\b.*\bregression\b
+      - \bregression\b.*\bdiagnos\w*\b|\bdiagnos\w*\b.*\bregression\b
       exclude_patterns:
       - \boutage\b|\berror spike\b
       - \bjust fix (it|this)\b
+      - \b(right now|currently)\b.*\bproduction\b|\bproduction\b.*\b(right now|currently)\b
   capacity-planner:
     path: skills/capacity-planner
     category: platform
@@ -3544,7 +3545,9 @@ skills:
       patterns:
       - \b(RCA|postmortem|production incident|incident investigation)\b
       - \b(5xx|error|latency)\b.*\b(spike|incident|production)\b
-      - \broot[ -]cause\b.*\b(incident|outage|postmortem|production)\b|\b(incident|outage|postmortem|production)\b.*\broot[
+      - \broot[ -]cause\b.*\b(incident|outage|postmortem|production|RCA|5xx|error
+        spike|deploy regression|consumer lag|SLO breach|P1|P2|INC-|on-call)\b|\b(incident|outage|postmortem|production|RCA|5xx|error
+        spike|deploy regression|consumer lag|SLO breach|P1|P2|INC-|on-call)\b.*\broot[
         -]cause\b
   incident-triage-agent:
     path: skills/incident-triage-agent

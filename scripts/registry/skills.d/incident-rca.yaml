@@ -62,4 +62,4 @@ incident-rca:
     patterns:
     - \b(RCA|postmortem|production incident|incident investigation)\b
     - \b(5xx|error|latency)\b.*\b(spike|incident|production)\b
-    - \broot[ -]cause\b.*\b(incident|outage|postmortem|production)\b|\b(incident|outage|postmortem|production)\b.*\broot[ -]cause\b
+    - \broot[ -]cause\b.*\b(incident|outage|postmortem|production|RCA|5xx|error spike|deploy regression|consumer lag|SLO breach|P1|P2|INC-|on-call)\b|\b(incident|outage|postmortem|production|RCA|5xx|error spike|deploy regression|consumer lag|SLO breach|P1|P2|INC-|on-call)\b.*\broot[ -]cause\b
