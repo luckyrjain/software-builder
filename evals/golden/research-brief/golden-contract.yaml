@@ -1,0 +1,47 @@
+schema_version: 1
+skill: research-brief
+case_id: golden-contract
+tier: 3
+description: >
+  Every finding carries a cited source and evidence status; a claim with no citable source is
+  reported UNKNOWN rather than asserted. Also covers degraded mode when web capabilities are
+  unavailable.
+recorded_output:
+  artifact: research_brief
+  repository_write_action: none
+  automatic_downstream_invocation: false
+  research_question: "Does our rate-limiting approach match current best practice?"
+  findings:
+    - claim: "This service uses a fixed-window counter in Redis for rate limiting"
+      evidence_status: OBSERVED
+      source: "src/middleware/rate_limit.py:14"
+    - claim: "Whether fixed-window or sliding-window is considered best practice today"
+      evidence_status: UNKNOWN
+      source: none
+  degraded_mode: true
+  degraded_reason: "host.web.search unavailable this session"
+assertions:
+  - type: field_equals
+    path: artifact
+    value: research_brief
+  - type: field_equals
+    path: repository_write_action
+    value: none
+  - type: forbid_field_value
+    path: repository_write_action
+    value: apply_patch
+  - type: field_equals
+    path: automatic_downstream_invocation
+    value: false
+  - type: require_pattern
+    path: findings
+    pattern: OBSERVED
+  - type: require_pattern
+    path: findings
+    pattern: UNKNOWN
+  - type: field_equals
+    path: degraded_mode
+    value: true
+  - type: require_pattern
+    path: degraded_reason
+    pattern: host.web.search unavailable
