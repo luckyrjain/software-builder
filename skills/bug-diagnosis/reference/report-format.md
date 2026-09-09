@@ -52,6 +52,9 @@ of them:
 ## Rules
 
 - Every hypothesis, including rejected ones, is listed with the evidence that rejected it.
-- `root_cause` states a confidence band; never rendered as confirmed without cited evidence.
+- `root_cause` states a confidence band; never rendered as confirmed without cited evidence. Confidence
+  band is one of the shared categorical bands (HIGH / MEDIUM / LOW / UNKNOWN) defined in
+  [confidence-bands.md](../../../docs/skill-framework/shared/confidence-bands.md) — never a numeric score
+  or an alternate label.
 - `repro_status: confirmed` requires cited evidence; otherwise `unconfirmed` with a stated reason.
 - Never claim a fix was applied — this report never edits source, tests, or configuration.

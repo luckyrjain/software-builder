@@ -60,6 +60,7 @@ incident-rca:
     external_services: Datadog MCP, Jira MCP, KubeSense CLI (optional)
   routing:
     patterns:
-    - \b(RCA|postmortem|production incident|incident investigation)\b
+    - \b(RCA|root cause analysis|postmortem|production incident|incident investigation)\b
     - \b(5xx|error|latency)\b.*\b(spike|incident|production)\b
-    - \broot[ -]cause\b.*\b(incident|outage|postmortem|production|RCA|5xx|error spike|deploy regression|consumer lag|SLO breach|P1|P2|INC-|on-call)\b|\b(incident|outage|postmortem|production|RCA|5xx|error spike|deploy regression|consumer lag|SLO breach|P1|P2|INC-|on-call)\b.*\broot[ -]cause\b
+    - \broot[ -]cause\b.*\b(incident|outage|production|5xx|error spike)\b|\b(incident|outage|production|5xx|error spike)\b.*\broot[ -]cause\b
+    - \b(INC-|P1|P2|SLO breach|on-call|consumer lag|deploy regression)\b
