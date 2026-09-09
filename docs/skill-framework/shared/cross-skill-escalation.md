@@ -173,6 +173,8 @@ Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local
 | domain-modeling finds contested alternatives blocking ADR readiness | engineering-decision-discovery receives the `domain_model_update` contested terms/alternatives and evidence refs | "Grill me on the unresolved decision for `{scope}` using the attached evidence" |
 | local-diff-review flags a security-sensitive Standards finding | security-review receives the finding and evidence | "Security review of `{finding}` flagged during local diff review" |
 | bug-diagnosis confirms a root cause ready to fix | loop-task-implementer receives the confirmed root cause and evidence | "Fix `{function}` per the confirmed root cause in `{symptom}`'s diagnosis" |
+| bug-diagnosis's evidence reveals a live production incident | incident-rca receives the symptom and evidence | "RCA for `{service}` `{window}` — surfaced during bug diagnosis" |
+| bug-diagnosis's root cause is structural, not a local bug | codebase-architecture-review receives the root cause and evidence refs | "Review the architecture around `{scope}` — bug-diagnosis found a structural cause" |
 
 ## 3. Handoff block (required fields)
 

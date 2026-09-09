@@ -47,6 +47,7 @@ do **not** pick highest score as primary. Phase exit gates: [phase-exit-criteria
 
 | Request | Use instead |
 |---------|-------------|
+| Non-incident bug, test failure, or performance regression root cause (no active time window) | **bug-diagnosis** |
 | Overprovisioned / right-sized deployment? | **k8s-overprovisioning-datadog** |
 | Review a merge request / PR | **pr-review** |
 | Required observability provider unavailable / unauthorized | Follow [mcp-error-handling.md](../../docs/skill-framework/shared/mcp-error-handling.md), report the missing capability, and return or use a documented fallback |

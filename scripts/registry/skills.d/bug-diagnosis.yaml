@@ -39,9 +39,10 @@ bug-diagnosis:
   routing:
     patterns:
     - \bdiagnose\b.*\b(this|the)\b.*\b(bug|failure|regression|test)\b
-    - \bwhy is\b.*\bfailing\b
-    - \broot cause\b.*\b(test failure|bug)\b
+    - \bwhy is(n't)?\b.*\bfailing\b
+    - \broot[ -]cause\b.*\b(test failure|bug)\b|\b(test failure|bug)\b.*\broot[ -]cause\b
     - \breproduce\b.*\bthis\b.*\bbug\b
+    - \b(regression|performance regression)\b.*\bdiagnos\w*\b|\bdiagnos\w*\b.*\bregression\b
     exclude_patterns:
     - \boutage\b|\berror spike\b
     - \bjust fix (it|this)\b

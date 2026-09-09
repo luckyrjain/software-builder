@@ -342,6 +342,7 @@ contracts:
           title: string
           symptom: string
           repro_status: string
+          repro_evidence: string
           hypotheses_tested: list
           root_cause: string
           confidence: string
@@ -349,6 +350,7 @@ contracts:
           repository_write_action: string
           automatic_downstream_invocation: boolean
           unresolved_questions: list
+          recommendation: string
         codebase_architecture_report:
           title: string
           scope: mapping
@@ -1377,6 +1379,7 @@ contracts:
         - title
         - symptom
         - repro_status
+        - repro_evidence
         - hypotheses_tested
         - root_cause
         - confidence
@@ -1384,6 +1387,7 @@ contracts:
         - repository_write_action
         - automatic_downstream_invocation
         - unresolved_questions
+        - recommendation
       codebase_architecture_report:
         fields:
         - title
@@ -2658,9 +2662,11 @@ skills:
     routing:
       patterns:
       - \bdiagnose\b.*\b(this|the)\b.*\b(bug|failure|regression|test)\b
-      - \bwhy is\b.*\bfailing\b
-      - \broot cause\b.*\b(test failure|bug)\b
+      - \bwhy is(n't)?\b.*\bfailing\b
+      - \broot[ -]cause\b.*\b(test failure|bug)\b|\b(test failure|bug)\b.*\broot[
+        -]cause\b
       - \breproduce\b.*\bthis\b.*\bbug\b
+      - \b(regression|performance regression)\b.*\bdiagnos\w*\b|\bdiagnos\w*\b.*\bregression\b
       exclude_patterns:
       - \boutage\b|\berror spike\b
       - \bjust fix (it|this)\b
@@ -3538,7 +3544,8 @@ skills:
       patterns:
       - \b(RCA|postmortem|production incident|incident investigation)\b
       - \b(5xx|error|latency)\b.*\b(spike|incident|production)\b
-      - \broot cause\b.*\b(incident|outage|postmortem|production)\b
+      - \broot[ -]cause\b.*\b(incident|outage|postmortem|production)\b|\b(incident|outage|postmortem|production)\b.*\broot[
+        -]cause\b
   incident-triage-agent:
     path: skills/incident-triage-agent
     category: incident

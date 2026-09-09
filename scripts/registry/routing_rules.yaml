@@ -21,9 +21,10 @@ routes:
   bug-diagnosis:
     patterns:
     - \bdiagnose\b.*\b(this|the)\b.*\b(bug|failure|regression|test)\b
-    - \bwhy is\b.*\bfailing\b
-    - \broot cause\b.*\b(test failure|bug)\b
+    - \bwhy is(n't)?\b.*\bfailing\b
+    - \broot[ -]cause\b.*\b(test failure|bug)\b|\b(test failure|bug)\b.*\broot[ -]cause\b
     - \breproduce\b.*\bthis\b.*\bbug\b
+    - \b(regression|performance regression)\b.*\bdiagnos\w*\b|\bdiagnos\w*\b.*\bregression\b
     exclude_patterns:
     - \boutage\b|\berror spike\b
     - \bjust fix (it|this)\b
@@ -99,7 +100,8 @@ routes:
     patterns:
     - \b(RCA|postmortem|production incident|incident investigation)\b
     - \b(5xx|error|latency)\b.*\b(spike|incident|production)\b
-    - \broot cause\b.*\b(incident|outage|postmortem|production)\b
+    - \broot[ -]cause\b.*\b(incident|outage|postmortem|production)\b|\b(incident|outage|postmortem|production)\b.*\broot[
+      -]cause\b
   incident-triage-agent:
     patterns:
     - \b(pager|page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b

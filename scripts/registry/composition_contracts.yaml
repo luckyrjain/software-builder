@@ -209,6 +209,7 @@ artifact_schemas:
     - title
     - symptom
     - repro_status
+    - repro_evidence
     - hypotheses_tested
     - root_cause
     - confidence
@@ -216,6 +217,7 @@ artifact_schemas:
     - repository_write_action
     - automatic_downstream_invocation
     - unresolved_questions
+    - recommendation
   codebase_architecture_report:
     fields:
     - title

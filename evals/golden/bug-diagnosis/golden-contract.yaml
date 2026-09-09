@@ -20,7 +20,7 @@ recorded_output:
       result: survived
       evidence: "checkout.py:88 applies discount after calling calculate_tax(), confirmed via trace"
   root_cause: "Discount applied after tax instead of before, per checkout.py:88"
-  root_cause_confidence: HIGH
+  confidence: HIGH
 assertions:
   - type: field_equals
     path: artifact
@@ -44,5 +44,5 @@ assertions:
     path: root_cause
     pattern: Discount applied after tax
   - type: field_equals
-    path: root_cause_confidence
+    path: confidence
     value: HIGH
