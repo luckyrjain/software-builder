@@ -6,7 +6,8 @@ description: >-
   deployment risk, release risk, blast radius, rollback plan, go/no-go on deployment risk alone.
   Not for the composed multi-repo release go/no-go sweep (release-readiness-checker), an aggregated
   ship/no-ship verdict across CI/review/policy/specialists for one change (production-readiness-
-  review), or investigating an incident that already happened (incident-triage-agent).
+  review), investigating an incident that already happened (incident-triage-agent), or the
+  breaking-change/CVE/API-diff review of a dependency version bump itself (dependency-upgrade-review).
 ---
 
 # deployment-risk-review
@@ -36,6 +37,8 @@ Routing table: [skill-routing.md](../../docs/skill-framework/shared/skill-routin
 | Pre-deploy risk check on a single change description | Post-incident root-cause investigation of a confirmed incident → **incident-triage-agent** (delegates to incident-rca) |
 | Assessing rollback-plan safety/speed before shipping | Composed, multi-service release-wide readiness report → **release-readiness-checker** |
 | — | "Is this PR/MR production ready?", "go/no-go for this change" spanning ALL evidence (CI, review, policy, specialists), not deployment risk alone → **production-readiness-review** |
+| — | Breaking changes, CVEs, or API differences of a dependency version bump itself → **dependency-upgrade-review** |
+| Schema/data migration's blast radius and rollback plan as part of shipping the whole change | The migration script's own indexing, locking, and query-plan safety → **database-review** |
 
 ## Deliverable
 

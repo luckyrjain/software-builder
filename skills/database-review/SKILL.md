@@ -4,8 +4,9 @@ description: >-
   Use when a database schema, migration, or query needs review for indexing, locking, transactions,
   migration safety, query plans, replication, and partitioning. Keywords: database review, schema review,
   migration review, index review, query plan, locking, partitioning. Not for the MySQL-to-Postgres rewrite
-  itself (mysql-to-postgres-sql), a general MR review (pr-review), or capacity forecasting
-  (capacity-planner).
+  itself (mysql-to-postgres-sql), a general MR review (pr-review), capacity forecasting
+  (capacity-planner), or the blast radius/rollback plan of shipping the change that runs this migration
+  (deployment-risk-review).
 ---
 
 # database-review
@@ -31,6 +32,7 @@ Routing table: [skill-routing.md](../../docs/skill-framework/shared/skill-routin
 | A schema/DDL, migration script, or representative queries need review | A MySQL→Postgres dialect rewrite itself → **mysql-to-postgres-sql** |
 | Indexing, locking, transaction, migration-safety, query-plan, replication, or partitioning question | Reviewing one MR end-to-end (of which a migration is one part) → **pr-review** |
 | — | Forecasting future capacity/growth, not reviewing a given schema/migration → **capacity-planner** |
+| Migration safety: indexing, locking, and query-plan behavior of the migration script itself | Blast radius, rollback complexity, or go/no-go risk of shipping the change that runs it → **deployment-risk-review** |
 
 ## Deliverable
 

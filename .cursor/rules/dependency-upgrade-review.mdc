@@ -1,5 +1,5 @@
 ---
-description: Use when a framework or library upgrade needs review: breaking changes, CVEs, API differences, transitive dependency impact, and rollout risk. Keywords: dependency upgrade, version bump review, CVE review, breaking change, transitive dependency. Not for a dedicated deep security audit (security-review, which this skill escalates to for exploitable CVEs) or the MySQL-to-Postgres migration itself (mysql-to-postgres-sql).
+description: Use when a framework or library upgrade needs review: breaking changes, CVEs, API differences, transitive dependency impact, and rollout risk. Keywords: dependency upgrade, version bump review, CVE review, breaking change, transitive dependency. Not for a dedicated deep security audit (security-review, which this skill escalates to for exploitable CVEs), the MySQL-to-Postgres migration itself (mysql-to-postgres-sql), or a pre-deploy blast-radius/rollback assessment of the resulting change once the version is picked (deployment-risk-review).
 alwaysApply: false
 ---
 
