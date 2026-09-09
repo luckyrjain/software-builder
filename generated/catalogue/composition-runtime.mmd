@@ -67,8 +67,10 @@ graph TD
   domain-comprehension ==>|handoff| squad-map
   domain-modeling -.->|escalates| architecture-review
   domain-modeling -.->|escalates| domain-comprehension
+  domain-modeling -.->|escalates| engineering-decision-discovery
   domain-modeling -.->|escalates| module-design
   engineering-decision-discovery -.->|escalates| architecture-review
+  engineering-decision-discovery -.->|escalates| domain-modeling
   engineering-decision-discovery -.->|escalates| module-design
   implementation-planner -.->|escalates| loop-task-implementer
   incident-rca -.->|escalates| k8s-overprovisioning-datadog

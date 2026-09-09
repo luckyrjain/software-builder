@@ -3032,6 +3032,7 @@ skills:
       - domain-comprehension
       - module-design
       - architecture-review
+      - engineering-decision-discovery
     capabilities:
       required:
       - host.report.write
@@ -3155,6 +3156,7 @@ skills:
       invokes: []
       escalation_targets:
       - module-design
+      - domain-modeling
       - architecture-review
     capabilities:
       required:
