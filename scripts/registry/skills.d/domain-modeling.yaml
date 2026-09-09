@@ -39,7 +39,7 @@ domain-modeling:
   routing:
     patterns:
     - \bglossary\b.*\b(defin\w*|conflicts?)\b
-    - \bwe( just)? decided\b
+    - \bwe( just)? decided\b.*\bbecause\b
     - \bstress-test\b.*\b(term|domain)\b
     - \b(sharpen|pin down|challenge)\b.*\b(domain|terminology|glossary)\b
     - \byou'?re saying\b.*\bdo you mean\b
