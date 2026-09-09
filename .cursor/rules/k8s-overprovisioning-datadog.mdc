@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the k8s-overprovisioning-datadog skill. Read `k8s-overprovisioning-datadog/SKILL.md` and follow it.
-Phase index: `k8s-overprovisioning-datadog/reference/phase-index.md` when present under the skill directory.
+Invoke the k8s-overprovisioning-datadog skill. Read `skills/k8s-overprovisioning-datadog/SKILL.md` and follow it.
+Phase index: `skills/k8s-overprovisioning-datadog/reference/phase-index.md` when present under the skill directory.

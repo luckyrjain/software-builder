@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the loop-task-implementer skill. Read `loop-task-implementer/SKILL.md` and follow it.
-Phase index: `loop-task-implementer/reference/phase-index.md` when present under the skill directory.
+Invoke the loop-task-implementer skill. Read `skills/loop-task-implementer/SKILL.md` and follow it.
+Phase index: `skills/loop-task-implementer/reference/phase-index.md` when present under the skill directory.

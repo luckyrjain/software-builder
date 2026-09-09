@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the new-hire-guide skill. Read `new-hire-guide/SKILL.md` and follow it.
-Phase index: `new-hire-guide/reference/phase-index.md` when present under the skill directory.
+Invoke the new-hire-guide skill. Read `skills/new-hire-guide/SKILL.md` and follow it.
+Phase index: `skills/new-hire-guide/reference/phase-index.md` when present under the skill directory.

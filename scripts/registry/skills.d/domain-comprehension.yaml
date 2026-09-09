@@ -1,5 +1,5 @@
 domain-comprehension:
-  path: domain-comprehension
+  path: skills/domain-comprehension
   category: architecture
   invocation: ambient
   hosts:

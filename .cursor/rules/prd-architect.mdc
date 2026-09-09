@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the prd-architect skill. Read `prd-architect/SKILL.md` and follow it.
-Phase index: `prd-architect/reference/phase-index.md` when present under the skill directory.
+Invoke the prd-architect skill. Read `skills/prd-architect/SKILL.md` and follow it.
+Phase index: `skills/prd-architect/reference/phase-index.md` when present under the skill directory.

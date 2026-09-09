@@ -4,4 +4,4 @@ inclusion: manual
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-For observability-review, read `observability-review/SKILL.md` and follow it.
+For observability-review, read `skills/observability-review/SKILL.md` and follow it.

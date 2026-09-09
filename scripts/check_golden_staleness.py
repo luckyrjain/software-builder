@@ -11,7 +11,7 @@ leaves a gap: nothing ever compares that provenance against the thing it is prov
 
 This script closes that gap, advisory-only: for every golden fixture, it compares
 `refresh_meta.last_refreshed_at` against the git commit date of its skill's SKILL.md
-(`git log -1 --format=%cI -- <skill>/SKILL.md`). A SKILL.md commit landing after a
+(`git log -1 --follow --format=%cI -- <skill>/SKILL.md`). A SKILL.md commit landing after a
 fixture's last refresh doesn't prove the fixture is wrong -- the change might be
 unrelated to what the fixture asserts -- but it is exactly the situation a maintainer
 would want a nudge to double-check. Per ADR-0003/0004 (this repo deliberately never
@@ -57,7 +57,7 @@ def _skill_md_last_commit_at(root: Path, skill_path: str) -> datetime | None:
     relative_path = f"{skill_path}/SKILL.md"
     try:
         completed = subprocess.run(
-            ["git", "-C", str(root), "log", "-1", "--format=%cI", "--", relative_path],
+            ["git", "-C", str(root), "log", "-1", "--follow", "--format=%cI", "--", relative_path],
             capture_output=True,
             text=True,
             check=False,

@@ -34,9 +34,14 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.registry.schema import parse_registry  # noqa: E402
+from scripts.registry.models import Registry  # noqa: E402
 
 SKILL_ID_RE = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 
@@ -196,7 +201,7 @@ def _registry_fragment(skill_id: str, description: str) -> str:
     # routing/output_contract as explicit TODOs since those are real design decisions, not
     # boilerplate.
     return f"""{skill_id}:
-  path: {skill_id}
+  path: skills/{skill_id}
   category: analysis  # TODO: pick the real category (see other fragments in this directory)
   extends: read-only-leaf-review
   install:
@@ -233,8 +238,40 @@ def _registry_fragment(skill_id: str, description: str) -> str:
 """
 
 
+def _skills_root(root: Path, registry: Registry) -> Path:
+    """Where a brand-new, not-yet-registered skill should be scaffolded.
+
+    Mirrors the same "every registry entry's `path:` parent, when they agree"
+    derivation `scripts/registry/crosscheck.py`'s `_skills_root()` and
+    `scripts/registry/generate_makefile_roster.py`'s `_skills_dir()` already use, so this
+    script automatically tracks any future repo-wide skills-directory move exactly like
+    those two do, instead of hard-coding `"skills"` a third time. Unlike those two
+    (which fall back to `root` / `"."` for an empty/synthetic registry -- their
+    pre-migration historical default), this falls back to `root / "skills"`: a script
+    whose entire job is creating a new skill has no reason to default to the pre-move
+    layout, and every real skill in this repository has shared a single `skills` parent
+    since the migration landed.
+    """
+    if registry.skills:
+        parents = {PurePosixPath(entry.path).parent for entry in registry.skills.values()}
+        if len(parents) == 1:
+            (only,) = parents
+            if only != PurePosixPath("."):
+                return root / only
+    return root / "skills"
+
+
 def scaffold(skill_id: str, description: str, *, root: Path = ROOT) -> list[Path]:
-    skill_dir = root / skill_id
+    # skill_id has no registry entry yet at scaffold time -- this fragment's own
+    # `path: skills/{skill_id}` line (see _registry_fragment above) is what *creates*
+    # that entry, so there is nothing for a registry lookup to find here in the common
+    # case. If skill_id already has a stray/stale registry entry (e.g. a leftover
+    # fragment from an aborted previous attempt), resolve through it directly instead of
+    # guessing -- that's the real location an exists() check must guard against, even if
+    # it disagrees with where every other skill lives.
+    registry = parse_registry(root / "skills.yaml")
+    existing_entry = registry.skills.get(skill_id)
+    skill_dir = root / existing_entry.path if existing_entry is not None else _skills_root(root, registry) / skill_id
     fragment_path = root / "scripts" / "registry" / "skills.d" / f"{skill_id}.yaml"
     if skill_dir.exists():
         raise FileExistsError(f"{skill_dir.relative_to(root)} already exists")

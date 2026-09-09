@@ -223,12 +223,13 @@ def test_legacy_install_aborts_loudly_when_destination_resolution_fails(tmp_path
     home = tmp_path / "home"
     repo = tmp_path / "repo"
     repo.mkdir()
-    for name in ("scripts", "skills.yaml", "VERSION", "pr-review"):
-        source = ROOT / name
-        destination = repo / name
+    for rel in ("scripts", "skills.yaml", "VERSION", "skills/pr-review"):
+        source = ROOT / rel
+        destination = repo / rel
         if source.is_dir():
             shutil.copytree(source, destination)
         else:
+            destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(source.read_bytes())
     # Deliberately no agent-hosts.yaml copied.
 

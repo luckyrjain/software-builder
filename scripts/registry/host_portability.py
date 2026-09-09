@@ -58,8 +58,8 @@ def _plugin_errors(path: Path, host: str) -> list[str]:
         return errors
     if payload.get("name") != "software-builder":
         errors.append(f"error: {host} package identity drift")
-    if payload.get("skills") != "./":
-        errors.append(f"error: {host} package must point at canonical root skill tree")
+    if payload.get("skills") != "./skills":
+        errors.append(f"error: {host} package must point at canonical skill tree")
     return errors
 
 

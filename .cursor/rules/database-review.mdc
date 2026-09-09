@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the database-review skill. Read `database-review/SKILL.md` and follow it.
-Phase index: `database-review/reference/phase-index.md` when present under the skill directory.
+Invoke the database-review skill. Read `skills/database-review/SKILL.md` and follow it.
+Phase index: `skills/database-review/reference/phase-index.md` when present under the skill directory.

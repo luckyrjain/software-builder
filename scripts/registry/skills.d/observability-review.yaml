@@ -1,5 +1,5 @@
 observability-review:
-  path: observability-review
+  path: skills/observability-review
   category: review
   extends: read-only-leaf-review
   install:

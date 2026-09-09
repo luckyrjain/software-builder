@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the backlog-runner skill. Read `backlog-runner/SKILL.md` and follow it.
-Phase index: `backlog-runner/reference/phase-index.md` when present under the skill directory.
+Invoke the backlog-runner skill. Read `skills/backlog-runner/SKILL.md` and follow it.
+Phase index: `skills/backlog-runner/reference/phase-index.md` when present under the skill directory.

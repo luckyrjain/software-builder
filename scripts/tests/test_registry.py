@@ -896,6 +896,66 @@ def test_validate_skill_directory_sync_detects_orphan_and_missing(tmp_path: Path
     assert "error: missing-dir: registry entry has no SKILL.md directory" in errors
 
 
+def _skill_entry_with_path(path: str) -> SkillEntry:
+    from scripts.registry.models import CompositionSpec, HostDiscoverySpec, InstallSpec, LintSpec, SkillEntry
+
+    return SkillEntry(
+        path=path,
+        category="testing",
+        invocation="ambient",
+        hosts={
+            "cursor": HostDiscoverySpec(discovery="rule"),
+            "claude": HostDiscoverySpec(install=True),
+            "kiro": HostDiscoverySpec(discovery="manual"),
+        },
+        install=InstallSpec(requires=[]),
+        lint=LintSpec(skill_md_max_lines=180, target=path.rsplit("/", 1)[-1]),
+        composition=CompositionSpec(),
+        risk_class=[],
+    )
+
+
+def test_validate_skill_paths_share_one_parent_names_the_outlier() -> None:
+    # Regression for the failure mode scripts/new_skill.py's bug produced (see
+    # scripts/tests/test_new_skill.py): a skill scaffolded with `path: <id>` (repo root)
+    # instead of `path: skills/<id>` used to get no error of its own -- every *other*,
+    # correctly-placed skill instead failed with a misleading "registry entry has no
+    # SKILL.md directory", because _skills_root() picks a directory by majority vote and
+    # the one outlier just silently lost the vote. This check must name the outlier
+    # directly, by skill id, instead.
+    from scripts.registry.crosscheck import _validate_skill_paths_share_one_parent
+    from scripts.registry.models import Registry
+
+    registry = Registry(
+        schema_version=1,
+        skills={
+            "alpha": _skill_entry_with_path("skills/alpha"),
+            "beta": _skill_entry_with_path("skills/beta"),
+            "stray": _skill_entry_with_path("stray"),
+        },
+    )
+    errors = _validate_skill_paths_share_one_parent(registry)
+
+    assert len(errors) == 1
+    assert "stray" in errors[0]
+    assert "alpha" not in errors[0]
+    assert "beta" not in errors[0]
+
+
+def test_validate_skill_paths_share_one_parent_accepts_uniform_registry() -> None:
+    from scripts.registry.crosscheck import _validate_skill_paths_share_one_parent
+    from scripts.registry.models import Registry
+
+    registry = Registry(
+        schema_version=1,
+        skills={
+            "alpha": _skill_entry_with_path("skills/alpha"),
+            "beta": _skill_entry_with_path("skills/beta"),
+        },
+    )
+    assert _validate_skill_paths_share_one_parent(registry) == []
+
+
 def test_bootstrap_registry_validates_on_real_repo() -> None:
     from scripts.registry.crosscheck import validate_registry
 
@@ -906,9 +966,9 @@ def test_bootstrap_registry_validates_on_real_repo() -> None:
 def test_render_cursor_rule_thin_wrapper() -> None:
     from scripts.registry.generate_cursor import render_cursor_rule
 
-    text = render_cursor_rule("squad-map", "Map repos to squads.", "rule")
+    text = render_cursor_rule("squad-map", "skills/squad-map", "Map repos to squads.", "rule")
     assert "GENERATED from skills.yaml" in text
-    assert "squad-map/SKILL.md" in text
+    assert "skills/squad-map/SKILL.md" in text
     assert "mock" not in text.lower()
     assert "alwaysApply: false" in text
     assert text.count("\n") < 15
@@ -917,9 +977,9 @@ def test_render_cursor_rule_thin_wrapper() -> None:
 def test_render_kiro_steering_thin_wrapper() -> None:
     from scripts.registry.generate_kiro import render_kiro_steering
 
-    text = render_kiro_steering("squad-map", "manual")
+    text = render_kiro_steering("squad-map", "skills/squad-map", "manual")
     assert "GENERATED from skills.yaml" in text
-    assert "squad-map/SKILL.md" in text
+    assert "skills/squad-map/SKILL.md" in text
     assert "inclusion: manual" in text
 
 

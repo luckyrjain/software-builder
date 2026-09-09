@@ -1,5 +1,5 @@
 release-readiness-checker:
-  path: release-readiness-checker
+  path: skills/release-readiness-checker
   category: release
   invocation: ambient
   hosts:

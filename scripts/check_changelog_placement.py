@@ -36,6 +36,14 @@ import re
 import sys
 from pathlib import Path
 
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from scripts.registry.paths import skill_dir_from_entry  # noqa: E402
+from scripts.registry.schema import parse_registry  # noqa: E402
+from scripts.yaml_safety import YAML_SAFETY_ERRORS  # noqa: E402
+
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 HEADING_RE = re.compile(r"^(#{2,6})\s+(.*\S)\s*$")
 
@@ -137,13 +145,37 @@ def _jaccard(left: set[str], right: set[str]) -> float:
     return len(left & right) / len(union)
 
 
+def _skill_source_dirs(root: Path) -> dict[str, Path]:
+    """Every skill id's resolved source directory, keyed by skill id.
+
+    Registry-driven (via skills.yaml's `path:` field) rather than a bare `root.iterdir()`
+    scan for subdirectories -- once skills move under `skills/` (see the parent
+    migration plan), an iterdir() scan over `root` would find only that one directory,
+    and this check would silently discover zero skills -- and therefore zero
+    misplacements -- forever, instead of loudly breaking. Falls back to the old
+    iterdir()-based scan when skills.yaml is missing or fails to parse, matching this
+    function's entire behavior before it became registry-aware: this script's own
+    tests build a bare CHANGELOG.md-only tree with no skills.yaml, to exercise the
+    duplicate-detection heuristic, not registry resolution.
+    """
+    try:
+        registry = parse_registry(root / "skills.yaml")
+    except (OSError, *YAML_SAFETY_ERRORS):
+        return {path.name: path for path in root.iterdir() if path.is_dir()}
+    return {
+        skill_id: skill_dir_from_entry(root, entry, skill_id)
+        for skill_id, entry in registry.skills.items()
+    }
+
+
 def find_likely_misplacements(root: Path) -> list[str]:
     changelog_path = root / "CHANGELOG.md"
     if not changelog_path.is_file():
         return []
 
+    skill_paths = _skill_source_dirs(root)
     skill_dirs = {
-        path.name for path in root.iterdir() if path.is_dir() and (path / "CHANGELOG.md").is_file()
+        skill_id for skill_id, path in skill_paths.items() if (path / "CHANGELOG.md").is_file()
     }
     root_entries = parse_root_changelog_entries(
         changelog_path.read_text(encoding="utf-8"), skill_dirs
@@ -153,7 +185,7 @@ def find_likely_misplacements(root: Path) -> list[str]:
     skill_entries_cache: dict[str, list[tuple[str, str, str]]] = {}
     for skill, date, root_title, root_body in root_entries:
         if skill not in skill_entries_cache:
-            skill_changelog = root / skill / "CHANGELOG.md"
+            skill_changelog = skill_paths[skill] / "CHANGELOG.md"
             skill_entries_cache[skill] = parse_skill_changelog_entries(
                 skill_changelog.read_text(encoding="utf-8")
             )

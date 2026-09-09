@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the release-readiness-checker skill. Read `release-readiness-checker/SKILL.md` and follow it.
-Phase index: `release-readiness-checker/reference/phase-index.md` when present under the skill directory.
+Invoke the release-readiness-checker skill. Read `skills/release-readiness-checker/SKILL.md` and follow it.
+Phase index: `skills/release-readiness-checker/reference/phase-index.md` when present under the skill directory.

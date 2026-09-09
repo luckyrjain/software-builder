@@ -14,8 +14,9 @@ The policy, in one place:
 * A vendored copy inside the skill package always wins.
 * If there is no vendored copy but an install manifest proves this *is* an installed package, that
   is a packaging fault -- refuse, never look outside the package.
-* Otherwise accept the parent directory only when it proves itself a software-builder checkout
-  (`skills.yaml` and `scripts/package_skill.py` both present).
+* Otherwise walk up from the skill's directory, accepting the first ancestor (within a small
+  bound) that proves itself a software-builder checkout (`skills.yaml` and
+  `scripts/package_skill.py` both present) -- never an unproven directory at any level.
 * Otherwise refuse.
 """
 
@@ -47,10 +48,14 @@ def shared_runtime_path(skill_root: Path, module_name: str, *, description: str 
     if (skill_root / INSTALL_MANIFEST).is_file():
         raise RuntimeError(f"unable to load packaged {description}: {vendored}")
 
-    repo_root = skill_root.parent
-    source = repo_root / SHARED_RELATIVE / filename
-    if all((repo_root / marker).is_file() for marker in SOURCE_CHECKOUT_MARKERS) and source.is_file():
-        return source
+    # A skill's directory is not always exactly one level below repo root (e.g. once skills move
+    # under skills/<name>/), so walk up looking for the same proof -- both SOURCE_CHECKOUT_MARKERS
+    # present -- at each ancestor instead of assuming the immediate parent is repo root. The bound
+    # keeps this from ever walking out to an arbitrary, unrelated ancestor on disk.
+    for repo_root in (skill_root.parent, *skill_root.parent.parents)[:6]:
+        source = repo_root / SHARED_RELATIVE / filename
+        if all((repo_root / marker).is_file() for marker in SOURCE_CHECKOUT_MARKERS) and source.is_file():
+            return source
     raise RuntimeError(
         f"unable to load packaged {description} or verified source-checkout runtime: {vendored}"
     )

@@ -74,6 +74,50 @@ def test_a_source_checkout_must_prove_itself_with_repository_markers(loader, tmp
     assert loader.shared_runtime_path(skill, "thing") == source
 
 
+def test_a_source_checkout_is_found_by_walking_up_past_an_extra_nesting_level(
+    loader, tmp_path: Path
+) -> None:
+    """Once skills move to skills/<name>/, `skill_root.parent` (here `skills/`) no longer IS repo
+    root -- the walk-up must climb past it to find the ancestor that actually proves itself with
+    SOURCE_CHECKOUT_MARKERS, simulating the post-migration `<repo>/skills/some-skill` layout."""
+    repo_root = tmp_path
+    skill = repo_root / "skills" / "some-skill"
+    skill.mkdir(parents=True)
+    source = repo_root / "docs/skill-framework/shared/thing.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("VALUE = 3\n", encoding="utf-8")
+
+    # The immediate parent (`skills/`) does not itself hold the markers -- proving this case
+    # actually needs the walk-up, not just a layout where a single parent hop would still work.
+    assert not (skill.parent / "skills.yaml").is_file()
+
+    (repo_root / "skills.yaml").write_text("schema_version: 1\n", encoding="utf-8")
+    (repo_root / "scripts").mkdir()
+    (repo_root / "scripts/package_skill.py").write_text("# marker\n", encoding="utf-8")
+
+    assert loader.shared_runtime_path(skill, "thing") == source
+    assert loader.load_shared_runtime(skill, "thing").VALUE == 3
+
+
+def test_a_source_checkout_is_still_refused_when_no_ancestor_proves_itself(
+    loader, tmp_path: Path
+) -> None:
+    """Nesting a skill several levels deep with no ancestor ever proving itself via
+    SOURCE_CHECKOUT_MARKERS must still fail with the same error the single-parent-hop code raised
+    -- the walk-up only changes what can succeed, never weakens the refusal."""
+    skill = tmp_path / "some-skill"
+    skill.mkdir()
+    # A source file exists at the immediate parent, but no ancestor ever gets the markers, so the
+    # walk-up must exhaust its bound and still refuse -- proving unproven directories are never
+    # trusted regardless of how many levels are searched.
+    source = tmp_path / "docs/skill-framework/shared/thing.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("VALUE = 4\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="verified source-checkout runtime"):
+        loader.shared_runtime_path(skill, "thing")
+
+
 def test_module_names_are_names_not_paths(loader, tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="invalid shared runtime module name"):
         loader.shared_runtime_path(tmp_path, "../../etc/passwd")
@@ -134,3 +178,69 @@ def test_packaged_pr_review_ships_the_framework_tree_its_scripts_execute(tmp_pat
     assert skill_loads_shared_runtime(dest)
     assert (dest / "docs/skill-framework/shared/review_contract_runtime.py").is_file()
     assert (dest / "scripts/shared_runtime_loader.py").is_file()
+
+
+def _exec_generated_bootstrap(script_path: Path):
+    """Write scripts/registry/generate_shared_runtime_bootstrap.py's generated bootstrap block
+    into `script_path` (with the minimal imports/`_RUNTIME_DESCRIPTION` every one of the 8 real
+    target files supplies around it) and exec it, returning the resulting module. This exercises
+    the exact text `make generate` projects into those 8 files -- not a reimplementation of it."""
+    from scripts.registry.generate_shared_runtime_bootstrap import (
+        render_shared_runtime_bootstrap_block,
+    )
+
+    script_path.parent.mkdir(parents=True, exist_ok=True)
+    script_path.write_text(
+        "from __future__ import annotations\n"
+        "import importlib.util\n"
+        "from pathlib import Path\n"
+        "from types import ModuleType\n"
+        "\n"
+        "_RUNTIME_DESCRIPTION = 'test runtime'\n"
+        f"{render_shared_runtime_bootstrap_block()}",
+        encoding="utf-8",
+    )
+    spec = importlib.util.spec_from_file_location("generated_bootstrap_under_test", script_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_generated_bootstrap_finds_the_loader_at_todays_flat_layout(tmp_path: Path) -> None:
+    """Before the skills/ migration, a skill's directory sits directly at repo root, so
+    `SKILL_ROOT.parent` already IS the loader's ancestor -- the walk-up fallback must keep
+    resolving to the identical location the old hardcoded `SKILL_ROOT.parent / ...` did, not just
+    a plausible-looking one."""
+    loader_dir = tmp_path / "docs/skill-framework/shared"
+    loader_dir.mkdir(parents=True)
+    (loader_dir / "shared_runtime_loader.py").write_text("MARKER = 'flat-layout'\n", encoding="utf-8")
+
+    script_path = tmp_path / "some-skill/scripts/foo.py"
+    module = _exec_generated_bootstrap(script_path)
+
+    assert module.SKILL_ROOT.parent / "docs/skill-framework/shared/shared_runtime_loader.py" == (
+        loader_dir / "shared_runtime_loader.py"
+    )
+    loaded = module._shared_runtime_loader()
+    assert loaded.MARKER == "flat-layout"
+
+
+def test_generated_bootstrap_walks_up_from_a_nested_skill_root(tmp_path: Path) -> None:
+    """Once skills move to skills/<name>/, `SKILL_ROOT.parent` resolves to `skills/`, not repo
+    root -- the walk-up must still find the loader by climbing past it, simulating the
+    `<tmp>/skills/some-skill/scripts/foo.py` layout the migration produces."""
+    loader_dir = tmp_path / "docs/skill-framework/shared"
+    loader_dir.mkdir(parents=True)
+    (loader_dir / "shared_runtime_loader.py").write_text("MARKER = 'nested-layout'\n", encoding="utf-8")
+
+    script_path = tmp_path / "skills/some-skill/scripts/foo.py"
+    module = _exec_generated_bootstrap(script_path)
+
+    # SKILL_ROOT.parent alone (the old, non-walking computation) would land on `skills/`, which
+    # does not hold the loader -- proving this case actually needs the walk-up, not just a layout
+    # where the old code would have accidentally still worked.
+    assert not (module.SKILL_ROOT.parent / "docs/skill-framework/shared/shared_runtime_loader.py").is_file()
+
+    loaded = module._shared_runtime_loader()
+    assert loaded.MARKER == "nested-layout"

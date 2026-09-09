@@ -6,14 +6,14 @@ from typing import Any
 from scripts.registry.models import Registry
 
 
-def render_kiro_steering(skill_id: str, discovery: str) -> str:
+def render_kiro_steering(skill_id: str, path: str, discovery: str) -> str:
     inclusion = "always" if discovery == "always" else "manual"
     return (
         "---\n"
         f"inclusion: {inclusion}\n"
         "---\n\n"
         "<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->\n\n"
-        f"For {skill_id}, read `{skill_id}/SKILL.md` and follow it.\n"
+        f"For {skill_id}, read `{path}/SKILL.md` and follow it.\n"
     )
 
 
@@ -31,6 +31,7 @@ def generate_kiro_steering(
     return {
         root / ".kiro" / "steering" / f"{skill_id}.md": render_kiro_steering(
             skill_id,
+            entry.path,
             entry.hosts["kiro"].discovery,
         )
         for skill_id, entry in sorted(registry.skills.items())

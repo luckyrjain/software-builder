@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from collections import Counter
+from pathlib import Path, PurePosixPath
 
 from scripts.registry.capability_catalog import validate_capabilities_present
 from scripts.registry.composition import validate_composition_graph
@@ -27,6 +28,24 @@ _SKILL_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _GENERATED_MARKER = "GENERATED from skills.yaml"
 
 
+def _skills_root(root: Path, registry: Registry) -> Path:
+    """The directory that actually holds skill directories, derived from every
+    registry entry's `path:` parent -- not assumed to be the repo root.
+
+    All 41 skills currently share one parent (`skills`), so this resolves to a
+    single subdirectory in the real repository. Falls back to `root` itself if
+    entries disagree on their parent (e.g. an empty or synthetic test registry),
+    matching the pre-migration behavior of scanning the repo root directly.
+    """
+    if not registry.skills:
+        return root
+    parents = {PurePosixPath(entry.path).parent for entry in registry.skills.values()}
+    if len(parents) != 1:
+        return root
+    (only,) = parents
+    return root if only == PurePosixPath(".") else root / only
+
+
 def _skill_directories(root: Path) -> set[str]:
     return {
         path.parent.name
@@ -39,9 +58,9 @@ def _validate_skill_path(root: Path, skill_id: str, entry_path: str) -> list[str
     errors: list[str] = []
     if not _SKILL_ID_RE.match(skill_id):
         errors.append(f"error: {skill_id}: skill id must be lowercase kebab-case (no leading/trailing/double hyphens)")
-    if entry_path != skill_id:
+    if PurePosixPath(entry_path).name != skill_id:
         errors.append(
-            f"error: {skill_id}: path {entry_path!r} must match skill id (no aliases in v1)",
+            f"error: {skill_id}: path {entry_path!r} must end in the skill id (no aliases in v1)",
         )
     resolved_skill_md = (root / entry_path / "SKILL.md").resolve()
     root_resolved = root.resolve()
@@ -88,7 +107,7 @@ def find_stale_generated_adapters(root: Path, registry: Registry) -> list[Path]:
 def _validate_skill_directory_sync(root: Path, registry: Registry) -> list[str]:
     """Every SKILL.md directory must have a registry entry and vice versa."""
     errors: list[str] = []
-    skill_dirs = _skill_directories(root)
+    skill_dirs = _skill_directories(_skills_root(root, registry))
     registry_ids = set(registry.skills.keys())
     for orphan in sorted(skill_dirs - registry_ids):
         errors.append(f"error: {orphan}: directory has SKILL.md but no registry entry")
@@ -101,6 +120,40 @@ def _validate_skill_paths(root: Path, registry: Registry) -> list[str]:
     errors: list[str] = []
     for skill_id, entry in registry.skills.items():
         errors.extend(_validate_skill_path(root, skill_id, entry.path))
+    return errors
+
+
+def _validate_skill_paths_share_one_parent(registry: Registry) -> list[str]:
+    """Every registered skill's path must sit under the same parent directory.
+
+    `_validate_skill_directory_sync` derives `_skills_root()` by majority vote across
+    every entry's `path:` parent (falling back to `root` on a tie/disagreement) -- so a
+    single skill scaffolded at the wrong location (e.g. `scripts/new_skill.py` regressing
+    to a bare `path: <id>` instead of `path: skills/<id>`) doesn't get its own error.
+    Instead every *other*, correctly-placed skill silently fails to resolve against the
+    now-wrong `_skills_root()`, producing N misleading "registry entry has no SKILL.md
+    directory" errors that never name the actual offender. Checking parent-consistency
+    directly here, before that happens, reports exactly the one (or few) entries that
+    disagree with the rest of the registry -- not everyone else.
+    """
+    if len(registry.skills) < 2:
+        return []
+    parents_by_skill = {
+        skill_id: PurePosixPath(entry.path).parent for skill_id, entry in registry.skills.items()
+    }
+    distinct_parents = set(parents_by_skill.values())
+    if len(distinct_parents) <= 1:
+        return []
+    majority_parent, _ = Counter(parents_by_skill.values()).most_common(1)[0]
+    errors: list[str] = []
+    for skill_id in sorted(parents_by_skill):
+        parent = parents_by_skill[skill_id]
+        if parent != majority_parent:
+            errors.append(
+                f"error: {skill_id}: path {registry.skills[skill_id].path!r} has parent "
+                f"{parent.as_posix()!r}, inconsistent with the rest of the registry "
+                f"(every other skill's path parent is {majority_parent.as_posix()!r})",
+            )
     return errors
 
 
@@ -176,7 +229,7 @@ def _validate_skill_frontmatter_shape(root: Path, registry: Registry) -> list[st
                 errors.append(
                     f"error: {skill_id}: description missing 'Keywords:' — every other skill's "
                     f"SKILL.md frontmatter description states its routing keywords as "
-                    f"'Keywords: term, term, ...' (see e.g. pr-review/SKILL.md); add the same here",
+                    f"'Keywords: term, term, ...' (see e.g. skills/pr-review/SKILL.md); add the same here",
                 )
 
         errors.extend(
@@ -229,6 +282,7 @@ def validate_registry(root: Path) -> list[str]:
     errors: list[str] = []
     errors.extend(_validate_skill_directory_sync(root, registry))
     errors.extend(_validate_skill_paths(root, registry))
+    errors.extend(_validate_skill_paths_share_one_parent(registry))
     errors.extend(_validate_install_graph(registry))
     errors.extend(_validate_invoke_skill_references(registry))
     errors.extend(validate_composition_graph(registry))

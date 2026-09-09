@@ -68,8 +68,40 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PR_REVIEW_WORKFLOW_DIR = REPO_ROOT / "pr-review" / "workflow"
-AUTO_POST_POLICY = REPO_ROOT / "pr-gatekeeper" / "reference" / "auto-post-policy.md"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.registry.paths import skill_dir as _resolve_skill_dir  # noqa: E402
+from scripts.registry.schema import RegistryParseError, parse_registry  # noqa: E402
+
+# Resolved through skills.yaml's `path:` field rather than assumed to be
+# REPO_ROOT / "pr-review" and REPO_ROOT / "pr-gatekeeper" -- once either skill's `path:`
+# changes (see the parent migration plan), this follows automatically. Computed once at
+# import time (not re-read on every run) since both PR_REVIEW_WORKFLOW_DIR and
+# AUTO_POST_POLICY are plain module-level Path values the test suite monkeypatches
+# directly (see scripts/tests/test_check_pr_review_ask_point_drift.py) -- main() must
+# keep reading these as module globals, not recompute them locally, or that
+# monkeypatching stops having any effect.
+#
+# A malformed skills.yaml used to surface here as a raw RegistryParseError traceback at
+# import time -- confusing for a script whose whole job is an unrelated drift check, and
+# unlike every other per-check failure mode in this repo, which fails with a targeted
+# message. Mirrors scripts/validate_setup_freshness.py's `ensure_setup_freshness()`
+# precedent (catch RegistryParseError, re-raise with a pointer to `registry validate`),
+# adapted to module scope since the two Path globals below must stay real module
+# attributes for the monkeypatching above to keep working.
+try:
+    _REGISTRY = parse_registry(REPO_ROOT / "skills.yaml")
+except RegistryParseError as exc:
+    raise SystemExit(
+        "error: skills.yaml has schema errors -- cannot resolve pr-review/pr-gatekeeper "
+        "paths for the ask-point drift check (fix skills.yaml first, e.g. via "
+        f"`python3 -m scripts.registry validate`):\n  {exc}",
+    ) from exc
+PR_REVIEW_WORKFLOW_DIR = _resolve_skill_dir(REPO_ROOT, _REGISTRY, "pr-review") / "workflow"
+AUTO_POST_POLICY = (
+    _resolve_skill_dir(REPO_ROOT, _REGISTRY, "pr-gatekeeper") / "reference" / "auto-post-policy.md"
+)
 
 # See KNOWN LIMITATIONS #3 above.
 EXCLUDED_FILES = {"inputs.md"}
@@ -199,7 +231,7 @@ def main() -> int:
         f for f in PR_REVIEW_WORKFLOW_DIR.glob("*.md") if f.name not in EXCLUDED_FILES
     )
     if not workflow_files:
-        print("error: no pr-review/workflow/*.md files found to scan", file=sys.stderr)
+        print("error: no skills/pr-review/workflow/*.md files found to scan", file=sys.stderr)
         return 1
 
     flagged: list[tuple[str, int, str, float]] = []
@@ -232,9 +264,9 @@ def main() -> int:
 
     if flagged:
         print(
-            f"\nerror: {len(flagged)} ask-point-shaped paragraph(s) in pr-review/workflow/*.md "
+            f"\nerror: {len(flagged)} ask-point-shaped paragraph(s) in skills/pr-review/workflow/*.md "
             f"have < {OVERLAP_THRESHOLD:.0%} word overlap with "
-            f"pr-gatekeeper/reference/auto-post-policy.md — possible undocumented ask-point drift.\n",
+            f"skills/pr-gatekeeper/reference/auto-post-policy.md — possible undocumented ask-point drift.\n",
             file=sys.stderr,
         )
         for path, line_no, para, overlap in flagged:

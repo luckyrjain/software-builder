@@ -35,7 +35,7 @@ def grammar():
 @pytest.fixture(scope="module")
 def positions():
     return _load(
-        ROOT / "pr-review/scripts/github-comment-positions.py",
+        ROOT / "skills/pr-review/scripts/github-comment-positions.py",
         "github_comment_positions_under_test",
     )
 
@@ -43,7 +43,7 @@ def positions():
 @pytest.fixture(scope="module")
 def to_positions():
     return _load(
-        ROOT / "pr-review/scripts/diff-to-positions.py", "diff_to_positions_under_test"
+        ROOT / "skills/pr-review/scripts/diff-to-positions.py", "diff_to_positions_under_test"
     )
 
 

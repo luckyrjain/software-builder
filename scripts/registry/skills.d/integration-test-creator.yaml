@@ -1,5 +1,5 @@
 integration-test-creator:
-  path: integration-test-creator
+  path: skills/integration-test-creator
   category: testing
   invocation: ambient
   hosts:

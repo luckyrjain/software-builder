@@ -1,5 +1,5 @@
 contract-test-creator:
-  path: contract-test-creator
+  path: skills/contract-test-creator
   category: testing
   invocation: ambient
   hosts:

@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from validate_references import (  # noqa: E402
+    FROZEN_LINKS_MARKER,
     github_style_slug,
     heading_slugs,
     main,
@@ -239,6 +240,36 @@ def test_validate_markdown_file_flags_unclosed_fenced_code_block(tmp_path: Path)
     )
     errors = validate_tree(tmp_path, check_anchors=True)
     assert any("unclosed fenced code block" in error for error in errors)
+
+
+def test_frozen_links_marker_exempts_only_content_below_it(tmp_path: Path) -> None:
+    # Regression: CHANGELOG.md used to be excluded wholesale (`--exclude CHANGELOG.md`) to
+    # tolerate a frozen tail of pre-move dangling links, which silently lost link-checking
+    # coverage for every new entry a PR would ever add to that actively-maintained file. The
+    # marker exempts only the frozen span below it, one file, so a dangling link in NEW
+    # content (above the marker) still fails, while old, frozen content (below it) does not.
+    (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n"
+        "## New entry\n\n"
+        "- Broken new link: [missing](./missing-new.md)\n\n"
+        f"{FROZEN_LINKS_MARKER}\n\n"
+        "## Old frozen entry\n\n"
+        "- Broken old link: [missing](./missing-old.md)\n",
+        encoding="utf-8",
+    )
+
+    errors = validate_tree(tmp_path, check_anchors=True)
+    assert any("missing-new.md" in error for error in errors)
+    assert not any("missing-old.md" in error for error in errors)
+
+
+def test_frozen_links_marker_is_a_noop_when_absent(tmp_path: Path) -> None:
+    (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n- Broken link: [missing](./missing.md)\n",
+        encoding="utf-8",
+    )
+    errors = validate_tree(tmp_path, check_anchors=True)
+    assert any("missing.md" in error for error in errors)
 
 
 def test_validate_files_uses_the_same_anchor_algorithm_as_the_tree_walk(tmp_path: Path) -> None:

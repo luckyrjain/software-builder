@@ -1,5 +1,5 @@
 implementation-planner:
-  path: implementation-planner
+  path: skills/implementation-planner
   category: automation
   extends: read-only-leaf-review
   install:

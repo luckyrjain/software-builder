@@ -15,7 +15,7 @@
     "architecture",
     "testing"
   ],
-  "skills": "./",
+  "skills": "./skills",
   "interface": {
     "displayName": "Software Builder",
     "shortDescription": "Evidence-driven software delivery workflows",

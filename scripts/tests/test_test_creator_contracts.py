@@ -34,8 +34,8 @@ def test_common_workflow_preserves_unverified_when_execution_is_unavailable() ->
 
 
 def test_test_writer_aggregate_change_is_versioned_in_2_4_changelog() -> None:
-    aggregate = (ROOT / "test-writer" / "workflow" / "aggregate.md").read_text(encoding="utf-8")
-    changelog = (ROOT / "test-writer" / "CHANGELOG.md").read_text(encoding="utf-8")
+    aggregate = (ROOT / "skills/test-writer" / "workflow" / "aggregate.md").read_text(encoding="utf-8")
+    changelog = (ROOT / "skills/test-writer" / "CHANGELOG.md").read_text(encoding="utf-8")
     current_entry = changelog.split("## [2.4.0]", 1)[1].split("## [2.3.0]", 1)[0]
 
     assert "workflow_version: 1.6" in aggregate
@@ -73,6 +73,6 @@ def test_guard_evidence_stays_structured_not_verbatim_markdown() -> None:
     assert "must not be rendered verbatim" in shared
 
     for creator in TEST_CREATOR_SKILLS:
-        report = (ROOT / creator / "workflow" / "report.md").read_text(encoding="utf-8")
+        report = (ROOT / "skills" / creator / "workflow" / "report.md").read_text(encoding="utf-8")
         assert "canonical `skill_result`" in report, creator
         assert "Do not paste `status_snapshot` or `reason` verbatim" in report, creator

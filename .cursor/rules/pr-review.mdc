@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the pr-review skill. Read `pr-review/SKILL.md` and follow it.
-Phase index: `pr-review/reference/phase-index.md` when present under the skill directory.
+Invoke the pr-review skill. Read `skills/pr-review/SKILL.md` and follow it.
+Phase index: `skills/pr-review/reference/phase-index.md` when present under the skill directory.

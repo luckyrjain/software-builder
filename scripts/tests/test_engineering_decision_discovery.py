@@ -167,7 +167,7 @@ class TestSkillPackageContract:
     not go through load_registry()/dispatch_prompt(), so they do not depend on
     Task 3's registry wiring and are expected to pass now."""
 
-    SKILL_DIR = ROOT / "engineering-decision-discovery"
+    SKILL_DIR = ROOT / "skills/engineering-decision-discovery"
 
     EXPECTED_ROUTING_FRONTMATTER = (
         "---\n"

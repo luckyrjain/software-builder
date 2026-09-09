@@ -132,7 +132,7 @@ def test_install_list_does_not_write_skills(tmp_path: Path) -> None:
     # unknown host.
     shutil.copy2(ROOT / "agent-hosts.yaml", repo / "agent-hosts.yaml")
     (repo / "VERSION").write_text("0.0.0\n", encoding="utf-8")
-    shutil.copytree(ROOT / "unit-test-creator", repo / "unit-test-creator")
+    shutil.copytree(ROOT / "skills/unit-test-creator", repo / "unit-test-creator")
     shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")
 
     result = subprocess.run(
@@ -163,7 +163,7 @@ def test_install_list_does_not_write_skills(tmp_path: Path) -> None:
 
 def test_package_skill_writes_manifest(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
-    shutil.copytree(ROOT / "unit-test-creator", repo / "unit-test-creator")
+    shutil.copytree(ROOT / "skills/unit-test-creator", repo / "unit-test-creator")
     shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")
     (repo / "scripts").mkdir(parents=True)
     shutil.copy2(ROOT / "scripts" / "test_creator_write_guard.py", repo / "scripts" / "test_creator_write_guard.py")

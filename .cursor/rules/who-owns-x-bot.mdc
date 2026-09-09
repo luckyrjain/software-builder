@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the who-owns-x-bot skill. Read `who-owns-x-bot/SKILL.md` and follow it.
-Phase index: `who-owns-x-bot/reference/phase-index.md` when present under the skill directory.
+Invoke the who-owns-x-bot skill. Read `skills/who-owns-x-bot/SKILL.md` and follow it.
+Phase index: `skills/who-owns-x-bot/reference/phase-index.md` when present under the skill directory.

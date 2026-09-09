@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the api-design-review skill. Read `api-design-review/SKILL.md` and follow it.
-Phase index: `api-design-review/reference/phase-index.md` when present under the skill directory.
+Invoke the api-design-review skill. Read `skills/api-design-review/SKILL.md` and follow it.
+Phase index: `skills/api-design-review/reference/phase-index.md` when present under the skill directory.

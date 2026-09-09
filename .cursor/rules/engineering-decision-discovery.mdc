@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the engineering-decision-discovery skill. Read `engineering-decision-discovery/SKILL.md` and follow it.
-Phase index: `engineering-decision-discovery/reference/phase-index.md` when present under the skill directory.
+Invoke the engineering-decision-discovery skill. Read `skills/engineering-decision-discovery/SKILL.md` and follow it.
+Phase index: `skills/engineering-decision-discovery/reference/phase-index.md` when present under the skill directory.

@@ -14,6 +14,16 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
+# Needed only for scripts.registry.schema/scripts.registry.paths below: unlike this file's
+# other sibling imports (reference_utils, release_info, test_creator_catalog -- standalone
+# modules with no cross-module imports of their own), scripts/registry/schema.py's own
+# internal imports are all `scripts.`-prefixed, so it needs the repo root (not just
+# scripts/ itself) on sys.path to resolve them -- which a bare `python3 scripts/
+# package_skill.py` invocation (no PYTHONPATH set) would not otherwise have.
+_REPO_ROOT_FOR_IMPORTS = _SCRIPTS_DIR.parent
+if str(_REPO_ROOT_FOR_IMPORTS) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT_FOR_IMPORTS))
+
 from test_creator_catalog import TEST_CREATOR_SKILL_SET
 
 from reference_utils import (
@@ -30,6 +40,9 @@ from reference_utils import (
     sha256_file,
     split_link_target,
 )
+from scripts.registry.paths import skill_dir as _resolve_skill_dir
+from scripts.registry.schema import parse_registry
+from yaml_safety import YAML_SAFETY_ERRORS
 
 
 from release_info import (
@@ -226,6 +239,27 @@ def write_manifest(
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _resolve_source_dir(repo_root: Path, skill: str) -> Path:
+    """The skill's source directory, resolved through skills.yaml's `path:` field.
+
+    Falls back to `repo_root / skill` -- this function's entire behavior before it
+    became registry-aware -- when skills.yaml is missing or fails to parse, not just
+    when the skill has no entry in it: package_skill() has never required a valid
+    registry (only install.sh's own registry_check_skill() gate does, and that already
+    ran, against the same skills.yaml, before install.sh ever invokes package_skill.py
+    in the real install flow -- see install.sh's install_skill()). Several tests here
+    build a minimal skill tree with no skills.yaml at all to exercise something
+    unrelated to registry resolution (symlink handling, RELEASE-MANIFEST.json parsing,
+    the no-.git extracted-bundle flow); requiring a full registry from all of them
+    would couple those tests to a schema they aren't testing.
+    """
+    try:
+        registry = parse_registry(repo_root / "skills.yaml")
+    except (OSError, *YAML_SAFETY_ERRORS):
+        return repo_root / skill
+    return _resolve_skill_dir(repo_root, registry, skill)
+
+
 def _shared_script(repo_root: Path, filename: str, description: str, *, subdir: str = "scripts") -> Path:
     """Find a shared runtime script in the selected source repository."""
 
@@ -257,7 +291,7 @@ def package_skill(
     validate_skill_name(skill)
     validate_destination(dest)
 
-    skill_src = repo_root / skill
+    skill_src = _resolve_source_dir(repo_root, skill)
     skill_md = skill_src / "SKILL.md"
     if not skill_md.is_file():
         raise FileNotFoundError(f"skill not found at {skill_md}")

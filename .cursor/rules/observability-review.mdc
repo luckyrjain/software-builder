@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the observability-review skill. Read `observability-review/SKILL.md` and follow it.
-Phase index: `observability-review/reference/phase-index.md` when present under the skill directory.
+Invoke the observability-review skill. Read `skills/observability-review/SKILL.md` and follow it.
+Phase index: `skills/observability-review/reference/phase-index.md` when present under the skill directory.

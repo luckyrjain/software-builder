@@ -5,7 +5,7 @@ How domain language is split across this repository. Platform concepts describe 
 ## Contexts
 
 - [Software Builder platform](./CONTEXT.md) — skills, hosts, composition, evidence doctrine, multi-agent roles, and change-delivery vocabulary for the library itself
-- [Target system analysis](./domain-comprehension/CONTEXT.md) — bounded contexts, ownership, as-built requirements, and org rollups produced when skills operate on a target workspace
+- [Target system analysis](./skills/domain-comprehension/CONTEXT.md) — bounded contexts, ownership, as-built requirements, and org rollups produced when skills operate on a target workspace
 
 ## Relationships
 
@@ -22,7 +22,7 @@ How domain language is split across this repository. Platform concepts describe 
 | Why does the registry say `leaf`/`orchestrator` when CONTEXT.md says specialist/composer? | [CONTEXT.md § Composition topology](./CONTEXT.md#composition-topology-type-in-skillsyaml) |
 | What does `evidence_status` or `state_semantic` mean on a result? | [CONTEXT.md § Verification and evidence](./CONTEXT.md#verification-and-evidence) |
 | Which sense of "ownership" is this? | [CONTEXT.md § Ownership](./CONTEXT.md#ownership-three-senses) |
-| What is a bounded context or as-built PRD? | [domain-comprehension/CONTEXT.md](./domain-comprehension/CONTEXT.md) |
+| What is a bounded context or as-built PRD? | [domain-comprehension/CONTEXT.md](./skills/domain-comprehension/CONTEXT.md) |
 | What do `skills.yaml` fields mean? | [terminology-glossary.md](./docs/skill-framework/shared/terminology-glossary.md) |
 | What is a profile / `extends:` / an optional layer / a shadow? | [terminology-glossary.md](./docs/skill-framework/shared/terminology-glossary.md) |
 | Why was the registry canonical? | [ADR 0001](./docs/adr/0001-skills-registry.md) |

@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the weekly-squad-digest skill. Read `weekly-squad-digest/SKILL.md` and follow it.
-Phase index: `weekly-squad-digest/reference/phase-index.md` when present under the skill directory.
+Invoke the weekly-squad-digest skill. Read `skills/weekly-squad-digest/SKILL.md` and follow it.
+Phase index: `skills/weekly-squad-digest/reference/phase-index.md` when present under the skill directory.

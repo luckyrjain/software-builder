@@ -1,5 +1,5 @@
 api-design-review:
-  path: api-design-review
+  path: skills/api-design-review
   category: review
   extends: read-only-leaf-review
   install:

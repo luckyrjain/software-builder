@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the domain-comprehension skill. Read `domain-comprehension/SKILL.md` and follow it.
-Phase index: `domain-comprehension/reference/phase-index.md` when present under the skill directory.
+Invoke the domain-comprehension skill. Read `skills/domain-comprehension/SKILL.md` and follow it.
+Phase index: `skills/domain-comprehension/reference/phase-index.md` when present under the skill directory.

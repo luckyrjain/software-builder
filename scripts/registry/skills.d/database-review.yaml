@@ -1,5 +1,5 @@
 database-review:
-  path: database-review
+  path: skills/database-review
   category: review
   extends: read-only-leaf-review
   install:

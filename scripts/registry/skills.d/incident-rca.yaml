@@ -1,5 +1,5 @@
 incident-rca:
-  path: incident-rca
+  path: skills/incident-rca
   category: incident
   invocation: ambient
   hosts:

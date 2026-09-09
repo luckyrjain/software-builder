@@ -1,5 +1,5 @@
 prd-architect:
-  path: prd-architect
+  path: skills/prd-architect
   category: product
   invocation: ambient
   hosts:

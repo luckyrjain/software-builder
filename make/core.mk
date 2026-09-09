@@ -34,10 +34,11 @@
 # so `make lint` still works in a bare pytest environment -- xdist's -n flag would
 # otherwise error as unrecognized.
 #
-# Deliberately NOT reused for the smaller per-skill suites (pr-review/tests/,
-# k8s-overprovisioning-datadog/tests/, incident-rca/tests/, squad-map/tests/,
-# migration-program-manager/tests/): those targets already run concurrently with each
-# other and with this one under `make -j` (lint-suites), so each also spawning its own
+# Deliberately NOT reused for the smaller per-skill suites (skills/pr-review/tests/,
+# skills/k8s-overprovisioning-datadog/tests/, skills/incident-rca/tests/,
+# skills/squad-map/tests/, skills/migration-program-manager/tests/): those targets
+# already run concurrently with each other and with this one under `make -j`
+# (lint-suites), so each also spawning its own
 # `-n auto` (= nproc) worker pool oversubscribes CI runners by up to 6x and was the
 # source of sporadic broken-pipe/flaky failures in the dangling-link checker after
 # lint-suites moved to `make -j`. Those suites are small enough that make-level
@@ -237,17 +238,17 @@ lint-suites: lint-pr-review lint-loop-task-implementer lint-pr-gatekeeper lint-k
 lint-pr-review: lint-pr-review-skill lint-pr-review-scripts
 
 lint-pr-review-scripts:
-	@echo "py_compile pr-review/scripts/diff-to-positions.py pr-review/scripts/github-comment-positions.py pr-review/scripts/github-comment-recovery.py pr-review/scripts/pr_review_policy_guards.py"
-	@echo "pytest pr-review/tests/"
+	@echo "py_compile $(SKILLS_DIR)/pr-review/scripts/diff-to-positions.py $(SKILLS_DIR)/pr-review/scripts/github-comment-positions.py $(SKILLS_DIR)/pr-review/scripts/github-comment-recovery.py $(SKILLS_DIR)/pr-review/scripts/pr_review_policy_guards.py"
+	@echo "pytest $(SKILLS_DIR)/pr-review/tests/"
 	@cache="$(CURDIR)/.pycache-lint-pr-review"; \
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
 	trap 'rm -rf "$$cache"' EXIT; \
-	python3 -m py_compile pr-review/scripts/diff-to-positions.py || exit 1; \
-	python3 -m py_compile pr-review/scripts/github-comment-positions.py || exit 1; \
-	python3 -m py_compile pr-review/scripts/github-comment-recovery.py || exit 1; \
-	python3 -m py_compile pr-review/scripts/pr_review_policy_guards.py || exit 1; \
+	python3 -m py_compile $(SKILLS_DIR)/pr-review/scripts/diff-to-positions.py || exit 1; \
+	python3 -m py_compile $(SKILLS_DIR)/pr-review/scripts/github-comment-positions.py || exit 1; \
+	python3 -m py_compile $(SKILLS_DIR)/pr-review/scripts/github-comment-recovery.py || exit 1; \
+	python3 -m py_compile $(SKILLS_DIR)/pr-review/scripts/pr_review_policy_guards.py || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest pr-review/tests/ -q || exit 1; \
+		python3 -m pytest $(SKILLS_DIR)/pr-review/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run script tests" >&2; \
 		exit 1; \
@@ -256,18 +257,18 @@ lint-pr-review-scripts:
 lint-pr-review-skill:
 	@python3 scripts/lint_skills.py --skill pr-review
 	@echo "lint-pr-review-skill: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
-	@python3 -m scripts.validate_workflow_contracts pr-review
-	@grep -q 'smoke-test' pr-review/SKILL.md || \
+	@python3 -m scripts.validate_workflow_contracts $(SKILLS_DIR)/pr-review
+	@grep -q 'smoke-test' $(SKILLS_DIR)/pr-review/SKILL.md || \
 		{ echo "error: pr-review SKILL.md must link to reference/smoke-test.md" >&2; exit 1; }
-	@grep -q 'Merge gate' pr-review/workflow/phase-5.md || \
+	@grep -q 'Merge gate' $(SKILLS_DIR)/pr-review/workflow/phase-5.md || \
 		{ echo "error: phase-5.md must document merge gate checklist" >&2; exit 1; }
-	@test -f pr-review/reference/repository-health.md || \
-		{ echo "error: missing pr-review/reference/repository-health.md" >&2; exit 1; }
-	@test -f pr-review/reference/gold-review-excerpt.md || exit 1
-	@test -f pr-review/reference/finding-gates.md || exit 1
-	@test -f pr-review/tests/fixtures/phase5-review-metadata.yaml || \
+	@test -f $(SKILLS_DIR)/pr-review/reference/repository-health.md || \
+		{ echo "error: missing $(SKILLS_DIR)/pr-review/reference/repository-health.md" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/pr-review/reference/gold-review-excerpt.md || exit 1
+	@test -f $(SKILLS_DIR)/pr-review/reference/finding-gates.md || exit 1
+	@test -f $(SKILLS_DIR)/pr-review/tests/fixtures/phase5-review-metadata.yaml || \
 		{ echo "error: missing phase5 review_metadata golden fixture" >&2; exit 1; }
-	@grep -q 'Snyk MCP' pr-review/reference/finding-gates.md || \
+	@grep -q 'Snyk MCP' $(SKILLS_DIR)/pr-review/reference/finding-gates.md || \
 		{ echo "error: finding-gates.md must document Snyk MCP CVE scan order" >&2; exit 1; }
 	@echo "  ok (framework refs)"
 
@@ -275,21 +276,21 @@ lint-pr-gatekeeper:
 	@python3 scripts/lint_skills.py --skill pr-gatekeeper
 	@echo "lint-pr-gatekeeper: script pytest suite"
 	@if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest pr-gatekeeper/tests/ -q || exit 1; \
+		python3 -m pytest $(SKILLS_DIR)/pr-gatekeeper/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run pr-gatekeeper tests" >&2; \
 	fi
 	@echo "  ok (framework refs + idempotency tests)"
 	@echo "lint-pr-gatekeeper: ask-point drift check (pr-review workflow vs auto-post-policy.md)"
 	@python3 scripts/check_pr_review_ask_point_drift.py || \
-		{ echo "error: pr-review ask-point drift detected — see pr-gatekeeper/reference/auto-post-policy.md" >&2; exit 1; }
+		{ echo "error: pr-review ask-point drift detected — see $(SKILLS_DIR)/pr-gatekeeper/reference/auto-post-policy.md" >&2; exit 1; }
 
 lint-k8s-skill:
 	@python3 scripts/lint_skills.py --skill k8s-overprovisioning-datadog
 	@echo "lint-k8s-skill: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
-	@python3 -m scripts.validate_workflow_contracts k8s-overprovisioning-datadog
+	@python3 -m scripts.validate_workflow_contracts $(SKILLS_DIR)/k8s-overprovisioning-datadog
 	@echo "lint-k8s-skill: p95 not positively asserted in memory-sizing section"
-	@sec=$$(awk '/^## Memory request utilization/{f=1;next} /^## /{f=0} f' k8s-overprovisioning-datadog/thresholds.md); \
+	@sec=$$(awk '/^## Memory request utilization/{f=1;next} /^## /{f=0} f' $(SKILLS_DIR)/k8s-overprovisioning-datadog/thresholds.md); \
 	bad=$$(printf '%s\n' "$$sec" | grep -in 'p95' | grep -ivE 'not|never' || true); \
 	if [ -n "$$bad" ]; then \
 		echo "error: 'p95' positively asserted in memory-sizing section (memory uses a peak proxy, not p95):" >&2; \
@@ -298,56 +299,56 @@ lint-k8s-skill:
 	fi; \
 	echo "  ok"
 	@echo "lint-k8s-skill: decision graph schema (v3)"
-	@test -f k8s-overprovisioning-datadog/reference/decision-graph-schema.md || (echo "error: missing decision-graph-schema.md" >&2; exit 1)
-	@test -f k8s-overprovisioning-datadog/reference/decision-graph.example.yaml || (echo "error: missing decision-graph.example.yaml" >&2; exit 1)
-	@grep -q 'schema_version: 3' k8s-overprovisioning-datadog/reference/decision-graph-schema.md || (echo "error: schema_version 3 not in decision-graph-schema.md" >&2; exit 1)
-	@test -f k8s-overprovisioning-datadog/render/markdown.md || (echo "error: missing render/markdown.md" >&2; exit 1)
-	@test -f k8s-overprovisioning-datadog/workflow/build-graph.md || (echo "error: missing workflow/build-graph.md" >&2; exit 1)
+	@test -f $(SKILLS_DIR)/k8s-overprovisioning-datadog/reference/decision-graph-schema.md || (echo "error: missing decision-graph-schema.md" >&2; exit 1)
+	@test -f $(SKILLS_DIR)/k8s-overprovisioning-datadog/reference/decision-graph.example.yaml || (echo "error: missing decision-graph.example.yaml" >&2; exit 1)
+	@grep -q 'schema_version: 3' $(SKILLS_DIR)/k8s-overprovisioning-datadog/reference/decision-graph-schema.md || (echo "error: schema_version 3 not in decision-graph-schema.md" >&2; exit 1)
+	@test -f $(SKILLS_DIR)/k8s-overprovisioning-datadog/render/markdown.md || (echo "error: missing render/markdown.md" >&2; exit 1)
+	@test -f $(SKILLS_DIR)/k8s-overprovisioning-datadog/workflow/build-graph.md || (echo "error: missing workflow/build-graph.md" >&2; exit 1)
 	@echo "  ok"
 	@echo "lint-k8s-skill: report schema + templates"
-	@test -f k8s-overprovisioning-datadog/reference/report-schema.md || (echo "error: missing report-schema.md" >&2; exit 1)
-	@grep -q 'SCHEMA_VERSION=3' k8s-overprovisioning-datadog/reference/report-schema.md || (echo "error: SCHEMA_VERSION=3 not in report-schema.md" >&2; exit 1)
-	@test -f k8s-overprovisioning-datadog/templates/index.md || (echo "error: missing templates/index.md" >&2; exit 1)
+	@test -f $(SKILLS_DIR)/k8s-overprovisioning-datadog/reference/report-schema.md || (echo "error: missing report-schema.md" >&2; exit 1)
+	@grep -q 'SCHEMA_VERSION=3' $(SKILLS_DIR)/k8s-overprovisioning-datadog/reference/report-schema.md || (echo "error: SCHEMA_VERSION=3 not in report-schema.md" >&2; exit 1)
+	@test -f $(SKILLS_DIR)/k8s-overprovisioning-datadog/templates/index.md || (echo "error: missing templates/index.md" >&2; exit 1)
 	@echo "  ok"
 	@echo "lint-k8s-skill: modular templates (Human Report + appendix layouts)"
-	@count=$$(ls k8s-overprovisioning-datadog/templates/*.md 2>/dev/null | wc -l | tr -d ' '); \
+	@count=$$(ls $(SKILLS_DIR)/k8s-overprovisioning-datadog/templates/*.md 2>/dev/null | wc -l | tr -d ' '); \
 	if [ "$$count" -lt 14 ]; then \
 		echo "error: expected >= 14 template files (incl. human-report.md), found $$count" >&2; exit 1; \
 	fi; \
 	echo "  ok ($$count files)"
-	@grep -q 'assessment_metadata' k8s-overprovisioning-datadog/workflow/report.md || \
+	@grep -q 'assessment_metadata' $(SKILLS_DIR)/k8s-overprovisioning-datadog/workflow/report.md || \
 		{ echo "error: k8s workflow/report.md must document assessment_metadata footer" >&2; exit 1; }
-	@test -f k8s-overprovisioning-datadog/reference/gold-human-report-excerpt.md || exit 1
-	@grep -q 'INV-12.*critical' k8s-overprovisioning-datadog/reference/invariants.md || \
+	@test -f $(SKILLS_DIR)/k8s-overprovisioning-datadog/reference/gold-human-report-excerpt.md || exit 1
+	@grep -q 'INV-12.*critical' $(SKILLS_DIR)/k8s-overprovisioning-datadog/reference/invariants.md || \
 		{ echo "error: INV-12 must be critical severity in invariants.md" >&2; exit 1; }
-	@grep -q 'delivery_pointer.path' k8s-overprovisioning-datadog/workflow/build-graph.md || \
+	@grep -q 'delivery_pointer.path' $(SKILLS_DIR)/k8s-overprovisioning-datadog/workflow/build-graph.md || \
 		{ echo "error: build-graph.md must document delivery_pointer for READY actionable recs" >&2; exit 1; }
-	@grep -q 'namespace_ranking' k8s-overprovisioning-datadog/reference/phase-index.md || \
+	@grep -q 'namespace_ranking' $(SKILLS_DIR)/k8s-overprovisioning-datadog/reference/phase-index.md || \
 		{ echo "error: phase-index.md must list namespace waste ranking" >&2; exit 1; }
-	@grep -q 'APM latency modifier' k8s-overprovisioning-datadog/workflow/reason.md || \
+	@grep -q 'APM latency modifier' $(SKILLS_DIR)/k8s-overprovisioning-datadog/workflow/reason.md || \
 		{ echo "error: reason.md must reference APM latency modifier" >&2; exit 1; }
-	@test -f k8s-overprovisioning-datadog/skills-lock.json || exit 1
-	@test -f k8s-overprovisioning-datadog/dependencies.md || exit 1
-	@grep -q 'next_assessment_due' k8s-overprovisioning-datadog/workflow/report.md || \
+	@test -f $(SKILLS_DIR)/k8s-overprovisioning-datadog/skills-lock.json || exit 1
+	@test -f $(SKILLS_DIR)/k8s-overprovisioning-datadog/dependencies.md || exit 1
+	@grep -q 'next_assessment_due' $(SKILLS_DIR)/k8s-overprovisioning-datadog/workflow/report.md || \
 		{ echo "error: report.md must document next_assessment_due in history" >&2; exit 1; }
 	@echo "  ok"
 	@echo "lint-k8s-skill: decision graph invariant validator"
 	@cache="$(CURDIR)/.pycache-lint-k8s"; \
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
 	trap 'rm -rf "$$cache"' EXIT; \
-	python3 -m py_compile k8s-overprovisioning-datadog/scripts/validate_decision_graph.py || exit 1; \
-	for g in k8s-overprovisioning-datadog/reference/decision-graph.example.yaml \
-		k8s-overprovisioning-datadog/reference/decision-graph.trim.example.yaml \
-		k8s-overprovisioning-datadog/reference/decision-graph.scale-up.example.yaml \
-		k8s-overprovisioning-datadog/reference/decision-graph.insufficient-metrics.example.yaml; do \
-		python3 k8s-overprovisioning-datadog/scripts/validate_decision_graph.py "$$g" || exit 1; \
+	python3 -m py_compile $(SKILLS_DIR)/k8s-overprovisioning-datadog/scripts/validate_decision_graph.py || exit 1; \
+	for g in $(SKILLS_DIR)/k8s-overprovisioning-datadog/reference/decision-graph.example.yaml \
+		$(SKILLS_DIR)/k8s-overprovisioning-datadog/reference/decision-graph.trim.example.yaml \
+		$(SKILLS_DIR)/k8s-overprovisioning-datadog/reference/decision-graph.scale-up.example.yaml \
+		$(SKILLS_DIR)/k8s-overprovisioning-datadog/reference/decision-graph.insufficient-metrics.example.yaml; do \
+		python3 $(SKILLS_DIR)/k8s-overprovisioning-datadog/scripts/validate_decision_graph.py "$$g" || exit 1; \
 	done; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
 		if ! python3 -c "import yaml" >/dev/null 2>&1; then \
 			echo "error: PyYAML required for k8s tests — python3 -m pip install pyyaml" >&2; \
 			exit 1; \
 		fi; \
-		python3 -m pytest k8s-overprovisioning-datadog/tests/ -q || exit 1; \
+		python3 -m pytest $(SKILLS_DIR)/k8s-overprovisioning-datadog/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run k8s script tests" >&2; \
 		exit 1; \
@@ -359,50 +360,50 @@ lint-k8s: lint-k8s-skill
 lint-incident-rca:
 	@python3 scripts/lint_skills.py --skill incident-rca
 	@echo "lint-incident-rca: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
-	@python3 -m scripts.validate_workflow_contracts incident-rca
+	@python3 -m scripts.validate_workflow_contracts $(SKILLS_DIR)/incident-rca
 	@echo "lint-incident-rca: evidence.example.json parses as JSON"
 	@cache="$(CURDIR)/.pycache-lint-rca"; \
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
 	trap 'rm -rf "$$cache"' EXIT; \
-	python3 -c "import json,sys; json.load(open('incident-rca/reference/evidence.example.json'))" || \
-		{ echo "error: incident-rca/reference/evidence.example.json is not valid JSON" >&2; exit 1; }; \
+	python3 -c "import json,sys; json.load(open('$(SKILLS_DIR)/incident-rca/reference/evidence.example.json'))" || \
+		{ echo "error: $(SKILLS_DIR)/incident-rca/reference/evidence.example.json is not valid JSON" >&2; exit 1; }; \
 	echo "  ok"
 	@python3 -c "from pathlib import Path; from scripts.registry.schema import load_registry_raw; assert load_registry_raw(Path('skills.yaml'))['skills']['incident-rca']['entrypoint'] == 'SKILL.md'" || \
 		{ echo "error: canonical manifest must own incident-rca entrypoint metadata" >&2; exit 1; }
-	@grep -q 'dependency_chain' incident-rca/reference/evidence-schema.md || \
+	@grep -q 'dependency_chain' $(SKILLS_DIR)/incident-rca/reference/evidence-schema.md || \
 		{ echo "error: evidence-schema.md must document dependency_chain" >&2; exit 1; }
-	@grep -q 'Body content' incident-rca/report-template.md || \
+	@grep -q 'Body content' $(SKILLS_DIR)/incident-rca/report-template.md || \
 		{ echo "error: report-template.md Confluence export must map body content" >&2; exit 1; }
-	@grep -q 'optionalExternal' incident-rca/skills-lock.json || \
+	@grep -q 'optionalExternal' $(SKILLS_DIR)/incident-rca/skills-lock.json || \
 		{ echo "error: incident-rca skills-lock.json must document optional correlator pin" >&2; exit 1; }
-	@test -f incident-rca/reference/kubesense-spl.md || \
-		{ echo "error: missing incident-rca/reference/kubesense-spl.md" >&2; exit 1; }
-	@test -f incident-rca/scripts/kubesense_logs.py || \
-		{ echo "error: missing incident-rca/scripts/kubesense_logs.py" >&2; exit 1; }
-	@grep -q 'assessment_metadata' incident-rca/workflow/phase-5.md || \
+	@test -f $(SKILLS_DIR)/incident-rca/reference/kubesense-spl.md || \
+		{ echo "error: missing $(SKILLS_DIR)/incident-rca/reference/kubesense-spl.md" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/incident-rca/scripts/kubesense_logs.py || \
+		{ echo "error: missing $(SKILLS_DIR)/incident-rca/scripts/kubesense_logs.py" >&2; exit 1; }
+	@grep -q 'assessment_metadata' $(SKILLS_DIR)/incident-rca/workflow/phase-5.md || \
 		{ echo "error: incident-rca phase-5 must document assessment_metadata footer" >&2; exit 1; }
-	@test -f incident-rca/reference/gold-rca-excerpt.md || exit 1
+	@test -f $(SKILLS_DIR)/incident-rca/reference/gold-rca-excerpt.md || exit 1
 	@echo "  ok (framework refs)"
 	@echo "lint-incident-rca: evidence JSON schema validator"
 	@cache="$(CURDIR)/.pycache-lint-rca-schema"; \
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
 	trap 'rm -rf "$$cache"' EXIT; \
-	python3 -m py_compile incident-rca/scripts/validate_evidence_json.py || exit 1; \
-	python3 -m py_compile incident-rca/scripts/kubesense_logs.py || exit 1; \
-	python3 incident-rca/scripts/validate_evidence_json.py \
-		incident-rca/reference/evidence.example.json \
-		incident-rca/reference/evidence.example.opensearch-query-governance.json || exit 1; \
-	python3 -m py_compile incident-rca/scripts/validate_causal_graph.py || exit 1; \
-	python3 -m py_compile incident-rca/scripts/incident_rca_policy_guards.py || exit 1; \
-	python3 incident-rca/scripts/validate_causal_graph.py \
-		incident-rca/reference/causal-graph.example.yaml \
-		incident-rca/reference/evidence.example.json || exit 1; \
-	python3 -m py_compile incident-rca/scripts/verify_redaction.py || exit 1; \
-	python3 incident-rca/scripts/verify_redaction.py \
-		incident-rca/reference/evidence.example.json \
-		incident-rca/reference/evidence.example.opensearch-query-governance.json || exit 1; \
+	python3 -m py_compile $(SKILLS_DIR)/incident-rca/scripts/validate_evidence_json.py || exit 1; \
+	python3 -m py_compile $(SKILLS_DIR)/incident-rca/scripts/kubesense_logs.py || exit 1; \
+	python3 $(SKILLS_DIR)/incident-rca/scripts/validate_evidence_json.py \
+		$(SKILLS_DIR)/incident-rca/reference/evidence.example.json \
+		$(SKILLS_DIR)/incident-rca/reference/evidence.example.opensearch-query-governance.json || exit 1; \
+	python3 -m py_compile $(SKILLS_DIR)/incident-rca/scripts/validate_causal_graph.py || exit 1; \
+	python3 -m py_compile $(SKILLS_DIR)/incident-rca/scripts/incident_rca_policy_guards.py || exit 1; \
+	python3 $(SKILLS_DIR)/incident-rca/scripts/validate_causal_graph.py \
+		$(SKILLS_DIR)/incident-rca/reference/causal-graph.example.yaml \
+		$(SKILLS_DIR)/incident-rca/reference/evidence.example.json || exit 1; \
+	python3 -m py_compile $(SKILLS_DIR)/incident-rca/scripts/verify_redaction.py || exit 1; \
+	python3 $(SKILLS_DIR)/incident-rca/scripts/verify_redaction.py \
+		$(SKILLS_DIR)/incident-rca/reference/evidence.example.json \
+		$(SKILLS_DIR)/incident-rca/reference/evidence.example.opensearch-query-governance.json || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest incident-rca/tests/ -q || exit 1; \
+		python3 -m pytest $(SKILLS_DIR)/incident-rca/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run schema tests" >&2; \
 		exit 1; \
@@ -413,7 +414,7 @@ lint-incident-rca:
 lint-incident-triage-agent:
 	@python3 scripts/lint_skills.py --skill incident-triage-agent
 	@echo "lint-incident-triage-agent: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
-	@python3 -m scripts.validate_workflow_contracts incident-triage-agent
+	@python3 -m scripts.validate_workflow_contracts $(SKILLS_DIR)/incident-triage-agent
 
 lint-domain-comprehension: lint-domain-comprehension-skill lint-domain-comprehension-scripts
 
@@ -426,75 +427,75 @@ lint-domain-comprehension-scripts:
 	elif [ -x "$(CURDIR)/.venv/bin/python3" ] && "$(CURDIR)/.venv/bin/python3" -c "import yaml" >/dev/null 2>&1; then PY="$(CURDIR)/.venv/bin/python3"; \
 	elif [ -x "$$venv/bin/python3" ]; then PY="$$venv/bin/python3"; \
 	else python3 -m venv "$$venv" && "$$venv/bin/pip" install -q pyyaml pytest && PY="$$venv/bin/python3"; fi; \
-	"$$PY" -m py_compile domain-comprehension/scripts/validate_manifest_yaml.py || exit 1; \
-	"$$PY" -m py_compile domain-comprehension/scripts/validate_sub_agent_merge.py || exit 1; \
-	"$$PY" domain-comprehension/scripts/validate_manifest_yaml.py \
-		domain-comprehension/templates/manifest.yaml || exit 1; \
+	"$$PY" -m py_compile $(SKILLS_DIR)/domain-comprehension/scripts/validate_manifest_yaml.py || exit 1; \
+	"$$PY" -m py_compile $(SKILLS_DIR)/domain-comprehension/scripts/validate_sub_agent_merge.py || exit 1; \
+	"$$PY" $(SKILLS_DIR)/domain-comprehension/scripts/validate_manifest_yaml.py \
+		$(SKILLS_DIR)/domain-comprehension/templates/manifest.yaml || exit 1; \
 	echo "lint-domain-comprehension: manifest --check-content fixture"; \
-	bash domain-comprehension/tests/fixtures/check-content/prepare.sh; \
-	"$$PY" domain-comprehension/scripts/validate_manifest_yaml.py \
-		domain-comprehension/tests/fixtures/check-content/manifest.yaml \
-		--workspace-root domain-comprehension/tests/fixtures/check-content \
+	bash $(SKILLS_DIR)/domain-comprehension/tests/fixtures/check-content/prepare.sh; \
+	"$$PY" $(SKILLS_DIR)/domain-comprehension/scripts/validate_manifest_yaml.py \
+		$(SKILLS_DIR)/domain-comprehension/tests/fixtures/check-content/manifest.yaml \
+		--workspace-root $(SKILLS_DIR)/domain-comprehension/tests/fixtures/check-content \
 		--check-content || exit 1; \
-	"$$PY" domain-comprehension/scripts/validate_sub_agent_merge.py \
-		domain-comprehension/tests/fixtures/sub-agent-merge/valid.json || exit 1; \
+	"$$PY" $(SKILLS_DIR)/domain-comprehension/scripts/validate_sub_agent_merge.py \
+		$(SKILLS_DIR)/domain-comprehension/tests/fixtures/sub-agent-merge/valid.json || exit 1; \
 	if "$$PY" -c "import pytest" >/dev/null 2>&1; then \
-		"$$PY" -m pytest domain-comprehension/tests/ -q || exit 1; \
+		"$$PY" -m pytest $(SKILLS_DIR)/domain-comprehension/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run manifest tests" >&2; \
 		exit 1; \
 	fi; \
 	echo "lint-domain-comprehension: shellcheck test scripts"; \
 	if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck domain-comprehension/tests/fixtures/check-content/prepare.sh \
-			domain-comprehension/tests/run_pressure_tests.sh; \
+		shellcheck $(SKILLS_DIR)/domain-comprehension/tests/fixtures/check-content/prepare.sh \
+			$(SKILLS_DIR)/domain-comprehension/tests/run_pressure_tests.sh; \
 	elif command -v docker >/dev/null 2>&1; then \
 		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine@sha256:c82fe42504fbc9fc68f15d36638e5ee2324ebb8b94e96a3c4e395bf361c49183 \
-			shellcheck domain-comprehension/tests/fixtures/check-content/prepare.sh \
-			domain-comprehension/tests/run_pressure_tests.sh; \
+			shellcheck $(SKILLS_DIR)/domain-comprehension/tests/fixtures/check-content/prepare.sh \
+			$(SKILLS_DIR)/domain-comprehension/tests/run_pressure_tests.sh; \
 	fi; \
 	echo "  ok (manifest validator)"
 
 lint-domain-comprehension-skill:
 	@python3 scripts/lint_skills.py --skill domain-comprehension
-	@test -f domain-comprehension/templates/manifest.yaml || \
-		{ echo "error: missing domain-comprehension/templates/manifest.yaml" >&2; exit 1; }
-	@test -f domain-comprehension/templates/BUSINESS_FLOWS.md || exit 1
-	@test -f domain-comprehension/templates/KNOWN_OMISSIONS.md || exit 1
-	@grep -q 'manifest.yaml' domain-comprehension/SKILL.md || \
+	@test -f $(SKILLS_DIR)/domain-comprehension/templates/manifest.yaml || \
+		{ echo "error: missing $(SKILLS_DIR)/domain-comprehension/templates/manifest.yaml" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/domain-comprehension/templates/BUSINESS_FLOWS.md || exit 1
+	@test -f $(SKILLS_DIR)/domain-comprehension/templates/KNOWN_OMISSIONS.md || exit 1
+	@grep -q 'manifest.yaml' $(SKILLS_DIR)/domain-comprehension/SKILL.md || \
 		{ echo "error: domain-comprehension SKILL.md must document manifest.yaml" >&2; exit 1; }
-	@test -f domain-comprehension/reference/pressure-tests.md || exit 1
-	@test -f domain-comprehension/reference/gold-exec-summary-excerpt.md || exit 1
-	@test -f domain-comprehension/reference/sub-agent-merge.schema.json || exit 1
-	@grep -q 'sub-agent-merge' domain-comprehension/reference/sub-agent-orchestration.md || \
+	@test -f $(SKILLS_DIR)/domain-comprehension/reference/pressure-tests.md || exit 1
+	@test -f $(SKILLS_DIR)/domain-comprehension/reference/gold-exec-summary-excerpt.md || exit 1
+	@test -f $(SKILLS_DIR)/domain-comprehension/reference/sub-agent-merge.schema.json || exit 1
+	@grep -q 'sub-agent-merge' $(SKILLS_DIR)/domain-comprehension/reference/sub-agent-orchestration.md || \
 		{ echo "error: sub-agent-orchestration.md must document merge contract" >&2; exit 1; }
-	@grep -q 'Runtime validation location' domain-comprehension/workflow/phase-2b.md || \
+	@grep -q 'Runtime validation location' $(SKILLS_DIR)/domain-comprehension/workflow/phase-2b.md || \
 		{ echo "error: phase-2b.md must normative runtime validation location" >&2; exit 1; }
-	@grep -q 'schema_version: 2' domain-comprehension/templates/manifest.yaml || \
+	@grep -q 'schema_version: 2' $(SKILLS_DIR)/domain-comprehension/templates/manifest.yaml || \
 		{ echo "error: manifest template must be schema_version 2" >&2; exit 1; }
 	@echo "lint-domain-comprehension: pressure harness"
-	@bash domain-comprehension/tests/run_pressure_tests.sh
+	@bash $(SKILLS_DIR)/domain-comprehension/tests/run_pressure_tests.sh
 	@echo "  ok"
 
 lint-squad-map:
 	@python3 scripts/lint_skills.py --skill squad-map
-	@test -f squad-map/templates/SQUAD_MAP.md || \
-		{ echo "error: missing squad-map/templates/SQUAD_MAP.md" >&2; exit 1; }
-	@test -f squad-map/reference/pressure-tests.md || exit 1
-	@test -f squad-map/reference/gold-squad-map-excerpt.md || exit 1
-	@grep -q 'monorepo_service_dirs' squad-map/reference/config-schema.md || \
+	@test -f $(SKILLS_DIR)/squad-map/templates/SQUAD_MAP.md || \
+		{ echo "error: missing $(SKILLS_DIR)/squad-map/templates/SQUAD_MAP.md" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/squad-map/reference/pressure-tests.md || exit 1
+	@test -f $(SKILLS_DIR)/squad-map/reference/gold-squad-map-excerpt.md || exit 1
+	@grep -q 'monorepo_service_dirs' $(SKILLS_DIR)/squad-map/reference/config-schema.md || \
 		{ echo "error: config-schema.md must document monorepo_service_dirs mapping" >&2; exit 1; }
-	@grep -q '<org_prefix>' squad-map/reference/smoke-test.md || \
+	@grep -q '<org_prefix>' $(SKILLS_DIR)/squad-map/reference/smoke-test.md || \
 		{ echo "error: smoke-test.md must use portable org_prefix placeholder" >&2; exit 1; }
-	@grep -q 'Out of scope (archived)' squad-map/workflow/phase-1.md || \
+	@grep -q 'Out of scope (archived)' $(SKILLS_DIR)/squad-map/workflow/phase-1.md || \
 		{ echo "error: phase-1.md must document scope-shrink archival" >&2; exit 1; }
-	@test -f squad-map/scripts/squad_mapping.py || exit 1
+	@test -f $(SKILLS_DIR)/squad-map/scripts/squad_mapping.py || exit 1
 	@cache="$(CURDIR)/.pycache-lint-squad"; \
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
 	trap 'rm -rf "$$cache"' EXIT; \
-	python3 -m py_compile squad-map/scripts/squad_mapping.py || exit 1; \
+	python3 -m py_compile $(SKILLS_DIR)/squad-map/scripts/squad_mapping.py || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest squad-map/tests/ -q || exit 1; \
+		python3 -m pytest $(SKILLS_DIR)/squad-map/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run squad-map tests" >&2; \
 		exit 1; \
@@ -512,11 +513,11 @@ lint-release-readiness-checker:
 
 lint-migration-program-manager:
 	@python3 scripts/lint_skills.py --skill migration-program-manager
-	@test -f migration-program-manager/scripts/aggregate_migration_status.py || \
-		{ echo "error: missing migration-program-manager/scripts/aggregate_migration_status.py" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/migration-program-manager/scripts/aggregate_migration_status.py || \
+		{ echo "error: missing $(SKILLS_DIR)/migration-program-manager/scripts/aggregate_migration_status.py" >&2; exit 1; }
 	@echo "lint-migration-program-manager: aggregator pytest"
 	@if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest migration-program-manager/tests/ -q || exit 1; \
+		python3 -m pytest $(SKILLS_DIR)/migration-program-manager/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run migration-program-manager tests" >&2; \
 	fi
@@ -527,43 +528,43 @@ lint-cost-optimization-sprint-planner:
 
 lint-mysql-to-postgres-sql:
 	@python3 scripts/lint_skills.py --skill mysql-to-postgres-sql
-	@test -f mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh || \
-		{ echo "error: missing mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh" >&2; exit 1; }
-	@test -f mysql-to-postgres-sql/scripts/scan-report.sh || \
-		{ echo "error: missing mysql-to-postgres-sql/scripts/scan-report.sh" >&2; exit 1; }
-	@test -f mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh || \
-		{ echo "error: missing mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh" >&2; exit 1; }
-	@test -f mysql-to-postgres-sql/reference/spring-datasource-example.yaml || \
-		{ echo "error: missing mysql-to-postgres-sql/reference/spring-datasource-example.yaml" >&2; exit 1; }
-	@test -f mysql-to-postgres-sql/reference/skill-contract.md || \
-		{ echo "error: missing mysql-to-postgres-sql/reference/skill-contract.md" >&2; exit 1; }
-	@test -f mysql-to-postgres-sql/reference/pressure-tests.md || \
-		{ echo "error: missing mysql-to-postgres-sql/reference/pressure-tests.md" >&2; exit 1; }
-	@test -f mysql-to-postgres-sql/examples.md || \
-		{ echo "error: missing mysql-to-postgres-sql/examples.md" >&2; exit 1; }
-	@test -f mysql-to-postgres-sql/templates/SERVICE_PG_MIGRATION.md || \
-		{ echo "error: missing mysql-to-postgres-sql/templates/SERVICE_PG_MIGRATION.md" >&2; exit 1; }
-	@test -f mysql-to-postgres-sql/templates/MIGRATION_STATUS.yaml || \
-		{ echo "error: missing mysql-to-postgres-sql/templates/MIGRATION_STATUS.yaml" >&2; exit 1; }
-	@test -f mysql-to-postgres-sql/reference/domain-packs/README.md || \
-		{ echo "error: missing mysql-to-postgres-sql/reference/domain-packs/README.md" >&2; exit 1; }
-	@grep -q 'domain-packs' mysql-to-postgres-sql/SKILL.md || \
+	@test -f $(SKILLS_DIR)/mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh || \
+		{ echo "error: missing $(SKILLS_DIR)/mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/mysql-to-postgres-sql/scripts/scan-report.sh || \
+		{ echo "error: missing $(SKILLS_DIR)/mysql-to-postgres-sql/scripts/scan-report.sh" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh || \
+		{ echo "error: missing $(SKILLS_DIR)/mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/mysql-to-postgres-sql/reference/spring-datasource-example.yaml || \
+		{ echo "error: missing $(SKILLS_DIR)/mysql-to-postgres-sql/reference/spring-datasource-example.yaml" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/mysql-to-postgres-sql/reference/skill-contract.md || \
+		{ echo "error: missing $(SKILLS_DIR)/mysql-to-postgres-sql/reference/skill-contract.md" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/mysql-to-postgres-sql/reference/pressure-tests.md || \
+		{ echo "error: missing $(SKILLS_DIR)/mysql-to-postgres-sql/reference/pressure-tests.md" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/mysql-to-postgres-sql/examples.md || \
+		{ echo "error: missing $(SKILLS_DIR)/mysql-to-postgres-sql/examples.md" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/mysql-to-postgres-sql/templates/SERVICE_PG_MIGRATION.md || \
+		{ echo "error: missing $(SKILLS_DIR)/mysql-to-postgres-sql/templates/SERVICE_PG_MIGRATION.md" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/mysql-to-postgres-sql/templates/MIGRATION_STATUS.yaml || \
+		{ echo "error: missing $(SKILLS_DIR)/mysql-to-postgres-sql/templates/MIGRATION_STATUS.yaml" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/mysql-to-postgres-sql/reference/domain-packs/README.md || \
+		{ echo "error: missing $(SKILLS_DIR)/mysql-to-postgres-sql/reference/domain-packs/README.md" >&2; exit 1; }
+	@grep -q 'domain-packs' $(SKILLS_DIR)/mysql-to-postgres-sql/SKILL.md || \
 		{ echo "error: mysql-to-postgres-sql SKILL.md must reference domain-packs" >&2; exit 1; }
-	@grep -q 'MIGRATION_STATUS' mysql-to-postgres-sql/SKILL.md || \
+	@grep -q 'MIGRATION_STATUS' $(SKILLS_DIR)/mysql-to-postgres-sql/SKILL.md || \
 		{ echo "error: mysql-to-postgres-sql SKILL.md must reference MIGRATION_STATUS.yaml" >&2; exit 1; }
-	@grep -q 'skill-contract' mysql-to-postgres-sql/SKILL.md || \
+	@grep -q 'skill-contract' $(SKILLS_DIR)/mysql-to-postgres-sql/SKILL.md || \
 		{ echo "error: mysql-to-postgres-sql SKILL.md must link to skill-contract.md" >&2; exit 1; }
 	@echo "  ok"
 	@echo "lint-mysql-to-postgres-sql: scan fixture + pressure harness"
-	@bash mysql-to-postgres-sql/tests/run_pressure_tests.sh
+	@bash $(SKILLS_DIR)/mysql-to-postgres-sql/tests/run_pressure_tests.sh
 	@cache="$(CURDIR)/.pycache-lint-mysql"; \
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
 	trap 'rm -rf "$$cache"' EXIT; \
-	python3 -m py_compile mysql-to-postgres-sql/scripts/ast_check_mysql_dialect.py || exit 1; \
+	python3 -m py_compile $(SKILLS_DIR)/mysql-to-postgres-sql/scripts/ast_check_mysql_dialect.py || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest mysql-to-postgres-sql/tests/test_pressure_policy.py -q || exit 1; \
+		python3 -m pytest $(SKILLS_DIR)/mysql-to-postgres-sql/tests/test_pressure_policy.py -q || exit 1; \
 		if python3 -c "import sqlglot" >/dev/null 2>&1; then \
-			python3 -m pytest mysql-to-postgres-sql/tests/test_ast_check_mysql_dialect.py -q || exit 1; \
+			python3 -m pytest $(SKILLS_DIR)/mysql-to-postgres-sql/tests/test_ast_check_mysql_dialect.py -q || exit 1; \
 		else \
 			echo "sqlglot not installed — install with 'python3 -m pip install sqlglot' to run the AST secondary-checker tests" >&2; \
 			exit 1; \
@@ -575,10 +576,10 @@ lint-mysql-to-postgres-sql:
 	echo "  ok (pressure + pytest + AST checker)"
 	@echo "lint-mysql-to-postgres-sql: shellcheck scan + test scripts"
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck -x -P SCRIPTDIR mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh mysql-to-postgres-sql/scripts/scan-report.sh mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh mysql-to-postgres-sql/tests/run_pressure_tests.sh; \
+		shellcheck -x -P SCRIPTDIR $(SKILLS_DIR)/mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh $(SKILLS_DIR)/mysql-to-postgres-sql/scripts/scan-report.sh $(SKILLS_DIR)/mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh $(SKILLS_DIR)/mysql-to-postgres-sql/tests/run_pressure_tests.sh; \
 	elif command -v docker >/dev/null 2>&1; then \
 		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine@sha256:c82fe42504fbc9fc68f15d36638e5ee2324ebb8b94e96a3c4e395bf361c49183 \
-			shellcheck -x -P SCRIPTDIR mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh mysql-to-postgres-sql/scripts/scan-report.sh mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh mysql-to-postgres-sql/tests/run_pressure_tests.sh; \
+			shellcheck -x -P SCRIPTDIR $(SKILLS_DIR)/mysql-to-postgres-sql/scripts/scan-mysql-dialect.sh $(SKILLS_DIR)/mysql-to-postgres-sql/scripts/scan-report.sh $(SKILLS_DIR)/mysql-to-postgres-sql/scripts/mysql-dialect-patterns.sh $(SKILLS_DIR)/mysql-to-postgres-sql/tests/run_pressure_tests.sh; \
 	else \
 		echo "error: install shellcheck or docker" >&2; exit 1; \
 	fi
@@ -589,14 +590,14 @@ lint-loop-task-implementer: lint-loop-task-implementer-skill lint-loop-task-impl
 # Mirrors lint-pr-review-scripts: the skill ships a validator, so its own tests are
 # co-located with it and run from the target that lints it.
 lint-loop-task-implementer-scripts:
-	@echo "py_compile loop-task-implementer/scripts/validate_loop_lifecycle.py"
-	@echo "pytest loop-task-implementer/tests/"
+	@echo "py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/validate_loop_lifecycle.py"
+	@echo "pytest $(SKILLS_DIR)/loop-task-implementer/tests/"
 	@cache="$(CURDIR)/.pycache-lint-loop-task-implementer"; \
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
 	trap 'rm -rf "$$cache"' EXIT; \
-	python3 -m py_compile loop-task-implementer/scripts/validate_loop_lifecycle.py || exit 1; \
+	python3 -m py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/validate_loop_lifecycle.py || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest loop-task-implementer/tests/ -q || exit 1; \
+		python3 -m pytest $(SKILLS_DIR)/loop-task-implementer/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run script tests" >&2; \
 		exit 1; \
@@ -606,22 +607,22 @@ lint-loop-task-implementer-skill:
 	@python3 scripts/lint_skills.py --skill loop-task-implementer
 	@echo "lint-loop-task-implementer: required files"
 	@for f in SETUP.md README.md examples.md report-template.md; do \
-		test -f loop-task-implementer/$$f || \
-			{ echo "error: missing loop-task-implementer/$$f" >&2; exit 1; }; \
+		test -f $(SKILLS_DIR)/loop-task-implementer/$$f || \
+			{ echo "error: missing $(SKILLS_DIR)/loop-task-implementer/$$f" >&2; exit 1; }; \
 	done
-	@test -f loop-task-implementer/reference/state-schema.yaml || \
-		{ echo "error: missing loop-task-implementer/reference/state-schema.yaml" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/loop-task-implementer/reference/state-schema.yaml || \
+		{ echo "error: missing $(SKILLS_DIR)/loop-task-implementer/reference/state-schema.yaml" >&2; exit 1; }
 
 lint-backlog-runner:
 	@python3 scripts/lint_skills.py --skill backlog-runner
 
 lint-weekly-squad-digest:
 	@python3 scripts/lint_skills.py --skill weekly-squad-digest
-	@test -f weekly-squad-digest/scripts/digest_grouping.py || \
-		{ echo "error: missing weekly-squad-digest/scripts/digest_grouping.py" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/weekly-squad-digest/scripts/digest_grouping.py || \
+		{ echo "error: missing $(SKILLS_DIR)/weekly-squad-digest/scripts/digest_grouping.py" >&2; exit 1; }
 	@echo "lint-weekly-squad-digest: digest_grouping pytest"
 	@if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest weekly-squad-digest/tests/ -q || exit 1; \
+		python3 -m pytest $(SKILLS_DIR)/weekly-squad-digest/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run weekly-squad-digest tests" >&2; \
 	fi
@@ -632,18 +633,18 @@ lint-$(1):
 	@python3 scripts/lint_skills.py --skill $(1)
 	@echo "lint-$(1): detection scripts + test-creation-principles contract"
 	@for f in $(2); do \
-		test -f $(1)/scripts/$$$$f || \
-			{ echo "error: missing $(1)/scripts/$$$$f" >&2; exit 1; }; \
+		test -f $(SKILLS_DIR)/$(1)/scripts/$$$$f || \
+			{ echo "error: missing $(SKILLS_DIR)/$(1)/scripts/$$$$f" >&2; exit 1; }; \
 	done
-	@grep -q 'docs/skill-framework/shared/test-creation-principles.md' $(1)/reference/skill-contract.md || \
-		{ echo "error: $(1)/reference/skill-contract.md must link to shared test-creation-principles" >&2; exit 1; }
+	@grep -q 'docs/skill-framework/shared/test-creation-principles.md' $(SKILLS_DIR)/$(1)/reference/skill-contract.md || \
+		{ echo "error: $(SKILLS_DIR)/$(1)/reference/skill-contract.md must link to shared test-creation-principles" >&2; exit 1; }
 	@echo "  ok (framework refs)"
 	@echo "lint-$(1): shellcheck scan"
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck -x -P SCRIPTDIR $(1)/scripts/*.sh; \
+		shellcheck -x -P SCRIPTDIR $(SKILLS_DIR)/$(1)/scripts/*.sh; \
 	elif command -v docker >/dev/null 2>&1; then \
 		docker run --rm -v "$(CURDIR):/mnt" -w /mnt koalaman/shellcheck-alpine@sha256:c82fe42504fbc9fc68f15d36638e5ee2324ebb8b94e96a3c4e395bf361c49183 \
-			shellcheck -x -P SCRIPTDIR $(1)/scripts/*.sh; \
+			shellcheck -x -P SCRIPTDIR $(SKILLS_DIR)/$(1)/scripts/*.sh; \
 	else \
 		echo "error: install shellcheck or docker" >&2; exit 1; \
 	fi
@@ -653,7 +654,7 @@ lint-$(1):
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$$$cache"; \
 	trap 'rm -rf "$$$$cache"' EXIT; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest $(1)/tests/$(3) -q || exit 1; \
+		python3 -m pytest $(SKILLS_DIR)/$(1)/tests/$(3) -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run $(1)'s own suite" >&2; \
 		exit 1; \
@@ -704,26 +705,26 @@ lint-unit-test-creator-safe-output:
 lint-test-writer:
 	@python3 scripts/lint_skills.py --skill test-writer
 	@echo "lint-test-writer: no detection/generation scripts (router only)"
-	@if [ -d test-writer/scripts ] || [ -d test-writer/tests ]; then \
+	@if [ -d $(SKILLS_DIR)/test-writer/scripts ] || [ -d $(SKILLS_DIR)/test-writer/tests ]; then \
 		echo "error: test-writer must not have scripts/ or tests/ — it is a router with no detection/generation logic of its own" >&2; exit 1; \
 	fi
-	@test -f test-writer/examples.md || \
-		{ echo "error: missing test-writer/examples.md" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/test-writer/examples.md || \
+		{ echo "error: missing $(SKILLS_DIR)/test-writer/examples.md" >&2; exit 1; }
 
 lint-prd-architect:
 	@python3 scripts/lint_skills.py --skill prd-architect
 	@echo "lint-prd-architect: route-aware workflow contract (workflow_version, phase, produces, consumes checked here too)"
-	@python3 -m scripts.validate_workflow_contracts prd-architect
-	@test -f prd-architect/report-template.md || \
-		{ echo "error: missing prd-architect/report-template.md" >&2; exit 1; }
-	@test -f prd-architect/prd-architect.eval.md || \
-		{ echo "error: missing prd-architect/prd-architect.eval.md" >&2; exit 1; }
-	@test -f prd-architect/scripts/prd_safe_output.py || \
+	@python3 -m scripts.validate_workflow_contracts $(SKILLS_DIR)/prd-architect
+	@test -f $(SKILLS_DIR)/prd-architect/report-template.md || \
+		{ echo "error: missing $(SKILLS_DIR)/prd-architect/report-template.md" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/prd-architect/prd-architect.eval.md || \
+		{ echo "error: missing $(SKILLS_DIR)/prd-architect/prd-architect.eval.md" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/prd-architect/scripts/prd_safe_output.py || \
 		{ echo "error: missing prd-architect safe-output renderer" >&2; exit 1; }
-	@test -f prd-architect/examples.md || \
-		{ echo "error: missing prd-architect/examples.md" >&2; exit 1; }
-	@grep -q 'smoke-test' prd-architect/SKILL.md || \
-		{ echo "error: prd-architect/SKILL.md must link to reference/smoke-test.md" >&2; exit 1; }
+	@test -f $(SKILLS_DIR)/prd-architect/examples.md || \
+		{ echo "error: missing $(SKILLS_DIR)/prd-architect/examples.md" >&2; exit 1; }
+	@grep -q 'smoke-test' $(SKILLS_DIR)/prd-architect/SKILL.md || \
+		{ echo "error: $(SKILLS_DIR)/prd-architect/SKILL.md must link to reference/smoke-test.md" >&2; exit 1; }
 
 lint-architecture-review:
 	@python3 scripts/lint_skills.py --skill architecture-review
@@ -765,8 +766,8 @@ lint-module-design:
 		"## When to use / NOT to use" "## Deliverable" "## Required inputs" \
 		"## Prerequisites" "## Workflow" "## Boundary rules" \
 		"## Cross-skill escalation" "## Framework" "## Begin"; do \
-		grep -Fqx "$$heading" module-design/SKILL.md || \
-			{ echo "error: module-design/SKILL.md must contain heading $$heading" >&2; exit 1; }; \
+		grep -Fqx "$$heading" $(SKILLS_DIR)/module-design/SKILL.md || \
+			{ echo "error: $(SKILLS_DIR)/module-design/SKILL.md must contain heading $$heading" >&2; exit 1; }; \
 	done
 	@echo "  ok"
 
@@ -777,8 +778,8 @@ lint-codebase-architecture-review:
 		"## When to use / NOT to use" "## Deliverable" "## Scope and prerequisites" \
 		"## Workflow" "## Candidate rules" "## Cross-skill boundary" \
 		"## Framework" "## Begin"; do \
-		grep -Fqx "$$heading" codebase-architecture-review/SKILL.md || \
-			{ echo "error: codebase-architecture-review/SKILL.md must contain heading $$heading" >&2; exit 1; }; \
+		grep -Fqx "$$heading" $(SKILLS_DIR)/codebase-architecture-review/SKILL.md || \
+			{ echo "error: $(SKILLS_DIR)/codebase-architecture-review/SKILL.md must contain heading $$heading" >&2; exit 1; }; \
 	done
 	@echo "  ok"
 
@@ -790,8 +791,8 @@ lint-engineering-decision-discovery:
 		"## Prerequisites" "## Workflow" "## Decision tree and frontier rules" \
 		"## Interaction and ownership rules" "## Cross-skill boundary" \
 		"## Framework" "## Begin"; do \
-		grep -Fqx "$$heading" engineering-decision-discovery/SKILL.md || \
-			{ echo "error: engineering-decision-discovery/SKILL.md must contain heading $$heading" >&2; exit 1; }; \
+		grep -Fqx "$$heading" $(SKILLS_DIR)/engineering-decision-discovery/SKILL.md || \
+			{ echo "error: $(SKILLS_DIR)/engineering-decision-discovery/SKILL.md must contain heading $$heading" >&2; exit 1; }; \
 	done
 	@echo "  ok"
 
@@ -847,10 +848,10 @@ lint-framework:
 	$(call require_heading,docs/skill-framework/shared/examples-conventions.md,'^## 2\. Scenario format',2. Scenario format)
 	$(call require_heading,docs/skill-framework/shared/examples-conventions.md,'^## 5\. Anti-patterns',5. Anti-patterns)
 	@for skill in $(ALL_SKILLS); do \
-		test -f $$skill/examples.md || \
-			{ echo "error: missing $$skill/examples.md (examples-conventions)" >&2; exit 1; }; \
-		grep -q '## Invocation' $$skill/examples.md || \
-			{ echo "error: $$skill/examples.md must have Invocation section" >&2; exit 1; }; \
+		test -f $(SKILLS_DIR)/$$skill/examples.md || \
+			{ echo "error: missing $(SKILLS_DIR)/$$skill/examples.md (examples-conventions)" >&2; exit 1; }; \
+		grep -q '## Invocation' $(SKILLS_DIR)/$$skill/examples.md || \
+			{ echo "error: $(SKILLS_DIR)/$$skill/examples.md must have Invocation section" >&2; exit 1; }; \
 	done
 	$(call require_heading,docs/skill-framework/shared/phase-glossary.md,'^## 5\. Cross-skill analogies',5. Cross-skill analogies)
 	$(call require_content,docs/skill-framework/shared/phase-glossary.md,'MCP profile',the MCP profile)
@@ -875,9 +876,9 @@ lint-framework:
 		{ echo "error: cross-skill-escalation must include mysql artifact handoff block" >&2; exit 1; }
 	@grep -q 'Approach B' docs/skill-framework/README.md || \
 		{ echo "error: skill-framework README must document deferred Approach B" >&2; exit 1; }
-	$(call require_file,domain-comprehension/reference/assessment-metadata.md,assessment-metadata contract)
-	$(call require_file,squad-map/reference/assessment-metadata.md,assessment-metadata contract)
-	$(call require_file,mysql-to-postgres-sql/reference/assessment-metadata.md,assessment-metadata contract)
+	$(call require_file,$(SKILLS_DIR)/domain-comprehension/reference/assessment-metadata.md,assessment-metadata contract)
+	$(call require_file,$(SKILLS_DIR)/squad-map/reference/assessment-metadata.md,assessment-metadata contract)
+	$(call require_file,$(SKILLS_DIR)/mysql-to-postgres-sql/reference/assessment-metadata.md,assessment-metadata contract)
 	$(call require_content,docs/skill-framework/README.md,'review-metadata-schema',the review-metadata schema)
 	@echo "lint-framework: SETUP.md freshness tables"
 	@python3 scripts/validate_setup_freshness.py
@@ -896,12 +897,12 @@ lint-framework:
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
 	$(call require_content,docs/skill-framework/README.md,'| Complete |',a Complete status row)
 	@for skill in $(ALL_SKILLS); do \
-		grep -q 'skill-framework' $$skill/SETUP.md || \
-			{ echo "error: $$skill/SETUP.md must link to docs/skill-framework" >&2; exit 1; }; \
-		grep -q 'docs/skill-framework/shared/skill-routing.md' $$skill/SKILL.md || \
-			{ echo "error: $$skill/SKILL.md must link to shared skill-routing" >&2; exit 1; }; \
-		grep -q 'docs/skill-framework/shared/prompt-injection.md' $$skill/SKILL.md || \
-			{ echo "error: $$skill/SKILL.md must link to shared prompt-injection" >&2; exit 1; }; \
+		grep -q 'skill-framework' $(SKILLS_DIR)/$$skill/SETUP.md || \
+			{ echo "error: $(SKILLS_DIR)/$$skill/SETUP.md must link to docs/skill-framework" >&2; exit 1; }; \
+		grep -q 'docs/skill-framework/shared/skill-routing.md' $(SKILLS_DIR)/$$skill/SKILL.md || \
+			{ echo "error: $(SKILLS_DIR)/$$skill/SKILL.md must link to shared skill-routing" >&2; exit 1; }; \
+		grep -q 'docs/skill-framework/shared/prompt-injection.md' $(SKILLS_DIR)/$$skill/SKILL.md || \
+			{ echo "error: $(SKILLS_DIR)/$$skill/SKILL.md must link to shared prompt-injection" >&2; exit 1; }; \
 	done
 	@echo "lint-framework: first-ingest untrusted-content wiring"
 	@fail=0; \
@@ -947,17 +948,17 @@ lint-framework:
 		"module-design:workflow/inputs.md" \
 		"codebase-architecture-review:workflow/scope.md"; do \
 		skill=$${pair%%:*}; file=$${pair#*:}; \
-		if ! grep -qiE 'untrusted|prompt-injection' $$skill/$$file; then \
-			echo "error: $$skill/$$file must declare untrusted-content guard" >&2; fail=1; \
+		if ! grep -qiE 'untrusted|prompt-injection' $(SKILLS_DIR)/$$skill/$$file; then \
+			echo "error: $(SKILLS_DIR)/$$skill/$$file must declare untrusted-content guard" >&2; fail=1; \
 		fi; \
 	done; \
 	if [ "$$fail" -ne 0 ]; then exit 1; fi
 	@echo "lint-framework: PRD rendered-output safety wiring"
-	@grep -q 'docs/skill-framework/shared/prompt-injection.md' prd-architect/workflow/gate.md && \
-	 grep -q 'docs/skill-framework/shared/safe-output.md' prd-architect/workflow/gate.md && \
-	 grep -qi 'source_material' prd-architect/workflow/gate.md && \
-	 grep -qiE 'escape|fence' prd-architect/workflow/gate.md && \
-	 grep -qi 'redact' prd-architect/workflow/gate.md || \
+	@grep -q 'docs/skill-framework/shared/prompt-injection.md' $(SKILLS_DIR)/prd-architect/workflow/gate.md && \
+	 grep -q 'docs/skill-framework/shared/safe-output.md' $(SKILLS_DIR)/prd-architect/workflow/gate.md && \
+	 grep -qi 'source_material' $(SKILLS_DIR)/prd-architect/workflow/gate.md && \
+	 grep -qiE 'escape|fence' $(SKILLS_DIR)/prd-architect/workflow/gate.md && \
+	 grep -qi 'redact' $(SKILLS_DIR)/prd-architect/workflow/gate.md || \
 		{ echo "error: prd-architect Gate must sanitize untrusted rendered fields per prompt-injection and safe-output" >&2; exit 1; }
 	@echo "lint-framework: all SETUP.md links ok"
 	@echo "lint-framework: cross-agent discovery files (.cursor/rules + .kiro/steering)"
@@ -984,7 +985,7 @@ lint-framework:
 		docs/skill-framework/shared/examples/review-metadata.example.yaml \
 		docs/skill-framework/shared/examples/assessment-metadata-rca.example.yaml \
 		docs/skill-framework/shared/examples/assessment-metadata-k8s.example.yaml \
-		pr-review/tests/fixtures/phase5-review-metadata.yaml || exit 1
+		$(SKILLS_DIR)/pr-review/tests/fixtures/phase5-review-metadata.yaml || exit 1
 	@echo "lint-framework: source-tree reference validation (anchors + local links, cross-cutting docs)"
 	@python3 scripts/validate_references.py --source-tree . --exclude docs/superpowers --exclude .claude/worktrees || exit 1
 	@echo "lint-framework: ok"
@@ -1012,7 +1013,7 @@ kubesense-errors:
 	if [ -n "$(TO)" ]; then args="$$args --to $(TO)"; fi; \
 	if [ -n "$(LIMIT)" ]; then args="$$args --limit $(LIMIT)"; fi; \
 	if [ -n "$(EVIDENCE)" ]; then args="$$args --evidence"; fi; \
-	python3 incident-rca/scripts/kubesense_logs.py $$args
+	python3 $(SKILLS_DIR)/incident-rca/scripts/kubesense_logs.py $$args
 
 setup-hooks:
 	git config core.hooksPath .githooks

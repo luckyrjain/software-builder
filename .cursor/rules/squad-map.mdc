@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the squad-map skill. Read `squad-map/SKILL.md` and follow it.
-Phase index: `squad-map/reference/phase-index.md` when present under the skill directory.
+Invoke the squad-map skill. Read `skills/squad-map/SKILL.md` and follow it.
+Phase index: `skills/squad-map/reference/phase-index.md` when present under the skill directory.

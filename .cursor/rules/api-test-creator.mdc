@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the api-test-creator skill. Read `api-test-creator/SKILL.md` and follow it.
-Phase index: `api-test-creator/reference/phase-index.md` when present under the skill directory.
+Invoke the api-test-creator skill. Read `skills/api-test-creator/SKILL.md` and follow it.
+Phase index: `skills/api-test-creator/reference/phase-index.md` when present under the skill directory.

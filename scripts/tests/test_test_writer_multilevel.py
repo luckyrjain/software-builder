@@ -4,7 +4,7 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SKILL = ROOT / "test-writer"
+SKILL = ROOT / "skills/test-writer"
 
 
 def _read(path: str) -> str:

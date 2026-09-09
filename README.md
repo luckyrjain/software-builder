@@ -58,8 +58,8 @@ If none is available, `loop-task-implementer` can use weaker, sequential role si
 perform explicit context resets and re-derive facts from the repository for each role. If it cannot,
 the run must not claim role isolation and its findings remain `NEEDS_EVIDENCE`. To take work all the
 way to merge readiness, the host also needs repository write access and visibility into CI for the
-exact head commit. See the [platform adapters](loop-task-implementer/reference/platform-adapters.md)
-and [host-capability requirements](loop-task-implementer/reference/mcp-capabilities.md).
+exact head commit. See the [platform adapters](skills/loop-task-implementer/reference/platform-adapters.md)
+and [host-capability requirements](skills/loop-task-implementer/reference/mcp-capabilities.md).
 
 ### Only for contributing to this repository
 
@@ -151,10 +151,10 @@ Each skill directory has three entry points:
 | **ChatGPT / Codex** | Copy selected skills to the runtime's supported directory, commonly `~/.agents/skills/` | Separate tasks or fresh agent sessions; worktrees where available | Use repository connectors for remote state and local Git for implementation when available. |
 | **GitHub Copilot** | Copy skills to `.github/skills/` (project) or `~/.copilot/skills/` (personal); `.claude/skills/` and `~/.agents/skills/` also work per GitHub's docs | Separate tasks or fresh agent sessions | Discovery is documented, not yet independently verified — see [docs/agent-compatibility.md](docs/agent-compatibility.md). |
 | **Kiro** | Open this repository and use `.kiro/steering/<skill>.md` | Kiro specs plus separate role contexts | No installer copy is required for in-repo use. |
-| **Generic repository agent** | Point the agent directly at `<skill>/SKILL.md` | Host-dependent; otherwise use the documented sequential fallback | State the active role and provide only that role's input package. |
+| **Generic repository agent** | Point the agent directly at `skills/<skill>/SKILL.md` | Host-dependent; otherwise use the documented sequential fallback | State the active role and provide only that role's input package. |
 
 The canonical cross-harness guidance, including the neutral handoff envelope, is in
-[loop-task-implementer/reference/platform-adapters.md](loop-task-implementer/reference/platform-adapters.md).
+[skills/loop-task-implementer/reference/platform-adapters.md](skills/loop-task-implementer/reference/platform-adapters.md).
 
 ### Verification status
 <!-- agent-compatibility:start -->
@@ -181,8 +181,9 @@ bash scripts/install.sh --agent cursor
 bash scripts/install.sh --agent claude-user
 ```
 
-The default installer discovers every root-level `*/SKILL.md`, copies full skill directories to both
-`~/.cursor/skills/` and `~/.claude/skills/`, and replaces an existing installation of the same skill.
+The default installer installs every skill registered in `skills.yaml`, copies full skill directories
+to both `~/.cursor/skills/` and `~/.claude/skills/`, and replaces an existing installation of the same
+skill.
 Review [scripts/README.md](scripts/README.md) before using a custom target or automating installation.
 
 > Make target names usually follow `make install-<skill>`. The exception is
@@ -197,37 +198,37 @@ routes to skills in another category.
 
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
-| [loop-task-implementer](loop-task-implementer/) | “Implement issue 42 and open a PR” | Isolated Builder → two-lens Reviewer → adjudication → remediation → PR loop | [README](loop-task-implementer/README.md) · [SETUP](loop-task-implementer/SETUP.md) |
-| [backlog-runner](backlog-runner/) | Scheduled trigger | Pulls tracker tasks and runs `loop-task-implementer` in dependency order without merging | [README](backlog-runner/README.md) · [SETUP](backlog-runner/SETUP.md) |
-| [pr-review](pr-review/) | `/pr-review` or “review this MR/PR” | GitHub/GHES PR or GitLab MR review with evidence-backed findings and optional inline posts | [README](pr-review/README.md) · [SETUP](pr-review/SETUP.md) |
-| [pr-gatekeeper](pr-gatekeeper/) | Push webhook | Runs `pr-review` on every push to an open MR and applies unattended posting policy | [README](pr-gatekeeper/README.md) · [SETUP](pr-gatekeeper/SETUP.md) |
-| [release-readiness-checker](release-readiness-checker/) | “Is this release ready?” | Aggregates review, Kubernetes, and incident signals into a release go/no-go report | [README](release-readiness-checker/README.md) · [SETUP](release-readiness-checker/SETUP.md) |
-| [production-readiness-review](production-readiness-review/) | “Is PR #123 production ready?” | Read-only rollup of trusted CI, code-review, build-provenance, SCM-policy, change-impact, deployment-risk, and specialist-review evidence into one fail-closed verdict for one exact PR/MR/release candidate | [README](production-readiness-review/README.md) · [SETUP](production-readiness-review/SETUP.md) |
-| [prd-architect](prd-architect/) | “Write a PRD for …” / “Should we build this?” | Validates ideas and turns specs into implementation-ready PRDs with Build Readiness gating | [README](prd-architect/README.md) · [SETUP](prd-architect/SETUP.md) |
-| [change-impact-analyzer](change-impact-analyzer/) | “What services/contracts are affected by this change?” | Bounded, evidence-backed impact analysis for designs and exact PR/MR heads | [README](change-impact-analyzer/README.md) · [SETUP](change-impact-analyzer/SETUP.md) |
-| [implementation-planner](implementation-planner/) | “Plan the implementation for `<task/PRD>`” | Deterministic, dependency-ordered implementation plan with source traceability, feeding `loop-task-implementer` | [README](implementation-planner/README.md) · [SETUP](implementation-planner/SETUP.md) |
-| [test-writer](test-writer/) | “Write tests for MR !123” — level unspecified | Router: classifies the request and dispatches to exactly one of the five skills below | [README](test-writer/README.md) · [SETUP](test-writer/SETUP.md) |
-| [unit-test-creator](unit-test-creator/) | “Write unit tests for `<file/module>`” | Isolated, fast, every external dependency mocked; detects the repo's test framework and never patches production code to force green | [README](unit-test-creator/README.md) · [SETUP](unit-test-creator/SETUP.md) |
-| [integration-test-creator](integration-test-creator/) | “Write an integration test against the real DB” | Tests the real seam to one real adjacent dependency (testcontainers/docker-compose) — never mocks it | [README](integration-test-creator/README.md) · [SETUP](integration-test-creator/SETUP.md) |
-| [contract-test-creator](contract-test-creator/) | “Write a Pact contract test for `<consumer>`” | Consumer-driven contract tests (Pact-style); every interaction shape traces to real observed usage | [README](contract-test-creator/README.md) · [SETUP](contract-test-creator/SETUP.md) |
-| [e2e-test-creator](e2e-test-creator/) | “Write an e2e test for the checkout journey” | Full user-journey browser tests (Playwright/Cypress/Selenium); asserts on user-visible outcomes only | [README](e2e-test-creator/README.md) · [SETUP](e2e-test-creator/SETUP.md) |
-| [api-test-creator](api-test-creator/) | “Write a Postman/API test for `POST /api/orders`” | Black-box request/response assertions (Postman/Newman) against a real running API — no browser | [README](api-test-creator/README.md) · [SETUP](api-test-creator/SETUP.md) |
+| [loop-task-implementer](skills/loop-task-implementer/) | “Implement issue 42 and open a PR” | Isolated Builder → two-lens Reviewer → adjudication → remediation → PR loop | [README](skills/loop-task-implementer/README.md) · [SETUP](skills/loop-task-implementer/SETUP.md) |
+| [backlog-runner](skills/backlog-runner/) | Scheduled trigger | Pulls tracker tasks and runs `loop-task-implementer` in dependency order without merging | [README](skills/backlog-runner/README.md) · [SETUP](skills/backlog-runner/SETUP.md) |
+| [pr-review](skills/pr-review/) | `/pr-review` or “review this MR/PR” | GitHub/GHES PR or GitLab MR review with evidence-backed findings and optional inline posts | [README](skills/pr-review/README.md) · [SETUP](skills/pr-review/SETUP.md) |
+| [pr-gatekeeper](skills/pr-gatekeeper/) | Push webhook | Runs `pr-review` on every push to an open MR and applies unattended posting policy | [README](skills/pr-gatekeeper/README.md) · [SETUP](skills/pr-gatekeeper/SETUP.md) |
+| [release-readiness-checker](skills/release-readiness-checker/) | “Is this release ready?” | Aggregates review, Kubernetes, and incident signals into a release go/no-go report | [README](skills/release-readiness-checker/README.md) · [SETUP](skills/release-readiness-checker/SETUP.md) |
+| [production-readiness-review](skills/production-readiness-review/) | “Is PR #123 production ready?” | Read-only rollup of trusted CI, code-review, build-provenance, SCM-policy, change-impact, deployment-risk, and specialist-review evidence into one fail-closed verdict for one exact PR/MR/release candidate | [README](skills/production-readiness-review/README.md) · [SETUP](skills/production-readiness-review/SETUP.md) |
+| [prd-architect](skills/prd-architect/) | “Write a PRD for …” / “Should we build this?” | Validates ideas and turns specs into implementation-ready PRDs with Build Readiness gating | [README](skills/prd-architect/README.md) · [SETUP](skills/prd-architect/SETUP.md) |
+| [change-impact-analyzer](skills/change-impact-analyzer/) | “What services/contracts are affected by this change?” | Bounded, evidence-backed impact analysis for designs and exact PR/MR heads | [README](skills/change-impact-analyzer/README.md) · [SETUP](skills/change-impact-analyzer/SETUP.md) |
+| [implementation-planner](skills/implementation-planner/) | “Plan the implementation for `<task/PRD>`” | Deterministic, dependency-ordered implementation plan with source traceability, feeding `loop-task-implementer` | [README](skills/implementation-planner/README.md) · [SETUP](skills/implementation-planner/SETUP.md) |
+| [test-writer](skills/test-writer/) | “Write tests for MR !123” — level unspecified | Router: classifies the request and dispatches to exactly one of the five skills below | [README](skills/test-writer/README.md) · [SETUP](skills/test-writer/SETUP.md) |
+| [unit-test-creator](skills/unit-test-creator/) | “Write unit tests for `<file/module>`” | Isolated, fast, every external dependency mocked; detects the repo's test framework and never patches production code to force green | [README](skills/unit-test-creator/README.md) · [SETUP](skills/unit-test-creator/SETUP.md) |
+| [integration-test-creator](skills/integration-test-creator/) | “Write an integration test against the real DB” | Tests the real seam to one real adjacent dependency (testcontainers/docker-compose) — never mocks it | [README](skills/integration-test-creator/README.md) · [SETUP](skills/integration-test-creator/SETUP.md) |
+| [contract-test-creator](skills/contract-test-creator/) | “Write a Pact contract test for `<consumer>`” | Consumer-driven contract tests (Pact-style); every interaction shape traces to real observed usage | [README](skills/contract-test-creator/README.md) · [SETUP](skills/contract-test-creator/SETUP.md) |
+| [e2e-test-creator](skills/e2e-test-creator/) | “Write an e2e test for the checkout journey” | Full user-journey browser tests (Playwright/Cypress/Selenium); asserts on user-visible outcomes only | [README](skills/e2e-test-creator/README.md) · [SETUP](skills/e2e-test-creator/SETUP.md) |
+| [api-test-creator](skills/api-test-creator/) | “Write a Postman/API test for `POST /api/orders`” | Black-box request/response assertions (Postman/Newman) against a real running API — no browser | [README](skills/api-test-creator/README.md) · [SETUP](skills/api-test-creator/SETUP.md) |
 
 ### Incidents and reliability
 
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
-| [incident-rca](incident-rca/) | “RCA for … between …” | Multi-source post-incident investigation across observability and delivery systems | [README](incident-rca/README.md) · [SETUP](incident-rca/SETUP.md) |
-| [incident-triage-agent](incident-triage-agent/) | Paging webhook | Produces page-fire triage and incident-resolved postmortem drafts | [README](incident-triage-agent/README.md) · [SETUP](incident-triage-agent/SETUP.md) |
+| [incident-rca](skills/incident-rca/) | “RCA for … between …” | Multi-source post-incident investigation across observability and delivery systems | [README](skills/incident-rca/README.md) · [SETUP](skills/incident-rca/SETUP.md) |
+| [incident-triage-agent](skills/incident-triage-agent/) | Paging webhook | Produces page-fire triage and incident-resolved postmortem drafts | [README](skills/incident-triage-agent/README.md) · [SETUP](skills/incident-triage-agent/SETUP.md) |
 
 ### Architecture, ownership, and onboarding
 
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
-| [domain-comprehension](domain-comprehension/) | “Map the domain …” | Evidence-backed bounded contexts, ownership, dependencies, and business flows | [README](domain-comprehension/README.md) · [SETUP](domain-comprehension/SETUP.md) |
-| [squad-map](squad-map/) | “Who owns …?” | Maps repositories and services to squads using GitLab, Datadog, and CODEOWNERS evidence | [README](squad-map/README.md) · [SETUP](squad-map/SETUP.md) |
-| [who-owns-x-bot](who-owns-x-bot/) | `/who-owns <name>` | Returns one Slack-ready ownership answer by delegating to `squad-map` | [README](who-owns-x-bot/README.md) · [SETUP](who-owns-x-bot/SETUP.md) |
-| [new-hire-guide](new-hire-guide/) | “Onboard `<name>` to `<squad>`” | Builds a squad-scoped onboarding tour from ownership and domain evidence | [README](new-hire-guide/README.md) · [SETUP](new-hire-guide/SETUP.md) |
+| [domain-comprehension](skills/domain-comprehension/) | “Map the domain …” | Evidence-backed bounded contexts, ownership, dependencies, and business flows | [README](skills/domain-comprehension/README.md) · [SETUP](skills/domain-comprehension/SETUP.md) |
+| [squad-map](skills/squad-map/) | “Who owns …?” | Maps repositories and services to squads using GitLab, Datadog, and CODEOWNERS evidence | [README](skills/squad-map/README.md) · [SETUP](skills/squad-map/SETUP.md) |
+| [who-owns-x-bot](skills/who-owns-x-bot/) | `/who-owns <name>` | Returns one Slack-ready ownership answer by delegating to `squad-map` | [README](skills/who-owns-x-bot/README.md) · [SETUP](skills/who-owns-x-bot/SETUP.md) |
+| [new-hire-guide](skills/new-hire-guide/) | “Onboard `<name>` to `<squad>`” | Builds a squad-scoped onboarding tour from ownership and domain evidence | [README](skills/new-hire-guide/README.md) · [SETUP](skills/new-hire-guide/SETUP.md) |
 
 ### Architecture and specialized design review
 
@@ -236,33 +237,33 @@ design, and dedicated single-domain reviews.
 
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
-| [architecture-review](architecture-review/) | “Architecture review for `<feature>`” | Architecture decision, risks, scale limits, failure modes, security, operability, alternatives | [README](architecture-review/README.md) · [SETUP](architecture-review/SETUP.md) |
-| [system-design](system-design/) | “Design the implementation for `<feature>`” | Components, APIs, events, data model, state machines, consistency, retries, capacity, rollout | [README](system-design/README.md) · [SETUP](system-design/SETUP.md) |
-| [api-design-review](api-design-review/) | “Review the API design for `<feature>`” | REST/GraphQL/gRPC/async-event review: compatibility, pagination, idempotency, versioning, authZ | [README](api-design-review/README.md) · [SETUP](api-design-review/SETUP.md) |
-| [database-review](database-review/) | “Review this schema/migration” | Schema, indexing, locking, transactions, migrations, query plans, replication, partitioning | [README](database-review/README.md) · [SETUP](database-review/SETUP.md) |
-| [security-review](security-review/) | “Security review of `<target>`” | Dedicated authN/authZ, secrets, injection, SSRF, tenant isolation, crypto, dependency exposure | [README](security-review/README.md) · [SETUP](security-review/SETUP.md) |
-| [performance-review](performance-review/) | “Performance review of `<target>`” | Algorithmic complexity, DB behavior, N+1, cache, memory, concurrency, connection pools, fanout | [README](performance-review/README.md) · [SETUP](performance-review/SETUP.md) |
-| [capacity-planner](capacity-planner/) | “Forecast capacity for `<service>`” | Turns historical demand into RPS/CPU/memory/DB/queue/storage/replica requirements | [README](capacity-planner/README.md) · [SETUP](capacity-planner/SETUP.md) |
-| [observability-review](observability-review/) | “Observability review for `<service>`” | Evaluates metrics, logs, tracing, dashboards, alerts, SLOs, correlation IDs for coverage gaps | [README](observability-review/README.md) · [SETUP](observability-review/SETUP.md) |
-| [deployment-risk-review](deployment-risk-review/) | “Deployment risk review for `<change>`” | Blast radius, migration risk, rollback complexity, dependency risk, traffic risk, confidence | [README](deployment-risk-review/README.md) · [SETUP](deployment-risk-review/SETUP.md) |
-| [resilience-review](resilience-review/) | “Resilience review of `<design/implementation>`” | Timeout budgets, retries, circuit breaking, load shedding, backpressure, queues, idempotency, partial failures, recovery | [README](resilience-review/README.md) · [SETUP](resilience-review/SETUP.md) |
-| [dependency-upgrade-review](dependency-upgrade-review/) | “Review upgrading `<dependency>` to `<version>`” | Breaking changes, CVEs, API differences, transitive dependencies, rollout risk | [README](dependency-upgrade-review/README.md) · [SETUP](dependency-upgrade-review/SETUP.md) |
-| [tech-debt-assessor](tech-debt-assessor/) | “Rank this tech debt backlog” | Ranks debt by business impact × engineering drag × operational risk ÷ effort | [README](tech-debt-assessor/README.md) · [SETUP](tech-debt-assessor/SETUP.md) |
+| [architecture-review](skills/architecture-review/) | “Architecture review for `<feature>`” | Architecture decision, risks, scale limits, failure modes, security, operability, alternatives | [README](skills/architecture-review/README.md) · [SETUP](skills/architecture-review/SETUP.md) |
+| [system-design](skills/system-design/) | “Design the implementation for `<feature>`” | Components, APIs, events, data model, state machines, consistency, retries, capacity, rollout | [README](skills/system-design/README.md) · [SETUP](skills/system-design/SETUP.md) |
+| [api-design-review](skills/api-design-review/) | “Review the API design for `<feature>`” | REST/GraphQL/gRPC/async-event review: compatibility, pagination, idempotency, versioning, authZ | [README](skills/api-design-review/README.md) · [SETUP](skills/api-design-review/SETUP.md) |
+| [database-review](skills/database-review/) | “Review this schema/migration” | Schema, indexing, locking, transactions, migrations, query plans, replication, partitioning | [README](skills/database-review/README.md) · [SETUP](skills/database-review/SETUP.md) |
+| [security-review](skills/security-review/) | “Security review of `<target>`” | Dedicated authN/authZ, secrets, injection, SSRF, tenant isolation, crypto, dependency exposure | [README](skills/security-review/README.md) · [SETUP](skills/security-review/SETUP.md) |
+| [performance-review](skills/performance-review/) | “Performance review of `<target>`” | Algorithmic complexity, DB behavior, N+1, cache, memory, concurrency, connection pools, fanout | [README](skills/performance-review/README.md) · [SETUP](skills/performance-review/SETUP.md) |
+| [capacity-planner](skills/capacity-planner/) | “Forecast capacity for `<service>`” | Turns historical demand into RPS/CPU/memory/DB/queue/storage/replica requirements | [README](skills/capacity-planner/README.md) · [SETUP](skills/capacity-planner/SETUP.md) |
+| [observability-review](skills/observability-review/) | “Observability review for `<service>`” | Evaluates metrics, logs, tracing, dashboards, alerts, SLOs, correlation IDs for coverage gaps | [README](skills/observability-review/README.md) · [SETUP](skills/observability-review/SETUP.md) |
+| [deployment-risk-review](skills/deployment-risk-review/) | “Deployment risk review for `<change>`” | Blast radius, migration risk, rollback complexity, dependency risk, traffic risk, confidence | [README](skills/deployment-risk-review/README.md) · [SETUP](skills/deployment-risk-review/SETUP.md) |
+| [resilience-review](skills/resilience-review/) | “Resilience review of `<design/implementation>`” | Timeout budgets, retries, circuit breaking, load shedding, backpressure, queues, idempotency, partial failures, recovery | [README](skills/resilience-review/README.md) · [SETUP](skills/resilience-review/SETUP.md) |
+| [dependency-upgrade-review](skills/dependency-upgrade-review/) | “Review upgrading `<dependency>` to `<version>`” | Breaking changes, CVEs, API differences, transitive dependencies, rollout risk | [README](skills/dependency-upgrade-review/README.md) · [SETUP](skills/dependency-upgrade-review/SETUP.md) |
+| [tech-debt-assessor](skills/tech-debt-assessor/) | “Rank this tech debt backlog” | Ranks debt by business impact × engineering drag × operational risk ÷ effort | [README](skills/tech-debt-assessor/README.md) · [SETUP](skills/tech-debt-assessor/SETUP.md) |
 
 ### Infrastructure and cost
 
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
-| [k8s-overprovisioning-datadog](k8s-overprovisioning-datadog/) | “Is `<service>` overprovisioned?” | Kubernetes MCP-first analysis with per-capability Datadog fallback for CPU, memory, replicas, waste, and optional cost | [README](k8s-overprovisioning-datadog/README.md) · [SETUP](k8s-overprovisioning-datadog/SETUP.md) |
-| [cost-optimization-sprint-planner](cost-optimization-sprint-planner/) | “Plan a cost-optimization sprint” | Sweeps deployments for waste and ranks monthly savings by squad | [README](cost-optimization-sprint-planner/README.md) · [SETUP](cost-optimization-sprint-planner/SETUP.md) |
+| [k8s-overprovisioning-datadog](skills/k8s-overprovisioning-datadog/) | “Is `<service>` overprovisioned?” | Kubernetes MCP-first analysis with per-capability Datadog fallback for CPU, memory, replicas, waste, and optional cost | [README](skills/k8s-overprovisioning-datadog/README.md) · [SETUP](skills/k8s-overprovisioning-datadog/SETUP.md) |
+| [cost-optimization-sprint-planner](skills/cost-optimization-sprint-planner/) | “Plan a cost-optimization sprint” | Sweeps deployments for waste and ranks monthly savings by squad | [README](skills/cost-optimization-sprint-planner/README.md) · [SETUP](skills/cost-optimization-sprint-planner/SETUP.md) |
 
 ### Migrations and program reporting
 
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
-| [mysql-to-postgres-sql](mysql-to-postgres-sql/) | “Rewrite MySQL SQL for PostgreSQL” | Scans and rewrites native SQL and JDBC usage for PostgreSQL | [README](mysql-to-postgres-sql/README.md) · [SETUP](mysql-to-postgres-sql/SETUP.md) |
-| [migration-program-manager](migration-program-manager/) | “Migration status across all repos” | Rolls up `MIGRATION_STATUS.yaml` files by squad, risk, blockers, and staleness | [README](migration-program-manager/README.md) · [SETUP](migration-program-manager/SETUP.md) |
-| [weekly-squad-digest](weekly-squad-digest/) | Scheduled trigger | Combines migration and cost rollups into one squad-grouped digest | [README](weekly-squad-digest/README.md) · [SETUP](weekly-squad-digest/SETUP.md) |
+| [mysql-to-postgres-sql](skills/mysql-to-postgres-sql/) | “Rewrite MySQL SQL for PostgreSQL” | Scans and rewrites native SQL and JDBC usage for PostgreSQL | [README](skills/mysql-to-postgres-sql/README.md) · [SETUP](skills/mysql-to-postgres-sql/SETUP.md) |
+| [migration-program-manager](skills/migration-program-manager/) | “Migration status across all repos” | Rolls up `MIGRATION_STATUS.yaml` files by squad, risk, blockers, and staleness | [README](skills/migration-program-manager/README.md) · [SETUP](skills/migration-program-manager/SETUP.md) |
+| [weekly-squad-digest](skills/weekly-squad-digest/) | Scheduled trigger | Combines migration and cost rollups into one squad-grouped digest | [README](skills/weekly-squad-digest/README.md) · [SETUP](skills/weekly-squad-digest/SETUP.md) |
 
 ## MCP and external integrations
 

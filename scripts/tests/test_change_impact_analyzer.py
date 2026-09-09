@@ -160,8 +160,8 @@ def composition_fields() -> list[str]:
 
 
 def test_change_impact_skill_package_declares_contract() -> None:
-    frontmatter = load_unique_frontmatter(ROOT / "change-impact-analyzer" / "SKILL.md")
-    skill_text = (ROOT / "change-impact-analyzer" / "SKILL.md").read_text(encoding="utf-8")
+    frontmatter = load_unique_frontmatter(ROOT / "skills/change-impact-analyzer" / "SKILL.md")
+    skill_text = (ROOT / "skills/change-impact-analyzer" / "SKILL.md").read_text(encoding="utf-8")
     assert frontmatter["name"] == "change-impact-analyzer"
     for required_text in (
         "host.report.write",

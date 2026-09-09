@@ -1,5 +1,5 @@
 pr-gatekeeper:
-  path: pr-gatekeeper
+  path: skills/pr-gatekeeper
   category: review
   invocation: automation-only
   hosts:

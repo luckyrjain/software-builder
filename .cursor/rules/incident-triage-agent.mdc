@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the incident-triage-agent skill. Read `incident-triage-agent/SKILL.md` and follow it.
-Phase index: `incident-triage-agent/reference/phase-index.md` when present under the skill directory.
+Invoke the incident-triage-agent skill. Read `skills/incident-triage-agent/SKILL.md` and follow it.
+Phase index: `skills/incident-triage-agent/reference/phase-index.md` when present under the skill directory.

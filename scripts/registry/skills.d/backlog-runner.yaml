@@ -1,5 +1,5 @@
 backlog-runner:
-  path: backlog-runner
+  path: skills/backlog-runner
   category: automation
   invocation: automation-only
   hosts:

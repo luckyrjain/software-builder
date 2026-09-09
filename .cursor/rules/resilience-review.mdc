@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the resilience-review skill. Read `resilience-review/SKILL.md` and follow it.
-Phase index: `resilience-review/reference/phase-index.md` when present under the skill directory.
+Invoke the resilience-review skill. Read `skills/resilience-review/SKILL.md` and follow it.
+Phase index: `skills/resilience-review/reference/phase-index.md` when present under the skill directory.

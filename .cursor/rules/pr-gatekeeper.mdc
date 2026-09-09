@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the pr-gatekeeper skill. Read `pr-gatekeeper/SKILL.md` and follow it.
-Phase index: `pr-gatekeeper/reference/phase-index.md` when present under the skill directory.
+Invoke the pr-gatekeeper skill. Read `skills/pr-gatekeeper/SKILL.md` and follow it.
+Phase index: `skills/pr-gatekeeper/reference/phase-index.md` when present under the skill directory.

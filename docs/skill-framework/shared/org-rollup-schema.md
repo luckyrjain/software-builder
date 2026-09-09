@@ -46,7 +46,7 @@ own HIGH/MEDIUM/LOW/UNKNOWN vocabulary, reused here rather than inventing a para
 `services[].owner` is a hand-typed string, not derived from squad-map, and may be stale or wrong). Always
 resolve `squad`/`squad_confidence` by matching the source artifact's service/repo identifier against
 `SQUAD_MAP.md`'s `Repo` or `Datadog service` column (per
-[squad-map/reference/squad-mapping.md](../../../squad-map/reference/squad-mapping.md)). When no match is
+[squad-map/reference/squad-mapping.md](../../../skills/squad-map/reference/squad-mapping.md)). When no match is
 found, `squad: UNKNOWN`, `squad_confidence: UNKNOWN` — never silently drop the item, never guess.
 
 **On a row in `SQUAD_MAP.md`'s own Conflicts table** (GitLab squad ≠ Datadog team for that repo/service),
@@ -56,13 +56,13 @@ squad-map's existing rule rather than layering a second one on top.
 
 **The name doesn't always match verbatim — this is a real, not hypothetical, mismatch.** Confirmed
 directly against k8s-overprovisioning-datadog's own canonical example:
-[decision-graph.example.yaml](../../../k8s-overprovisioning-datadog/reference/decision-graph.example.yaml)'s
+[decision-graph.example.yaml](../../../skills/k8s-overprovisioning-datadog/reference/decision-graph.example.yaml)'s
 `metadata.service` (`example-payment-consumer`) differs from its own `scope`'s `kube_deployment:` tag
 (`payment-consumer`).
 Per adapter:
 - **k8s items:** match against `SQUAD_MAP.md`'s `Datadog service` column (both Datadog-side identifiers);
   when it still doesn't match verbatim, use squad-map's own `ownership.datadog.service_aliases` config
-  ([squad-map/reference/config-schema.md](../../../squad-map/reference/config-schema.md)) — an aggregator
+  ([squad-map/reference/config-schema.md](../../../skills/squad-map/reference/config-schema.md)) — an aggregator
   is a *consumer* of that existing alias mechanism, never a place to build a second one.
 - **mysql-to-postgres-sql items:** match `services[].path` against `SQUAD_MAP.md`'s `Repo` column first
   (a folder name is more likely to equal a repo name than a free-form `services[].name`), falling back to
@@ -77,8 +77,8 @@ repos / Out of scope (archived) sections without treating rows there as part of 
 ### mysql-to-postgres-sql → `pg_migration_gate`
 
 Source: `MIGRATION_STATUS.yaml` `services[]` rows
-([mysql-to-postgres-sql/templates/MIGRATION_STATUS.yaml](../../../mysql-to-postgres-sql/templates/MIGRATION_STATUS.yaml)).
-**Implemented by [migration-program-manager](../../../migration-program-manager/SKILL.md)** (item #8),
+([mysql-to-postgres-sql/templates/MIGRATION_STATUS.yaml](../../../skills/mysql-to-postgres-sql/templates/MIGRATION_STATUS.yaml)).
+**Implemented by [migration-program-manager](../../../skills/migration-program-manager/SKILL.md)** (item #8),
 which reads every workspace's `MIGRATION_STATUS.yaml` directly (mysql-to-postgres-sql itself never
 aggregates across workspaces) and additionally persists a `staleness_days` value per service — the
 "consuming skill's own staleness threshold" the row below defers to.
@@ -94,9 +94,9 @@ aggregates across workspaces) and additionally persists a `staleness_days` value
 ### k8s-overprovisioning-datadog → `k8s_waste`
 
 Source: one `decision_graph` YAML **per single-deployment run**
-([k8s-overprovisioning-datadog/reference/decision-graph-schema.md](../../../k8s-overprovisioning-datadog/reference/decision-graph-schema.md))
+([k8s-overprovisioning-datadog/reference/decision-graph-schema.md](../../../skills/k8s-overprovisioning-datadog/reference/decision-graph-schema.md))
 — there is no *full-assessment* org-wide k8s mode. **Implemented by
-[cost-optimization-sprint-planner](../../../cost-optimization-sprint-planner/SKILL.md)** (item #10),
+[cost-optimization-sprint-planner](../../../skills/cost-optimization-sprint-planner/SKILL.md)** (item #10),
 which loops k8s-overprovisioning-datadog once per deployment in scope, collecting N graphs before this
 adapter runs, optionally pre-filtered by k8s-overprovisioning-datadog's own Phase 0b "Namespace ranking"
 query pattern (top 5 per namespace, reused directly rather than through a standalone-ranking mode
@@ -111,7 +111,7 @@ same as that design spec's own § Non-goals.
 | `service` | The graph's deployment/service identifier (`metadata` block) |
 | `status` | `recommendations[].status` (`READY\|BLOCKED\|DEFERRED\|REJECTED\|COMPLETED`) |
 | `priority` | `recommendations[].priority` (`P0\|P1\|P2`) |
-| `value` | `{freed_cpu_cores, freed_giB, monthly_savings_total, cost_basis}` — **prefer `appendix.cost` when the graph's optional COST phase ran** (it stores `$/core`, `$/GiB`, savings already); only derive these yourself per [k8s-overprovisioning-datadog/cost-estimation.md](../../../k8s-overprovisioning-datadog/cost-estimation.md)'s formulas when `appendix.cost` is absent (COST is skippable — `cost_skipped: <reason>` means "not assessed," never treat it as "$0") |
+| `value` | `{freed_cpu_cores, freed_giB, monthly_savings_total, cost_basis}` — **prefer `appendix.cost` when the graph's optional COST phase ran** (it stores `$/core`, `$/GiB`, savings already); only derive these yourself per [k8s-overprovisioning-datadog/cost-estimation.md](../../../skills/k8s-overprovisioning-datadog/cost-estimation.md)'s formulas when `appendix.cost` is absent (COST is skippable — `cost_skipped: <reason>` means "not assessed," never treat it as "$0") |
 | `evidence_ref` | The specific `decision_graph` YAML this run produced |
 
 A deployment with `assessment.final_decision: KEEP_CONFIGURATION` still produces an `org_rollup_item`

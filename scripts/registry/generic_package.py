@@ -194,7 +194,25 @@ def _heading_slugs(root: Path, path: Path) -> set[str]:
     return slugs
 
 
+def _is_frozen_history(root: Path, path: Path) -> bool:
+    """True for docs/superpowers/ sources: frozen historical plans/specs, excluded from
+    strict link checking the same way scripts/validate_references.py excludes them."""
+    try:
+        rel = path.relative_to(root)
+    except ValueError:
+        return False
+    return rel.parts[:2] == ("docs", "superpowers")
+
+
 def _markdown_targets(root: Path, path: Path, tracked_regular: set[Path]) -> set[Path]:
+    # docs/superpowers/ is frozen historical record (plans/specs predating whatever the
+    # repository looks like today) -- scripts/validate_references.py already excludes it
+    # from strict link checking for the same reason (see its --exclude flag). A spec
+    # written when a skill lived at the repo root, describing a design that has since
+    # moved (or been renamed/removed) entirely, is expected to accumulate dangling
+    # relative links over time; that is not a defect in the *current* runtime package,
+    # so such links are skipped here rather than failing the whole build closed.
+    frozen_source = _is_frozen_history(root, path)
     text = _markdown_without_fences(_packaged_bytes(root, path).decode("utf-8"))
     targets: set[Path] = set()
     for match in MARKDOWN_LINK_RE.finditer(text):
@@ -210,14 +228,20 @@ def _markdown_targets(root: Path, path: Path, tracked_regular: set[Path]) -> set
         try:
             target.relative_to(root)
         except ValueError as exc:
+            if frozen_source:
+                continue
             raise ValueError(
                 f"generic package reference escapes repository: {rel} referenced in {path.relative_to(root)}",
             ) from exc
         if target not in tracked_regular:
+            if frozen_source:
+                continue
             raise ValueError(
                 f"generic package reference points to untracked file: {rel} referenced in {path.relative_to(root)}",
             )
         if not target.is_file():
+            if frozen_source:
+                continue
             raise ValueError(
                 f"generic package dangling markdown reference: {rel} referenced in {path.relative_to(root)}",
             )

@@ -1,5 +1,5 @@
 new-hire-guide:
-  path: new-hire-guide
+  path: skills/new-hire-guide
   category: architecture
   invocation: ambient
   hosts:

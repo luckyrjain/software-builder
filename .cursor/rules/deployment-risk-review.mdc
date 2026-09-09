@@ -5,5 +5,5 @@ alwaysApply: false
 
 <!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
 
-Invoke the deployment-risk-review skill. Read `deployment-risk-review/SKILL.md` and follow it.
-Phase index: `deployment-risk-review/reference/phase-index.md` when present under the skill directory.
+Invoke the deployment-risk-review skill. Read `skills/deployment-risk-review/SKILL.md` and follow it.
+Phase index: `skills/deployment-risk-review/reference/phase-index.md` when present under the skill directory.

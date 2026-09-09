@@ -141,10 +141,11 @@ def render_doc_links_table(
     ]
     for skill_id in sorted(registry.skills):
         label = f"**{skill_id}** (deprecated)" if skill_id in deprecated else f"**{skill_id}**"
+        path = registry.skills[skill_id].path
         lines.append(
-            f"| {label} | [{skill_id}/README.md](../{skill_id}/README.md) | "
-            f"[{skill_id}/SKILL.md](../{skill_id}/SKILL.md) | "
-            f"[{skill_id}/SETUP.md](../{skill_id}/SETUP.md) |",
+            f"| {label} | [{skill_id}/README.md](../{path}/README.md) | "
+            f"[{skill_id}/SKILL.md](../{path}/SKILL.md) | "
+            f"[{skill_id}/SETUP.md](../{path}/SETUP.md) |",
         )
     return "\n".join(lines) + "\n"
 

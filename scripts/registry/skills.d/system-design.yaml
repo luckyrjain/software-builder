@@ -1,5 +1,5 @@
 system-design:
-  path: system-design
+  path: skills/system-design
   category: architecture
   extends: read-only-leaf-review
   install:
