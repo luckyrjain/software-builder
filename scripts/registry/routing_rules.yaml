@@ -187,6 +187,15 @@ routes:
       to ship)\b.*\b(this|the) (pr|mr|pull request|merge request|release candidate)\b
     - \bgo[- /]?no[- ]?go for (this|one) (change|pr|mr|pull request|merge request)\b
     - \bgo[- /]?no[- ]?go\b.*\bdeployment risk\b
+  research-brief:
+    patterns:
+    - \bresearch\b.*\b(this|the)\b.*\bquestion\b
+    - \bfind out whether\b
+    - \binvestigate\b.*\bquestion\b
+    - \bwhat does\b.*\bdocumentation\b.*\bsay\b
+    exclude_patterns:
+    - \b(current[- ]state domain|bounded contexts?|existing .* service)\b
+    - \b(help me decide|which option|grill me)\b
   resilience-review:
     patterns:
     - \b(resilience|failure[- ]mode|fault[- ]toleran)\w*\b.*\b(review|assessment|analysis|controls?)\b

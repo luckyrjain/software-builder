@@ -1,0 +1,9 @@
+---
+description: Investigate a research question against primary sources — repository evidence and, when available, external documentation — and report findings with a cited source and evidence status per claim. Use when a question needs an evidenced, sourced answer rather than a recollection. Keywords: research this, find out whether, what does the documentation say, investigate this question, cited findings. Not for reconstructing this codebase's own current behavior (domain-comprehension), or deciding between options once the facts are known (engineering-decision-discovery).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the research-brief skill. Read `skills/research-brief/SKILL.md` and follow it.
+Phase index: `skills/research-brief/reference/phase-index.md` when present under the skill directory.

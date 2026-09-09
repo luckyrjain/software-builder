@@ -405,6 +405,20 @@ skills:
       host.build.provenance.read: a v2 entry whose release_ref is a non-source digest
         cannot establish candidate identity; production readiness is never invoked
         and stays UNKNOWN
+  research-brief:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional:
+    - name: host.web.search
+      enables: cited external research beyond repository evidence
+    - name: host.web.fetch
+      enables: following a specific external link found via search
+    degraded_modes:
+      host.web.search: skip external search; answer from repository evidence only
+        and mark every external-source-dependent claim UNKNOWN
+      host.web.fetch: skip fetching the specific link; cite the search result summary
+        only if one exists, marked lower confidence, or UNKNOWN otherwise
   resilience-review:
     required:
     - host.report.write

@@ -96,6 +96,7 @@ column.
 | `prd-architect` | `host.report.write` | — | BLOCKED | — |
 | `production-readiness-review` | `host.dependency.advisories.read` | — | DEGRADED | `host.report.write`, `host.repository.read`, `host.scm.change.read`, `host.ci.status`, `host.scm.policy.read`, `host.build.provenance.read`, `host.service.metadata.read` |
 | `release-readiness-checker` | `host.report.write` | — | BLOCKED | — |
+| `research-brief` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `resilience-review` | `host.repository.read` | — | DEGRADED | `host.report.write` |
 | `security-review` | `host.report.write` | — | BLOCKED | — |
 | `squad-map` | **GitLab ❌** `gitlab.list_projects` | scm.merge_request.list | BLOCKED | — |

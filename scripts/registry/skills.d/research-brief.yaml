@@ -1,0 +1,56 @@
+research-brief:
+  path: skills/research-brief
+  category: analysis
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    invokes: []
+    escalation_targets:
+    - engineering-decision-discovery
+    - prd-architect
+    - domain-comprehension
+  capabilities:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional:
+    - name: host.web.search
+      enables: cited external research beyond repository evidence
+    - name: host.web.fetch
+      enables: following a specific external link found via search
+    degraded_modes:
+      host.web.search: skip external search; answer from repository evidence only and mark every
+        external-source-dependent claim UNKNOWN
+      host.web.fetch: skip fetching the specific link; cite the search result summary only if one
+        exists, marked lower confidence, or UNKNOWN otherwise
+  lint:
+    skill_md_max_lines: 180
+    target: research-brief
+  version: 1.0.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: read
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - research_brief
+  dependencies: []
+  degraded_behavior:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: Web search/fetch (optional) — degrades to repository-only research when unavailable
+  routing:
+    patterns:
+    - \bresearch\b.*\b(this|the)\b.*\bquestion\b
+    - \bfind out whether\b
+    - \binvestigate\b.*\bquestion\b
+    - \bwhat does\b.*\bdocumentation\b.*\bsay\b
+    exclude_patterns:
+    - \b(current[- ]state domain|bounded contexts?|existing .* service)\b
+    - \b(help me decide|which option|grill me)\b

@@ -58,6 +58,7 @@ body:
         - prd-architect
         - production-readiness-review
         - release-readiness-checker
+        - research-brief
         - resilience-review
         - security-review
         - squad-map

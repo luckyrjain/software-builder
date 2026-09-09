@@ -33,6 +33,7 @@ graph TD
   prd-architect["prd-architect<br/>leaf"]
   production-readiness-review["production-readiness-review<br/>orchestrator"]
   release-readiness-checker["release-readiness-checker<br/>orchestrator"]
+  research-brief["research-brief<br/>leaf"]
   resilience-review["resilience-review<br/>leaf"]
   security-review["security-review<br/>leaf"]
   squad-map["squad-map<br/>leaf"]
@@ -154,6 +155,9 @@ graph TD
   release-readiness-checker -.->|escalates| incident-rca
   release-readiness-checker -.->|escalates| k8s-overprovisioning-datadog
   release-readiness-checker -.->|escalates| pr-review
+  research-brief -.->|escalates| domain-comprehension
+  research-brief -.->|escalates| engineering-decision-discovery
+  research-brief -.->|escalates| prd-architect
   security-review -.->|escalates| dependency-upgrade-review
   system-design -.->|escalates| api-design-review
   system-design -.->|escalates| database-review
