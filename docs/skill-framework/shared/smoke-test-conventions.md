@@ -68,6 +68,7 @@ Maintainer pressure scenarios: [pressure-tests.md](pressure-tests.md).
 | incident-triage-agent | Webhook: `event_type: page_triggered`, `service`, `triggered_at`, `alert_title`, `severity` | 30-minute window announced, UTC-suffixed, symmetric around `triggered_at` |
 | k8s-overprovisioning-datadog | Assess single deployment with ≥7d history from Kubernetes MCP or Datadog, <5 containers | DISCOVER_SOURCES profile first; scope: deployment + env + window |
 | domain-comprehension | `Map bounded contexts in <domain> workspace` | Session 0 MCP profile + census scope |
+| domain-modeling | `domain_focus: <term or decision under discussion>` | Terminology/scenario/code-cross-reference findings, before the report is built |
 | squad-map | `Map squads for repos in <workspace>` | Phase 0: `GitLab ✅ \| Datadog …` |
 | who-owns-x-bot | `query: <repo-name>`, `workspace_root: <workspace>` | One Slack-formatted reply — no intermediate chatter, no file written |
 | new-hire-guide | `new_hire: {name: <name>, squad: <squad>}`, `workspace_root: <workspace>` | squad-map's own Phase 0/1 output, then domain-comprehension's own Session 0 output, unscoped |

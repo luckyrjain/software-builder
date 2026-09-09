@@ -1,6 +1,6 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, module-design, codebase-architecture-review, engineering-decision-discovery, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, and
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, domain-modeling, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, module-design, codebase-architecture-review, engineering-decision-discovery, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, and
 production-readiness-review.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
@@ -98,6 +98,9 @@ dispatch, and `codebase-architecture-review`'s `composition.invokes` does not ga
 | Scope expansion from one module now spans multiple components, APIs, events, or data flows | module-design → system-design | Module spec, affected components, and expanded implementation scope | "Create the implementation design for `{scope}`; the module boundary now spans `{components}`" |
 | Scope expansion from one module requires an architecture-wide correctness, risk, or scale decision | module-design → architecture-review | Module spec, alternatives, and architecture-wide trade-off | "Review the proposed architecture decision for `{scope}`; the module boundary now changes `{trade_off}`" |
 | Resolved decisions describe one module's contract, seam, or interface | engineering-decision-discovery → module-design | `engineering_decision_record` (resolved decisions + evidence refs) | "Design the module/interface/seam for `{scope}` using the resolved decision record" |
+| Scope now spans reconstructing an entire unfamiliar domain from scratch, not one session's terms | domain-modeling → domain-comprehension | `domain_model_update` + session terms/decisions in scope | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
+| A crystallized decision describes one concrete module's contract, seam, or interface | domain-modeling → module-design | `domain_model_update` (ADR draft + evidence refs) | "Design the module/interface/seam for `{scope}` using the resolved decision record" |
+| A crystallized decision needs an architecture-wide risk/scale/trade-off verdict | domain-modeling → architecture-review | `domain_model_update` (ADR draft + rejected alternatives) | "Review the proposed architecture decision for `{scope}` using the attached decision record" |
 | The frontier itself needs an architecture-wide risk/scale/trade-off verdict, not a decision interview | engineering-decision-discovery → architecture-review | `engineering_decision_record` (frontier + alternatives rejected) | "Review the proposed architecture decision for `{scope}` using the attached decision record" |
 | System design defines an API surface needing contract review | system-design → api-design-review | API surface from design spec | "Review the API design for `{feature}`" |
 | System design defines a data model needing schema review | system-design → database-review | Data model from design spec | "Review the database schema for `{feature}`" |
@@ -156,6 +159,9 @@ Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local
 | module-design expands into an architecture-wide correctness/risk/scale decision | architecture-review receives the alternatives and trade-off | "Review the proposed architecture decision for `{scope}`; the module boundary now changes `{trade_off}`" |
 | engineering-decision-discovery resolves decisions describing one module's contract, seam, or interface | module-design receives the resolved `engineering_decision_record` | "Design the module/interface/seam for `{scope}` using the resolved decision record" |
 | engineering-decision-discovery's frontier needs an architecture-wide risk/scale/trade-off verdict | architecture-review receives the `engineering_decision_record` frontier and rejected alternatives | "Review the proposed architecture decision for `{scope}` using the attached decision record" |
+| domain-modeling's scope spans reconstructing an entire unfamiliar domain from scratch | domain-comprehension receives the `domain_model_update` and session terms/decisions in scope | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
+| domain-modeling crystallizes a decision describing one module's contract, seam, or interface | module-design receives the `domain_model_update` ADR draft and evidence refs | "Design the module/interface/seam for `{scope}` using the resolved decision record" |
+| domain-modeling crystallizes a decision needing an architecture-wide risk/scale/trade-off verdict | architecture-review receives the `domain_model_update` ADR draft and rejected alternatives | "Review the proposed architecture decision for `{scope}` using the attached decision record" |
 
 ## 3. Handoff block (required fields)
 
@@ -204,6 +210,7 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Existing codebase architecture friction / refactoring candidates | codebase-architecture-review |
 | Grill me / stress-test this decision / unresolved engineering decisions before design or implementation | engineering-decision-discovery |
 | One code-level module / interface / seam / package / test surface | module-design |
+| Domain model / ubiquitous language / glossary term / sharpen terminology / propose an ADR from a crystallized session decision | domain-modeling |
 | Proposed architecture correctness | architecture-review |
 | System/component/API/event/data implementation design | system-design |
 | Caller-supplied debt backlog ranking | tech-debt-assessor |

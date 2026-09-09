@@ -52,6 +52,7 @@ software-builder/
     ├── codebase-architecture-review/ # Bounded, evidence-backed review of an existing codebase's architecture friction
     ├── engineering-decision-discovery/ # Interactive, evidence-backed challenge that surfaces and resolves unsettled engineering decisions
     ├── module-design/              # Evidence-backed design for one concrete module's contract, seams, dependencies, tests
+    ├── domain-modeling/            # Sharpens terminology/decisions from the current session into a report-only CONTEXT.md/ADR proposal
     ├── system-design/             # Implementation-level design: components, APIs, data model, rollout
     ├── api-design-review/         # REST/GraphQL/gRPC/async-event design review
     ├── database-review/           # Schema, indexing, locking, transactions, migrations, query plans
@@ -83,6 +84,7 @@ Each skill directory follows the same pattern:
 | `dependency-upgrade-review` | review | ambient | — | `make lint-dependency-upgrade-review` |
 | `deployment-risk-review` | review | ambient | — | `make lint-deployment-risk-review` |
 | `domain-comprehension` | architecture | ambient | squad-map | `make lint-domain-comprehension` |
+| `domain-modeling` | architecture | ambient | — | `make lint-domain-modeling` |
 | `e2e-test-creator` | testing | ambient | — | `make lint-e2e-test-creator` |
 | `engineering-decision-discovery` | architecture | ambient | — | `make lint-engineering-decision-discovery` |
 | `implementation-planner` | automation | ambient | — | `make lint-implementation-planner` |

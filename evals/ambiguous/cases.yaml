@@ -7,6 +7,7 @@ cases:
   - {skill: incident-rca, prompt: "Run an RCA for the production incident and also right-size Kubernetes CPU and memory requests.", expected_status: ambiguous, expected_candidates: [incident-rca, k8s-overprovisioning-datadog]}
   - {skill: incident-triage-agent, prompt: "Triage this pager alert webhook and also handle the PR webhook through the automation gate.", expected_status: ambiguous, expected_candidates: [incident-triage-agent, pr-gatekeeper]}
   - {skill: domain-comprehension, prompt: "Understand the current-state domain and bounded contexts and build a squad ownership map from CODEOWNERS.", expected_status: ambiguous, expected_candidates: [domain-comprehension, squad-map]}
+  - {skill: domain-modeling, prompt: "Sharpen the domain terminology term 'RefundPolicy', then design the concrete module interface for it.", expected_status: ambiguous, expected_candidates: [domain-modeling, module-design]}
   - {skill: squad-map, prompt: "Build a squad map from CODEOWNERS and answer who owns the repayment service.", expected_status: ambiguous, expected_candidates: [squad-map, who-owns-x-bot]}
   - {skill: who-owns-x-bot, prompt: "Who owns the repayment service, and build the full squad ownership map from CODEOWNERS.", expected_status: ambiguous, expected_candidates: [squad-map, who-owns-x-bot]}
   - {skill: new-hire-guide, prompt: "Create a new hire onboarding guide and also understand the current-state domain and bounded contexts.", expected_status: ambiguous, expected_candidates: [domain-comprehension, new-hire-guide]}

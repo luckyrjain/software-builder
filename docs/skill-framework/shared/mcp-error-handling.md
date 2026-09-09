@@ -75,6 +75,7 @@ column.
 | `dependency-upgrade-review` | `host.report.write` | — | BLOCKED | — |
 | `deployment-risk-review` | `host.report.write` | — | BLOCKED | — |
 | `domain-comprehension` | `host.repository.read` | — | BLOCKED | — |
+| `domain-modeling` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `e2e-test-creator` | `host.repository.read_write` | — | BLOCKED | — |
 | `engineering-decision-discovery` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `implementation-planner` | `host.repository.read` | — | BLOCKED | `host.report.write` |

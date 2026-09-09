@@ -1,0 +1,9 @@
+---
+description: Build and sharpen a project's domain model as an ongoing discipline during active design or build work: challenge terminology against CONTEXT.md, invent edge-case scenarios, cross-check stated behavior against code, and propose an ADR draft the moment a decision crystallizes. Use when the user is pinning down domain terminology or a ubiquitous language, or when another skill needs live domain vocabulary mid-session. Keywords: domain model, ubiquitous language, glossary, CONTEXT.md, ADR draft, ambiguous terminology, edge-case scenario, ADR record. Not for one-shot reconstruction of an unfamiliar domain from scratch (domain-comprehension), or one concrete module's contract/seam (module-design).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the domain-modeling skill. Read `skills/domain-modeling/SKILL.md` and follow it.
+Phase index: `skills/domain-modeling/reference/phase-index.md` when present under the skill directory.

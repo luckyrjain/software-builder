@@ -19,6 +19,9 @@ graph TD
   deployment-risk-review -.->|escalates| release-readiness-checker
   deployment-risk-review -.->|escalates| incident-triage-agent
   domain-comprehension -->|invokes| squad-map
+  domain-modeling -.->|escalates| domain-comprehension
+  domain-modeling -.->|escalates| module-design
+  domain-modeling -.->|escalates| architecture-review
   engineering-decision-discovery -.->|escalates| module-design
   engineering-decision-discovery -.->|escalates| architecture-review
   implementation-planner -.->|escalates| loop-task-implementer

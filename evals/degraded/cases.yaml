@@ -7,6 +7,7 @@ cases:
   - {skill: incident-rca, missing_capability: telemetry.logs.query, available_capabilities: [], expected_behavior: BLOCKED}
   - {skill: incident-triage-agent, missing_capability: pager.webhook.receive, available_capabilities: [], expected_behavior: BLOCKED}
   - {skill: domain-comprehension, missing_capability: host.repository.read, available_capabilities: [], expected_behavior: BLOCKED}
+  - {skill: domain-modeling, missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
   - {skill: squad-map, missing_capability: gitlab.list_projects, available_capabilities: [], expected_behavior: BLOCKED}
   - {skill: who-owns-x-bot, missing_capability: slack.slash_command.receive, available_capabilities: [], expected_behavior: BLOCKED}
   - {skill: new-hire-guide, missing_capability: host.repository.read, available_capabilities: [], expected_behavior: BLOCKED}
