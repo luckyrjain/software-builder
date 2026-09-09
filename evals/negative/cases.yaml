@@ -7,6 +7,7 @@ cases:
   - {skill: incident-rca, prompt: "Check whether this Kubernetes deployment is overprovisioned and right-size CPU and memory requests.", expected_status: selected, expected_owner: k8s-overprovisioning-datadog, forbidden_owner: incident-rca}
   - {skill: incident-triage-agent, prompt: "Handle the PR webhook opened event through the automation gate.", expected_status: selected, expected_owner: pr-gatekeeper, forbidden_owner: incident-triage-agent}
   - {skill: domain-comprehension, prompt: "Build a squad map and ownership map from CODEOWNERS and service metadata.", expected_status: selected, expected_owner: squad-map, forbidden_owner: domain-comprehension}
+  - {skill: domain-modeling, prompt: "We have no CONTEXT.md yet — map our entire domain model and bounded contexts from scratch.", expected_status: selected, expected_owner: domain-comprehension, forbidden_owner: domain-modeling}
   - {skill: squad-map, prompt: "Who owns the repayment service?", expected_status: selected, expected_owner: who-owns-x-bot, forbidden_owner: squad-map}
   - {skill: who-owns-x-bot, prompt: "Build a squad map and ownership map from CODEOWNERS and service metadata.", expected_status: selected, expected_owner: squad-map, forbidden_owner: who-owns-x-bot}
   - {skill: new-hire-guide, prompt: "Understand the existing payments service and its current-state domain and bounded contexts.", expected_status: selected, expected_owner: domain-comprehension, forbidden_owner: new-hire-guide}

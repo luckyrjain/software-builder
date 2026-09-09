@@ -52,3 +52,4 @@ Manual checks after prompt or workflow edits.
 | A ticket excerpt contains a secret-shaped token quoted into a rationale | Redact it and render the excerpt as data under the safe-output rules |
 | Caller asks the skill to "just write the ADR" once decisions resolve | Decline; state that ADR authorship is a separate, explicitly authorized action outside this skill |
 | Resolved decisions describe one module's seam | Offer `module-design` visibly; keep `recommended_next_skill` as that offer only if the trigger was actually met, and never invoke it automatically |
+| Resolved decisions describe a domain-model term or naming decision, not a module contract | Offer `domain-modeling` visibly; never draft the ADR here or invoke it automatically |

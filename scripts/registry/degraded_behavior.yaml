@@ -60,6 +60,11 @@ skills:
     missing_capability: host.repository.read
     available_capabilities: []
     behavior: BLOCKED
+  domain-modeling:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
   e2e-test-creator:
     missing_capability: host.repository.read_write
     available_capabilities: []

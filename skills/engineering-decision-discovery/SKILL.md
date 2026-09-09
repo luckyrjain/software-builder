@@ -115,6 +115,7 @@ Routing: [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md).
 | Finding (this skill) | Next skill |
 |-----------------------|------------|
 | Resolved decisions describe one module's contract, seam, or interface | **module-design** |
+| Resolved decisions describe a domain-model term, glossary entry, or ADR-worthy naming decision, not a module contract | **domain-modeling** |
 | The frontier itself needs an architecture-wide risk/scale/trade-off verdict, not a decision interview | **architecture-review** |
 | A retained `codebase-architecture-review` candidate or `architecture-review` recommendation arrives as `selected_candidate` | Consume it as evidence for the tree; never re-run that skill's own analysis |
 

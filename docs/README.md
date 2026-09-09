@@ -45,6 +45,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **dependency-upgrade-review** | [dependency-upgrade-review/README.md](../skills/dependency-upgrade-review/README.md) | [dependency-upgrade-review/SKILL.md](../skills/dependency-upgrade-review/SKILL.md) | [dependency-upgrade-review/SETUP.md](../skills/dependency-upgrade-review/SETUP.md) |
 | **deployment-risk-review** | [deployment-risk-review/README.md](../skills/deployment-risk-review/README.md) | [deployment-risk-review/SKILL.md](../skills/deployment-risk-review/SKILL.md) | [deployment-risk-review/SETUP.md](../skills/deployment-risk-review/SETUP.md) |
 | **domain-comprehension** | [domain-comprehension/README.md](../skills/domain-comprehension/README.md) | [domain-comprehension/SKILL.md](../skills/domain-comprehension/SKILL.md) | [domain-comprehension/SETUP.md](../skills/domain-comprehension/SETUP.md) |
+| **domain-modeling** | [domain-modeling/README.md](../skills/domain-modeling/README.md) | [domain-modeling/SKILL.md](../skills/domain-modeling/SKILL.md) | [domain-modeling/SETUP.md](../skills/domain-modeling/SETUP.md) |
 | **e2e-test-creator** | [e2e-test-creator/README.md](../skills/e2e-test-creator/README.md) | [e2e-test-creator/SKILL.md](../skills/e2e-test-creator/SKILL.md) | [e2e-test-creator/SETUP.md](../skills/e2e-test-creator/SETUP.md) |
 | **engineering-decision-discovery** | [engineering-decision-discovery/README.md](../skills/engineering-decision-discovery/README.md) | [engineering-decision-discovery/SKILL.md](../skills/engineering-decision-discovery/SKILL.md) | [engineering-decision-discovery/SETUP.md](../skills/engineering-decision-discovery/SETUP.md) |
 | **implementation-planner** | [implementation-planner/README.md](../skills/implementation-planner/README.md) | [implementation-planner/SKILL.md](../skills/implementation-planner/SKILL.md) | [implementation-planner/SETUP.md](../skills/implementation-planner/SETUP.md) |
@@ -160,6 +161,11 @@ Skills reference each other when a finding belongs in another workflow:
 | module-design | Scope expansion from one module now spans multiple components, APIs, events, or data flows | system-design |
 | module-design | Scope expansion from one module requires an architecture-wide correctness, risk, or scale decision | architecture-review |
 | engineering-decision-discovery | Resolved decisions describe one module's contract, seam, or interface | module-design |
+| engineering-decision-discovery | Resolved decisions describe a domain-model term, glossary entry, or ADR-worthy naming decision, not a module contract | domain-modeling |
+| domain-modeling | Scope now spans reconstructing an entire unfamiliar domain from scratch, not one session's terms | domain-comprehension |
+| domain-modeling | A crystallized decision describes one concrete module's contract, seam, or interface | module-design |
+| domain-modeling | A crystallized decision needs an architecture-wide risk/scale/trade-off verdict | architecture-review |
+| domain-modeling | Genuinely contested alternatives block ADR readiness and need an interactive interview before a decision crystallizes | engineering-decision-discovery |
 | engineering-decision-discovery | The frontier itself needs an architecture-wide risk/scale/trade-off verdict, not a decision interview | architecture-review |
 | system-design | System design defines an API surface needing contract review | api-design-review |
 | system-design | System design defines a data model needing schema review | database-review |

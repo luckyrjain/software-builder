@@ -18,6 +18,7 @@ artifact_types:
 - architecture_review_report
 - system_design_spec
 - module_design_spec
+- domain_model_update
 - codebase_architecture_report
 - api_design_review_report
 - database_review_report
@@ -179,6 +180,19 @@ artifact_schemas:
     - migration_plan
     - alternatives_rejected
     - unresolved_questions
+  domain_model_update:
+    fields:
+    - title
+    - domain_focus
+    - scope_evidence
+    - terminology_findings
+    - scenario_findings
+    - code_cross_reference
+    - proposed_context_patch
+    - adr_readiness
+    - proposed_adr
+    - unresolved_questions
+    - recommendation
   codebase_architecture_report:
     fields:
     - title
@@ -547,6 +561,11 @@ skills:
     - squad_map
     consumes:
     - mr_context
+    write_authority: read-only
+  domain-modeling:
+    produces:
+    - domain_model_update
+    consumes: []
     write_authority: read-only
   e2e-test-creator:
     produces:

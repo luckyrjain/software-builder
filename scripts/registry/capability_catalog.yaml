@@ -94,6 +94,11 @@ skills:
         claims UNKNOWN instead of inferring from static evidence
       telemetry.logs.query: skip KubeSense/log corroboration; mark log-dependent claims
         UNKNOWN
+  domain-modeling:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
   e2e-test-creator:
     required:
     - host.repository.read_write
