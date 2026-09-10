@@ -60,5 +60,5 @@ incident-rca:
     external_services: Datadog MCP, Jira MCP, KubeSense CLI (optional)
   routing:
     patterns:
-    - \b(RCA|root cause|postmortem|production incident|incident investigation)\b
+    - \b(RCA|root cause|postmortem|post-incident|production incident|incident investigation)\b
     - \b(5xx|error|latency)\b.*\b(spike|incident|production)\b
