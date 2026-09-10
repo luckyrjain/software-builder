@@ -32,7 +32,6 @@ authoritative as-is (see registry/generators.py).
 
 from __future__ import annotations
 
-import copy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -41,6 +40,7 @@ import yaml
 
 from scripts.registry.fragments import (
     FRAGMENTS_DIRNAME,
+    derive_contract_sections,
     load_fragment_skills,
     skills_fragments_dir,
 )
@@ -50,8 +50,13 @@ from scripts.yaml_safety import load_unique_yaml_file, require_mapping
 # Re-exported for existing importers (scripts/registry/generators.py, tests) — the
 # loaders themselves now live in fragments.py so schema.py can depend on them without
 # also depending on this module. See fragments.py's docstring for why.
+# derive_contract_sections lives there too, for the same reason: schema.py's
+# load_registry_raw re-derives contracts in-memory on every read (not just at
+# `make generate` write time), so a not-yet-merged new skill's fragment is already
+# visible to validation before the first `make generate` ever runs.
 __all__ = [
     "FRAGMENTS_DIRNAME",
+    "derive_contract_sections",
     "load_fragment_skills",
     "skills_fragments_dir",
 ]
@@ -111,70 +116,6 @@ def _strip_trailing_banner(chunk: str, banner: str | None) -> str:
     while chunk.endswith(suffix):
         chunk = chunk[: -len(suffix)]
     return chunk
-
-
-def _skill_composition_contract(entry: dict[str, Any]) -> dict[str, Any]:
-    """One skill's `contracts.composition.skills.<id>` entry, from that skill's own fragment.
-
-    `produces`/`produce_fields` come from the skill's `output_contract`, `write_authority`
-    from its `authority`, and the consumed half from its `composition` block -- the only
-    facts here with no other home in the fragment. Empty field maps are omitted rather than
-    written as `{}`, matching how the section was authored by hand. Missing blocks project as
-    empty rather than raising: requiring them is `validate_canonical_manifest`'s job, and the
-    minimal fixtures several tests build carry neither.
-    """
-    output_contract = require_mapping(entry.get("output_contract") or {}, "output_contract")
-    composition = require_mapping(entry.get("composition") or {}, "composition")
-    contract: dict[str, Any] = {
-        "produces": list(output_contract.get("produces", [])),
-        "consumes": list(composition.get("consumes", [])),
-    }
-    produce_fields = output_contract.get("produce_fields") or {}
-    if produce_fields:
-        contract["produce_fields"] = produce_fields
-    consume_fields = composition.get("consume_fields") or {}
-    if consume_fields:
-        contract["consume_fields"] = consume_fields
-    contract["write_authority"] = entry.get("authority")
-    return contract
-
-
-def derive_contract_sections(
-    contracts: dict[str, Any],
-    skills: dict[str, dict[str, Any]],
-) -> dict[str, Any]:
-    """Return `contracts` with every per-skill sub-mapping re-derived from `skills`.
-
-    `skills` must be profile-resolved, so a skill inheriting its `authority` or `type` from a
-    `profiles:` entry projects the value it actually runs with.
-
-    A section this registry does not carry is left alone rather than conjured: the minimal
-    skills.yaml fixtures several tests build declare only part of `contracts:`, and whether a
-    required section is missing is `validate_canonical_manifest`'s question, not this one's.
-    """
-    derived = copy.deepcopy(contracts)
-    skill_types = {skill_id: entry.get("type") for skill_id, entry in skills.items()}
-    sub_mappings: dict[str, dict[str, Any]] = {
-        "platform": {
-            "skill_types": skill_types,
-            "skill_permissions": {
-                skill_id: entry.get("permissions") for skill_id, entry in skills.items()
-            },
-        },
-        "composition_runtime": {"skill_types": dict(skill_types)},
-        "composition": {
-            "skills": {
-                skill_id: _skill_composition_contract(entry) for skill_id, entry in skills.items()
-            },
-        },
-    }
-    for section, fields in sub_mappings.items():
-        if section not in derived:
-            continue
-        target = require_mapping(derived[section], f"contracts.{section}")
-        for field, value in fields.items():
-            target[field] = value
-    return derived
 
 
 def merge_registry_yaml(root: Path) -> str:
