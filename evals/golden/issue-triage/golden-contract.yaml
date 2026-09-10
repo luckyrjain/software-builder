@@ -4,21 +4,38 @@ case_id: golden-contract
 tier: 3
 description: >
   Raw issues get evidence-cited classification, never a written label. A duplicate claim requires an
-  evidence match, and an unclear owner is reported unclear rather than guessed.
+  evidence match, an unclear owner is reported unclear rather than guessed, and a high-severity
+  user-facing bug is still not escalated as an incident unless the impact is active right now.
 recorded_output:
   artifact: issue_triage_report
+  title: Checkout discount issue triage
   repository_write_action: none
   automatic_downstream_invocation: false
+  # Every row carries all four of report-format.md's mandated columns. Issue 2 previously
+  # omitted severity and recommended_owner, which is exactly the partially-filled shape the
+  # conjunctive assertions below now make impossible to record silently.
   issues_classified:
     - issue_excerpt: "Checkout total is wrong when a discount code is applied after tax"
       category: bug
       severity: "high — user-facing incorrect charge"
       duplicate_of: none
-      recommended_owner: unclear — no ownership evidence found
+      recommended_owner: "unclear — no ownership evidence found"
+    # Category stays the substantive one (bug), not "duplicate": duplication is recorded in
+    # duplicate_of, per examples.md's own worked row and workflow/classify.md's precedence rule.
     - issue_excerpt: "Same as above, discount math is off at checkout"
       category: bug
+      severity: "high — same user-facing incorrect charge as issue 1"
       duplicate_of: "issue 1 — matching symptom (discount/tax order) and matching component (checkout)"
-recommendation: "Route issue 1 to the checkout owner once identified via squad-map; issue 2 is a duplicate of issue 1."
+      recommended_owner: "unclear — no ownership evidence found"
+  # workflow/classify.md step 5: incident-shaped means active, ongoing impact RIGHT NOW, not
+  # merely high severity. Both issues here are high severity and neither is an incident, so
+  # this stays empty -- pinning that "high severity" alone never buys an incident-rca handoff.
+  incident_shaped_issues: []
+  unresolved_questions:
+    - issue: "Checkout total is wrong when a discount code is applied after tax"
+      missing_evidence: "no CODEOWNERS entry or prior-handling record for the checkout path"
+      classification_impact: "recommended owner cannot be named; reported unclear rather than guessed"
+  recommendation: "Route issue 1 to the checkout owner once identified via squad-map; issue 2 is a duplicate of issue 1."
 assertions:
   - type: field_equals
     path: artifact
@@ -32,9 +49,70 @@ assertions:
   - type: field_equals
     path: automatic_downstream_invocation
     value: false
+  # HARNESS NOTE: this branch's scripts/evals/golden.py `resolve_path` walks dicts only -- it
+  # cannot index into a list, so `issues_classified[0].category` is not addressable and every
+  # per-issue check below is a regex over the list's stringified dict repr. That is a known
+  # harness limitation with its own filed follow-up (task_06ea4d70), NOT something to work
+  # around by flattening the fixture. What the assertions do instead is stay CONJUNCTIVE and
+  # single-item-scoped: `[^}]*?` cannot cross a `}`, so each pattern below must find all of its
+  # parts inside ONE issue's dict. Bare substring checks (what this fixture used to have) went
+  # green as long as the words appeared anywhere in the list, so a run that emitted the right
+  # evidence text attached to the WRONG issue -- or one issue's evidence and another's severity
+  # -- passed. Do not relax these back to bare substrings.
+  #
+  # Issue 1: its own excerpt, its own category, and its own evidence-carrying severity, together.
   - type: require_pattern
     path: issues_classified
-    pattern: matching symptom
+    pattern: "'issue_excerpt': 'Checkout total is wrong[^}]*?'category': 'bug'[^}]*?'severity': 'high — user-facing incorrect charge'"
+  # ...and that same issue is the one reporting the unclear owner, not some other row.
   - type: require_pattern
     path: issues_classified
-    pattern: unclear — no ownership evidence found
+    pattern: "'issue_excerpt': 'Checkout total is wrong[^}]*?'recommended_owner': 'unclear — no ownership evidence found'"
+  # Issue 2: the duplicate claim's evidence must sit on the issue actually claimed as a
+  # duplicate, and must name both halves of the match (symptom AND component) per
+  # report-format.md's "evidence match, not proximity" rule.
+  - type: require_pattern
+    path: issues_classified
+    pattern: "'issue_excerpt': 'Same as above[^}]*?'duplicate_of': 'issue 1 — matching symptom \\(discount/tax order\\) and matching component \\(checkout\\)'"
+  # ...and issue 2 carries its own owner column too, so a row cannot silently omit a mandated
+  # column while the other row's value satisfies a list-wide substring check.
+  - type: require_pattern
+    path: issues_classified
+    pattern: "'issue_excerpt': 'Same as above[^}]*?'recommended_owner': 'unclear — no ownership evidence found'"
+  # Structural: two separate dict items, each with its own braces. Catches the degenerate
+  # shapes every substring assertion in the old fixture accepted -- both issues merged into one
+  # dict, a list of bare strings, or a prose paragraph. It does NOT catch the list being
+  # replaced by its own repr as a string, because the harness stringifies the resolved value
+  # before matching (`str(actual)`), which makes a list and its repr indistinguishable to every
+  # require_pattern; that needs typed assertions, not a better regex.
+  - type: require_pattern
+    path: issues_classified
+    pattern: "^\\[\\{.*\\}, \\{.*\\}\\]$"
+  # A severity with no cited evidence is a fabricated severity. report-format.md requires
+  # "<severity + evidence>", so a bare severity word alone is forbidden outright.
+  - type: forbid_pattern
+    path: issues_classified
+    pattern: "'severity': '(?:critical|high|medium|low)'"
+  # Placeholder values in any mandated column. "none"/"unclear — ..." are legitimate recorded
+  # outcomes; TBD/TODO/N/A/pending are the skill declining to classify while looking like it did.
+  - type: forbid_pattern
+    path: issues_classified
+    pattern: "'(?:category|severity|duplicate_of|recommended_owner)': '(?:TBD|TODO|N/?A|pending|to be determined|\\?+|-)'"
+  # Neither issue is incident-shaped: high severity alone must not manufacture an incident-rca
+  # handoff (workflow/classify.md step 5 gates on ACTIVE impact, not severity).
+  - type: field_equals
+    path: incident_shaped_issues
+    value: []
+  # `recommendation` used to be indented as a TOP-LEVEL key, a sibling of recorded_output, so it
+  # was not part of the recorded payload at all and no assertion could reach it -- the field was
+  # in the registered schema with zero coverage. Now nested correctly and actually exercised:
+  # it must name the deferred-ownership follow-up rather than inventing an owner.
+  - type: require_pattern
+    path: recommendation
+    pattern: "squad-map"
+  - type: require_pattern
+    path: recommendation
+    pattern: "issue 2 is a duplicate of issue 1"
+  - type: require_pattern
+    path: unresolved_questions
+    pattern: "reported unclear rather than guessed"

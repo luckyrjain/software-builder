@@ -11,8 +11,12 @@ consumes:
 
 For each issue in `issues`:
 
-1. **Category** — bug, feature request, question, security, or duplicate. Cite the text that supports
-   the chosen category.
+1. **Category** — exactly one of `bug`, `feature`, `question`, `security`, `duplicate`, spelled as
+   emitted by [../reference/report-format.md](../reference/report-format.md) (`feature`, not "feature
+   request"). Cite the text that supports the chosen category. A duplicate keeps its own substantive
+   category — a duplicated crash report stays `bug` — and the match is recorded in **duplicate-of**,
+   not the category; reserve the `duplicate` category for an issue whose only content is a
+   restatement of another, with nothing of its own to classify.
 2. **Severity** — cite evidence (user-facing impact, blocking vs. cosmetic, affected scope) rather
    than a bare guess.
 3. **Duplicate-of** — check for an evidence match (matching symptom, matching stack trace, matching

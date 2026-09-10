@@ -4,9 +4,9 @@ description: >-
   Classify one or more raw, unscoped incoming issues, bugs, or feature requests: category, severity,
   duplicate-of (when evidence supports it), and a recommended owning skill or squad. Use when raw
   issues need triage before anyone acts on them. Keywords: triage these issues, classify these bugs,
-  what category is this, is this a duplicate, which team owns this. Not for a live paging-webhook
-  incident (incident-triage-agent), or an already-scoped tracker query to work through
-  (backlog-runner).
+  what category is this, is this a duplicate of another issue, which team owns this issue. Not for a
+  live paging-webhook incident (incident-triage-agent), an already-scoped tracker query to work
+  through (backlog-runner), or a bare ownership lookup with no raw issue to classify (squad-map).
 ---
 
 # issue-triage
@@ -33,6 +33,7 @@ Routing: [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md).
 | One or more raw, unscoped issues need category/severity/duplicate/owner classification | **incident-triage-agent** — a live paging-webhook incident, no human turn available |
 | Recommend routing before anyone acts, without writing a label | **backlog-runner** — an already-scoped tracker query it works through |
 | Group possible duplicates and flag unclear ownership | A request with no raw issue text to classify |
+| Recommend an owner **for an issue being triaged** | **squad-map** — a bare "who owns this repo/service?", no issue to classify |
 
 ## Deliverable
 

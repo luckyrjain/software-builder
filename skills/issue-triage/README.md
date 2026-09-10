@@ -20,7 +20,8 @@ topical similarity alone never earns a duplicate claim.
 - Group possible duplicates and flag unclear ownership.
 
 Do not use it for a live paging-webhook incident with no human turn available
-(`incident-triage-agent`), or an already-scoped tracker query to work through (`backlog-runner`).
+(`incident-triage-agent`), an already-scoped tracker query to work through (`backlog-runner`), or a
+bare "who owns this repo/service?" lookup with no raw issue to classify (`squad-map`).
 
 ## Pipeline
 

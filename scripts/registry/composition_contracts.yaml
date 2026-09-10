@@ -399,6 +399,7 @@ artifact_schemas:
     fields:
     - title
     - issues_classified
+    - incident_shaped_issues
     - unresolved_questions
     - recommendation
     - repository_write_action

@@ -39,27 +39,82 @@ issue-triage:
   setup_freshness:
     external_services: None — reads repository and caller-provided context only
   routing:
-    # Pattern 3 (below) replaces the plan's original bare `\bis this\b.*\ba duplicate\b`.
-    # That bare form is a severe topic-free-wrapper bug: "is this a duplicate [of X]?" is
-    # generic English that attaches to any statement about anything (a CVE, a migration
-    # script, a PR, a deployment config), stealing ownership from the real owner. A
-    # registry-wide sweep found 118 of 172 tested combinations falsely collided with
-    # sibling skills -- the same "topic-free wrapper pattern collides registry-wide"
-    # defect class that cost research-brief's port 3 review rounds to close (see
+    # WARNING TO FUTURE EDITORS: do not relax patterns 3-5 back to a bare `\ba duplicate\b`,
+    # and do not let patterns 1 and 2 drift back to different noun sets. Both mistakes were
+    # already made once here and each cost a review round.
+    #
+    # Patterns 3-5 replace the plan's original bare `\bis this\b.*\ba duplicate\b`. That
+    # bare form is a severe topic-free-wrapper bug: "is this a duplicate [of X]?" is generic
+    # English that attaches to any statement about anything (a CVE, a migration script, a
+    # PR, a deployment config), stealing ownership from the real owner. A registry-wide
+    # sweep found 118 of 172 tested combinations falsely collided with sibling skills --
+    # the same "topic-free wrapper pattern collides registry-wide" defect class that cost
+    # research-brief's port 3 review rounds to close (see
     # scripts/registry/skills.d/research-brief.yaml on research-brief-skill for that
-    # precedent's own durable-warning-comment). The pattern now requires a co-occurring
-    # issue/bug/ticket/report anchor, in all 3 word orderings (anchor after "duplicate",
-    # anchor before "is this", and anchor between "is this" and "a duplicate" -- the last
-    # is the most natural real phrasing, "is this bug report a duplicate"). Patterns 1 and
-    # 2 are unchanged from the plan: verified 0 of 43 sibling positive-eval prompts match
-    # either bare, only this skill's own specific invocation phrase triggers them.
+    # precedent's own durable-warning-comment).
+    #
+    # Round 1's fix -- requiring a co-occurring issue/bug/ticket/report anchor in all 3 word
+    # orderings -- was NOT enough, and the reason generalizes: the anchor word can sit in
+    # the SAME slot a wrapper-writer naturally uses. "Is this issue a duplicate? {other
+    # skill's request}" (and its bug/ticket/report variants: "Is this ticket a duplicate?
+    # ...", "Is this bug a duplicate? ...", "Is this report a duplicate? ...") satisfies the
+    # anchored pattern via the WRAPPER PHRASE ITSELF, not via anything domain-specific in
+    # the wrapped content -- 41 of 43 sibling positive-eval prompts collided under that one
+    # wrapper. Any anchor word placed in that slot is vulnerable, whichever word it is, so
+    # widening or swapping the noun set cannot close it.
+    #
+    # The close is structural instead: patterns 3-5 now require the ADJACENT 2-word phrase
+    # "a duplicate of", not a bare "a duplicate". A bare yes/no duplicate question tacked
+    # onto arbitrary content no longer matches, because there "duplicate" is followed by
+    # "?"/end-of-clause rather than literally "of"; only a question that actually references
+    # comparing against a SPECIFIC other item ("is this bug report a duplicate of one
+    # already filed?") reaches the pattern. See scripts/tests/test_issue_triage_routing.py,
+    # whose `_wrapped_duplicate` must carry one template per wrapper style: the vulnerable
+    # styles above went undetected through a full review round purely because the sweep had
+    # no template for them.
+    #
+    # Patterns 1 and 2 now share the identical, full noun set. They previously used
+    # different, asymmetric ones (pattern 1 had `tickets?` but not `feature requests?`,
+    # pattern 2 the reverse), so "Triage these raw feature requests" and "Classify these
+    # incoming tickets" both went no_match despite being squarely this skill's own domain.
+    # Verified that 0 of 43 sibling positive-eval prompts match either bare: only this
+    # skill's own specific invocation phrasing triggers them.
     patterns:
-    - \btriage\b.*\b(these|the|raw|incoming)\b.*\b(issues?|bugs?|tickets?)\b
-    - \bclassify\b.*\b(these|the)\b.*\b(issues?|bugs?|feature requests?)\b
-    - \bis this\b.*\ba duplicate\b.*\b(issues?|bugs?|tickets?|reports?)\b
-    - \b(issues?|bugs?|tickets?|reports?)\b.*\bis this\b.*\ba duplicate\b
-    - \bis this\b.*\b(issues?|bugs?|tickets?|reports?)\b.*\ba duplicate\b
-    # The 3rd exclude below was originally a bare, contextless `\b(PR|MR|pull
+    - \btriage\b.*\b(these|the|raw|incoming)\b.*\b(issues?|bugs?|tickets?|feature requests?)\b
+    - \bclassify\b.*\b(these|the)\b.*\b(issues?|bugs?|tickets?|feature requests?)\b
+    - \bis this\b.*\ba duplicate of\b.*\b(issues?|bugs?|tickets?|reports?)\b
+    - \b(issues?|bugs?|tickets?|reports?)\b.*\bis this\b.*\ba duplicate of\b
+    - \bis this\b.*\b(issues?|bugs?|tickets?|reports?)\b.*\ba duplicate of\b
+    # A 3rd exclude, `\bovernight\b.*\btracker query\b`, used to sit between the two below
+    # and is deliberately GONE. It was transcribed from this skill's own "when NOT to use"
+    # prose ("an already-scoped tracker query to work through -- backlog-runner"), not from
+    # an observed collision, and the phrase "tracker query" appears in zero prompts anywhere
+    # in evals/ -- it is documentation vocabulary, not user vocabulary. Three findings
+    # against it, all verified on the live dispatcher:
+    #   * It protected nothing. evals/negative/cases.yaml's backlog-runner row ("Run backlog
+    #     tickets overnight and implement each one until zero issues.") matches none of this
+    #     skill's include patterns to begin with, so the patterns, not the exclude, are what
+    #     keep it with backlog-runner. Removing the exclude leaves it selected: backlog-runner.
+    #   * It missed the real backlog-runner overlap. The one documented residual collision
+    #     with backlog-runner ("Run the backlog tickets overnight with the scheduled queue
+    #     runner. Is this a duplicate of something else?", see
+    #     scripts/tests/test_issue_triage_routing.py's KNOWN_DUPLICATE_PATTERN_OVERLAPS)
+    #     contains no "tracker query" at all, so the exclude never fired on it.
+    #   * It created a no-owner hole -- the strictly worst dispatcher outcome, a request no
+    #     skill is responsible for. "Triage the overnight tracker query results and classify
+    #     these tickets." fired include patterns 1 AND 2, was stripped by this exclude, and
+    #     then went no_match because backlog-runner's own pattern requires "tickets" BEFORE
+    #     "overnight" and this phrasing has it after. An exclude must never be able to leave a
+    #     prompt ownerless; locked in by a regression test.
+    # The pager exclude below is deliberately KEPT despite protecting nothing in the current
+    # corpus either, because its failure mode is the opposite one: it never yields no_match
+    # (incident-triage-agent's own patterns always catch these), and incident-triage-agent
+    # serves the unattended, no-human-turn paging path where an `ambiguous` verdict has
+    # nobody to resolve it. Dropping it would make live paging events ambiguous between an
+    # unattended agent and this interactive skill -- a strictly worse trade than the one
+    # above.
+    #
+    # The 2nd exclude below was originally a bare, contextless `\b(PR|MR|pull
     # request|merge request)\b` (no co-occurring anchor). Verified via the live
     # dispatcher that this caused a false negative on a realistic, legitimately-anchored
     # triage prompt that only incidentally mentions a PR: "Triage these incoming bug
@@ -73,9 +128,16 @@ issue-triage:
     # inside a triage request still excludes, but an incidental PR reference no longer
     # does. After the fix: the PR-mentioning triage prompt above selects issue-triage;
     # "Triage these issues: please review and merge this PR that fixes one of them."
-    # still excludes.
+    # still excludes. Re-checked this round against three further in-domain triage prompts
+    # that mention a PR/MR in a non-review-request way ("...and note which ones a merge
+    # request already closed.", "...the bug appeared right after PR !88 shipped.",
+    # "...one references PR #456 as a related fix."): all three select issue-triage, so the
+    # narrowed form needs no further narrowing. One neighbouring prompt, "Triage these raw
+    # issues; the reporter linked the merge request that introduced the regression.", is
+    # `ambiguous` between issue-triage and pr-review -- but issue-triage's exclude does not
+    # fire there at all; it is pr-review's own `(PR|MR|...)\b.*\bregression\b` pattern
+    # claiming the prompt, which is pre-existing and outside this fragment.
     exclude_patterns:
     - \b(pager|page-fire|webhook)\b.*\bincident\b
-    - \bovernight\b.*\btracker query\b
     - \b(PR|MR|pull request|merge request)\b.*\b(review|merge (?:it|this)|approve)\b
     - \b(review|merge (?:it|this)|approve)\b.*\b(PR|MR|pull request|merge request)\b
