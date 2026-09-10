@@ -2,8 +2,9 @@
 name: incident-rca
 description: >-
   RCA and post-incident investigation for outages, error spikes, deploy regressions, and latency
-  incidents in a time window. Keywords: RCA, root cause, postmortem, INC-, P1/P2, on-call. Datadog or
-  KubeSense. Not for MR review, K8s rightsizing, or live remediation. Full phrases: examples.md.
+  incidents in a time window. Keywords: RCA, root cause analysis, postmortem, INC-, P1/P2, SLO
+  breach, on-call, consumer lag, deploy regression. Datadog or KubeSense. Not for MR review, K8s
+  rightsizing, or live remediation. Full phrases: examples.md.
 ---
 
 # Incident Root Cause Analysis (Hybrid)
@@ -47,6 +48,7 @@ do **not** pick highest score as primary. Phase exit gates: [phase-exit-criteria
 
 | Request | Use instead |
 |---------|-------------|
+| Non-incident bug, test failure, or performance regression root cause (no active time window) | **bug-diagnosis** |
 | Overprovisioned / right-sized deployment? | **k8s-overprovisioning-datadog** |
 | Review a merge request / PR | **pr-review** |
 | Required observability provider unavailable / unauthorized | Follow [mcp-error-handling.md](../../docs/skill-framework/shared/mcp-error-handling.md), report the missing capability, and return or use a documented fallback |

@@ -33,6 +33,11 @@ skills:
     optional:
     - name: loop-task-implementer.invoke
       enables: interactive single-task mode
+  bug-diagnosis:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
   capacity-planner:
     required:
     - host.report.write

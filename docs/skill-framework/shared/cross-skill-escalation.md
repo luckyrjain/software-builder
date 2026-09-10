@@ -1,6 +1,6 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, domain-modeling, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, module-design, codebase-architecture-review, engineering-decision-discovery, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, local-diff-review, research-brief, and
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, domain-modeling, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, module-design, codebase-architecture-review, engineering-decision-discovery, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, local-diff-review, bug-diagnosis, research-brief, and
 production-readiness-review.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
@@ -131,6 +131,9 @@ dispatch, and `codebase-architecture-review`'s `composition.invokes` does not ga
 | Production readiness review needs exact-head PR/MR code-review evidence | production-readiness-review → pr-review | `mr_context` (no-post, chat-only result consumed) | "Review MR !{iid} for `{project}` — chat-only, no post" |
 | A Standards finding is security-sensitive | local-diff-review → security-review | `local_diff_review` (finding + evidence refs) | "Security review of `{finding}` flagged during local diff review" |
 | Caller wants this diff reviewed once it's posted as a real PR/MR | local-diff-review → pr-review | Diff scope + spec context | "Review MR !{iid} for `{project}`" |
+| Root cause is confirmed and ready to fix | bug-diagnosis → loop-task-implementer | `bug_diagnosis_report` (root cause + evidence refs) | "Fix `{function}` per the confirmed root cause in `{symptom}`'s diagnosis" |
+| Evidence reveals this is actually a live production incident | bug-diagnosis → incident-rca | `bug_diagnosis_report` (symptom + evidence) | "RCA for `{service}` `{window}` — surfaced during bug diagnosis" |
+| Root cause is structural, not a local bug | bug-diagnosis → codebase-architecture-review | `bug_diagnosis_report` (root cause + evidence refs) | "Review the architecture around `{scope}` — bug-diagnosis found a structural cause" |
 | Findings surface a decision that needs interrogating | research-brief → engineering-decision-discovery | `research_brief` (findings + evidence refs) | "Grill me on the decision surfaced by researching `{research_question}`" |
 | Findings become the input to a PRD | research-brief → prd-architect | `research_brief` (cited findings) | "Write a PRD for `{initiative}` based on the research-brief findings" |
 | Question turns out to be about this codebase's own current behavior | research-brief → domain-comprehension | `research_brief` (question + partial findings) | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
@@ -172,6 +175,9 @@ Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local
 | domain-modeling crystallizes a decision needing an architecture-wide risk/scale/trade-off verdict | architecture-review receives the `domain_model_update` ADR draft and rejected alternatives | "Review the proposed architecture decision for `{scope}` using the attached decision record" |
 | domain-modeling finds contested alternatives blocking ADR readiness | engineering-decision-discovery receives the `domain_model_update` contested terms/alternatives and evidence refs | "Grill me on the unresolved decision for `{scope}` using the attached evidence" |
 | local-diff-review flags a security-sensitive Standards finding | security-review receives the finding and evidence | "Security review of `{finding}` flagged during local diff review" |
+| bug-diagnosis confirms a root cause ready to fix | loop-task-implementer receives the confirmed root cause and evidence | "Fix `{function}` per the confirmed root cause in `{symptom}`'s diagnosis" |
+| bug-diagnosis's evidence reveals a live production incident | incident-rca receives the symptom and evidence | "RCA for `{service}` `{window}` — surfaced during bug diagnosis" |
+| bug-diagnosis's root cause is structural, not a local bug | codebase-architecture-review receives the root cause and evidence refs | "Review the architecture around `{scope}` — bug-diagnosis found a structural cause" |
 | research-brief surfaces a decision needing interrogation | engineering-decision-discovery receives the `research_brief` findings | "Grill me on the decision surfaced by researching `{research_question}`" |
 
 ## 3. Handoff block (required fields)
@@ -211,6 +217,7 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Review GitLab MR (interactive, conversational) | pr-review |
 | Automated, unattended review on every push (webhook-triggered) | pr-gatekeeper |
 | Post-incident RCA / root cause (interactive, conversational) | incident-rca |
+| Non-incident bug/test-failure/perf-regression root-cause diagnosis | bug-diagnosis |
 | PagerDuty/Opsgenie page-fire or incident-resolved webhook (unattended) | incident-triage-agent |
 | Squad / repo ownership mapping (interactive, conversational) | squad-map |
 | Single-shot automated ownership lookup (Slack `/who-owns` slash command) | who-owns-x-bot |

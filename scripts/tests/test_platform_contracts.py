@@ -107,6 +107,7 @@ def test_eval_contract_covers_required_collision_suite() -> None:
             "numbered-pr-production-readiness",
             "numbered-pr-ready-to-release-vs-release-wide",
             "release-wide-go-no-go-vs-production-readiness",
+            "bug-diagnosis-vs-incident-rca-root-cause",
         }
     assert set(raw["adversarial_classes"]) == {
         "instruction_override",

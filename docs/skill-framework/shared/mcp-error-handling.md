@@ -66,6 +66,7 @@ column.
 | `api-test-creator` | `host.repository.read_write` | — | BLOCKED | — |
 | `architecture-review` | `host.report.write` | — | BLOCKED | — |
 | `backlog-runner` | `scheduler.cron.trigger` | — | BLOCKED | — |
+| `bug-diagnosis` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `capacity-planner` | `host.report.write` | — | BLOCKED | — |
 | `change-impact-analyzer` | `host.repository.read` | — | DEGRADED | `host.report.write`, `host.scm.change.read` |
 | `codebase-architecture-review` | `host.repository.read` | — | BLOCKED | `host.report.write` |

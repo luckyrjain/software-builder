@@ -164,20 +164,13 @@ SWEEP = [
 # is an assertion about one known state and not a licence for the sweep to go quiet. The
 # research-brief half of the guard below is never relaxed for these.
 #
-# `test-writer`/`what-does-documentation-prefix`: change-impact-analyzer owns the pre-existing
-# pattern `\bwhat\b.*\b(services?|contracts?|data|tests?)\b.*\b(change|affected|impact|touch)\b`
-# (scripts/registry/skills.d/change-impact-analyzer.yaml, unchanged on main and untouched by this
-# branch), and test-writer's positive prompt "Write tests for this change; ..." already contains
-# both "tests" and "change". So *any* question-form prefix starting with "What" collides -- a
-# plain "What is the situation with write tests for this change?" reproduces it exactly, and so
-# does the whole sweep with research-brief deleted from the compiled rules. Every wrapper template
-# for research-brief's `\bwhat does\b.*\bdocumentation\b.*\bsay\b` pattern necessarily begins with
-# "what", so no rewording of the template avoids it. Fixing it means narrowing another, already
-# merged skill's routing pattern and re-validating its own evals: out of scope for this PR, in the
-# same way earlier rounds documented framework-level findings rather than fixing them here.
-KNOWN_NON_RESEARCH_BRIEF_OVERLAPS = {
-    ("test-writer", "what-does-documentation-prefix"): ("change-impact-analyzer", "test-writer"),
-}
+# `test-writer`/`what-does-documentation-prefix` used to collide with change-impact-analyzer's
+# `\bwhat\b.*\b(services?|contracts?|data|tests?)\b.*\b(change|affected|impact|touch)\b` pattern,
+# which matched test-writer's own positive prompt ("Write tests for this change; ...") under any
+# question-form "What" prefix. Fixed upstream on main (#238) by narrowing that pattern to require
+# "affected/impact/touch", or "change" co-occurring with "design/proposal/proposed" -- so this
+# table is currently empty; keep the shape so a future genuine overlap has somewhere to go.
+KNOWN_NON_RESEARCH_BRIEF_OVERLAPS: dict[tuple[str, str], tuple[str, ...]] = {}
 
 
 @pytest.mark.parametrize(("skill", "prompt", "wrapper_id"), SWEEP)

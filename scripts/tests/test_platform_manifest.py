@@ -181,18 +181,27 @@ def test_repository_platform_manifest_validates() -> None:
 
 
 @pytest.mark.mutates_repository_root
-def test_validate_manifest_reports_new_fragment_missing_from_composition_contracts_cleanly() -> None:
+def test_validate_manifest_accepts_fresh_fragment_before_generate_runs() -> None:
     """Regression: a skill that exists only as a fresh scripts/registry/skills.d/<id>.yaml
     fragment (i.e. `make generate` has never run since it was added -- exactly CONTRIBUTING.md's
-    documented "add a fragment, then run make generate" first step for a brand-new skill) is
-    already visible to load_registry_raw's fragment merge, but skills.yaml's own literal
-    `contracts.composition.skills` section -- which `load_contracts` reads verbatim, not
-    fragment-aware -- doesn't have an entry for it yet. `_build_manifest` used to index straight
-    into that mapping (`composition[skill_id]`), so this state crashed `make generate` with an
-    uncaught KeyError and a raw traceback instead of the clean, listed validation error every
-    other structural gap for a new skill produces (see validate_composition_runtime's identically
-    worded "composition contracts missing skills" message for the runtime-side equivalent of this
-    same gap). validate_manifest must report it the same way: a clean error string, not a crash.
+    documented "add a fragment, then run make generate" first step for a brand-new skill) must
+    validate cleanly, with no errors, before `make generate` ever runs.
+
+    This used to fail two different ways in sequence. First, `_build_manifest` indexed straight
+    into skills.yaml's literal, not-yet-regenerated `contracts.composition.skills` mapping
+    (`composition[skill_id]`), which raised an uncaught KeyError -- a raw traceback instead of a
+    clean validation error. That was fixed by reporting the gap as an ordinary "composition
+    contracts missing skills" error instead of crashing -- but that fix only changed the failure
+    mode, not the underlying problem: `cmd_generate`'s own pre-write validation gate
+    (`_validate_for_generate`) runs before the fragment-merge step that would populate those
+    derived sections, so *every* brand-new skill still failed `make generate`'s first attempt,
+    requiring a manual bootstrap workaround every single time one was added.
+
+    The real fix is `load_registry_raw` (schema.py) re-deriving `contracts:`'s per-skill
+    sub-mappings from the live fragment view on every read -- the same derivation
+    `merge_registry_yaml` uses to write skills.yaml's on-disk projection -- so a fragment that
+    was never merged is already reflected everywhere validation looks, with nothing written to
+    disk. `make generate` now succeeds on a brand-new skill's very first attempt.
 
     Exercised directly against ROOT (same pattern as test_repository_platform_manifest_validates
     above) rather than an isolated tmp_path copy: validate_canonical_manifest also checks that
@@ -259,11 +268,7 @@ orphan-test-skill:
         skill_dir.rmdir()
         clear_registry_cache()
 
-    assert errors, "a fragment missing from composition contracts must be reported, not silently pass"
-    assert any(
-        "composition contracts missing skills" in error and "orphan-test-skill" in error
-        for error in errors
-    ), errors
+    assert errors == [], "a fresh fragment must validate cleanly before make generate ever runs"
 
 
 def test_skill_versions_does_not_hide_malformed_canonical_contracts(tmp_path: Path) -> None:

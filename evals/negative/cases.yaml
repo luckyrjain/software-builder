@@ -44,4 +44,5 @@ cases:
   - {skill: implementation-planner, prompt: "Implement this task, review the changes, fix issues, and repeat until zero issues.", expected_status: selected, expected_owner: loop-task-implementer, forbidden_owner: implementation-planner}
   - {skill: production-readiness-review, prompt: "Assess the deployment risk and blast radius of this exact change.", expected_status: selected, expected_owner: deployment-risk-review, forbidden_owner: production-readiness-review}
   - {skill: engineering-decision-discovery, prompt: "Challenge this proposed architecture before we start building.", expected_status: selected, expected_owner: architecture-review, forbidden_owner: engineering-decision-discovery}
+  - {skill: bug-diagnosis, prompt: "Run an RCA for the production outage between 14:00 and 16:00 UTC.", expected_status: selected, expected_owner: incident-rca, forbidden_owner: bug-diagnosis}
   - {skill: research-brief, prompt: "Understand the existing payments service and its current-state domain and bounded contexts.", expected_status: selected, expected_owner: domain-comprehension, forbidden_owner: research-brief}

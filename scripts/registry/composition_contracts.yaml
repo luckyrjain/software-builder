@@ -20,6 +20,7 @@ artifact_types:
 - module_design_spec
 - domain_model_update
 - local_diff_review
+- bug_diagnosis_report
 - codebase_architecture_report
 - api_design_review_report
 - database_review_report
@@ -203,6 +204,20 @@ artifact_schemas:
     - spec_findings
     - repository_write_action
     - automatic_downstream_invocation
+    - recommendation
+  bug_diagnosis_report:
+    fields:
+    - title
+    - symptom
+    - repro_status
+    - repro_evidence
+    - hypotheses_tested
+    - root_cause
+    - confidence
+    - evidence_refs
+    - repository_write_action
+    - automatic_downstream_invocation
+    - unresolved_questions
     - recommendation
   codebase_architecture_report:
     fields:
@@ -476,6 +491,11 @@ skills:
     - implementation_pr
     consumes:
     - implementation_task
+    write_authority: read-only
+  bug-diagnosis:
+    produces:
+    - bug_diagnosis_report
+    consumes: []
     write_authority: read-only
   capacity-planner:
     produces:

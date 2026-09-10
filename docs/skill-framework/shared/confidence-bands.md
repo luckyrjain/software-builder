@@ -2,11 +2,11 @@
 
 **Normative.** All skills MUST use these four categorical bands only: HIGH, MEDIUM, LOW, UNKNOWN.
 
-**Consumers:** pr-review (`reference/executive-summary.md`), incident-rca (`reference/manual-scoring.md`, `reference/evidence-schema.md`), k8s (`reference/confidence-formula.md`), squad-map (`reference/squad-mapping.md`), domain-comprehension (`reference/confidence-rubric.md`), mysql-to-postgres-sql (`SKILL.md` priority tiers — see §2.1).
+**Consumers:** pr-review (`reference/executive-summary.md`), incident-rca (`reference/manual-scoring.md`, `reference/evidence-schema.md`), k8s (`reference/confidence-formula.md`), squad-map (`reference/squad-mapping.md`), domain-comprehension (`reference/confidence-rubric.md`), mysql-to-postgres-sql (`SKILL.md` priority tiers — see §2.1), bug-diagnosis (`workflow/report.md`, `reference/report-format.md`).
 
 ## 1. Purpose
 
-One vocabulary across pr-review, incident-rca, k8s-overprovisioning-datadog, squad-map, domain-comprehension, and mysql-to-postgres-sql (see Consumers above) so agents do not mix alternate labels ("High", "0.9", "Very High", "Confident", "Likely") inconsistently. When comparing findings across skills, translate to these four bands first.
+One vocabulary across pr-review, incident-rca, k8s-overprovisioning-datadog, squad-map, domain-comprehension, mysql-to-postgres-sql, and bug-diagnosis (see Consumers above) so agents do not mix alternate labels ("High", "0.9", "Very High", "Confident", "Likely") inconsistently. When comparing findings across skills, translate to these four bands first.
 
 ## 2. Categorical definitions
 

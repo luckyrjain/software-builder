@@ -21,6 +21,11 @@ skills:
     missing_capability: scheduler.cron.trigger
     available_capabilities: []
     behavior: BLOCKED
+  bug-diagnosis:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
   capacity-planner:
     missing_capability: host.report.write
     available_capabilities: []

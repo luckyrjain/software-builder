@@ -39,3 +39,7 @@ build/
 # accidentally committed one run's reports (removed as stale/unreferenced in a later pass);
 # this keeps a future run's reports from being recommitted the same way.
 /.superpowers/
+
+# graphify skill output: locally-generated knowledge graph (cache, graph.json/html, report).
+# Regenerate with `graphify update .` -- not a deliverable, and the cache alone runs ~19M.
+/graphify-out/

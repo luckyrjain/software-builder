@@ -7,6 +7,9 @@ graph TD
   architecture-review -.->|escalates| loop-task-implementer
   architecture-review -.->|escalates| prd-architect
   backlog-runner -->|invokes| loop-task-implementer
+  bug-diagnosis -.->|escalates| loop-task-implementer
+  bug-diagnosis -.->|escalates| incident-rca
+  bug-diagnosis -.->|escalates| codebase-architecture-review
   capacity-planner -.->|escalates| k8s-overprovisioning-datadog
   codebase-architecture-review -.->|escalates| module-design
   codebase-architecture-review -.->|escalates| domain-comprehension
