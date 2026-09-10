@@ -20,10 +20,13 @@ label, state transition, or tracker field.
 | 7 | "Triage this bug report — is this a duplicate of the login-timeout issue from March?" | Classify checks the named prior issue for a symptom/stack-trace/repro match before accepting the claim | Duplicate check |
 | 8 | "Triage this: is this a duplicate of #482 that we closed last sprint?" | Classify checks #482 for an evidence match; proximity or a shared title alone is not enough | Duplicate check |
 
-Rows 6-8 each carry a "triage"/"classify" word on purpose. A bare "is this a duplicate of ...?" with
-no triage/classify framing anywhere does **not** trigger this skill's routing, and that is deliberate:
-the bare construction is domain-neutral English that attaches to any subject at all, so every attempt
-to make it safe on its own falsely captured other skills' requests instead. See the routing comment in
+Rows 6-8 each **lead** with a "triage"/"classify" word on purpose. A bare "is this a duplicate of ...?"
+with no triage/classify framing does **not** trigger this skill's routing, and neither does one whose
+triage/classify word trails the question ("Is this a duplicate of #482? Triage it."). Both are
+deliberate: the bare construction is domain-neutral English that attaches to any subject at all, and a
+trailing verb is a *mention* of triage rather than an *invocation* of it — both forms falsely captured
+other skills' requests when they were allowed to route here. Framed verb-first, as in rows 6-8, the
+same question reaches the skill. See the routing comment in
 `scripts/registry/skills.d/issue-triage.yaml` for the root cause and the accepted recall trade.
 
 ## Example: bug/feature/duplicate mix classified per issue
