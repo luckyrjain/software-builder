@@ -144,14 +144,12 @@ issue-triage:
     # it; dropping it would make live paging events ambiguous between an unattended agent and
     # this interactive skill.
     #
-    # Known, accepted consequence of mirroring exclude 2 verbatim: incident-triage-agent's own
-    # `\btriage\b.*\bpage\b` is broad enough to claim an in-domain triage request that merely
-    # mentions a UI "page" ("Triage these incoming bugs: one says the settings page fails to load
-    # after an incident last week." -> incident-triage-agent). That is a wrong-OWNER outcome, not
-    # a no-owner one -- strictly milder than the orphaning this exclude used to cause, and it
-    # originates in incident-triage-agent's own include pattern, not in this fragment. Narrowing
-    # it on this side would break the if-and-only-if property and reopen orphaning; the fix, if
-    # it is ever worth making, belongs in that skill's own fragment.
+    # incident-triage-agent's own patterns previously included bare `page` as a trigger
+    # alternative, which was broad enough to claim an in-domain triage request that merely
+    # mentions a UI "page" ("Triage these incoming bugs: one says the settings page fails to
+    # load after an incident last week." -> incident-triage-agent, a wrong-owner outcome). That
+    # skill's own fragment has since narrowed `page` to `paged|on-call page`; the mirror below
+    # was updated to match, so this false positive no longer occurs.
     #
     # Exclude 3-4 encode pr-review's full candidacy condition, one exclude per pr-review include
     # pattern. pr-review DOES declare exclude_patterns ("no PR"/"there is no PR" and the
@@ -166,8 +164,8 @@ issue-triage:
     # `patterns`); an earlier revision of this comment claimed otherwise, which is what allowed
     # the include-only mirror to look like the best available option.
     exclude_patterns:
-    - \b(pager|page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
-    - \btriage\b.*\b(pager|page|alert webhook|incident webhook)\b
+    - \b(pager|paged|on-call page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
+    - \btriage\b.*\b(pager|paged|on-call page|alert webhook|incident webhook)\b
     - \A(?![\s\S]*(?:(?:\b(no|without)\s+(PR|MR|pull request|merge request)\b)|(?:\bthere is
       no\s+(PR|MR|pull request|merge request)\b)|(?:\b(production ready|production readiness|ready
       to release|ready to deploy|ready to ship)\b)))(?=[\s\S]*(?:\b(review|inspect|analy[sz]e)\b.*\b(PR|MR|pull
