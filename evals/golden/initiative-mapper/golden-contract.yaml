@@ -21,6 +21,7 @@ recorded_output:
       depends_on: T1
       ready_for: unresolved
   sequencing: "T1 can start immediately; T2 is blocked on T1."
+  recommendation: "Start with T1 (migrate-in-place vs. new DB) via engineering-decision-discovery; T2 stays unresolved until the invoicing UI is scoped."
 assertions:
   - type: field_equals
     path: artifact
@@ -43,3 +44,6 @@ assertions:
   - type: require_pattern
     path: sequencing
     pattern: blocked on T1
+  - type: require_pattern
+    path: recommendation
+    pattern: Start with T1
