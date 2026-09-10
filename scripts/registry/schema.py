@@ -19,7 +19,11 @@ from scripts.registry.models import (
     Registry,
     SkillEntry,
 )
-from scripts.registry.fragments import load_fragment_skills, skills_fragments_dir
+from scripts.registry.fragments import (
+    derive_contract_sections,
+    load_fragment_skills,
+    skills_fragments_dir,
+)
 from scripts.yaml_safety import load_unique_yaml_file
 from scripts.yaml_safety import require_mapping as _require_mapping
 
@@ -223,10 +227,17 @@ def load_registry_raw(path: Path) -> Any:
     per-skill authoring fragments, see manifest_merge.py), the `skills:` mapping is
     loaded fresh from those fragments rather than trusting `path`'s own `skills:`
     block, which may be stale until the next `make generate` writes the merged
-    projection back to disk. This is the single choke point resolving that
-    staleness for every parse_registry()/load_registry_raw() caller at once --
-    including a skill that only exists as a new fragment and has never yet been
-    merged into skills.yaml, which would otherwise be invisible to validation.
+    projection back to disk. `contracts:`'s per-skill sub-mappings (`platform.skill_types`,
+    `platform.skill_permissions`, `composition_runtime.skill_types`,
+    `composition.skills`) are re-derived from that same fresh skill view for the same
+    reason -- see manifest_merge.derive_contract_sections, the same derivation
+    `merge_registry_yaml` uses to write skills.yaml's on-disk `contracts:` section.
+    This is the single choke point resolving that staleness for every
+    parse_registry()/load_registry_raw() caller at once -- including a skill that only
+    exists as a new fragment and has never yet been merged into skills.yaml, which
+    would otherwise be invisible to validation (and would make `cmd_generate`'s own
+    pre-write validation gate reject every brand-new skill on its first `make
+    generate`, since that gate runs before anything is written to disk).
 
     Cached per resolved *root directory* (see clear_registry_cache) so the ~28
     call sites that share this one path within a single invocation don't each
@@ -253,10 +264,18 @@ def load_registry_raw(path: Path) -> Any:
     if cache_key not in _registry_raw_cache:
         raw = load_unique_yaml_file(path)
         fragments_dir = skills_fragments_dir(path.parent)
-        if fragments_dir.is_dir():
+        has_fragments = fragments_dir.is_dir()
+        if has_fragments:
             raw = dict(_require_mapping(raw, str(path)))
             raw["skills"] = load_fragment_skills(path.parent)
-        _registry_raw_cache[cache_key] = apply_skill_defaults(resolve_registry_profiles(raw))
+        resolved = apply_skill_defaults(resolve_registry_profiles(raw))
+        if has_fragments and isinstance(resolved, dict) and "contracts" in resolved:
+            resolved = dict(resolved)
+            resolved["contracts"] = derive_contract_sections(
+                _require_mapping(resolved["contracts"], f"{path}: contracts"),
+                _require_mapping(resolved.get("skills") or {}, f"{path}: skills"),
+            )
+        _registry_raw_cache[cache_key] = resolved
     return copy.deepcopy(_registry_raw_cache[cache_key])
 
 
