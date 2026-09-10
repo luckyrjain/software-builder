@@ -67,5 +67,5 @@ incident-triage-agent:
       squad-map
   routing:
     patterns:
-    - \b(pager|page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
-    - \btriage\b.*\b(pager|page|alert webhook|incident webhook)\b
+    - \b(pager|paged|on-call page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
+    - \btriage\b.*\b(pager|paged|on-call page|alert webhook|incident webhook)\b

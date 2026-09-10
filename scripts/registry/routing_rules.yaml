@@ -108,8 +108,8 @@ routes:
     - \b(INC-|P1|P2|SLO breach|on-call|consumer lag|deploy regression)\b
   incident-triage-agent:
     patterns:
-    - \b(pager|page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
-    - \btriage\b.*\b(pager|page|alert webhook|incident webhook)\b
+    - \b(pager|paged|on-call page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
+    - \btriage\b.*\b(pager|paged|on-call page|alert webhook|incident webhook)\b
   integration-test-creator:
     patterns:
     - \b(integration tests?|integration-test)\b
