@@ -46,3 +46,4 @@ cases:
   - {skill: engineering-decision-discovery, prompt: "Grill me on this decision without repository read access.", missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
   - {skill: bug-diagnosis, prompt: "Diagnose this bug without repository read access.", missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
   - {skill: research-brief, missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
+  - {skill: issue-triage, missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}

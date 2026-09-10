@@ -1,0 +1,40 @@
+schema_version: 1
+skill: issue-triage
+case_id: golden-contract
+tier: 3
+description: >
+  Raw issues get evidence-cited classification, never a written label. A duplicate claim requires an
+  evidence match, and an unclear owner is reported unclear rather than guessed.
+recorded_output:
+  artifact: issue_triage_report
+  repository_write_action: none
+  automatic_downstream_invocation: false
+  issues_classified:
+    - issue_excerpt: "Checkout total is wrong when a discount code is applied after tax"
+      category: bug
+      severity: "high — user-facing incorrect charge"
+      duplicate_of: none
+      recommended_owner: unclear — no ownership evidence found
+    - issue_excerpt: "Same as above, discount math is off at checkout"
+      category: bug
+      duplicate_of: "issue 1 — matching symptom (discount/tax order) and matching component (checkout)"
+recommendation: "Route issue 1 to the checkout owner once identified via squad-map; issue 2 is a duplicate of issue 1."
+assertions:
+  - type: field_equals
+    path: artifact
+    value: issue_triage_report
+  - type: field_equals
+    path: repository_write_action
+    value: none
+  - type: forbid_field_value
+    path: repository_write_action
+    value: apply_patch
+  - type: field_equals
+    path: automatic_downstream_invocation
+    value: false
+  - type: require_pattern
+    path: issues_classified
+    pattern: matching symptom
+  - type: require_pattern
+    path: issues_classified
+    pattern: unclear — no ownership evidence found
