@@ -11,6 +11,7 @@ import cycle.
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import Any
 
@@ -61,3 +62,67 @@ def load_fragment_skills(root: Path) -> dict[str, Any]:
             raise ValueError(f"duplicate skill id across fragments: {skill_id!r}")
         skills[skill_id] = entry
     return skills
+
+
+def _skill_composition_contract(entry: dict[str, Any]) -> dict[str, Any]:
+    """One skill's `contracts.composition.skills.<id>` entry, from that skill's own fragment.
+
+    `produces`/`produce_fields` come from the skill's `output_contract`, `write_authority`
+    from its `authority`, and the consumed half from its `composition` block -- the only
+    facts here with no other home in the fragment. Empty field maps are omitted rather than
+    written as `{}`, matching how the section was authored by hand. Missing blocks project as
+    empty rather than raising: requiring them is `validate_canonical_manifest`'s job, and the
+    minimal fixtures several tests build carry neither.
+    """
+    output_contract = require_mapping(entry.get("output_contract") or {}, "output_contract")
+    composition = require_mapping(entry.get("composition") or {}, "composition")
+    contract: dict[str, Any] = {
+        "produces": list(output_contract.get("produces", [])),
+        "consumes": list(composition.get("consumes", [])),
+    }
+    produce_fields = output_contract.get("produce_fields") or {}
+    if produce_fields:
+        contract["produce_fields"] = produce_fields
+    consume_fields = composition.get("consume_fields") or {}
+    if consume_fields:
+        contract["consume_fields"] = consume_fields
+    contract["write_authority"] = entry.get("authority")
+    return contract
+
+
+def derive_contract_sections(
+    contracts: dict[str, Any],
+    skills: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Return `contracts` with every per-skill sub-mapping re-derived from `skills`.
+
+    `skills` must be profile-resolved, so a skill inheriting its `authority` or `type` from a
+    `profiles:` entry projects the value it actually runs with.
+
+    A section this registry does not carry is left alone rather than conjured: the minimal
+    skills.yaml fixtures several tests build declare only part of `contracts:`, and whether a
+    required section is missing is `validate_canonical_manifest`'s question, not this one's.
+    """
+    derived = copy.deepcopy(contracts)
+    skill_types = {skill_id: entry.get("type") for skill_id, entry in skills.items()}
+    sub_mappings: dict[str, dict[str, Any]] = {
+        "platform": {
+            "skill_types": skill_types,
+            "skill_permissions": {
+                skill_id: entry.get("permissions") for skill_id, entry in skills.items()
+            },
+        },
+        "composition_runtime": {"skill_types": dict(skill_types)},
+        "composition": {
+            "skills": {
+                skill_id: _skill_composition_contract(entry) for skill_id, entry in skills.items()
+            },
+        },
+    }
+    for section, fields in sub_mappings.items():
+        if section not in derived:
+            continue
+        target = require_mapping(derived[section], f"contracts.{section}")
+        for field, value in fields.items():
+            target[field] = value
+    return derived
