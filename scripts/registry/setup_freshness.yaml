@@ -58,6 +58,8 @@ skills:
       squad-map
   integration-test-creator:
     external_services: Docker / testcontainers (local)
+  issue-triage:
+    external_services: None — reads repository and caller-provided context only
   k8s-overprovisioning-datadog:
     external_services: Kubernetes MCP, Datadog MCP
   local-diff-review:

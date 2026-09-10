@@ -1,0 +1,178 @@
+issue-triage:
+  path: skills/issue-triage
+  category: analysis
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    invokes: []
+    escalation_targets:
+    - security-review
+    - incident-rca
+    - prd-architect
+    - tech-debt-assessor
+    - squad-map
+  capabilities:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: issue-triage
+  version: 1.0.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - issue_triage_report
+  dependencies: []
+  degraded_behavior:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None — reads repository and caller-provided context only
+  routing:
+    # WARNING TO FUTURE EDITORS: do not reintroduce ANY standalone "is this a duplicate ..."
+    # pattern here, with or without an anchor noun; do not let patterns 1 and 2 drift back to
+    # different noun sets; and do not un-anchor pattern 3. All three mistakes were already made
+    # here, and the first one cost three full review rounds.
+    #
+    # ROOT CAUSE of the duplicate-pattern collisions (three rounds of it). "Is this a duplicate
+    # of ...?" is generic English: is / this / a / duplicate / of are all domain-neutral words,
+    # so the construction attaches to a statement about anything -- a CVE, a migration script, a
+    # PR, a deployment config -- and steals ownership from the real owner. The plan's original
+    # bare `\bis this\b.*\ba duplicate\b` failed 118 of 172 swept combinations. Round 1 required
+    # a co-occurring issue/bug/ticket/report ANCHOR noun; that failed because the wrapper-writer
+    # can put the anchor inside the wrapper phrase itself ("Is this issue a duplicate? {other
+    # skill's request}") -- 41 of 43 siblings collided. Round 2 required the adjacent literal
+    # "a duplicate of"; that failed the same way one word over -- 287 of 301 collided.
+    #
+    # Round 2's close was to require the duplicate question to CO-OCCUR with `triage`/`classify`
+    # -- verbs no other skill in this registry uses in its routing patterns at all -- in either
+    # order (pattern 3 verb-first, pattern 4 verb-last). ROUND 3 FOUND THAT PATTERN 4 REPRODUCED
+    # THE VERY SAME BUG one level up: the verb is placeable inside the wrapper too, so
+    # "{sibling's own trigger}. Is this a duplicate we should triage separately?" collided on 43
+    # of 45 sibling positive-eval prompts, and the leading variant ("Is this a duplicate we
+    # should triage separately? {sibling}") collided on another 43. Round 2's 12-template
+    # wrapper sweep never carried a template with `triage`/`classify` in the WRAPPER text, which
+    # is exactly why it went green on a hole.
+    #
+    # THE ROUND-3 CLOSE, and the principle behind it: a bare MENTION of the verb is not an
+    # INVOCATION of it. "...a duplicate we should triage separately" is a question about whether
+    # to triage; "Triage this: is this a duplicate?" is an instruction to triage. The difference
+    # a regex can see is POSITION: an imperative leads its request. So pattern 3 is anchored to
+    # the start of the prompt (`\A\W*`), and pattern 4 -- whose whole shape was "the verb turns
+    # up somewhere after the duplicate question", i.e. precisely the mention-not-invocation
+    # case -- is DELETED. Measured over the 15 round-3 adversarial wrapper templates x 45 sibling
+    # prompts: 516/675 collisions before, 55/675 after; over a 20-template trailing-wrapper sweep
+    # (verb strictly after all sibling text, the reported failure shape): 645/900 before,
+    # 172/900 after, and every one of those 172 is patterns 1/2 firing on a wrapper that spells
+    # out this skill's own primary invocation phrase in full ("...is this a duplicate -- classify
+    # the issue accordingly"), never pattern 3.
+    #
+    # THE RESIDUAL, stated so it is a decision and not an unknown: patterns 1 and 2 match
+    # "triage|classify ... these|the|raw|incoming ... issue-noun" wherever that phrase sits, so a
+    # wrapper that writes out that whole phrase does make this skill a candidate. That is
+    # deliberate and already load-bearing elsewhere -- test_triage_framed_wrapper_never_orphans_
+    # a_sibling_prompt asserts that "Triage these incoming issues: {sibling}" legitimately
+    # reaches this skill -- and the outcome in those cases is `ambiguous` (a human resolves it),
+    # never `no_match`. Narrowing patterns 1/2 to close it would break that test and cost the
+    # skill its primary trigger; the boundary this fragment defends is the one round 3 named:
+    # a verb MENTION after the wrapped content must not route here, a verb INVOCATION may.
+    #
+    # ACCEPTED RECALL LOSS, deliberately taken (unchanged from round 2, plus one round-3
+    # addition): a bare "Is this a duplicate of issue #42?" with no triage/classify word still
+    # does not match, and as of round 3 neither does a duplicate-question-first phrasing whose
+    # verb trails it ("Is this a duplicate of #42? Triage it."). Both still reach this ambient
+    # skill once framed verb-first ("Triage this: is this a duplicate of issue #42?"), which is
+    # the form examples.md's duplicate rows show.
+    #
+    # Patterns 1 and 2 share the identical, full noun set. They previously used different,
+    # asymmetric ones (pattern 1 had `tickets?` but not `feature requests?`, pattern 2 the
+    # reverse), so "Triage these raw feature requests" and "Classify these incoming tickets"
+    # both went no_match despite being squarely this skill's own domain. Verified that 0 of 45
+    # sibling positive-eval prompts match either bare: only this skill's own specific invocation
+    # phrasing triggers them.
+    patterns:
+    - \btriage\b.*\b(these|the|raw|incoming)\b.*\b(issues?|bugs?|tickets?|feature requests?)\b
+    - \bclassify\b.*\b(these|the)\b.*\b(issues?|bugs?|tickets?|feature requests?)\b
+    - \A\W*(triage|classify)\b.*\bis this\b.*\ba duplicate\b
+    # A 3rd exclude, `\bovernight\b.*\btracker query\b`, used to sit between the two groups below
+    # and is deliberately GONE. It was transcribed from this skill's own "when NOT to use" prose
+    # ("an already-scoped tracker query to work through -- backlog-runner"), not from an observed
+    # collision, and the phrase "tracker query" appears in zero prompts anywhere in evals/ -- it
+    # is documentation vocabulary, not user vocabulary. Three findings against it, all verified
+    # on the live dispatcher:
+    #   * It protected nothing. evals/negative/cases.yaml's backlog-runner row ("Run backlog
+    #     tickets overnight and implement each one until zero issues.") matches none of this
+    #     skill's include patterns to begin with, so the patterns, not the exclude, are what
+    #     keep it with backlog-runner. Removing the exclude leaves it selected: backlog-runner.
+    #   * It missed the real backlog-runner overlap it was supposed to cover, which contains no
+    #     "tracker query" at all, so the exclude never fired on it.
+    #   * It created a no-owner hole -- the strictly worst dispatcher outcome, a request no skill
+    #     is responsible for. "Triage the overnight tracker query results and classify these
+    #     tickets." fired include patterns 1 AND 2, was stripped by this exclude, and then went
+    #     no_match because backlog-runner's own pattern requires "tickets" BEFORE "overnight" and
+    #     this phrasing has it after. An exclude must never be able to leave a prompt ownerless;
+    #     locked in by a regression test.
+    #
+    # THE EXCLUDE RULE THIS FRAGMENT FOLLOWS: an exclude that defers to a sibling skill must
+    # encode that sibling's FULL CANDIDACY CONDITION -- its include patterns AND the absence of
+    # its own excludes -- so the exclude fires if and only if the sibling really would pick the
+    # prompt up. Round 2 got half of this right (mirror the sibling's includes) and shipped the
+    # other half wrong: it ignored the sibling's OWN exclude_patterns, so a prompt could match
+    # this skill's mirrored exclude while the sibling declined it, orphaning the prompt with no
+    # owner at all -- the same class of bug as the dead 3rd exclude above. Measured on the live
+    # dispatcher over 6 in-domain triage prompts x 10 pr-review-declining tails: 36 of 60 went
+    # `no_match` and a further 24 went to the wrong owner; after the fix, 0 of 60 are `no_match`
+    # and the only 6 that leave this skill are ones pr-review genuinely does claim.
+    #
+    # Exclude 1-2 mirror incident-triage-agent's own two routing patterns VERBATIM, which is
+    # correct here and needs no guard: that skill declares no exclude_patterns at all, so its
+    # includes ARE its full candidacy condition (asserted, not assumed -- see
+    # test_excludes_encode_each_siblings_full_candidacy_condition, which re-derives both groups
+    # from the siblings' own fragments and fails if either sibling ever gains an exclude). This
+    # exclude must be KEPT (unlike the dead 3rd one) because incident-triage-agent serves the
+    # unattended, no-human-turn paging path where an `ambiguous` verdict has nobody to resolve
+    # it; dropping it would make live paging events ambiguous between an unattended agent and
+    # this interactive skill.
+    #
+    # Known, accepted consequence of mirroring exclude 2 verbatim: incident-triage-agent's own
+    # `\btriage\b.*\bpage\b` is broad enough to claim an in-domain triage request that merely
+    # mentions a UI "page" ("Triage these incoming bugs: one says the settings page fails to load
+    # after an incident last week." -> incident-triage-agent). That is a wrong-OWNER outcome, not
+    # a no-owner one -- strictly milder than the orphaning this exclude used to cause, and it
+    # originates in incident-triage-agent's own include pattern, not in this fragment. Narrowing
+    # it on this side would break the if-and-only-if property and reopen orphaning; the fix, if
+    # it is ever worth making, belongs in that skill's own fragment.
+    #
+    # Exclude 3-4 encode pr-review's full candidacy condition, one exclude per pr-review include
+    # pattern. pr-review DOES declare exclude_patterns ("no PR"/"there is no PR" and the
+    # production-readiness phrasings), so a verbatim include-only mirror over-fires: "Triage
+    # these incoming bug reports -- there is no PR for any of them yet, so review each one for
+    # correctness." matched the mirror, pr-review declined it via its own `\b(no|without)\s+(PR
+    # |...)` exclude, and the prompt ended up owned by nobody. Each exclude below is therefore
+    # `\A(?!<any pr-review exclude anywhere>)(?=<that pr-review include anywhere>)` -- a
+    # zero-width assertion at position 0, so it is one match attempt with no backtracking blow-up,
+    # and it is exactly "pr-review is a candidate". Negative lookahead is available in this
+    # pattern language and already used elsewhere in the registry (see test-writer's own
+    # `patterns`); an earlier revision of this comment claimed otherwise, which is what allowed
+    # the include-only mirror to look like the best available option.
+    exclude_patterns:
+    - \b(pager|page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
+    - \btriage\b.*\b(pager|page|alert webhook|incident webhook)\b
+    - \A(?![\s\S]*(?:(?:\b(no|without)\s+(PR|MR|pull request|merge request)\b)|(?:\bthere is
+      no\s+(PR|MR|pull request|merge request)\b)|(?:\b(production ready|production readiness|ready
+      to release|ready to deploy|ready to ship)\b)))(?=[\s\S]*(?:\b(review|inspect|analy[sz]e)\b.*\b(PR|MR|pull
+      request|merge request|diff)\b))
+    - \A(?![\s\S]*(?:(?:\b(no|without)\s+(PR|MR|pull request|merge request)\b)|(?:\bthere is
+      no\s+(PR|MR|pull request|merge request)\b)|(?:\b(production ready|production readiness|ready
+      to release|ready to deploy|ready to ship)\b)))(?=[\s\S]*(?:\b(PR|MR|pull request|merge
+      request)\b.*\b(review|regression|correctness)\b))

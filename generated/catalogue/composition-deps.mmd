@@ -37,6 +37,11 @@ graph TD
   incident-triage-agent -->|invokes| squad-map
   incident-triage-agent -.->|escalates| incident-rca
   incident-triage-agent -.->|escalates| squad-map
+  issue-triage -.->|escalates| security-review
+  issue-triage -.->|escalates| incident-rca
+  issue-triage -.->|escalates| prd-architect
+  issue-triage -.->|escalates| tech-debt-assessor
+  issue-triage -.->|escalates| squad-map
   k8s-overprovisioning-datadog -.->|escalates| incident-rca
   k8s-overprovisioning-datadog -.->|escalates| pr-review
   local-diff-review -.->|escalates| security-review

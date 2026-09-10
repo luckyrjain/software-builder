@@ -66,7 +66,8 @@ software-builder/
     ├── dependency-upgrade-review/ # Breaking changes, CVEs, API diffs, transitive dependency rollout risk
     ├── tech-debt-assessor/        # Ranks debt by business impact x engineering drag x risk / effort
     ├── bug-diagnosis/             # Diagnose a non-incident bug or perf regression: repro, falsify hypotheses, report root cause
-    └── research-brief/            # Cited research findings for a bounded question, repository and/or external sources
+    ├── research-brief/            # Cited research findings for a bounded question, repository and/or external sources
+    └── issue-triage/              # Classify raw incoming issues/bugs/feature-requests: category, severity, duplicate, owner
 ```
 
 Each skill directory follows the same pattern:
@@ -95,6 +96,7 @@ Each skill directory follows the same pattern:
 | `incident-rca` | incident | ambient | — | `make lint-incident-rca` |
 | `incident-triage-agent` | incident | automation-only | incident-rca, squad-map | `make lint-incident-triage-agent` |
 | `integration-test-creator` | testing | ambient | — | `make lint-integration-test-creator` |
+| `issue-triage` | analysis | ambient | — | `make lint-issue-triage` |
 | `k8s-overprovisioning-datadog` | platform | ambient | — | `make lint-k8s-skill` |
 | `local-diff-review` | review | ambient | — | `make lint-local-diff-review` |
 | `loop-task-implementer` | automation | ambient | — | `make lint-loop-task-implementer` |

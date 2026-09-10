@@ -30,6 +30,7 @@ body:
         - incident-rca
         - incident-triage-agent
         - integration-test-creator
+        - issue-triage
         - k8s-overprovisioning-datadog
         - local-diff-review
         - loop-task-implementer
