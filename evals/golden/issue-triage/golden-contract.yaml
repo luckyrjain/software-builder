@@ -60,42 +60,56 @@ assertions:
   - type: field_equals
     path: automatic_downstream_invocation
     value: false
-  # HARNESS NOTE: this branch's scripts/evals/golden.py `resolve_path` walks dicts only -- it
-  # cannot index into a list, so `issues_classified[0].category` is not addressable and every
-  # per-issue check below is a regex over the list's stringified dict repr. That is a known
-  # harness limitation with its own filed follow-up (task_06ea4d70), NOT something to work
-  # around by flattening the fixture. What the assertions do instead is stay CONJUNCTIVE and
-  # single-item-scoped: `[^}]*?` cannot cross a `}`, so each pattern below must find all of its
-  # parts inside ONE issue's dict. Bare substring checks (what this fixture used to have) went
-  # green as long as the words appeared anywhere in the list, so a run that emitted the right
-  # evidence text attached to the WRONG issue -- or one issue's evidence and another's severity
-  # -- passed. Do not relax these back to bare substrings.
+  # PER-ISSUE ASSERTIONS use real list paths. Earlier revisions of this fixture carried a
+  # "HARNESS NOTE" saying scripts/evals/golden.py's `resolve_path` walked dicts only, so
+  # `issues_classified[0].category` was unaddressable and every per-issue check had to be a
+  # conjunctive regex over the list's stringified dict repr. That limitation is GONE: PR #237
+  # gave resolve_path list indexing (`[0]`, `[-1]`) and single-field equality predicates
+  # (`[?field=='value']`, which must match exactly one item -- zero is a failure, more than one
+  # an error). The regexes-over-repr are replaced below by paths that pin one item and then
+  # compare its field directly.
   #
-  # Issue 1: its own excerpt, its own category, and its own evidence-carrying severity, together.
-  - type: require_pattern
-    path: issues_classified
-    pattern: "'issue_excerpt': 'Checkout total is wrong[^}]*?'category': 'bug'[^}]*?'severity': 'high — user-facing incorrect charge'"
-  # ...and that same issue is the one reporting the unclear owner, not some other row.
-  - type: require_pattern
-    path: issues_classified
-    pattern: "'issue_excerpt': 'Checkout total is wrong[^}]*?'recommended_owner': 'unclear — no ownership evidence found'"
+  # Three things get strictly better, not just tidier:
+  #   * `field_equals` compares the VALUE, so a row whose severity merely CONTAINS the expected
+  #     text no longer passes, and the repr-quoting trap the fixture had to work around (a value
+  #     containing an apostrophe reprs with double quotes and silently breaks every
+  #     `'field': '...'` regex) cannot bite at all.
+  #   * the predicate itself is an assertion: exactly one row must carry that excerpt, so a run
+  #     that duplicates or drops a row fails on the path rather than on a pattern.
+  #   * typed resolution finally catches the degenerate shape the old structural regex could not
+  #     -- a list replaced by its own repr as a string. `[0]` on a string raises, where
+  #     `require_pattern` over `str(actual)` could not tell the two apart.
+  #
+  # Issue 1: its own category, its own evidence-carrying severity, its own owner column.
+  - type: field_equals
+    path: issues_classified[?issue_excerpt=='Checkout total is wrong when a discount code is applied after tax'].category
+    value: bug
+  - type: field_equals
+    path: issues_classified[?issue_excerpt=='Checkout total is wrong when a discount code is applied after tax'].severity
+    value: "high — user-facing incorrect charge"
+  - type: field_equals
+    path: issues_classified[?issue_excerpt=='Checkout total is wrong when a discount code is applied after tax'].recommended_owner
+    value: "unclear — no ownership evidence found"
   # Issue 2: the duplicate claim's evidence must sit on the issue actually claimed as a
   # duplicate, and must name both halves of the match (symptom AND component) per
   # report-format.md's "evidence match, not proximity" rule.
-  - type: require_pattern
-    path: issues_classified
-    pattern: "'issue_excerpt': 'Same as above[^}]*?'duplicate_of': 'issue 1 — matching symptom \\(discount/tax order\\) and matching component \\(checkout\\)'"
+  - type: field_equals
+    path: issues_classified[?issue_excerpt=='Same as above, discount math is off at checkout'].duplicate_of
+    value: "issue 1 — matching symptom (discount/tax order) and matching component (checkout)"
   # ...and issue 2 carries its own owner column too, so a row cannot silently omit a mandated
-  # column while the other row's value satisfies a list-wide substring check.
-  - type: require_pattern
-    path: issues_classified
-    pattern: "'issue_excerpt': 'Same as above[^}]*?'recommended_owner': 'unclear — no ownership evidence found'"
-  # Structural: two separate dict items, each with its own braces. Catches the degenerate
-  # shapes every substring assertion in the old fixture accepted -- both issues merged into one
-  # dict, a list of bare strings, or a prose paragraph. It does NOT catch the list being
-  # replaced by its own repr as a string, because the harness stringifies the resolved value
-  # before matching (`str(actual)`), which makes a list and its repr indistinguishable to every
-  # require_pattern; that needs typed assertions, not a better regex.
+  # column while the other row's value satisfies a list-wide check.
+  - type: field_equals
+    path: issues_classified[?issue_excerpt=='Same as above, discount math is off at checkout'].recommended_owner
+    value: "unclear — no ownership evidence found"
+  # Structural, in two halves because no single assertion type covers both. `field_present` on
+  # `[1].category` is the typed half: it resolves only if the value really is a list whose second
+  # item really is a dict with that key, which is what catches the list arriving as its own repr
+  # string -- the one degenerate shape the old regex-only structural check explicitly could not
+  # see. The repr regex is kept as the second half because it is the only way to pin the COUNT at
+  # exactly two: it fails on a merged single dict, on a list of bare strings, on a prose
+  # paragraph, and on a silently appended third row.
+  - type: field_present
+    path: issues_classified[1].category
   - type: require_pattern
     path: issues_classified
     pattern: "^\\[\\{.*\\}, \\{.*\\}\\]$"
