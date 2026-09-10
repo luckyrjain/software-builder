@@ -196,9 +196,11 @@ routes:
     - \b(cit(?:e|es|ed|ing|ations?)|prior art)\b.*\bfind out whether\b
     - \binvestigate\b.*\bquestion\b.*\b(cit(?:e|es|ed|ing|ations?)|prior art)\b
     - \b(cit(?:e|es|ed|ing|ations?)|prior art)\b.*\binvestigate\b.*\bquestion\b
-    - \bwhat does\b.*\bdocumentation\b.*\bsay\b
+    - \bwhat does\b.*\bdocumentation\b.*\bsay\b.*\b(cit(?:e|es|ed|ing|ations?)|prior
+      art)\b
+    - \b(cit(?:e|es|ed|ing|ations?)|prior art)\b.*\bwhat does\b.*\bdocumentation\b.*\bsay\b
     exclude_patterns:
-    - \b(current[- ]state domain|bounded contexts?|existing .* service)\b
+    - \b(current[- ]state domain|bounded contexts?)\b
     - \b(help me decide|which option|grill me)\b
   resilience-review:
     patterns:

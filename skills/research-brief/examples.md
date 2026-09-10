@@ -18,7 +18,7 @@ never edit source, tests, configuration, or docs, or implement anything automati
 | 5 | "Investigate our current-state domain and map out the bounded contexts across the order and payment services." | Wrong scope — offer `domain-comprehension` | Wrong-skill row |
 | 6 | "Investigate this question: should we retry on 5xx responses from the billing API, or back off entirely? Cite the conflicting guidance you find in the code and the vendor's docs." | Inputs → Gather → Report; Findings mark the guidance `CONFLICTED`; Report offers `engineering-decision-discovery` | Escalation offered |
 | 7 | "Help me decide which option is best: Postgres or DynamoDB for our new service." | Wrong scope — offer `engineering-decision-discovery` | Wrong-skill row |
-| 8 | "What does the ORM library's documentation say about connection pool sizing, and does our own config match that guidance?" | Inputs → Gather → Report; repository config cross-checked against the library's fetched documentation | Happy path (repo + external) |
+| 8 | "What does the ORM library's documentation say about connection pool sizing, and does our own config match that guidance, cited to both sources?" | Inputs → Gather → Report; repository config cross-checked against the library's fetched documentation | Happy path (repo + external) |
 
 ## Example: a claim with no source is marked UNKNOWN, never asserted
 

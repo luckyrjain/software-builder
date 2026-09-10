@@ -46,14 +46,18 @@ research-brief:
   setup_freshness:
     external_services: Web search/fetch (optional) — degrades to repository-only research when unavailable
   routing:
-    # "research this/the question", "find out whether" and "investigate ... question"
-    # are this skill's documented keywords, but on their own they are topic-free
-    # English wrappers: any other skill's real trigger phrase can be restated inside
-    # one ("Find out whether PR #123 is production ready"), which made every such
-    # prompt ambiguous between that skill and this one. All three therefore require a
-    # co-occurring citation anchor -- the same "generic verb + domain anchor" shape
-    # incident-rca and resilience-review already use -- so a wrapper alone no longer
-    # routes here. See scripts/tests/test_research_brief_routing.py.
+    # "research this/the question", "find out whether", "investigate ... question" and
+    # "what does ... documentation ... say" are this skill's documented keywords, but on
+    # their own they are topic-free English wrappers: any other skill's real trigger
+    # phrase can be restated inside one ("Find out whether PR #123 is production ready",
+    # "What does the documentation say about whether PR #123 is production ready"), which
+    # made every such prompt ambiguous between that skill and this one. All four
+    # therefore require a co-occurring citation anchor -- the same "generic verb + domain
+    # anchor" shape incident-rca and resilience-review already use -- so a wrapper alone
+    # no longer routes here. See scripts/tests/test_research_brief_routing.py, whose
+    # WRAPPERS tuple must carry one template per documented wrapper: each pattern that
+    # stayed unanchored through a review round did so because no sweep template
+    # exercised it.
     #
     # The anchor is deliberately just the `cite` family and `prior art`. Two wider
     # anchor lists were tried and both collided, because "evidence-driven" vocabulary
@@ -71,6 +75,18 @@ research-brief:
     # Do not re-widen this list without re-running the registry-wide wrapper sweep in
     # scripts/tests/test_research_brief_routing.py: each widening above looked
     # obviously safe and was not.
+    #
+    # Known shared limitation, deliberately not worked around here: the dispatcher
+    # compiles every skill's patterns with re.IGNORECASE only (scripts/evals/dispatcher.py
+    # `_compile_list`, unchanged since #130 and untouched by this branch), so `.*` does not
+    # span a newline. A co-occurrence pattern whose two halves land on different lines
+    # therefore will not match. This is repo-wide -- 51 of 83 routing patterns across 24 of
+    # the 44 skills use `.*` the same way, incident-rca and change-impact-analyzer included
+    # -- and research-brief is not more exposed than its siblings: all 176 eval prompts are
+    # single-line, and the dispatcher is a CI oracle for declared ownership, not the host
+    # router that sees real user prose. Swapping `.` for `[\s\S]` in only this fragment
+    # would diverge it from 23 other skills with no behavioral gain in CI; changing the
+    # dispatcher's global flags belongs in its own change, with every skill's evals re-run.
     patterns:
     - \bresearch\b.*\b(this|the)\b.*\bquestion\b.*\b(cit(?:e|es|ed|ing|ations?)|prior art)\b
     - \b(cit(?:e|es|ed|ing|ations?)|prior art)\b.*\bresearch\b.*\b(this|the)\b.*\bquestion\b
@@ -78,9 +94,20 @@ research-brief:
     - \b(cit(?:e|es|ed|ing|ations?)|prior art)\b.*\bfind out whether\b
     - \binvestigate\b.*\bquestion\b.*\b(cit(?:e|es|ed|ing|ations?)|prior art)\b
     - \b(cit(?:e|es|ed|ing|ations?)|prior art)\b.*\binvestigate\b.*\bquestion\b
-    # Structurally specific rather than a bare word, and verified separately: it needs
-    # all three of "what does", "documentation" and "say" in that order.
-    - \bwhat does\b.*\bdocumentation\b.*\bsay\b
+    # Round 2 kept this one bare, reasoning that needing all three of "what does",
+    # "documentation" and "say" in that order made it structurally specific enough to be
+    # safe. That reasoning was wrong, and it was never actually verified: the sweep had
+    # no template for this wrapper, so nothing tested it. It collides exactly like the
+    # other three -- "What does the documentation say about whether {any sibling's
+    # trigger}?" cost 42 of 43 sibling positive-eval prompts their owner -- so it is now
+    # anchored identically, in both orderings.
+    - \bwhat does\b.*\bdocumentation\b.*\bsay\b.*\b(cit(?:e|es|ed|ing|ations?)|prior art)\b
+    - \b(cit(?:e|es|ed|ing|ations?)|prior art)\b.*\bwhat does\b.*\bdocumentation\b.*\bsay\b
     exclude_patterns:
-    - \b(current[- ]state domain|bounded contexts?|existing .* service)\b
+    # `existing .* service` was here for evals/negative/cases.yaml's research-brief row,
+    # but that prompt fires none of the include patterns to begin with (it says
+    # "Understand ...", not any of the four wrappers), so the exclude protected nothing
+    # and instead cost real requests -- "Find out whether the existing auth service
+    # supports OIDC, citing sources." was correctly anchored and still went no_match.
+    - \b(current[- ]state domain|bounded contexts?)\b
     - \b(help me decide|which option|grill me)\b
