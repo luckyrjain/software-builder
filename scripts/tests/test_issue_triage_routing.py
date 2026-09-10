@@ -26,24 +26,25 @@ def test_triage_raw_issues_routes_to_issue_triage() -> None:
 def test_overnight_tracker_sweep_does_not_route_to_issue_triage() -> None:
     """Mirrors evals/negative/cases.yaml's issue-triage row.
 
-    Asserted against `.owner` per the brief, verbatim. Note (surfaced by this task's own
-    mutation-teeth check, see task-4-report.md): `DispatchResult.owner` is None for any
-    non-`selected`/multi-candidate result, so this assertion passes vacuously if a future
-    pattern change makes issue-triage a false *candidate* here (status goes `ambiguous`
-    alongside backlog-runner) rather than the sole, wrongly `selected` owner. It still
-    catches the sole-owner regression it names in its test id.
+    Asserted against `.candidates`, not `.owner`: `DispatchResult.owner` is None for any
+    non-`selected` result, so `owner != "issue-triage"` would pass vacuously if a future
+    pattern change made issue-triage a false *candidate* here (status goes `ambiguous`
+    alongside backlog-runner) rather than the sole, wrongly `selected` owner -- the exact
+    regression class this test exists to catch. See research-brief's own routing test
+    (branch `research-brief-skill`) for the identical fix, applied there after its round-2
+    review found this same vacuous-assertion shape.
     """
     result = _dispatch("Run backlog tickets overnight and implement each one until zero issues.")
-    assert result.owner != "issue-triage"
+    assert "issue-triage" not in result.candidates, result
 
 
 def test_paging_webhook_does_not_route_to_issue_triage() -> None:
-    """Same `.owner`-vs-`.candidates` characteristic as the test above: this passes
-    vacuously if issue-triage instead becomes a false candidate alongside
-    incident-triage-agent (status `ambiguous`) rather than the sole selected owner.
+    """Same `.owner`-vs-`.candidates` characteristic as the test above: asserted against
+    `.candidates` so it still catches issue-triage becoming a false candidate alongside
+    incident-triage-agent (status `ambiguous`), not just a wrongly `selected` sole owner.
     """
     result = _dispatch("Handle the pager alert webhook and triage the incident.")
-    assert result.owner != "issue-triage"
+    assert "issue-triage" not in result.candidates, result
 
 
 def _positive_cases() -> list[tuple[str, str]]:
