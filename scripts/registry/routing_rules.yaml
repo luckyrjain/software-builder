@@ -88,7 +88,7 @@ routes:
       decomposition|dependency[- ]aware plan|execution waves)\b
   incident-rca:
     patterns:
-    - \b(RCA|root cause|postmortem|production incident|incident investigation)\b
+    - \b(RCA|root cause|postmortem|post-incident|production incident|incident investigation)\b
     - \b(5xx|error|latency)\b.*\b(spike|incident|production)\b
   incident-triage-agent:
     patterns:
