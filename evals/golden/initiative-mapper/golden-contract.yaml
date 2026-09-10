@@ -11,15 +11,21 @@ recorded_output:
   repository_write_action: none
   automatic_downstream_invocation: false
   initiative_description: "Modernize our billing system"
+  # `evidence` is the 5th column of report-format.md's fixed Structure table and the subject of
+  # its first Rule ("Every ticket cites the evidence that makes it a real sub-question"), but no
+  # fixture carried the field at all and nothing asserted it -- the same mandated-but-uncovered
+  # gap `unresolved_questions` had.
   decision_tickets:
     - id: T1
       question: "Do we migrate the existing billing DB in place or stand up a new one?"
       depends_on: "none"
       ready_for: engineering-decision-discovery
+      evidence: "The initiative names the existing billing DB and its two live consumers; no migration approach is on record for either"
     - id: T2
       question: "What does the new invoicing UI look like?"
       depends_on: "T1"
       ready_for: unresolved
+      evidence: "The initiative mentions invoicing screens only in passing — no invoicing-UI scope, candidate design, or owner appears in the request or the repository"
   sequencing: "T1 can start immediately — nothing blocks it. T2 is blocked on T1's outcome."
   # report-format.md mandates an "Unresolved questions" section and `unresolved_questions` is a
   # declared `initiative_map` field, but this fixture exercised neither: a run that marked T2
@@ -73,16 +79,42 @@ assertions:
   - type: require_pattern
     path: decision_tickets[?ready_for=='unresolved'].question
     pattern: "invoicing UI"
+  # Every ticket owes the evidence that makes it a real sub-question rather than a restatement
+  # of the initiative (report-format.md, Rules). Pinned per ticket: a predicate matching zero
+  # items raises, so dropping either ticket's `evidence` key fails here rather than passing on
+  # the other ticket's text.
+  - type: require_pattern
+    path: decision_tickets[?id=='T1'].evidence
+    pattern: "existing billing DB and its two live consumers"
+  - type: require_pattern
+    path: decision_tickets[?id=='T2'].evidence
+    pattern: "no invoicing-UI scope, candidate design, or owner"
   # The generality the id-pinned assertions give up, restored in the form that does not depend
-  # on this fixture's own ids: no ticket may carry a placeholder or empty question, and every
-  # ticket's `ready_for` must come from report-format.md's fixed four-value vocabulary -- so a
-  # vague "needs more thought" (exactly what SKILL.md's boundary rules forbid) fails here.
+  # on this fixture's own ids: no ticket may carry a placeholder or empty question or evidence,
+  # and every ticket's `ready_for` must come from report-format.md's fixed four-value vocabulary
+  # -- so a vague "needs more thought" (exactly what SKILL.md's boundary rules forbid) fails here.
+  #
+  # Every forbid_pattern below runs against `str(decision_tickets)`, i.e. Python's repr of the list of dicts, so
+  # they match on repr's quoting. Every quote here is therefore `['"]`, not a bare `'`: repr
+  # switches a string containing an apostrophe to double quotes, and the previous single-quote-only
+  # spelling of the vocabulary guard was silently bypassed by any `ready_for` value carrying one.
   - type: forbid_pattern
     path: decision_tickets
-    pattern: "'question': '(?:TBD|TODO|N/?A|\\?+)?'"
+    pattern: "['\"](?:question|evidence)['\"]: ['\"](?:TBD|TODO|N/?A|\\?+)?['\"]"
   - type: forbid_pattern
     path: decision_tickets
-    pattern: "'ready_for': '(?!(?:engineering-decision-discovery|prd-architect|implementation-planner|unresolved)')"
+    pattern: "['\"]ready_for['\"]: ['\"](?!(?:engineering-decision-discovery|prd-architect|implementation-planner|unresolved)['\"])"
+  # The vocabulary and placeholder guards above can only judge a key that is present, so an item
+  # omitting the key entirely escaped both. These catch that directly: each matches a ticket dict
+  # -- a `{...}` run containing no nested braces -- in which the named key never appears, so a
+  # ticket missing `ready_for` or `evidence` fails instead of passing silently. (A brace character
+  # inside a ticket's own text would confuse the `[^{}]` run; that fails closed, i.e. loudly.)
+  - type: forbid_pattern
+    path: decision_tickets
+    pattern: "\\{(?:(?!['\"]ready_for['\"])[^{}])*\\}"
+  - type: forbid_pattern
+    path: decision_tickets
+    pattern: "\\{(?:(?!['\"]evidence['\"])[^{}])*\\}"
   # Sequencing is prose per report-format.md's Structure block, so it stays a pattern check --
   # but the old `blocked on T1` substring was satisfied by its own negation ("T2 is NOT blocked
   # on T1"). Naming the subject immediately before "is blocked" defeats an inserted negation,
@@ -105,6 +137,13 @@ assertions:
   - type: require_pattern
     path: unresolved_questions[?ticket=='T2'].impact
     pattern: "cannot be routed to a downstream skill"
+  # report-format.md's Recommendation section is prose too, so it stays a pattern check -- with
+  # the same negation treatment `sequencing` above already got: the bare "Start with T1"
+  # substring is satisfied by its own negation ("Do NOT start with T1"), so the forbid_pattern
+  # catches the negation spellings that can precede the claim.
   - type: require_pattern
     path: recommendation
     pattern: "Start with T1"
+  - type: forbid_pattern
+    path: recommendation
+    pattern: "\\b(?:not|never|no longer|don'?t|do not|avoid|instead of)\\s+start(?:ing)?\\s+with\\b"
