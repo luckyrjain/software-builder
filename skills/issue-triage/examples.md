@@ -16,9 +16,15 @@ label, state transition, or tracker field.
 | 3 | "Triage these issues." (no issue text attached) | HARD STOP — ask for the raw issue text(s) | Boundary rule |
 | 4 | "The pager just went off — production checkout is down right now, this is a live incident." | Wrong scope — a live paging-webhook incident with no human turn available; use `incident-triage-agent` instead | Wrong-skill row |
 | 5 | "Classify these bugs about the flaky nightly build — feels like tech debt that needs to be ranked, not just triaged into a category." | Classify records the category; Report offers `tech-debt-assessor` for ranking | Cross-skill handoff |
-| 6 | "Is this a duplicate ticket — same repro steps and stack trace as the one filed last week?" | Classify checks for an evidence match; Report records `duplicate_of` with cited evidence or "none found" | Duplicate check |
-| 7 | "This bug report — is this a duplicate of the login-timeout issue from March?" | Classify checks the named prior issue for a symptom/stack-trace/repro match before accepting the claim | Duplicate check |
-| 8 | "Is this issue a duplicate of #482 that we closed last sprint?" | Classify checks #482 for an evidence match; proximity or a shared title alone is not enough | Duplicate check |
+| 6 | "Classify this incoming ticket — is this a duplicate, same repro steps and stack trace as the one filed last week?" | Classify checks for an evidence match; Report records `duplicate_of` with cited evidence or "none found" | Duplicate check |
+| 7 | "Triage this bug report — is this a duplicate of the login-timeout issue from March?" | Classify checks the named prior issue for a symptom/stack-trace/repro match before accepting the claim | Duplicate check |
+| 8 | "Triage this: is this a duplicate of #482 that we closed last sprint?" | Classify checks #482 for an evidence match; proximity or a shared title alone is not enough | Duplicate check |
+
+Rows 6-8 each carry a "triage"/"classify" word on purpose. A bare "is this a duplicate of ...?" with
+no triage/classify framing anywhere does **not** trigger this skill's routing, and that is deliberate:
+the bare construction is domain-neutral English that attaches to any subject at all, so every attempt
+to make it safe on its own falsely captured other skills' requests instead. See the routing comment in
+`scripts/registry/skills.d/issue-triage.yaml` for the root cause and the accepted recall trade.
 
 ## Example: bug/feature/duplicate mix classified per issue
 

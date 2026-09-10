@@ -3821,13 +3821,13 @@ skills:
       - \btriage\b.*\b(these|the|raw|incoming)\b.*\b(issues?|bugs?|tickets?|feature
         requests?)\b
       - \bclassify\b.*\b(these|the)\b.*\b(issues?|bugs?|tickets?|feature requests?)\b
-      - \bis this\b.*\ba duplicate of\b.*\b(issues?|bugs?|tickets?|reports?)\b
-      - \b(issues?|bugs?|tickets?|reports?)\b.*\bis this\b.*\ba duplicate of\b
-      - \bis this\b.*\b(issues?|bugs?|tickets?|reports?)\b.*\ba duplicate of\b
+      - \b(triage|classify)\b.*\bis this\b.*\ba duplicate\b
+      - \bis this\b.*\ba duplicate\b.*\b(triage|classify)\b
       exclude_patterns:
-      - \b(pager|page-fire|webhook)\b.*\bincident\b
-      - \b(PR|MR|pull request|merge request)\b.*\b(review|merge (?:it|this)|approve)\b
-      - \b(review|merge (?:it|this)|approve)\b.*\b(PR|MR|pull request|merge request)\b
+      - \b(pager|page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
+      - \btriage\b.*\b(pager|page|alert webhook|incident webhook)\b
+      - \b(review|inspect|analy[sz]e)\b.*\b(PR|MR|pull request|merge request|diff)\b
+      - \b(PR|MR|pull request|merge request)\b.*\b(review|regression|correctness)\b
   k8s-overprovisioning-datadog:
     path: skills/k8s-overprovisioning-datadog
     category: platform

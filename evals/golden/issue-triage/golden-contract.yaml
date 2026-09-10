@@ -40,6 +40,17 @@ assertions:
   - type: field_equals
     path: artifact
     value: issue_triage_report
+  # `title` is a registered field of issue_triage_report and, until this change, was recorded
+  # here but asserted nowhere in any fixture or eval case -- a schema field with literally zero
+  # verification, the same class of gap as the `recommendation` field this fixture already
+  # caught sitting outside recorded_output entirely. It must name the subject actually triaged,
+  # not be blank or a placeholder.
+  - type: require_pattern
+    path: title
+    pattern: "(?i)checkout"
+  - type: forbid_pattern
+    path: title
+    pattern: "(?i)^(?:TBD|TODO|N/?A|untitled|report|issue triage)\\s*$"
   - type: field_equals
     path: repository_write_action
     value: none
