@@ -164,6 +164,11 @@ skills:
     missing_capability: host.report.write
     available_capabilities: []
     behavior: BLOCKED
+  research-brief:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
   resilience-review:
     missing_capability: host.repository.read
     available_capabilities:

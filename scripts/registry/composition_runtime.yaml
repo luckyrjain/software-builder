@@ -36,6 +36,7 @@ skill_types:
   prd-architect: leaf
   production-readiness-review: orchestrator
   release-readiness-checker: orchestrator
+  research-brief: leaf
   resilience-review: leaf
   security-review: leaf
   squad-map: leaf
@@ -297,3 +298,7 @@ artifact_ownership:
     owners:
     - engineering-decision-discovery
     delegates: []
+  research_brief:
+    mode: canonical
+    owners:
+    - research-brief

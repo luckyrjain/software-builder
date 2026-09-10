@@ -67,6 +67,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **prd-architect** | [prd-architect/README.md](../skills/prd-architect/README.md) | [prd-architect/SKILL.md](../skills/prd-architect/SKILL.md) | [prd-architect/SETUP.md](../skills/prd-architect/SETUP.md) |
 | **production-readiness-review** | [production-readiness-review/README.md](../skills/production-readiness-review/README.md) | [production-readiness-review/SKILL.md](../skills/production-readiness-review/SKILL.md) | [production-readiness-review/SETUP.md](../skills/production-readiness-review/SETUP.md) |
 | **release-readiness-checker** | [release-readiness-checker/README.md](../skills/release-readiness-checker/README.md) | [release-readiness-checker/SKILL.md](../skills/release-readiness-checker/SKILL.md) | [release-readiness-checker/SETUP.md](../skills/release-readiness-checker/SETUP.md) |
+| **research-brief** | [research-brief/README.md](../skills/research-brief/README.md) | [research-brief/SKILL.md](../skills/research-brief/SKILL.md) | [research-brief/SETUP.md](../skills/research-brief/SETUP.md) |
 | **resilience-review** | [resilience-review/README.md](../skills/resilience-review/README.md) | [resilience-review/SKILL.md](../skills/resilience-review/SKILL.md) | [resilience-review/SETUP.md](../skills/resilience-review/SETUP.md) |
 | **security-review** | [security-review/README.md](../skills/security-review/README.md) | [security-review/SKILL.md](../skills/security-review/SKILL.md) | [security-review/SETUP.md](../skills/security-review/SETUP.md) |
 | **squad-map** | [squad-map/README.md](../skills/squad-map/README.md) | [squad-map/SKILL.md](../skills/squad-map/SKILL.md) | [squad-map/SETUP.md](../skills/squad-map/SETUP.md) |
@@ -199,6 +200,9 @@ Skills reference each other when a finding belongs in another workflow:
 | bug-diagnosis | Root cause is confirmed and ready to fix | loop-task-implementer |
 | bug-diagnosis | Evidence reveals this is actually a live production incident | incident-rca |
 | bug-diagnosis | Root cause is structural, not a local bug | codebase-architecture-review |
+| research-brief | Findings surface a decision that needs interrogating | engineering-decision-discovery |
+| research-brief | Findings become the input to a PRD | prd-architect |
+| research-brief | Question turns out to be about this codebase's own current behavior | domain-comprehension |
 <!-- cross-skill-routing:end -->
 
 Full symmetric matrix (forward + reverse escalations):

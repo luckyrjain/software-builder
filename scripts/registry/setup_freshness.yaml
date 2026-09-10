@@ -93,6 +93,9 @@ skills:
     external_services: GitLab MCP, Kubernetes MCP, Datadog MCP (via composed skills);
       optional SCM history/policy and build-provenance host evidence for v2 conditional
       production-readiness invocation
+  research-brief:
+    external_services: Web search/fetch (optional) — degrades to repository-only research
+      when unavailable
   resilience-review:
     external_services: None — reads supplied resilience content and optional repository
       or runtime/config evidence only

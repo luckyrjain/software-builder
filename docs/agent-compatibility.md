@@ -85,6 +85,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | claude | prd-architect | BLOCKED | host.report.write |
 | claude | production-readiness-review | BLOCKED | host.report.write |
 | claude | release-readiness-checker | BLOCKED | host.report.write |
+| claude | research-brief | BLOCKED | host.report.write, host.repository.read |
 | claude | resilience-review | BLOCKED | host.report.write |
 | claude | security-review | BLOCKED | host.report.write |
 | claude | squad-map | BLOCKED | gitlab.list_projects |
@@ -129,6 +130,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | cursor | prd-architect | BLOCKED | host.report.write |
 | cursor | production-readiness-review | BLOCKED | host.report.write |
 | cursor | release-readiness-checker | BLOCKED | host.report.write |
+| cursor | research-brief | BLOCKED | host.report.write, host.repository.read |
 | cursor | resilience-review | BLOCKED | host.report.write |
 | cursor | security-review | BLOCKED | host.report.write |
 | cursor | squad-map | BLOCKED | gitlab.list_projects |
@@ -173,6 +175,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | github-copilot | prd-architect | BLOCKED | host.report.write |
 | github-copilot | production-readiness-review | BLOCKED | host.report.write |
 | github-copilot | release-readiness-checker | BLOCKED | host.report.write |
+| github-copilot | research-brief | BLOCKED | host.report.write, host.repository.read |
 | github-copilot | resilience-review | BLOCKED | host.report.write |
 | github-copilot | security-review | BLOCKED | host.report.write |
 | github-copilot | squad-map | BLOCKED | gitlab.list_projects |
@@ -217,6 +220,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | kiro | prd-architect | BLOCKED | host.report.write |
 | kiro | production-readiness-review | BLOCKED | host.report.write |
 | kiro | release-readiness-checker | BLOCKED | host.report.write |
+| kiro | research-brief | BLOCKED | host.report.write, host.repository.read |
 | kiro | resilience-review | BLOCKED | host.report.write |
 | kiro | security-review | BLOCKED | host.report.write |
 | kiro | squad-map | BLOCKED | gitlab.list_projects |

@@ -36,6 +36,7 @@ artifact_types:
 - implementation_plan
 - production_readiness_report
 - engineering_decision_record
+- research_brief
 artifact_schemas:
   mr_context:
     fields:
@@ -382,6 +383,17 @@ artifact_schemas:
     - unresolved_decisions
     - alternatives_rejected
     - limitations
+  research_brief:
+    fields:
+    - title
+    - research_question
+    - findings
+    - degraded_mode
+    - degraded_reason
+    - unresolved_questions
+    - recommendation
+    - repository_write_action
+    - automatic_downstream_invocation
 creator_parity:
   skills:
   - unit-test-creator
@@ -1064,6 +1076,11 @@ skills:
       - assessment_metadata
       - root_cause
       - confidence
+    write_authority: read-only
+  research-brief:
+    produces:
+    - research_brief
+    consumes: []
     write_authority: read-only
   resilience-review:
     produces:

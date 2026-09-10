@@ -1,0 +1,74 @@
+schema_version: 1
+skill: research-brief
+case_id: golden-contract
+tier: 3
+description: >
+  Every finding carries a cited source and evidence status; a claim with no citable source is
+  reported UNKNOWN rather than asserted. Also covers degraded mode when web capabilities are
+  unavailable.
+recorded_output:
+  artifact: research_brief
+  repository_write_action: none
+  automatic_downstream_invocation: false
+  research_question: "Does our rate-limiting approach match current best practice?"
+  findings:
+    - claim: "This service uses a fixed-window counter in Redis for rate limiting"
+      evidence_status: OBSERVED
+      source: "src/middleware/rate_limit.py:14"
+    - claim: "Whether fixed-window or sliding-window is considered best practice today"
+      evidence_status: UNKNOWN
+      source: none
+  unresolved_questions:
+    - question: "Is sliding-window now the documented recommendation?"
+      missing_evidence: "host.web.search unavailable — no external primary source reachable"
+      impact: "Cannot say whether the current approach is behind current guidance"
+  degraded_mode: true
+  degraded_reason: "host.web.search unavailable this session"
+  recommendation: "Re-run with host.web.search available before acting on the best-practice question."
+assertions:
+  - type: field_equals
+    path: artifact
+    value: research_brief
+  - type: field_equals
+    path: repository_write_action
+    value: none
+  - type: forbid_field_value
+    path: repository_write_action
+    value: apply_patch
+  - type: field_equals
+    path: automatic_downstream_invocation
+    value: false
+  # Pins each finding's own evidence_status to its own source directly, via
+  # resolve_path's `[?field=='value']` predicate (selects exactly one findings item) --
+  # no longer a substring search over the whole list's stringified repr, so a brief that
+  # asserted BOTH claims as OBSERVED against fabricated URLs cannot go green here.
+  - type: field_equals
+    path: findings[?source=='src/middleware/rate_limit.py:14'].evidence_status
+    value: OBSERVED
+  # Exact equality also forbids every near-miss spelling of "no source" (null, "", N/A,
+  # TBD, ...) in one assertion -- the predicate selects the UNKNOWN finding by its
+  # evidence_status, and the value must equal the string "none" precisely.
+  - type: field_equals
+    path: findings[?evidence_status=='UNKNOWN'].source
+    value: "none"
+  # report-format.md's core rule, stated negatively so it also fires on findings this
+  # fixture does not enumerate: no claim is asserted at a non-UNKNOWN status while
+  # carrying no source.
+  - type: forbid_pattern
+    path: findings
+    pattern: "'evidence_status': '(?:OBSERVED|INFERRED|CONFLICTED)', 'source': 'none'"
+  - type: field_equals
+    path: degraded_mode
+    value: true
+  # Pairs with report-format.md's degraded_mode/degraded_reason invariant: a degraded run
+  # names the missing capability, so degraded_reason is never empty here. Dots escaped —
+  # unescaped they matched any character, so "hostXwebXsearch unavailable" passed too.
+  - type: require_pattern
+    path: degraded_reason
+    pattern: "host\\.web\\.search unavailable"
+  - type: require_pattern
+    path: recommendation
+    pattern: "host\\.web\\.search"
+  - type: require_pattern
+    path: unresolved_questions
+    pattern: "host\\.web\\.search unavailable"

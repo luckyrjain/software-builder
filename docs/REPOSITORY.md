@@ -65,7 +65,8 @@ software-builder/
     ├── resilience-review/         # Timeout budgets, retries, circuit breaking, backpressure, recovery review
     ├── dependency-upgrade-review/ # Breaking changes, CVEs, API diffs, transitive dependency rollout risk
     ├── tech-debt-assessor/        # Ranks debt by business impact x engineering drag x risk / effort
-    └── bug-diagnosis/             # Diagnose a non-incident bug or perf regression: repro, falsify hypotheses, report root cause
+    ├── bug-diagnosis/             # Diagnose a non-incident bug or perf regression: repro, falsify hypotheses, report root cause
+    └── research-brief/            # Cited research findings for a bounded question, repository and/or external sources
 ```
 
 Each skill directory follows the same pattern:
@@ -108,6 +109,7 @@ Each skill directory follows the same pattern:
 | `prd-architect` | product | ambient | — | `make lint-prd-architect` |
 | `production-readiness-review` | release | ambient | pr-review, change-impact-analyzer, deployment-risk-review, security-review, observability-review, resilience-review, api-design-review, database-review, performance-review, capacity-planner, dependency-upgrade-review | `make lint-production-readiness-review` |
 | `release-readiness-checker` | release | ambient | pr-review, k8s-overprovisioning-datadog, incident-rca | `make lint-release-readiness-checker` |
+| `research-brief` | analysis | ambient | — | `make lint-research-brief` |
 | `resilience-review` | review | ambient | — | `make lint-resilience-review` |
 | `security-review` | review | ambient | — | `make lint-security-review` |
 | `squad-map` | architecture | ambient | — | `make lint-squad-map` |

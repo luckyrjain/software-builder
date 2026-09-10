@@ -89,6 +89,9 @@ graph TD
   release-readiness-checker -.->|escalates| pr-review
   release-readiness-checker -.->|escalates| k8s-overprovisioning-datadog
   release-readiness-checker -.->|escalates| incident-rca
+  research-brief -.->|escalates| engineering-decision-discovery
+  research-brief -.->|escalates| prd-architect
+  research-brief -.->|escalates| domain-comprehension
   security-review -.->|escalates| dependency-upgrade-review
   system-design -.->|escalates| api-design-review
   system-design -.->|escalates| database-review
