@@ -34,6 +34,7 @@ body:
         - implementation-planner
         - incident-rca
         - incident-triage-agent
+        - initiative-mapper
         - integration-test-creator
         - issue-triage
         - k8s-overprovisioning-datadog

@@ -110,6 +110,13 @@ routes:
     patterns:
     - \b(pager|paged|on-call page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
     - \btriage\b.*\b(pager|paged|on-call page|alert webhook|incident webhook)\b
+  initiative-mapper:
+    patterns:
+    - \bdecision[- ]tickets?\b
+    - \binitiative map\b
+    exclude_patterns:
+    - \bimplementation[- ]ready\b.*\bPRD\b
+    - \balready[- ]approved\b.*\bdesign\b
   integration-test-creator:
     patterns:
     - \b(integration tests?|integration-test)\b

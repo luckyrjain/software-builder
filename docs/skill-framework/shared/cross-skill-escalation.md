@@ -1,7 +1,7 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, domain-modeling, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, module-design, codebase-architecture-review, engineering-decision-discovery, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, local-diff-review, bug-diagnosis, research-brief, production-readiness-review, and
-issue-triage.
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, domain-modeling, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, module-design, codebase-architecture-review, engineering-decision-discovery, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, local-diff-review, bug-diagnosis, research-brief, production-readiness-review, issue-triage, and
+initiative-mapper.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -142,6 +142,9 @@ dispatch, and `codebase-architecture-review`'s `composition.invokes` does not ga
 | An issue is a feature request needing a PRD | issue-triage → prd-architect | `issue_triage_report` (issue text) | "Write an implementation-ready PRD for `{feature}` per triaged issue" |
 | An issue is a debt item needing ranking | issue-triage → tech-debt-assessor | `issue_triage_report` (issue + classification) | "Rank `{item}` in the tech debt backlog — flagged during issue triage" |
 | Ownership is unclear from available evidence | issue-triage → squad-map | `issue_triage_report` (issue + repo) | "Who owns `{repo}`?" |
+| A mapped ticket is one unresolved decision | initiative-mapper → engineering-decision-discovery | `initiative_map` (ticket + evidence refs) | "Grill me on the unresolved decision for ticket `{ticket_id}` in `{initiative}`" |
+| A mapped ticket is scoped enough for a PRD | initiative-mapper → prd-architect | `initiative_map` (ticket + evidence) | "Write an implementation-ready PRD for ticket `{ticket_id}` in `{initiative}`" |
+| A mapped ticket already has an approved design | initiative-mapper → implementation-planner | `initiative_map` (ticket + evidence) | "Create the implementation plan for ticket `{ticket_id}` in `{initiative}`" |
 
 Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local deltas only.
 
@@ -185,6 +188,7 @@ Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local
 | bug-diagnosis's root cause is structural, not a local bug | codebase-architecture-review receives the root cause and evidence refs | "Review the architecture around `{scope}` — bug-diagnosis found a structural cause" |
 | research-brief surfaces a decision needing interrogation | engineering-decision-discovery receives the `research_brief` findings | "Grill me on the decision surfaced by researching `{research_question}`" |
 | issue-triage flags an issue as security-sensitive | security-review receives the finding | "Security review of `{finding}` flagged during issue triage" |
+| initiative-mapper finds a ticket that's one unresolved decision | engineering-decision-discovery receives the `initiative_map` ticket and evidence | "Grill me on the unresolved decision for ticket `{ticket_id}` in `{initiative}`" |
 
 ## 3. Handoff block (required fields)
 
@@ -257,6 +261,7 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Local or uncommitted diff review, not a numbered PR/MR | local-diff-review |
 | General cited research question, not this codebase's own behavior | research-brief |
 | Raw, unscoped issue/bug/feature-request classification, human turn available | issue-triage |
+| Large, foggy, too-big-for-one-session effort decomposition | initiative-mapper |
 
 See each skill's **when NOT to use** table in `SKILL.md`.
 

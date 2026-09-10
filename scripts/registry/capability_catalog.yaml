@@ -149,6 +149,11 @@ skills:
     degraded_modes:
       slack.post.message: still produce the triage_doc/postmortem_draft artifact;
         paging summary is simply not delivered to Slack
+  initiative-mapper:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
   integration-test-creator:
     required:
     - host.repository.read_write

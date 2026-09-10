@@ -52,6 +52,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **implementation-planner** | [implementation-planner/README.md](../skills/implementation-planner/README.md) | [implementation-planner/SKILL.md](../skills/implementation-planner/SKILL.md) | [implementation-planner/SETUP.md](../skills/implementation-planner/SETUP.md) |
 | **incident-rca** | [incident-rca/README.md](../skills/incident-rca/README.md) | [incident-rca/SKILL.md](../skills/incident-rca/SKILL.md) | [incident-rca/SETUP.md](../skills/incident-rca/SETUP.md) |
 | **incident-triage-agent** | [incident-triage-agent/README.md](../skills/incident-triage-agent/README.md) | [incident-triage-agent/SKILL.md](../skills/incident-triage-agent/SKILL.md) | [incident-triage-agent/SETUP.md](../skills/incident-triage-agent/SETUP.md) |
+| **initiative-mapper** | [initiative-mapper/README.md](../skills/initiative-mapper/README.md) | [initiative-mapper/SKILL.md](../skills/initiative-mapper/SKILL.md) | [initiative-mapper/SETUP.md](../skills/initiative-mapper/SETUP.md) |
 | **integration-test-creator** | [integration-test-creator/README.md](../skills/integration-test-creator/README.md) | [integration-test-creator/SKILL.md](../skills/integration-test-creator/SKILL.md) | [integration-test-creator/SETUP.md](../skills/integration-test-creator/SETUP.md) |
 | **issue-triage** | [issue-triage/README.md](../skills/issue-triage/README.md) | [issue-triage/SKILL.md](../skills/issue-triage/SKILL.md) | [issue-triage/SETUP.md](../skills/issue-triage/SETUP.md) |
 | **k8s-overprovisioning-datadog** | [k8s-overprovisioning-datadog/README.md](../skills/k8s-overprovisioning-datadog/README.md) | [k8s-overprovisioning-datadog/SKILL.md](../skills/k8s-overprovisioning-datadog/SKILL.md) | [k8s-overprovisioning-datadog/SETUP.md](../skills/k8s-overprovisioning-datadog/SETUP.md) |
@@ -209,6 +210,9 @@ Skills reference each other when a finding belongs in another workflow:
 | issue-triage | An issue is a feature request needing a PRD | prd-architect |
 | issue-triage | An issue is a debt item needing ranking | tech-debt-assessor |
 | issue-triage | Ownership is unclear from available evidence | squad-map |
+| initiative-mapper | A mapped ticket is one unresolved decision | engineering-decision-discovery |
+| initiative-mapper | A mapped ticket is scoped enough for a PRD | prd-architect |
+| initiative-mapper | A mapped ticket already has an approved design | implementation-planner |
 <!-- cross-skill-routing:end -->
 
 Full symmetric matrix (forward + reverse escalations):

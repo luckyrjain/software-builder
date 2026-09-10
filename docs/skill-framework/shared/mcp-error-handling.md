@@ -82,6 +82,7 @@ column.
 | `implementation-planner` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `incident-rca` | `telemetry.logs.query` | — | BLOCKED | — |
 | `incident-triage-agent` | `pager.webhook.receive` | — | BLOCKED | — |
+| `initiative-mapper` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `integration-test-creator` | `host.repository.read_write` | — | BLOCKED | — |
 | `issue-triage` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `k8s-overprovisioning-datadog` | **Kubernetes MCP ❌** `kubernetes.metrics.history` | observability.metrics.query | FALLBACK | `datadog.query_metrics` |

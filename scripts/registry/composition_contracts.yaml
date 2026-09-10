@@ -38,6 +38,7 @@ artifact_types:
 - engineering_decision_record
 - research_brief
 - issue_triage_report
+- initiative_map
 artifact_schemas:
   mr_context:
     fields:
@@ -400,6 +401,16 @@ artifact_schemas:
     - title
     - issues_classified
     - incident_shaped_issues
+    - unresolved_questions
+    - recommendation
+    - repository_write_action
+    - automatic_downstream_invocation
+  initiative_map:
+    fields:
+    - title
+    - initiative_description
+    - decision_tickets
+    - sequencing
     - unresolved_questions
     - recommendation
     - repository_write_action
@@ -776,6 +787,11 @@ skills:
       mr_context:
       - project
       - head_sha
+    write_authority: read-only
+  initiative-mapper:
+    produces:
+    - initiative_map
+    consumes: []
     write_authority: read-only
   integration-test-creator:
     produces:

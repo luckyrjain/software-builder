@@ -37,6 +37,9 @@ graph TD
   incident-triage-agent -->|invokes| squad-map
   incident-triage-agent -.->|escalates| incident-rca
   incident-triage-agent -.->|escalates| squad-map
+  initiative-mapper -.->|escalates| engineering-decision-discovery
+  initiative-mapper -.->|escalates| prd-architect
+  initiative-mapper -.->|escalates| implementation-planner
   issue-triage -.->|escalates| security-review
   issue-triage -.->|escalates| incident-rca
   issue-triage -.->|escalates| prd-architect
