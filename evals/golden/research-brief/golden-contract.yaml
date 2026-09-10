@@ -38,33 +38,19 @@ assertions:
   - type: field_equals
     path: automatic_downstream_invocation
     value: false
-  # CAVEAT: `require_pattern` resolves `findings` to the whole list and matches the
-  # pattern against its stringified repr (scripts/evals/golden.py's resolve_path +
-  # _pattern_matches); it cannot address one list element, and adding list-indexing to
-  # resolve_path is deliberately out of scope. Bare "OBSERVED"/"UNKNOWN" substrings were
-  # therefore toothless: a brief that asserted BOTH claims as OBSERVED against fabricated
-  # URLs still went green, because the word "UNKNOWN" survived inside a claim's prose.
-  # These tie each status to that same finding's own source in the repr instead — the
-  # narrowest conjunction the harness can express. Still not airtight (the repr is
-  # key-order dependent and _pattern_matches is case-insensitive), just much harder to
-  # satisfy degenerately.
-  - type: require_pattern
-    path: findings
-    pattern: "'evidence_status': 'OBSERVED', 'source': 'src/middleware/rate_limit\\.py:14'"
-  - type: require_pattern
-    path: findings
-    pattern: "'evidence_status': 'UNKNOWN', 'source': 'none'"
-  # CAVEAT: the require_pattern above proves the correct spelling of "no source" but says
-  # nothing about the near-misses: swapping `source: none` for `null`, `""`, `N/A` or `TBD`
-  # left the fixture green while defeating its intent, because the required literal is the
-  # only spelling it knows. Enumerated here rather than expressed as a lookahead
-  # ((?!none) after 'source': ) -- no fixture in this repository uses regex lookahead and
-  # this is not the place to introduce it. `null` needs the unquoted alternative: YAML
-  # parses it to Python None, whose repr carries no quotes, while `none` stays the string
-  # 'none'. Add any further placeholder spelling to this list as it is encountered.
-  - type: forbid_pattern
-    path: findings
-    pattern: "'evidence_status': 'UNKNOWN', 'source': (?:None|'(?:null|N/A|TBD|)')"
+  # Pins each finding's own evidence_status to its own source directly, via
+  # resolve_path's `[?field=='value']` predicate (selects exactly one findings item) --
+  # no longer a substring search over the whole list's stringified repr, so a brief that
+  # asserted BOTH claims as OBSERVED against fabricated URLs cannot go green here.
+  - type: field_equals
+    path: findings[?source=='src/middleware/rate_limit.py:14'].evidence_status
+    value: OBSERVED
+  # Exact equality also forbids every near-miss spelling of "no source" (null, "", N/A,
+  # TBD, ...) in one assertion -- the predicate selects the UNKNOWN finding by its
+  # evidence_status, and the value must equal the string "none" precisely.
+  - type: field_equals
+    path: findings[?evidence_status=='UNKNOWN'].source
+    value: "none"
   # report-format.md's core rule, stated negatively so it also fires on findings this
   # fixture does not enumerate: no claim is asserted at a non-UNKNOWN status while
   # carrying no source.
