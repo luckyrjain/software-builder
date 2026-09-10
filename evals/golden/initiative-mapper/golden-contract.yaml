@@ -115,6 +115,20 @@ assertions:
   - type: forbid_pattern
     path: decision_tickets
     pattern: "\\{(?:(?!['\"]evidence['\"])[^{}])*\\}"
+  - type: forbid_pattern
+    path: decision_tickets
+    pattern: "\\{(?:(?!['\"]question['\"])[^{}])*\\}"
+  - type: forbid_pattern
+    path: decision_tickets
+    pattern: "\\{(?:(?!['\"]depends_on['\"])[^{}])*\\}"
+  # The placeholder/vocabulary guards above only fire on a *string* value in the expected
+  # quoted shape -- a mutation setting question/evidence/depends_on/ready_for to None, [], or
+  # {} reprs without quotes at all (`'question': None`, `'evidence': []`) and slips past both
+  # the placeholder-string check and the presence checks above (the key IS present, just not a
+  # string). Catch those non-string values directly.
+  - type: forbid_pattern
+    path: decision_tickets
+    pattern: "['\"](?:question|evidence|ready_for|depends_on)['\"]: (?:None|\\[\\]|\\{\\})"
   # Sequencing is prose per report-format.md's Structure block, so it stays a pattern check --
   # but the old `blocked on T1` substring was satisfied by its own negation ("T2 is NOT blocked
   # on T1"). Naming the subject immediately before "is blocked" defeats an inserted negation,
@@ -146,4 +160,4 @@ assertions:
     pattern: "Start with T1"
   - type: forbid_pattern
     path: recommendation
-    pattern: "\\b(?:not|never|no longer|don'?t|do not|avoid|instead of)\\s+start(?:ing)?\\s+with\\b"
+    pattern: "\\b(?:not|never|no longer|don'?t|do not|avoid|instead of|rather than)\\s+start(?:ing)?\\s+with\\b"
