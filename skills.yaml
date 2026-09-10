@@ -3701,8 +3701,8 @@ skills:
         squad-map
     routing:
       patterns:
-      - \b(pager|page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
-      - \btriage\b.*\b(pager|page|alert webhook|incident webhook)\b
+      - \b(pager|paged|on-call page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
+      - \btriage\b.*\b(pager|paged|on-call page|alert webhook|incident webhook)\b
   integration-test-creator:
     path: skills/integration-test-creator
     category: testing
@@ -3823,8 +3823,8 @@ skills:
       - \bclassify\b.*\b(these|the)\b.*\b(issues?|bugs?|tickets?|feature requests?)\b
       - \A\W*(triage|classify)\b.*\bis this\b.*\ba duplicate\b
       exclude_patterns:
-      - \b(pager|page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
-      - \btriage\b.*\b(pager|page|alert webhook|incident webhook)\b
+      - \b(pager|paged|on-call page|alert webhook|incident webhook)\b.*\b(triage|automation|route|owner)\b
+      - \btriage\b.*\b(pager|paged|on-call page|alert webhook|incident webhook)\b
       - \A(?![\s\S]*(?:(?:\b(no|without)\s+(PR|MR|pull request|merge request)\b)|(?:\bthere
         is no\s+(PR|MR|pull request|merge request)\b)|(?:\b(production ready|production
         readiness|ready to release|ready to deploy|ready to ship)\b)))(?=[\s\S]*(?:\b(review|inspect|analy[sz]e)\b.*\b(PR|MR|pull
