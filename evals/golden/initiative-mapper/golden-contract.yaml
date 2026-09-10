@@ -5,7 +5,7 @@ tier: 3
 description: >
   A large, foggy initiative produces a decision-ticket map with dependency edges, never a written
   ticket/PRD/plan. Also covers a ticket with no clear ready-for skill (marked unresolved, not
-  force-fit).
+  force-fit) and the `unresolved_questions` section report-format.md mandates for it.
 recorded_output:
   artifact: initiative_map
   repository_write_action: none
@@ -14,13 +14,20 @@ recorded_output:
   decision_tickets:
     - id: T1
       question: "Do we migrate the existing billing DB in place or stand up a new one?"
-      depends_on: none
+      depends_on: "none"
       ready_for: engineering-decision-discovery
     - id: T2
       question: "What does the new invoicing UI look like?"
-      depends_on: T1
+      depends_on: "T1"
       ready_for: unresolved
-  sequencing: "T1 can start immediately; T2 is blocked on T1."
+  sequencing: "T1 can start immediately — nothing blocks it. T2 is blocked on T1's outcome."
+  # report-format.md mandates an "Unresolved questions" section and `unresolved_questions` is a
+  # declared `initiative_map` field, but this fixture exercised neither: a run that marked T2
+  # unresolved and then silently dropped the row explaining why went green.
+  unresolved_questions:
+    - ticket: T2
+      missing_evidence: "No invoicing-UI scope discussed yet — no candidate design, no owner named"
+      impact: "T2 cannot be routed to a downstream skill until its own scope sharpens"
   recommendation: "Start with T1 (migrate-in-place vs. new DB) via engineering-decision-discovery; T2 stays unresolved until the invoicing UI is scoped."
 assertions:
   - type: field_equals
@@ -35,15 +42,69 @@ assertions:
   - type: field_equals
     path: automatic_downstream_invocation
     value: false
+  # The map has to be a map *of something*. Without this an empty or whitespace-only
+  # initiative_description satisfied every other assertion in the file.
   - type: require_pattern
-    path: decision_tickets
-    pattern: engineering-decision-discovery
+    path: initiative_description
+    pattern: "\\S"
+  # Dependency edges are the deliverable's whole point and were previously unasserted: a
+  # mutation deleting `depends_on` or rewriting T2's edge to "none" still passed. Each edge is
+  # now pinned to its own ticket via resolve_path's `[?field=='value']` predicate (PR #237)
+  # rather than a substring search over the stringified list.
+  - type: field_equals
+    path: decision_tickets[?id=='T1'].depends_on
+    value: "none"
+  - type: field_equals
+    path: decision_tickets[?id=='T2'].depends_on
+    value: "T1"
+  # Same treatment for `ready_for`. The old `require_pattern` over the whole stringified list
+  # was satisfied by those strings appearing anywhere in it, so a force-fit inversion -- T1
+  # demoted to unresolved and T2 wrongly upgraded to a confident implementation-planner -- still
+  # matched both patterns. Exact equality per ticket makes that inversion fail.
+  - type: field_equals
+    path: decision_tickets[?id=='T1'].ready_for
+    value: engineering-decision-discovery
+  - type: field_equals
+    path: decision_tickets[?id=='T2'].ready_for
+    value: unresolved
+  # Selecting by `ready_for` instead of by id proves an unresolved ticket still *exists* (a
+  # predicate matching zero items raises, i.e. fails) and that it carries a real question rather
+  # than a TBD placeholder.
   - type: require_pattern
+    path: decision_tickets[?ready_for=='unresolved'].question
+    pattern: "invoicing UI"
+  # The generality the id-pinned assertions give up, restored in the form that does not depend
+  # on this fixture's own ids: no ticket may carry a placeholder or empty question, and every
+  # ticket's `ready_for` must come from report-format.md's fixed four-value vocabulary -- so a
+  # vague "needs more thought" (exactly what SKILL.md's boundary rules forbid) fails here.
+  - type: forbid_pattern
     path: decision_tickets
-    pattern: unresolved
+    pattern: "'question': '(?:TBD|TODO|N/?A|\\?+)?'"
+  - type: forbid_pattern
+    path: decision_tickets
+    pattern: "'ready_for': '(?!(?:engineering-decision-discovery|prd-architect|implementation-planner|unresolved)')"
+  # Sequencing is prose per report-format.md's Structure block, so it stays a pattern check --
+  # but the old `blocked on T1` substring was satisfied by its own negation ("T2 is NOT blocked
+  # on T1"). Naming the subject immediately before "is blocked" defeats an inserted negation,
+  # and the forbid_pattern catches the remaining negation spellings.
   - type: require_pattern
     path: sequencing
-    pattern: blocked on T1
+    pattern: "T1 can start immediately"
+  - type: require_pattern
+    path: sequencing
+    pattern: "T2 is blocked on T1"
+  - type: forbid_pattern
+    path: sequencing
+    pattern: "\\b(?:not|never|no longer|isn'?t|aren'?t)\\s+blocked\\b"
+  # Every unresolved ticket owes an "Unresolved questions" row saying what evidence is missing
+  # and what that costs. Selected by ticket id, so dropping T2's row fails rather than passing
+  # on some other row's text.
+  - type: require_pattern
+    path: unresolved_questions[?ticket=='T2'].missing_evidence
+    pattern: "invoicing-UI scope"
+  - type: require_pattern
+    path: unresolved_questions[?ticket=='T2'].impact
+    pattern: "cannot be routed to a downstream skill"
   - type: require_pattern
     path: recommendation
-    pattern: Start with T1
+    pattern: "Start with T1"

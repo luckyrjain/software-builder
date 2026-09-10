@@ -114,9 +114,6 @@ routes:
     patterns:
     - \bdecision[- ]tickets?\b
     - \binitiative map\b
-    exclude_patterns:
-    - \bimplementation[- ]ready\b.*\bPRD\b
-    - \balready[- ]approved\b.*\bdesign\b
   integration-test-creator:
     patterns:
     - \b(integration tests?|integration-test)\b

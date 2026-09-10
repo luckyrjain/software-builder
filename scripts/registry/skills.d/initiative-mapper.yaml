@@ -58,9 +58,31 @@ initiative-mapper:
     # even start") trigger on their own anymore -- only when the prompt also says "decision
     # tickets" or "initiative map" explicitly. Given the alternative is a 100% collision
     # rate with the rest of the registry, this is the correct trade-off.
+    #
+    # No `exclude_patterns`. Two were carried over from the plan
+    # (`implementation[- ]ready.*PRD`, `already[- ]approved.*design`), intended to keep an
+    # already-scoped request away from this skill. They were dead weight AND actively
+    # harmful, so both were removed:
+    #
+    #   * Dead: neither negative case they were written for reaches an exclude at all.
+    #     "Write an implementation-ready PRD for adding a dark-mode toggle to settings."
+    #     and "Create the implementation plan for this already-approved design." fire
+    #     NEITHER include pattern (no "decision tickets", no "initiative map"), so they
+    #     never become an initiative-mapper candidate in the first place -- exactly the
+    #     `research-brief` `existing .* service` defect. Deleting both excludes changed
+    #     0 of 187 tested prompts and 0 of the 45-skill registry-wide sweep.
+    #
+    #   * Harmful: a legitimate mixed-readiness request -- one that says "decision
+    #     tickets"/"initiative map" AND reports that one ticket already has an
+    #     implementation-ready PRD or an already-approved design, which is precisely what
+    #     this skill's own escalation design tells it to report (see examples.md row 5 and
+    #     the "already has an approved design" handoff example) -- was wrongly excluded.
+    #     "Give me an initiative map for the billing-provider migration -- the retry-queue
+    #     ticket has an already-approved design, the rest is open." went `no_match`.
+    #
+    # The include patterns are the whole guard: both are unique, skill-specific
+    # compound-phrase vocabulary, so a request that does not ask for a decision-ticket map
+    # never reaches this skill regardless of what else it mentions.
     patterns:
     - \bdecision[- ]tickets?\b
     - \binitiative map\b
-    exclude_patterns:
-    - \bimplementation[- ]ready\b.*\bPRD\b
-    - \balready[- ]approved\b.*\bdesign\b

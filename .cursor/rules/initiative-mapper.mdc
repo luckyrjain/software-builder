@@ -1,5 +1,5 @@
 ---
-description: Break a large, foggy, too-big-for-one-session effort into a decision-ticket map with dependency edges — which sub-questions need deciding before which, which tickets are scoped enough for a PRD, which already have an approved design. Use when an effort is too ambiguous or too large for prd-architect or implementation-planner to take directly. Keywords: map this initiative, this effort is too big, decompose this into tickets, where do we even start, plan this out before we scope it. Not for one already-scoped idea (prd-architect), or an already-approved design ready for tasks (implementation-planner).
+description: Break a large, foggy, too-big-for-one-session effort into a decision-ticket map with dependency edges — which sub-questions need deciding before which, which tickets are scoped enough for a PRD, which already have an approved design. Use when an effort is too ambiguous or too large for prd-architect or implementation-planner to take directly. Keywords: decision tickets, initiative map (the only two phrases the registry's own patterns match), map this initiative, this effort is too big, decompose this into tickets, where do we even start, plan this out before we scope it. Not for one already-scoped idea (prd-architect), or an already-approved design ready for tasks (implementation-planner).
 alwaysApply: false
 ---
 

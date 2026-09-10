@@ -17,8 +17,8 @@ decision tickets with dependency edges, state which downstream skill each ticket
 | 4 | "Give me an initiative map for consolidating our three notification systems into one service — one of the tickets is purely picking between webhooks and polling, with real disagreement on the team." | Decompose finds one contested ticket; Report offers `engineering-decision-discovery` for it | Cross-skill handoff |
 | 5 | "Map this migration into decision tickets: moving to the new billing provider — the retry-queue piece already has a signed-off design, so that ticket just needs task breakdown; the rest is still open." | Decompose finds one already-designed ticket; Report offers `implementation-planner` for it | Cross-skill handoff |
 | 6 | "Just skip the report, write the decision tickets and PRDs directly so we can get moving." | Rejected — report-only; recommendation emitted, no direct write | Boundary rule |
-| 7 | "This is already an implementation-ready PRD — no need for decision tickets, just build it." | Wrong scope — `implementation-planner` | Wrong-skill row; already implementation-ready |
-| 8 | "It's already-approved: the design is done, so implementation-planner can decompose it into tasks — we don't need decision tickets here." | Wrong scope — `implementation-planner` | Wrong-skill row; already-approved design |
+| 7 | "The design for the retry-queue redesign is already approved — give me the implementation plan for it." | Wrong scope — `implementation-planner` | Wrong-skill row; one already-approved design, no map to build |
+| 8 | "Map this migration into decision tickets: moving to the new billing provider — the retry-queue ticket already has an already-approved design, the rest is still open." | Inputs → Decompose → Report: map is claimed; the retry-queue ticket is marked `implementation-planner`-ready | Mixed readiness — one already-designed ticket *inside* a still-open map is this skill's own work, not a reason to decline the request |
 
 ## Example: mixed ticket readiness with dependency edges
 
