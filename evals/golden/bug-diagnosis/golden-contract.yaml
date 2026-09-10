@@ -37,9 +37,9 @@ assertions:
   - type: field_equals
     path: repro_status
     value: confirmed
-  - type: require_pattern
-    path: hypotheses_tested
-    pattern: rejected
+  - type: field_equals
+    path: hypotheses_tested[?candidate=='Rounding applied twice in tax calculation'].result
+    value: rejected
   - type: require_pattern
     path: root_cause
     pattern: Discount applied after tax
