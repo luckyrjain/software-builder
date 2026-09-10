@@ -89,8 +89,90 @@ def golden_case_index(cases: Iterable[GoldenCase]) -> dict[str, GoldenCase]:
     return {f"{case.skill}/{case.case_id}": case for case in cases}
 
 
+_PATH_SEGMENT_RE = re.compile(r"^(?P<key>[^\[\]]*)(?P<brackets>(?:\[[^\]]*\])*)$")
+_BRACKET_RE = re.compile(r"\[([^\]]*)\]")
+_PREDICATE_RE = re.compile(r"^\?\s*([A-Za-z_][A-Za-z0-9_]*)\s*==\s*(.+?)\s*$")
+
+
+def _split_path_segments(dotted_path: str) -> list[str]:
+    """Split on "." like str.split, except a "." inside a [...] bracket (e.g. a
+    predicate's quoted file-path value) does not start a new segment."""
+    segments: list[str] = []
+    current = ""
+    depth = 0
+    for ch in dotted_path:
+        if ch == "[":
+            depth += 1
+            current += ch
+        elif ch == "]":
+            depth -= 1
+            current += ch
+        elif ch == "." and depth == 0:
+            segments.append(current)
+            current = ""
+        else:
+            current += ch
+    segments.append(current)
+    return segments
+
+
+def _parse_bracket_literal(raw: str) -> Any:
+    raw = raw.strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("'", '"'):
+        return raw[1:-1]
+    if raw == "true":
+        return True
+    if raw == "false":
+        return False
+    if raw == "null":
+        return None
+    for caster in (int, float):
+        try:
+            return caster(raw)
+        except ValueError:
+            continue
+    return raw
+
+
+def _apply_bracket_op(current: Any, raw_op: str, dotted_path: str) -> Any:
+    """Apply one "[...]" op -- either a list index ("[0]", "[-1]") or a
+    predicate ("[?field=='value']") -- to resolve exactly one list item."""
+    op = raw_op.strip()
+    if op.startswith("?"):
+        match = _PREDICATE_RE.match(op)
+        if match is None:
+            raise ValueError(f"invalid predicate {raw_op!r} in path {dotted_path!r}")
+        field, raw_value = match.group(1), match.group(2)
+        expected = _parse_bracket_literal(raw_value)
+        if not isinstance(current, list):
+            raise KeyError(dotted_path)
+        matches = [item for item in current if isinstance(item, dict) and item.get(field) == expected]
+        if not matches:
+            raise KeyError(dotted_path)
+        if len(matches) > 1:
+            raise ValueError(
+                f"ambiguous path {dotted_path!r}: predicate [{op}] matched {len(matches)} "
+                f"items, expected exactly 1"
+            )
+        return matches[0]
+
+    try:
+        index = int(op)
+    except ValueError as exc:
+        raise ValueError(f"invalid list index {raw_op!r} in path {dotted_path!r}") from exc
+    if not isinstance(current, list) or index < -len(current) or index >= len(current):
+        raise KeyError(dotted_path)
+    return current[index]
+
+
 def resolve_path(data: dict[str, Any], dotted_path: str) -> Any:
-    """Walk a dict by a "a.b.c" dotted path; raise KeyError on any missing segment.
+    """Walk a dotted path by dict-key lookup, raising KeyError on any missing
+    segment. A segment may carry one or more "[...]" ops to reach into a list:
+    a plain index ("hypotheses_tested[0]") or a single-field equality predicate
+    ("findings[?evidence_status=='OBSERVED']") that must match exactly one item
+    -- zero matches is KeyError (consistent with a missing dict key), more than
+    one is ValueError, since a fixture assertion is supposed to pin down one
+    specific item, not silently pick one out of several.
 
     Shared by every module that needs to read or compare a nested field in a
     recorded golden output (this file's own assertions, mutation_guard.py's
@@ -98,10 +180,17 @@ def resolve_path(data: dict[str, Any], dotted_path: str) -> Any:
     path-resolution semantics can't quietly diverge between them.
     """
     current: Any = data
-    for segment in dotted_path.split("."):
-        if not isinstance(current, dict) or segment not in current:
-            raise KeyError(dotted_path)
-        current = current[segment]
+    for segment in _split_path_segments(dotted_path):
+        match = _PATH_SEGMENT_RE.match(segment)
+        if match is None:
+            raise ValueError(f"invalid path segment {segment!r} in path {dotted_path!r}")
+        key = match.group("key")
+        if key:
+            if not isinstance(current, dict) or key not in current:
+                raise KeyError(dotted_path)
+            current = current[key]
+        for raw_op in _BRACKET_RE.findall(match.group("brackets")):
+            current = _apply_bracket_op(current, raw_op, dotted_path)
     return current
 
 
