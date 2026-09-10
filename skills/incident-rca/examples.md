@@ -23,7 +23,7 @@ live rollback → out of scope.
 |---|-----------|----------|
 | 1 | "RCA for `neo-disbursement-service` 14:00–16:00 UTC" | Phase 0→5; window from user |
 | 2 | "RCA for INC-4521" | Phase 0b anchor → 1→5 |
-| 3 | "Root cause last Tuesday 2–4pm Kafka lag" | Org-wide Phase 1 discovery |
+| 3 | "Root cause of the Kafka lag incident last Tuesday 2–4pm" | Org-wide Phase 1 discovery |
 | 4 | "RCA neo-disbursement — logs unavailable" | slo_breach fallback path |
 | 5 | "Post-incident review payout-worker" | Standard pipeline |
 | 6 | "What caused the 5xx spike?" | Symptom-only; service discovery |

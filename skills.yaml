@@ -83,6 +83,7 @@ contracts:
       - module_design_spec
       - domain_model_update
       - local_diff_review
+      - bug_diagnosis_report
       - codebase_architecture_report
       - api_design_review_report
       - database_review_report
@@ -116,6 +117,7 @@ contracts:
         module_design_spec: 1
         domain_model_update: 1
         local_diff_review: 1
+        bug_diagnosis_report: 1
         codebase_architecture_report: 1
         api_design_review_report: 2
         database_review_report: 2
@@ -149,6 +151,7 @@ contracts:
         module_design_spec: proposed_state
         domain_model_update: proposed_state
         local_diff_review: proposed_state
+        bug_diagnosis_report: proposed_state
         codebase_architecture_report: proposed_state
         api_design_review_report: current_state
         database_review_report: current_state
@@ -178,6 +181,8 @@ contracts:
         domain_model_update:
         - proposed_state
         local_diff_review:
+        - proposed_state
+        bug_diagnosis_report:
         - proposed_state
         codebase_architecture_report:
         - proposed_state
@@ -332,6 +337,19 @@ contracts:
           spec_findings: list
           repository_write_action: string
           automatic_downstream_invocation: boolean
+          recommendation: string
+        bug_diagnosis_report:
+          title: string
+          symptom: string
+          repro_status: string
+          repro_evidence: string
+          hypotheses_tested: list
+          root_cause: string
+          confidence: string
+          evidence_refs: list
+          repository_write_action: string
+          automatic_downstream_invocation: boolean
+          unresolved_questions: list
           recommendation: string
         codebase_architecture_report:
           title: string
@@ -606,6 +624,11 @@ contracts:
         external_actions: write
         unattended: true
         merge: true
+      bug-diagnosis:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
       capacity-planner:
         repository: read
         external_actions: none
@@ -806,6 +829,7 @@ contracts:
       api-test-creator: leaf
       architecture-review: leaf
       backlog-runner: trigger
+      bug-diagnosis: leaf
       capacity-planner: leaf
       change-impact-analyzer: leaf
       codebase-architecture-review: leaf
@@ -852,6 +876,7 @@ contracts:
       api-test-creator: leaf
       architecture-review: leaf
       backlog-runner: trigger
+      bug-diagnosis: leaf
       capacity-planner: leaf
       change-impact-analyzer: leaf
       codebase-architecture-review: leaf
@@ -1082,6 +1107,10 @@ contracts:
         mode: canonical
         owners:
         - local-diff-review
+      bug_diagnosis_report:
+        mode: canonical
+        owners:
+        - bug-diagnosis
       codebase_architecture_report:
         mode: canonical
         owners:
@@ -1161,6 +1190,7 @@ contracts:
     - module_design_spec
     - domain_model_update
     - local_diff_review
+    - bug_diagnosis_report
     - codebase_architecture_report
     - api_design_review_report
     - database_review_report
@@ -1343,6 +1373,20 @@ contracts:
         - spec_findings
         - repository_write_action
         - automatic_downstream_invocation
+        - recommendation
+      bug_diagnosis_report:
+        fields:
+        - title
+        - symptom
+        - repro_status
+        - repro_evidence
+        - hypotheses_tested
+        - root_cause
+        - confidence
+        - evidence_refs
+        - repository_write_action
+        - automatic_downstream_invocation
+        - unresolved_questions
         - recommendation
       codebase_architecture_report:
         fields:
@@ -1605,6 +1649,11 @@ contracts:
         - implementation_pr
         consumes:
         - implementation_task
+        write_authority: read-only
+      bug-diagnosis:
+        produces:
+        - bug_diagnosis_report
+        consumes: []
         write_authority: read-only
       capacity-planner:
         produces:
@@ -2572,6 +2621,56 @@ skills:
     routing:
       patterns:
       - \b(backlog|tickets?)\b.*\b(overnight|scheduled|nightly|queue runner)\b
+  bug-diagnosis:
+    path: skills/bug-diagnosis
+    category: review
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      invokes: []
+      escalation_targets:
+      - loop-task-implementer
+      - incident-rca
+      - codebase-architecture-review
+    capabilities:
+      required:
+      - host.report.write
+      - host.repository.read
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: bug-diagnosis
+    version: 1.0.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - bug_diagnosis_report
+    dependencies: []
+    degraded_behavior:
+      missing_capability: host.repository.read
+      available_capabilities:
+      - host.report.write
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads repository and caller-provided context only
+    routing:
+      patterns:
+      - \bdiagnose\b.*\b(this|the)\b.*\b(bug|failure|regression|test)\b
+      - \bwhy is(n't)?\b.*\bfailing\b
+      - \broot[ -]cause\b.*\b(test failure|bug)\b|\b(test failure|bug)\b.*\broot[
+        -]cause\b
+      - \breproduce\b.*\bthis\b.*\bbug\b
+      - \bregression\b.*\bdiagnos\w*\b|\bdiagnos\w*\b.*\bregression\b
+      exclude_patterns:
+      - \boutage\b|\berror spike\b
+      - \bjust fix (it|this)\b
+      - \b(right now|currently)\b.*\bproduction\b|\bproduction\b.*\b(right now|currently)\b
   capacity-planner:
     path: skills/capacity-planner
     category: platform
@@ -3445,8 +3544,12 @@ skills:
       external_services: Datadog MCP, Jira MCP, KubeSense CLI (optional)
     routing:
       patterns:
-      - \b(RCA|root cause|postmortem|post-incident|production incident|incident investigation)\b
+      - \b(RCA|root cause analysis|postmortem|post-incident|production incident|incident
+        investigation)\b
       - \b(5xx|error|latency)\b.*\b(spike|incident|production)\b
+      - \broot[ -]cause\b.*\b(incident|outage|production|5xx|error spike)\b|\b(incident|outage|production|5xx|error
+        spike)\b.*\broot[ -]cause\b
+      - \b(INC-|P1|P2|SLO breach|on-call|consumer lag|deploy regression)\b
   incident-triage-agent:
     path: skills/incident-triage-agent
     category: incident

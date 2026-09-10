@@ -3,6 +3,7 @@ graph TD
   api-test-creator["api-test-creator<br/>leaf"]
   architecture-review["architecture-review<br/>leaf"]
   backlog-runner["backlog-runner<br/>trigger"]
+  bug-diagnosis["bug-diagnosis<br/>leaf"]
   capacity-planner["capacity-planner<br/>leaf"]
   change-impact-analyzer["change-impact-analyzer<br/>leaf"]
   codebase-architecture-review["codebase-architecture-review<br/>leaf"]
@@ -51,6 +52,9 @@ graph TD
   architecture-review -.->|escalates| system-design
   backlog-runner -->|requires| loop-task-implementer
   backlog-runner ==>|handoff| loop-task-implementer
+  bug-diagnosis -.->|escalates| codebase-architecture-review
+  bug-diagnosis -.->|escalates| incident-rca
+  bug-diagnosis -.->|escalates| loop-task-implementer
   capacity-planner -.->|escalates| k8s-overprovisioning-datadog
   codebase-architecture-review -.->|escalates| domain-comprehension
   codebase-architecture-review -.->|escalates| module-design

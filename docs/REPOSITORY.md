@@ -64,7 +64,8 @@ software-builder/
     ├── deployment-risk-review/    # Blast radius, migration risk, rollback complexity, traffic risk review
     ├── resilience-review/         # Timeout budgets, retries, circuit breaking, backpressure, recovery review
     ├── dependency-upgrade-review/ # Breaking changes, CVEs, API diffs, transitive dependency rollout risk
-    └── tech-debt-assessor/        # Ranks debt by business impact x engineering drag x risk / effort
+    ├── tech-debt-assessor/        # Ranks debt by business impact x engineering drag x risk / effort
+    └── bug-diagnosis/             # Diagnose a non-incident bug or perf regression: repro, falsify hypotheses, report root cause
 ```
 
 Each skill directory follows the same pattern:
@@ -76,6 +77,7 @@ Each skill directory follows the same pattern:
 | `api-test-creator` | testing | ambient | — | `make lint-api-test-creator` |
 | `architecture-review` | review | ambient | — | `make lint-architecture-review` |
 | `backlog-runner` | automation | automation-only | loop-task-implementer | `make lint-backlog-runner` |
+| `bug-diagnosis` | review | ambient | — | `make lint-bug-diagnosis` |
 | `capacity-planner` | platform | ambient | — | `make lint-capacity-planner` |
 | `change-impact-analyzer` | analysis | ambient | — | `make lint-change-impact-analyzer` |
 | `codebase-architecture-review` | architecture | ambient | — | `make lint-codebase-architecture-review` |

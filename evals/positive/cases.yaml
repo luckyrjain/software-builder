@@ -44,3 +44,4 @@ cases:
   - {skill: implementation-planner, prompt: "Create a dependency-aware implementation plan with execution waves and traceability.", expected_status: selected, expected_owner: implementation-planner}
   - {skill: production-readiness-review, prompt: "Is PR #123 production ready given its runtime code changes?", expected_status: selected, expected_owner: production-readiness-review}
   - {skill: engineering-decision-discovery, prompt: "What decisions are missing before we implement this design?", expected_status: selected, expected_owner: engineering-decision-discovery}
+  - {skill: bug-diagnosis, prompt: "Diagnose why this test is failing — root cause needed before we fix it.", expected_status: selected, expected_owner: bug-diagnosis}

@@ -43,6 +43,17 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Add bug-diagnosis skill (2026-09-09)
+
+- Added a new framework-compliant, ambient, read-only skill: `bug-diagnosis` (diagnoses a
+  non-incident bug, test failure, or performance regression — confirms a repro, forms and
+  falsifies candidate root causes, reports the confirmed cause with evidence). Report-only:
+  never edits source/tests/config to apply the fix. Distinguishes itself from `incident-rca`
+  (a live production incident with a time window) and `loop-task-implementer` (applying an
+  already-diagnosed fix). Also narrows `incident-rca`'s own "root cause" routing pattern to
+  require incident/outage/postmortem/production co-occurrence, since a bare "root cause"
+  trigger was swallowing bug-diagnosis's own vocabulary.
+
 ### Add local-diff-review skill (2026-09-09)
 
 - Added a new framework-compliant, ambient, read-only skill: `local-diff-review` (reviews the diff
