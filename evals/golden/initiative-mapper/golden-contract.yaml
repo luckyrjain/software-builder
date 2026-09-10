@@ -1,0 +1,45 @@
+schema_version: 1
+skill: initiative-mapper
+case_id: golden-contract
+tier: 3
+description: >
+  A large, foggy initiative produces a decision-ticket map with dependency edges, never a written
+  ticket/PRD/plan. Also covers a ticket with no clear ready-for skill (marked unresolved, not
+  force-fit).
+recorded_output:
+  artifact: initiative_map
+  repository_write_action: none
+  automatic_downstream_invocation: false
+  initiative_description: "Modernize our billing system"
+  decision_tickets:
+    - id: T1
+      question: "Do we migrate the existing billing DB in place or stand up a new one?"
+      depends_on: none
+      ready_for: engineering-decision-discovery
+    - id: T2
+      question: "What does the new invoicing UI look like?"
+      depends_on: T1
+      ready_for: unresolved
+  sequencing: "T1 can start immediately; T2 is blocked on T1."
+assertions:
+  - type: field_equals
+    path: artifact
+    value: initiative_map
+  - type: field_equals
+    path: repository_write_action
+    value: none
+  - type: forbid_field_value
+    path: repository_write_action
+    value: apply_patch
+  - type: field_equals
+    path: automatic_downstream_invocation
+    value: false
+  - type: require_pattern
+    path: decision_tickets
+    pattern: engineering-decision-discovery
+  - type: require_pattern
+    path: decision_tickets
+    pattern: unresolved
+  - type: require_pattern
+    path: sequencing
+    pattern: blocked on T1

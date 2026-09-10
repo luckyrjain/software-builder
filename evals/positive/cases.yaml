@@ -47,3 +47,4 @@ cases:
   - {skill: bug-diagnosis, prompt: "Diagnose why this test is failing — root cause needed before we fix it.", expected_status: selected, expected_owner: bug-diagnosis}
   - {skill: research-brief, prompt: "Find out whether our rate-limiting approach matches current best practice, citing sources.", expected_status: selected, expected_owner: research-brief}
   - {skill: issue-triage, prompt: "Triage these incoming bug reports and tell me which are duplicates.", expected_status: selected, expected_owner: issue-triage}
+  - {skill: initiative-mapper, prompt: "This 'modernize our billing system' effort is too big to scope in one sitting — map it into decision tickets.", expected_status: selected, expected_owner: initiative-mapper}
