@@ -139,7 +139,7 @@ dispatch, and `codebase-architecture-review`'s `composition.invokes` does not ga
 | Question turns out to be about this codebase's own current behavior | research-brief → domain-comprehension | `research_brief` (question + partial findings) | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
 | An issue is security-sensitive | issue-triage → security-review | `issue_triage_report` (issue + finding) | "Security review of `{finding}` flagged during issue triage" |
 | An issue describes an active incident, not a backlog bug | issue-triage → incident-rca | `issue_triage_report` (issue + incident-shaped evidence) | "RCA for `{service}` — flagged as active during issue triage" |
-| An issue is a feature request needing a PRD | issue-triage → prd-architect | `issue_triage_report` (issue text) | "Write an implementation-ready PRD for `{feature}}` per triaged issue" |
+| An issue is a feature request needing a PRD | issue-triage → prd-architect | `issue_triage_report` (issue text) | "Write an implementation-ready PRD for `{feature}` per triaged issue" |
 | An issue is a debt item needing ranking | issue-triage → tech-debt-assessor | `issue_triage_report` (issue + classification) | "Rank `{item}` in the tech debt backlog — flagged during issue triage" |
 | Ownership is unclear from available evidence | issue-triage → squad-map | `issue_triage_report` (issue + repo) | "Who owns `{repo}`?" |
 
