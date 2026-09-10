@@ -162,6 +162,11 @@ skills:
         iteration cannot happen locally
       host.dependency.reachable: no real adjacent dependency to test against; escalate
         or skip the target rather than fall back to mocking (that belongs to unit-test-creator)
+  issue-triage:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
   k8s-overprovisioning-datadog:
     required: []
     optional:

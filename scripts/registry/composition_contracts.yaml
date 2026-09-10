@@ -37,6 +37,7 @@ artifact_types:
 - production_readiness_report
 - engineering_decision_record
 - research_brief
+- issue_triage_report
 artifact_schemas:
   mr_context:
     fields:
@@ -390,6 +391,15 @@ artifact_schemas:
     - findings
     - degraded_mode
     - degraded_reason
+    - unresolved_questions
+    - recommendation
+    - repository_write_action
+    - automatic_downstream_invocation
+  issue_triage_report:
+    fields:
+    - title
+    - issues_classified
+    - incident_shaped_issues
     - unresolved_questions
     - recommendation
     - repository_write_action
@@ -788,6 +798,11 @@ skills:
       - output_dir
       - specialist_inputs
     write_authority: repository-write
+  issue-triage:
+    produces:
+    - issue_triage_report
+    consumes: []
+    write_authority: read-only
   k8s-overprovisioning-datadog:
     produces:
     - k8s_rightsizing_report

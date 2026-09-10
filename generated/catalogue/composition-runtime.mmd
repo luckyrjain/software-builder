@@ -20,6 +20,7 @@ graph TD
   incident-rca["incident-rca<br/>leaf"]
   incident-triage-agent["incident-triage-agent<br/>trigger"]
   integration-test-creator["integration-test-creator<br/>leaf"]
+  issue-triage["issue-triage<br/>leaf"]
   k8s-overprovisioning-datadog["k8s-overprovisioning-datadog<br/>leaf"]
   local-diff-review["local-diff-review<br/>leaf"]
   loop-task-implementer["loop-task-implementer<br/>orchestrator"]
@@ -88,6 +89,11 @@ graph TD
   incident-triage-agent ==>|handoff| squad-map
   incident-triage-agent -.->|escalates| incident-rca
   incident-triage-agent -.->|escalates| squad-map
+  issue-triage -.->|escalates| incident-rca
+  issue-triage -.->|escalates| prd-architect
+  issue-triage -.->|escalates| security-review
+  issue-triage -.->|escalates| squad-map
+  issue-triage -.->|escalates| tech-debt-assessor
   k8s-overprovisioning-datadog -.->|escalates| incident-rca
   k8s-overprovisioning-datadog -.->|escalates| pr-review
   local-diff-review -.->|escalates| pr-review

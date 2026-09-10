@@ -53,6 +53,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **incident-rca** | [incident-rca/README.md](../skills/incident-rca/README.md) | [incident-rca/SKILL.md](../skills/incident-rca/SKILL.md) | [incident-rca/SETUP.md](../skills/incident-rca/SETUP.md) |
 | **incident-triage-agent** | [incident-triage-agent/README.md](../skills/incident-triage-agent/README.md) | [incident-triage-agent/SKILL.md](../skills/incident-triage-agent/SKILL.md) | [incident-triage-agent/SETUP.md](../skills/incident-triage-agent/SETUP.md) |
 | **integration-test-creator** | [integration-test-creator/README.md](../skills/integration-test-creator/README.md) | [integration-test-creator/SKILL.md](../skills/integration-test-creator/SKILL.md) | [integration-test-creator/SETUP.md](../skills/integration-test-creator/SETUP.md) |
+| **issue-triage** | [issue-triage/README.md](../skills/issue-triage/README.md) | [issue-triage/SKILL.md](../skills/issue-triage/SKILL.md) | [issue-triage/SETUP.md](../skills/issue-triage/SETUP.md) |
 | **k8s-overprovisioning-datadog** | [k8s-overprovisioning-datadog/README.md](../skills/k8s-overprovisioning-datadog/README.md) | [k8s-overprovisioning-datadog/SKILL.md](../skills/k8s-overprovisioning-datadog/SKILL.md) | [k8s-overprovisioning-datadog/SETUP.md](../skills/k8s-overprovisioning-datadog/SETUP.md) |
 | **local-diff-review** | [local-diff-review/README.md](../skills/local-diff-review/README.md) | [local-diff-review/SKILL.md](../skills/local-diff-review/SKILL.md) | [local-diff-review/SETUP.md](../skills/local-diff-review/SETUP.md) |
 | **loop-task-implementer** | [loop-task-implementer/README.md](../skills/loop-task-implementer/README.md) | [loop-task-implementer/SKILL.md](../skills/loop-task-implementer/SKILL.md) | [loop-task-implementer/SETUP.md](../skills/loop-task-implementer/SETUP.md) |
@@ -203,6 +204,11 @@ Skills reference each other when a finding belongs in another workflow:
 | research-brief | Findings surface a decision that needs interrogating | engineering-decision-discovery |
 | research-brief | Findings become the input to a PRD | prd-architect |
 | research-brief | Question turns out to be about this codebase's own current behavior | domain-comprehension |
+| issue-triage | An issue is security-sensitive | security-review |
+| issue-triage | An issue describes an active incident, not a backlog bug | incident-rca |
+| issue-triage | An issue is a feature request needing a PRD | prd-architect |
+| issue-triage | An issue is a debt item needing ranking | tech-debt-assessor |
+| issue-triage | Ownership is unclear from available evidence | squad-map |
 <!-- cross-skill-routing:end -->
 
 Full symmetric matrix (forward + reverse escalations):

@@ -60,6 +60,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Is this PR/MR production ready, ready to release, ready to deploy, go/no-go for one/this change (aggregated across CI/review/policy/specialists), production readiness review for one exact PR/MR/release candidate | **production-readiness-review** | pr-review (generic correctness review only), release-readiness-checker (release-wide go/no-go across multiple services), deployment-risk-review/change-impact-analyzer (single-dimension analysis, not the aggregated readiness rollup) |
 | Diagnose this bug, why is this failing, root cause of a test failure, performance regression diagnosis (non-incident), reproduce this bug | **bug-diagnosis** | incident-rca (a live production incident with a time window), loop-task-implementer (applying an already-diagnosed fix) |
 | Research this, find out whether, investigate this question, what does the documentation say, cited findings | **research-brief** | domain-comprehension (this codebase's own current-state behavior), engineering-decision-discovery (deciding between already-known options) |
+| Triage these issues, classify raw bugs/feature-requests, is this a duplicate of `<issue>`, which team owns this issue | **issue-triage** | incident-triage-agent (live paging-webhook incident, no human turn), backlog-runner (already-scoped tracker query it works through), squad-map (a bare "who owns this repo/service?" with no raw issue to classify — issue-triage recommends an owner only *for an issue it is triaging*, and escalates to squad-map when that ownership is unclear) |
 
 ## Disambiguation rules
 
@@ -90,6 +91,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 25. **A fixed point (commit/branch/tag/merge-base) with no PR/MR number** → local-diff-review directly; **a PR/MR identified by number** → pr-review directly.
 26. **A bug/test failure/perf regression with no active production time window** → bug-diagnosis directly; **an active production incident with a time window** → incident-rca directly.
 27. **A bounded research question needing cited findings** → research-brief directly; **this codebase's own current-state behavior** → domain-comprehension directly.
+28. **Raw, unscoped issues needing classification, a human turn available** → issue-triage directly; **a paging-webhook page-fire, no human turn available** → incident-triage-agent; **an already-scoped tracker query to work through** → backlog-runner directly.
 
 ## Ambiguous requests — ask
 

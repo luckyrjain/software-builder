@@ -22,6 +22,7 @@ skill_types:
   incident-rca: leaf
   incident-triage-agent: trigger
   integration-test-creator: leaf
+  issue-triage: leaf
   k8s-overprovisioning-datadog: leaf
   local-diff-review: leaf
   loop-task-implementer: orchestrator
@@ -302,3 +303,7 @@ artifact_ownership:
     mode: canonical
     owners:
     - research-brief
+  issue_triage_report:
+    mode: canonical
+    owners:
+    - issue-triage
