@@ -25,13 +25,20 @@ def test_foggy_initiative_routes_to_initiative_mapper() -> None:
 
 
 def test_implementation_ready_prd_request_does_not_route_to_initiative_mapper() -> None:
+    """Asserted against `.candidates`, not `.owner`: `DispatchResult.owner` is None for any
+    non-`selected` result, so `owner != "initiative-mapper"` would pass vacuously if a future
+    pattern change made initiative-mapper a false *candidate* here (status goes `ambiguous`)
+    rather than the sole, wrongly `selected` owner. `research-brief`'s and `issue-triage`'s
+    own routing tests found and fixed this identical assertion shape earlier this session.
+    """
     result = _dispatch("Write an implementation-ready PRD for adding a dark-mode toggle to settings.")
-    assert result.owner != "initiative-mapper"
+    assert "initiative-mapper" not in result.candidates, result
 
 
 def test_already_approved_design_does_not_route_to_initiative_mapper() -> None:
+    """Same `.owner`-vs-`.candidates` characteristic as the test above."""
     result = _dispatch("Create the implementation plan for this already-approved design.")
-    assert result.owner != "initiative-mapper"
+    assert "initiative-mapper" not in result.candidates, result
 
 
 def _positive_cases() -> list[tuple[str, str]]:
