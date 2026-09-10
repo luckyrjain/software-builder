@@ -3543,7 +3543,8 @@ skills:
       external_services: Datadog MCP, Jira MCP, KubeSense CLI (optional)
     routing:
       patterns:
-      - \b(RCA|root cause analysis|postmortem|production incident|incident investigation)\b
+      - \b(RCA|root cause analysis|postmortem|post-incident|production incident|incident
+        investigation)\b
       - \b(5xx|error|latency)\b.*\b(spike|incident|production)\b
       - \broot[ -]cause\b.*\b(incident|outage|production|5xx|error spike)\b|\b(incident|outage|production|5xx|error
         spike)\b.*\broot[ -]cause\b
