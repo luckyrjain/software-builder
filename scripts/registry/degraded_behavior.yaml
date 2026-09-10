@@ -96,6 +96,11 @@ skills:
     missing_capability: host.repository.read_write
     available_capabilities: []
     behavior: BLOCKED
+  issue-triage:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
   k8s-overprovisioning-datadog:
     missing_capability: kubernetes.metrics.history
     available_capabilities:

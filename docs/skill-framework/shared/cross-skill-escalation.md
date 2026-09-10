@@ -1,7 +1,7 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, domain-modeling, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, module-design, codebase-architecture-review, engineering-decision-discovery, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, local-diff-review, bug-diagnosis, research-brief, and
-production-readiness-review.
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, domain-modeling, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, module-design, codebase-architecture-review, engineering-decision-discovery, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, local-diff-review, bug-diagnosis, research-brief, production-readiness-review, and
+issue-triage.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -137,6 +137,11 @@ dispatch, and `codebase-architecture-review`'s `composition.invokes` does not ga
 | Findings surface a decision that needs interrogating | research-brief → engineering-decision-discovery | `research_brief` (findings + evidence refs) | "Grill me on the decision surfaced by researching `{research_question}`" |
 | Findings become the input to a PRD | research-brief → prd-architect | `research_brief` (cited findings) | "Write a PRD for `{initiative}` based on the research-brief findings" |
 | Question turns out to be about this codebase's own current behavior | research-brief → domain-comprehension | `research_brief` (question + partial findings) | "Map bounded contexts and data ownership for `{domain}` — full domain comprehension" |
+| An issue is security-sensitive | issue-triage → security-review | `issue_triage_report` (issue + finding) | "Security review of `{finding}` flagged during issue triage" |
+| An issue describes an active incident, not a backlog bug | issue-triage → incident-rca | `issue_triage_report` (issue + incident-shaped evidence) | "RCA for `{service}` — flagged as active during issue triage" |
+| An issue is a feature request needing a PRD | issue-triage → prd-architect | `issue_triage_report` (issue text) | "Write an implementation-ready PRD for `{feature}}` per triaged issue" |
+| An issue is a debt item needing ranking | issue-triage → tech-debt-assessor | `issue_triage_report` (issue + classification) | "Rank `{item}` in the tech debt backlog — flagged during issue triage" |
+| Ownership is unclear from available evidence | issue-triage → squad-map | `issue_triage_report` (issue + repo) | "Who owns `{repo}`?" |
 
 Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local deltas only.
 
@@ -179,6 +184,7 @@ Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local
 | bug-diagnosis's evidence reveals a live production incident | incident-rca receives the symptom and evidence | "RCA for `{service}` `{window}` — surfaced during bug diagnosis" |
 | bug-diagnosis's root cause is structural, not a local bug | codebase-architecture-review receives the root cause and evidence refs | "Review the architecture around `{scope}` — bug-diagnosis found a structural cause" |
 | research-brief surfaces a decision needing interrogation | engineering-decision-discovery receives the `research_brief` findings | "Grill me on the decision surfaced by researching `{research_question}`" |
+| issue-triage flags an issue as security-sensitive | security-review receives the finding | "Security review of `{finding}` flagged during issue triage" |
 
 ## 3. Handoff block (required fields)
 
@@ -250,6 +256,7 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Is one exact PR/MR/release-candidate production ready / ready to release | production-readiness-review |
 | Local or uncommitted diff review, not a numbered PR/MR | local-diff-review |
 | General cited research question, not this codebase's own behavior | research-brief |
+| Raw, unscoped issue/bug/feature-request classification, human turn available | issue-triage |
 
 See each skill's **when NOT to use** table in `SKILL.md`.
 

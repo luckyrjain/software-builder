@@ -113,6 +113,18 @@ routes:
   integration-test-creator:
     patterns:
     - \b(integration tests?|integration-test)\b
+  issue-triage:
+    patterns:
+    - \btriage\b.*\b(these|the|raw|incoming)\b.*\b(issues?|bugs?|tickets?)\b
+    - \bclassify\b.*\b(these|the)\b.*\b(issues?|bugs?|feature requests?)\b
+    - \bis this\b.*\ba duplicate\b.*\b(issues?|bugs?|tickets?|reports?)\b
+    - \b(issues?|bugs?|tickets?|reports?)\b.*\bis this\b.*\ba duplicate\b
+    - \bis this\b.*\b(issues?|bugs?|tickets?|reports?)\b.*\ba duplicate\b
+    exclude_patterns:
+    - \b(pager|page-fire|webhook)\b.*\bincident\b
+    - \bovernight\b.*\btracker query\b
+    - \b(PR|MR|pull request|merge request)\b.*\b(review|merge (?:it|this)|approve)\b
+    - \b(review|merge (?:it|this)|approve)\b.*\b(PR|MR|pull request|merge request)\b
   k8s-overprovisioning-datadog:
     patterns:
     - \b(k8s|kubernetes|pod|deployment)\b.*\b(overprovision\w*|right-?siz\w*|requests?|limits?|CPU|memory)\b

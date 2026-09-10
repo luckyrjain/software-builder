@@ -1,0 +1,81 @@
+issue-triage:
+  path: skills/issue-triage
+  category: analysis
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    invokes: []
+    escalation_targets:
+    - security-review
+    - incident-rca
+    - prd-architect
+    - tech-debt-assessor
+    - squad-map
+  capabilities:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: issue-triage
+  version: 1.0.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - issue_triage_report
+  dependencies: []
+  degraded_behavior:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None — reads repository and caller-provided context only
+  routing:
+    # Pattern 3 (below) replaces the plan's original bare `\bis this\b.*\ba duplicate\b`.
+    # That bare form is a severe topic-free-wrapper bug: "is this a duplicate [of X]?" is
+    # generic English that attaches to any statement about anything (a CVE, a migration
+    # script, a PR, a deployment config), stealing ownership from the real owner. A
+    # registry-wide sweep found 118 of 172 tested combinations falsely collided with
+    # sibling skills -- the same "topic-free wrapper pattern collides registry-wide"
+    # defect class that cost research-brief's port 3 review rounds to close (see
+    # scripts/registry/skills.d/research-brief.yaml on research-brief-skill for that
+    # precedent's own durable-warning-comment). The pattern now requires a co-occurring
+    # issue/bug/ticket/report anchor, in all 3 word orderings (anchor after "duplicate",
+    # anchor before "is this", and anchor between "is this" and "a duplicate" -- the last
+    # is the most natural real phrasing, "is this bug report a duplicate"). Patterns 1 and
+    # 2 are unchanged from the plan: verified 0 of 43 sibling positive-eval prompts match
+    # either bare, only this skill's own specific invocation phrase triggers them.
+    patterns:
+    - \btriage\b.*\b(these|the|raw|incoming)\b.*\b(issues?|bugs?|tickets?)\b
+    - \bclassify\b.*\b(these|the)\b.*\b(issues?|bugs?|feature requests?)\b
+    - \bis this\b.*\ba duplicate\b.*\b(issues?|bugs?|tickets?|reports?)\b
+    - \b(issues?|bugs?|tickets?|reports?)\b.*\bis this\b.*\ba duplicate\b
+    - \bis this\b.*\b(issues?|bugs?|tickets?|reports?)\b.*\ba duplicate\b
+    # The 3rd exclude below was originally a bare, contextless `\b(PR|MR|pull
+    # request|merge request)\b` (no co-occurring anchor). Verified via the live
+    # dispatcher that this caused a false negative on a realistic, legitimately-anchored
+    # triage prompt that only incidentally mentions a PR: "Triage these incoming bug
+    # reports: one references PR #456 as a related fix." lost its owner (no_match)
+    # purely because the bare exclude fired on the word "PR", even though the prompt is
+    # squarely issue-triage's own domain and carries no review-request intent at all.
+    # Narrowed to require the PR/MR mention to co-occur with actual review-request
+    # language -- the same "generic verb + anchor" shape pr-review's own routing patterns
+    # use (`\b(PR|MR|pull request|merge request)\b.*\b(review|regression|correctness)\b`)
+    # -- in both orderings, so a genuine "please review/merge/approve this PR" aside
+    # inside a triage request still excludes, but an incidental PR reference no longer
+    # does. After the fix: the PR-mentioning triage prompt above selects issue-triage;
+    # "Triage these issues: please review and merge this PR that fixes one of them."
+    # still excludes.
+    exclude_patterns:
+    - \b(pager|page-fire|webhook)\b.*\bincident\b
+    - \bovernight\b.*\btracker query\b
+    - \b(PR|MR|pull request|merge request)\b.*\b(review|merge (?:it|this)|approve)\b
+    - \b(review|merge (?:it|this)|approve)\b.*\b(PR|MR|pull request|merge request)\b
