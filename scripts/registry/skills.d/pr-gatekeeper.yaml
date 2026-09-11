@@ -26,6 +26,7 @@ pr-gatekeeper:
       - project
       - merge_request_iid
       - head_sha
+      - expected_head_sha
   capabilities:
     required:
     - gitlab.get_merge_request
