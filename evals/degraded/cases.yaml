@@ -27,6 +27,7 @@ cases:
   - {skill: test-writer, missing_capability: host.repository.read, available_capabilities: [], expected_behavior: BLOCKED}
   - {skill: architecture-review, missing_capability: host.report.write, available_capabilities: [], expected_behavior: BLOCKED}
   - {skill: codebase-architecture-review, missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
+  - {skill: architecture-remediation-loop, missing_capability: loop-task-implementer.invoke, available_capabilities: [host.report.write, codebase-architecture-review.invoke, engineering-decision-discovery.invoke, module-design.invoke, production-readiness-review.invoke], expected_behavior: BLOCKED}
   - {skill: local-diff-review, missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
   - {skill: module-design, missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
   - {skill: system-design, missing_capability: host.report.write, available_capabilities: [], expected_behavior: BLOCKED}

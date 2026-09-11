@@ -13,6 +13,15 @@ skills:
     missing_capability: host.repository.read_write
     available_capabilities: []
     behavior: BLOCKED
+  architecture-remediation-loop:
+    missing_capability: loop-task-implementer.invoke
+    available_capabilities:
+    - host.report.write
+    - codebase-architecture-review.invoke
+    - engineering-decision-discovery.invoke
+    - module-design.invoke
+    - production-readiness-review.invoke
+    behavior: BLOCKED
   architecture-review:
     missing_capability: host.report.write
     available_capabilities: []

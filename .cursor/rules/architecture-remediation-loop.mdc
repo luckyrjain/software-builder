@@ -1,0 +1,9 @@
+---
+description: Use for an autonomous whole-codebase architecture remediation loop: repeated codebase-architecture-review scans build a candidate ledger, each candidate is grilled via engineering-decision-discovery, designed via module-design when needed, and taken to a merge-ready PR via loop-task-implementer, batched by risk and size, until a fresh codebase-architecture-review and a fresh production-readiness-review both return zero actionable findings. Keywords: architecture remediation loop, whole-codebase architecture improvement, candidate ledger, grill and implement, convergence loop, PR batching. Not for one bounded architecture review with no implementation (codebase-architecture-review), one already-scoped task (loop-task-implementer), or a single PR's readiness verdict (production-readiness-review).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the architecture-remediation-loop skill. Read `skills/architecture-remediation-loop/SKILL.md` and follow it.
+Phase index: `skills/architecture-remediation-loop/reference/phase-index.md` when present under the skill directory.

@@ -104,6 +104,7 @@ contracts:
       - initiative_map
       - merge_conflict_analysis
       - stakeholder_questionnaire
+      - architecture_remediation_report
       artifact_schema_versions:
         mr_review_report: 2
         rca_report: 1
@@ -143,6 +144,7 @@ contracts:
         initiative_map: 1
         merge_conflict_analysis: 1
         stakeholder_questionnaire: 1
+        architecture_remediation_report: 1
       state_semantics:
         mr_review_report: current_state
         rca_report: current_state
@@ -182,6 +184,7 @@ contracts:
         initiative_map: proposed_state
         merge_conflict_analysis: current_state
         stakeholder_questionnaire: current_state
+        architecture_remediation_report: current_state
       allowed_state_semantics:
         prd_report:
         - proposed_state
@@ -571,6 +574,16 @@ contracts:
           recommendation: string
           repository_write_action: string
           automatic_downstream_invocation: boolean
+        architecture_remediation_report:
+          review_scope: string
+          converged: boolean
+          cycles_run: integer
+          gate_a_status: string
+          gate_b_status: string
+          stopped_reason: string
+          candidates: mapping
+          batches: list
+          ledger_ref: mapping
       required_sections:
         skill_result:
           required_fields:
@@ -683,6 +696,11 @@ contracts:
       api-test-creator:
         repository: write
         external_actions: read
+        unattended: false
+        merge: false
+      architecture-remediation-loop:
+        repository: write
+        external_actions: write
         unattended: false
         merge: false
       architecture-review:
@@ -923,6 +941,7 @@ contracts:
     skill_types:
       api-design-review: leaf
       api-test-creator: leaf
+      architecture-remediation-loop: orchestrator
       architecture-review: leaf
       backlog-runner: trigger
       bug-diagnosis: leaf
@@ -975,6 +994,7 @@ contracts:
     skill_types:
       api-design-review: leaf
       api-test-creator: leaf
+      architecture-remediation-loop: orchestrator
       architecture-review: leaf
       backlog-runner: trigger
       bug-diagnosis: leaf
@@ -1037,6 +1057,11 @@ contracts:
       - visited_skills
       - depth
     handoffs:
+      architecture-remediation-loop:
+        loop-task-implementer:
+        - implementation_task
+        production-readiness-review:
+        - assessment_context
       pr-gatekeeper:
         pr-review:
         - mr_context
@@ -1294,6 +1319,10 @@ contracts:
         mode: canonical
         owners:
         - stakeholder-questionnaire
+      architecture_remediation_report:
+        mode: canonical
+        owners:
+        - architecture-remediation-loop
   composition:
     artifact_types:
     - mr_context
@@ -1337,6 +1366,7 @@ contracts:
     - initiative_map
     - merge_conflict_analysis
     - stakeholder_questionnaire
+    - architecture_remediation_report
     artifact_schemas:
       mr_context:
         fields:
@@ -1734,6 +1764,17 @@ contracts:
         - recommendation
         - repository_write_action
         - automatic_downstream_invocation
+      architecture_remediation_report:
+        fields:
+        - review_scope
+        - converged
+        - cycles_run
+        - gate_a_status
+        - gate_b_status
+        - stopped_reason
+        - candidates
+        - batches
+        - ledger_ref
     creator_parity:
       skills:
       - unit-test-creator
@@ -1803,6 +1844,16 @@ contracts:
           - session_token_budget
           - output_dir
           - specialist_inputs
+        write_authority: repository-write
+      architecture-remediation-loop:
+        produces:
+        - architecture_remediation_report
+        consumes:
+        - codebase_architecture_report
+        - engineering_decision_record
+        - module_design_spec
+        - implementation_pr
+        - production_readiness_report
         write_authority: repository-write
       architecture-review:
         produces:
@@ -2713,6 +2764,97 @@ skills:
     routing:
       patterns:
       - \b(API|HTTP|REST)\b.*\b(tests?|testing suite)\b
+  architecture-remediation-loop:
+    path: skills/architecture-remediation-loop
+    category: architecture
+    invocation: ambient
+    hosts:
+      cursor:
+        discovery: rule
+      claude:
+        install: true
+      github-copilot:
+        discovery: manual
+      kiro:
+        discovery: manual
+    install:
+      requires:
+      - codebase-architecture-review
+      - engineering-decision-discovery
+      - module-design
+      - loop-task-implementer
+      - production-readiness-review
+    composition:
+      invokes:
+      - loop-task-implementer
+      - production-readiness-review
+      escalation_targets:
+      - codebase-architecture-review
+      - engineering-decision-discovery
+      - module-design
+      - loop-task-implementer
+      - production-readiness-review
+      - domain-comprehension
+      consumes:
+      - codebase_architecture_report
+      - engineering_decision_record
+      - module_design_spec
+      - implementation_pr
+      - production_readiness_report
+    capabilities:
+      required:
+      - host.report.write
+      - loop-task-implementer.invoke
+      optional:
+      - name: codebase-architecture-review.invoke
+        enables: architecture-discovery cycle
+      - name: engineering-decision-discovery.invoke
+        enables: candidate grilling and disposition
+      - name: module-design.invoke
+        enables: module/interface/seam design for candidates that need it
+      - name: production-readiness-review.invoke
+        enables: holistic cumulative-branch gate
+    lint:
+      skill_md_max_lines: 180
+      target: architecture-remediation-loop
+    risk_class:
+    - repository-write
+    version: 1.0.0
+    type: orchestrator
+    authority: repository-write
+    permissions:
+      repository: write
+      external_actions: write
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - architecture_remediation_report
+      produce_fields: {}
+    dependencies:
+    - codebase-architecture-review
+    - engineering-decision-discovery
+    - module-design
+    - loop-task-implementer
+    - production-readiness-review
+    degraded_behavior:
+      missing_capability: loop-task-implementer.invoke
+      available_capabilities:
+      - host.report.write
+      - codebase-architecture-review.invoke
+      - engineering-decision-discovery.invoke
+      - module-design.invoke
+      - production-readiness-review.invoke
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None of its own — inherits whatever each composed skill requires
+    routing:
+      patterns:
+      - \b(architecture remediation loop|whole[- ]codebase architecture (improvement|remediation)|architecture
+        (improvement|remediation) loop)\b
+      - \b(architecture|codebase)\b.*\b(remediation loop|convergence loop|until (zero|clean|convergence))\b
+      exclude_patterns:
+      - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b
   architecture-review:
     path: skills/architecture-review
     category: review

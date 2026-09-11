@@ -64,6 +64,7 @@ column.
 |-------|-------------|-------------------|----------|----------------|
 | `api-design-review` | `host.report.write` | — | BLOCKED | — |
 | `api-test-creator` | `host.repository.read_write` | — | BLOCKED | — |
+| `architecture-remediation-loop` | `loop-task-implementer.invoke` | — | BLOCKED | `host.report.write`, `codebase-architecture-review.invoke`, `engineering-decision-discovery.invoke`, `module-design.invoke`, `production-readiness-review.invoke` |
 | `architecture-review` | `host.report.write` | — | BLOCKED | — |
 | `backlog-runner` | `scheduler.cron.trigger` | — | BLOCKED | — |
 | `bug-diagnosis` | `host.repository.read` | — | BLOCKED | `host.report.write` |

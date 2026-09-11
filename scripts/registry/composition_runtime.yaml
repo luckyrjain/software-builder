@@ -3,6 +3,7 @@ schema_version: 1
 skill_types:
   api-design-review: leaf
   api-test-creator: leaf
+  architecture-remediation-loop: orchestrator
   architecture-review: leaf
   backlog-runner: trigger
   bug-diagnosis: leaf
@@ -65,6 +66,11 @@ handoff_schema:
   - visited_skills
   - depth
 handoffs:
+  architecture-remediation-loop:
+    loop-task-implementer:
+    - implementation_task
+    production-readiness-review:
+    - assessment_context
   pr-gatekeeper:
     pr-review:
     - mr_context
@@ -322,3 +328,7 @@ artifact_ownership:
     mode: canonical
     owners:
     - stakeholder-questionnaire
+  architecture_remediation_report:
+    mode: canonical
+    owners:
+    - architecture-remediation-loop
