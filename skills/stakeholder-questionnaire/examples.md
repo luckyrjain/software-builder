@@ -12,7 +12,7 @@ automatically.
 | # | Caller sends | Resolves to | Notes |
 |---|-----------------|---------------|-------|
 | 1 | "We need to decide on retry budget for transient payment failures. Only the payments on-call engineer knows what we can sustain — they hold the SLA constraints and historical load data. Can you draft a questionnaire?" | Inputs → Draft → Report with a discovery questionnaire targeting the gap between what the engineer knows and what the decision needs | Happy path |
-| 2 | "We're blocked on whether to cache the user profile endpoint. Our caching expert (the platform team lead) knows the trade-offs we've already tried." | Inputs → Draft → Report with questions grouped by theme (observability, edge cases, invalidation strategy, most-important-first) | Questionnaire with themes |
+| 2 | "We're blocked on whether to cache the user profile endpoint. Our caching expert (the platform team lead) knows the trade-offs we've already tried. Can you draft a questionnaire to explore this with them?" | Inputs → Draft → Report with questions grouped by theme (observability, edge cases, invalidation strategy, most-important-first) | Questionnaire with themes |
 | 3 | "I need a discovery questionnaire drafted." | Inputs HARD STOP — ask what decision is blocked and who holds the missing knowledge | No context |
 | 4 | "The database migrations are taking too long on prod. Draft a questionnaire." | Inputs HARD STOP — ask whose knowledge is missing (DBA? DevOps? Ops on-call?) | No named recipient |
 | 5 | "Should we migrate to the new payment processor, or stick with the current one?" | Wrong skill — the caller can reason through this with enough interrogation; offer `engineering-decision-discovery` | Wrong-skill row |
