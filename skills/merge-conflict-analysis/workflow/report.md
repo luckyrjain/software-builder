@@ -16,8 +16,10 @@ form is `MERGE_CONFLICT_ANALYSIS.md`; its typed machine form is `merge_conflict_
 both as the read-only skill's response/artifact — never apply a resolution, stage, commit, or
 continue/abort the merge or rebase.
 
-The `## Mode` section always states the operation `conflict_state` detected and what "ours" and
-"theirs" mean for this report — they invert between merge and rebase, and are `unconfirmed` when no
+The `## Mode` section always states the operation `conflict_state` detected, the `detected_by`
+check that identified it (git's own ref/path resolution — never a hardcoded `.git/...` path), and
+what "ours" and "theirs" mean for this report — they invert between merge and rebase, and are
+`unconfirmed` when no
 ref identified the operation (a squash-merge or `git stash pop`), which also gets an unresolved
 question rather than a guess.
 

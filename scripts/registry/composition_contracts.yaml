@@ -421,6 +421,7 @@ artifact_schemas:
     - title
     - conflict_summary
     - mode
+    - detected_by
     - ours_theirs_note
     - hunks
     - unresolved_questions

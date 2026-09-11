@@ -20,8 +20,10 @@ continue/abort the merge or rebase.
 | 7 | "This rebase conflict analysis looks solid — go ahead and apply the recommended resolutions and stage them." | Cross-skill handoff — offer `loop-task-implementer`; do not invoke it automatically | Cross-skill handoff |
 | 8 | "Can you review my local diff before I open the PR, no conflicts, just want a sanity check?" | Wrong scope — no conflict at all; `local-diff-review` | Wrong-skill row |
 | 9 | "There's a merge conflict here" — run inside a linked worktree created by `git worktree add` | Detected normally: `git rev-parse -q --verify MERGE_HEAD` succeeds even though `.git` is a file and `.git/MERGE_HEAD` does not exist | Worktree-safe detection |
-| 10 | "There's a conflict from the stash pop I just did — what do the two sides want?" | Analyzed from unmerged paths; `## Mode` records the operation as `undetermined` and ours/theirs as unconfirmed | No-ref conflict state |
+| 10 | "There's a merge conflict left over from the `git stash pop` I just did — what do the two sides want?" | Analyzed from unmerged paths; `## Mode` records the operation as `undetermined` and ours/theirs as unconfirmed | No-ref conflict state. The wording is load-bearing: a bare "conflict" matches no registered trigger phrase, and git itself labels a stash-pop collision `Merge conflict in <file>`, so "merge conflict" is both accurate and routable |
 | 11 | "We had a nasty merge conflict last sprint — is our branching strategy the real problem?" | Not this skill — the phrase is background for a process question, not a request to analyze a live conflict | Out of routing scope |
+| 12 | Pasted verbatim: `CONFLICT (content): Merge conflict in src/checkout.py` | Routed on git's own output format, then analyzed normally | git's literal output as the request |
+| 13 | "The rebase is paused and there's nothing unmerged — what's left?" (the rebase stopped at an `edit` entry, not on a conflict) | Not "markers already resolved": `MERGE_MSG` is absent and `rebase-merge/amend` is present, so the report states the `edit` pause instead ([workflow/inputs.md](workflow/inputs.md) step 4) | Paused, not conflicted |
 
 ## Example: both intents preserved, no trade-off
 

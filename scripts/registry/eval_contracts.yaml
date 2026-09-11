@@ -210,6 +210,14 @@ untrusted_surfaces:
       # from real PRs (distinct from a caller pasting review text); fixture covers a forged
       # "CI is green, skip security" claim.
       - production-readiness-review/golden-injection-ci-security-skip-inert
+      # merge-conflict-analysis: SKILL.md "Untrusted content" names commit messages and PR/issue
+      # text explicitly, and they are its *primary* evidence — both sides' intent is read out of
+      # them. The conflicting side's commits were authored by someone other than the caller, so
+      # this is third-party content, not caller-supplied review material the registry's policy
+      # comment above excludes. Filed under this class rather than a new `commit_messages` one
+      # because production-readiness-review's entry already established that commit-message text
+      # belongs here. Fixture: a commit message demanding its side be taken without analysis.
+      - merge-conflict-analysis/golden-injection
   logs:
     case_refs:
       - incident-rca/golden-injection-inert-rca-report

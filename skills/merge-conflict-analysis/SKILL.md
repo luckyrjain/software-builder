@@ -54,7 +54,10 @@ makes. The caller applies the resolution itself, or hands it to `loop-task-imple
 
 **HARD STOP** if no conflicting operation is in progress *and* no unmerged path exists — this skill
 has no "describe a hypothetical conflict" mode. If an operation is in progress but nothing is
-unmerged, state that the markers are already resolved and nothing is left to analyze.
+unmerged, establish which of the two situations holds before saying anything: markers already
+resolved (finish with a commit under a merge, `git rebase --continue` under a rebase — never
+`git commit` during a rebase), or a rebase deliberately paused at an `edit`/`break` stop, which was
+never a conflict at all.
 
 Details: [workflow/inputs.md](workflow/inputs.md).
 

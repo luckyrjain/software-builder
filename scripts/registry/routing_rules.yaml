@@ -157,6 +157,10 @@ routes:
     - \b(?:this|these|my|our) (?:merge|rebase) conflicts?\b
     - \b(?:resolv(?:e|ing)|analy[sz](?:e|ing)|fix|fixing|understand|understanding|explain|walk
       me through|help me with)\b[^.?!\n]{0,24}\b(?:merge|rebase) conflicts?\b
+    - (?-i:\bCONFLICT\s*\([a-zA-Z/ _-]+\):|\bMerge conflict in \S*[./]\S*)
+    exclude_patterns:
+    - \b(?:no|not|isn'?t|wasn'?t|aren'?t|weren'?t|never)\b[^.?!\n]{0,12}\b(?:merge|rebase)
+      conflicts?\b
   migration-program-manager:
     patterns:
     - \b(migration program|migration portfolio|migration status rollup|migration program
