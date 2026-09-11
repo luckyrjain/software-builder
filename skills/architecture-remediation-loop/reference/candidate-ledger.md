@@ -23,6 +23,8 @@ candidate_ledger:
     needs_design: false
     module_design_spec_ref: null
     batch_id: null
+    depends_on_batch: null   # another row's batch_id this candidate's batch must wait on — see
+                             # reference/pr-batching-policy.md § 6; null means no cross-batch dependency
     batch_attempt_count: 0   # incremented each loop-task-implementer dispatch for this batch; see
                              # reference/pr-batching-policy.md and SKILL.md § Circuit breakers
     pull_request_url: null

@@ -66,4 +66,10 @@ one stops the loop with `converged: false` and the current ledger state — neve
 
 `AWAITING_MERGE` is the one pause state this skill expects to hit routinely for an unattended, non-merging
 loop — same status as loop-task-implementer's own `HUMAN_ACTION_REQUIRED`, just scoped to a whole cycle
-instead of one task.
+instead of one task. It deliberately has **no wait-budget circuit breaker**: like `HUMAN_ACTION_REQUIRED`,
+it is bounded by real-world human action, not by this skill's own budgets, and re-invoking while still
+unmerged is cheap — the merge check is re-derived fresh from each PR's own status every time, so repeated
+re-invocation neither accumulates cost nor risks acting on stale state. A caller who wants their own
+wait-budget policy enforces it at the invocation layer (e.g. a scheduler deciding how often to re-invoke),
+the same way backlog-runner's `deadline` is a *caller* config value, not something loop-task-implementer
+itself tracks.

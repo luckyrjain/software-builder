@@ -1,5 +1,5 @@
 ---
-workflow_version: 2.0
+workflow_version: 2.1
 phase: converge
 produces:
   - architecture_remediation_report
@@ -52,21 +52,28 @@ Read `production_readiness_report.verdict`:
 |---------|--------|
 | `READY` | Gate B passes |
 | `CONDITIONAL`, only caller-accepted waivers | Gate B passes |
-| `CONDITIONAL`/`NOT_READY` with blockers | Every `BLOCKER`/`HIGH`/`MEDIUM`/actionable-`LOW` finding becomes a new ledger candidate (`source: holistic`); send it through Disposition → Remediate in the **same** cycle before re-checking Gate A |
+| `CONDITIONAL`/`NOT_READY` with blockers | Every `BLOCKER`/`HIGH`/`MEDIUM`/actionable-`LOW` finding becomes a new ledger candidate (`source: holistic`); send it through Disposition → Remediate in the **same** cycle. Remediate's `batch_results` for these rows **re-enters § 1** — the same merge checkpoint, not a re-check skipped because "this is just a follow-up fix" — before Gate B is re-run |
 | `UNKNOWN` on any required dimension | **Not** a pass. Record the unresolved dimension against this cycle (see § 4) rather than looping past it silently |
+
+Gate B only passes once its own row above is satisfied **and** every batch that row's remediation opened is
+itself merge-confirmed via § 1 — a holistic-finding batch is not exempt from the same checkpoint an
+architecture-candidate batch goes through.
 
 ## 3. Gate A — fresh codebase-architecture-review
 
-Once Gate B's blockers are all resolved, re-run **Discover** (a genuinely fresh pass against the
-merge-confirmed state — never "ask if the old findings were fixed"). Gate A passes per
+Once Gate B passes (including every holistic-finding batch's own merge checkpoint), re-run **Discover** (a
+genuinely fresh pass against the merge-confirmed state — never "ask if the old findings were fixed"). Gate
+A passes per
 [reference/convergence-gates.md § Gate A](../reference/convergence-gates.md#gate-a-fresh-codebase-architecture-review).
 
 ## 4. Stall breaker — no material progress
 
-Track, per candidate root cause and per Gate B dimension, whether the **same** unresolved item (an accepted
-finding still open, or a dimension still `UNKNOWN`) appears in two consecutive cycles. If so, stop with
-`stopped_reason: NO_MATERIAL_PROGRESS` rather than continuing to spend cycles on it — see
-[SKILL.md § Circuit breakers](../SKILL.md#circuit-breakers).
+Track, per Gate B dimension, whether it reports `UNKNOWN` in two consecutive cycles — trip
+`stopped_reason: NO_MATERIAL_PROGRESS`. For architecture candidates, this is the same tracking Discover's
+own dedup already does ([workflow/discover.md § 4](discover.md): scope + root cause + evidence overlap, not
+text similarity alone) — an accepted finding still open across two consecutive cycles is, by construction,
+the same ledger row surviving as `DUPLICATE` twice; when it does, stop with `NO_MATERIAL_PROGRESS` rather
+than continuing to spend cycles on it. See [SKILL.md § Circuit breakers](../SKILL.md#circuit-breakers).
 
 ## 5. Converged / not yet converged
 
@@ -78,8 +85,11 @@ finding still open, or a dimension still `UNKNOWN`) appears in two consecutive c
 - **Not yet converged, `max_cycles` reached:** stop, emit the report with `converged: false` and the
   still-open ledger rows — never claim convergence that did not happen.
 
-`cycles_run` increments exactly once per Discover invocation (never inside the merge-checkpoint pause,
-which resumes the *same* cycle); `max_cycles` is checked before starting the next Discover pass, not after.
+`cycles_run` starts at `1` the moment Discover's first invocation runs (Inputs never sets it — Discover's
+own first call is cycle 1) and increments by exactly 1 each further time Discover is (re-)invoked; it never
+changes during the merge-checkpoint pause, which resumes the *same* cycle rather than starting a new one.
+`max_cycles` is checked before starting the next Discover pass, not after — a report emitted mid-cycle
+(e.g. `AWAITING_MERGE`) always shows the cycle currently in progress, not the next one.
 
 ## Required outputs
 

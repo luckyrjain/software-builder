@@ -3,6 +3,32 @@
 All notable changes to the architecture-remediation-loop skill. Per-file `workflow_version` in
 `workflow/*.md` frontmatter should match the version of the latest entry below that names that file.
 
+## [1.1.1] — 2026-09-11
+
+### Fixed
+- Found via a second, fresh 5-persona adversarial pass re-verifying the 1.1.0 fix round:
+- **High:** `reference/phase-index.md` and `reference/smoke-test.md`'s "zero candidates" rows still
+  described the pre-fix Gate-A-before-Gate-B ordering; reworded to match `workflow/converge.md`'s actual
+  merge-checkpoint → Gate B → Gate A order.
+- **High:** a holistic-remediation batch (opened from a Gate B finding, not a Discover cycle) could reach
+  `COMPLETED` and skip the merge checkpoint entirely, since Converge's § 1 only explicitly named "this
+  cycle's" architecture-candidate batches. § 2 now states explicitly that a holistic-finding batch
+  re-enters § 1 before Gate B is considered passed.
+- **Medium:** dedup (`workflow/discover.md` § 4) and the new stall breaker both matched on scope + root
+  cause *text* alone — vulnerable to codebase-architecture-review's own non-deterministic phrasing evading
+  the match. Both now also match on evidence overlap (`evidence_refs`), and the stall breaker is defined as
+  the same tracking dedup already does, not a second independent (and possibly divergent) mechanism.
+- **Medium:** `reference/pr-batching-policy.md` § 6 (inter-batch dependencies) described recording a
+  dependency "on both rows" with no ledger field to hold it. Added `depends_on_batch` to
+  `reference/candidate-ledger.md`'s schema and wired it into `workflow/remediate.md`'s dispatch-eligibility
+  check.
+- **Medium (documented, not new machinery):** `AWAITING_MERGE` has no wait-budget circuit breaker — this is
+  now stated explicitly as an intentional choice (mirroring loop-task-implementer's own unbounded
+  `HUMAN_ACTION_REQUIRED`) rather than an unstated gap, since re-invoking while unmerged is cheap and a
+  caller-side wait policy belongs at the invocation layer, not inside this skill.
+- Clarified `cycles_run`'s initial value and increment timing (starts at 1 on Discover's first call; never
+  advances during an `AWAITING_MERGE` pause).
+
 ## [1.1.0] — 2026-09-11
 
 ### Fixed

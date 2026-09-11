@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.1
+workflow_version: 1.2
 phase: discover
 produces:
   - candidate_ledger
@@ -36,7 +36,11 @@ prior row (§ 4) does.
    evidence, confidence, and falsification result verbatim; do not re-derive or restate them.
    codebase-architecture-review's own local identifier is not guaranteed stable across independent
    invocations, so dedup (§ 4) never keys on ID equality alone.
-4. **Deduplicate against the existing ledger** (cycle 2+ only), matching on scope + root cause, not ID:
+4. **Deduplicate against the existing ledger** (cycle 2+ only), matching on scope + root cause **and**
+   evidence overlap (shared file paths/line ranges across `evidence_refs`) — codebase-architecture-review's
+   own candidate phrasing is not guaranteed stable between invocations, so text similarity alone is not
+   sufficient; a candidate whose evidence overlaps an existing row's is the same finding even if its prose
+   differs, not ID-based:
    - Matches a ledger row that is **not yet merge-confirmed** (still `PENDING`/`BLOCKED`, or `COMPLETED`
      but awaiting the merge checkpoint): `DUPLICATE` — link to the existing row's ID, don't open a second
      one, and don't let it silently disappear either — it still counts as open against Gate A.

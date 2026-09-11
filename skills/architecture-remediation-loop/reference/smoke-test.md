@@ -57,7 +57,7 @@ Merge the PR(s) invocation 1 opened.
 
 | Condition | Expected behavior |
 |-----------|----------------------|
-| codebase-architecture-review retains zero candidates on cycle 1 | Gate A is already clean; Converge still runs Gate B once before reporting `converged: true` |
+| codebase-architecture-review retains zero candidates on cycle 1 | Gate A's condition is already met from Discover; Converge still runs the (trivial) merge checkpoint and Gate B once before reporting `converged: true` |
 | A candidate is contested twice by engineering-decision-discovery without decisive evidence | Circuit breaker trips — loop stops, `converged: false`, contested row left open in the report |
 | loop-task-implementer escalates the same batch twice | Circuit breaker trips — that batch's candidates marked `BLOCKED`, loop stops for review |
 | A batch's PR is not yet merged | Converge stops at `stopped_reason: AWAITING_MERGE` — not a failure, the expected pause for this skill |

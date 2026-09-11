@@ -65,4 +65,7 @@ Default: **sequence, don't stack.** A batch with a declared dependency on anothe
 until the dependency batch is merge-confirmed (workflow/converge.md § 1) — it stays `PENDING` this cycle,
 same as any other deferred candidate. Real cross-batch dependencies are expected to be uncommon (most
 candidates from one bounded `review_scope` are independent); when one is identified during batching or
-design, record it on both rows rather than guessing an implicit order.
+design, record it explicitly as `depends_on_batch` (the dependency's `batch_id`) on the dependent
+candidate's own ledger row — see
+[reference/candidate-ledger.md § Schema](candidate-ledger.md#schema) — never as an implicit ordering
+assumption that doesn't survive a session boundary.
