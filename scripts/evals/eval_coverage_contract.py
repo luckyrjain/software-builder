@@ -69,6 +69,7 @@ REQUIRED_UNTRUSTED_SURFACES = {
     "mcp_payloads",
     "api_responses",
     "skill_artifacts",
+    "fetched_web_pages",
 }
 
 _result = partial(eval_result, BATCH3_SKILL)
