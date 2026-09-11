@@ -25,6 +25,7 @@ graph TD
   k8s-overprovisioning-datadog["k8s-overprovisioning-datadog<br/>leaf"]
   local-diff-review["local-diff-review<br/>leaf"]
   loop-task-implementer["loop-task-implementer<br/>orchestrator"]
+  merge-conflict-analysis["merge-conflict-analysis<br/>leaf"]
   migration-program-manager["migration-program-manager<br/>orchestrator"]
   module-design["module-design<br/>leaf"]
   mysql-to-postgres-sql["mysql-to-postgres-sql<br/>leaf"]
@@ -102,6 +103,7 @@ graph TD
   k8s-overprovisioning-datadog -.->|escalates| pr-review
   local-diff-review -.->|escalates| pr-review
   local-diff-review -.->|escalates| security-review
+  merge-conflict-analysis -.->|escalates| loop-task-implementer
   migration-program-manager -->|requires| mysql-to-postgres-sql
   migration-program-manager -->|requires| squad-map
   migration-program-manager -.->|escalates| mysql-to-postgres-sql

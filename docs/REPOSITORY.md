@@ -68,7 +68,8 @@ software-builder/
     ├── bug-diagnosis/             # Diagnose a non-incident bug or perf regression: repro, falsify hypotheses, report root cause
     ├── research-brief/            # Cited research findings for a bounded question, repository and/or external sources
     ├── issue-triage/              # Classify raw incoming issues/bugs/feature-requests: category, severity, duplicate, owner
-    └── initiative-mapper/         # Break a large, foggy effort into a decision-ticket map before prd-architect/implementation-planner
+    ├── initiative-mapper/         # Break a large, foggy effort into a decision-ticket map before prd-architect/implementation-planner
+    └── merge-conflict-analysis/     # In-progress git merge/rebase conflict: per-hunk resolution recommendation with cited intent, never applied
 ```
 
 Each skill directory follows the same pattern:
@@ -102,6 +103,7 @@ Each skill directory follows the same pattern:
 | `k8s-overprovisioning-datadog` | platform | ambient | — | `make lint-k8s-skill` |
 | `local-diff-review` | review | ambient | — | `make lint-local-diff-review` |
 | `loop-task-implementer` | automation | ambient | — | `make lint-loop-task-implementer` |
+| `merge-conflict-analysis` | review | ambient | — | `make lint-merge-conflict-analysis` |
 | `migration-program-manager` | migration | ambient | mysql-to-postgres-sql, squad-map | `make lint-migration-program-manager` |
 | `module-design` | architecture | ambient | — | `make lint-module-design` |
 | `mysql-to-postgres-sql` | migration | ambient | — | `make lint-mysql-to-postgres-sql` |

@@ -58,6 +58,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **k8s-overprovisioning-datadog** | [k8s-overprovisioning-datadog/README.md](../skills/k8s-overprovisioning-datadog/README.md) | [k8s-overprovisioning-datadog/SKILL.md](../skills/k8s-overprovisioning-datadog/SKILL.md) | [k8s-overprovisioning-datadog/SETUP.md](../skills/k8s-overprovisioning-datadog/SETUP.md) |
 | **local-diff-review** | [local-diff-review/README.md](../skills/local-diff-review/README.md) | [local-diff-review/SKILL.md](../skills/local-diff-review/SKILL.md) | [local-diff-review/SETUP.md](../skills/local-diff-review/SETUP.md) |
 | **loop-task-implementer** | [loop-task-implementer/README.md](../skills/loop-task-implementer/README.md) | [loop-task-implementer/SKILL.md](../skills/loop-task-implementer/SKILL.md) | [loop-task-implementer/SETUP.md](../skills/loop-task-implementer/SETUP.md) |
+| **merge-conflict-analysis** | [merge-conflict-analysis/README.md](../skills/merge-conflict-analysis/README.md) | [merge-conflict-analysis/SKILL.md](../skills/merge-conflict-analysis/SKILL.md) | [merge-conflict-analysis/SETUP.md](../skills/merge-conflict-analysis/SETUP.md) |
 | **migration-program-manager** | [migration-program-manager/README.md](../skills/migration-program-manager/README.md) | [migration-program-manager/SKILL.md](../skills/migration-program-manager/SKILL.md) | [migration-program-manager/SETUP.md](../skills/migration-program-manager/SETUP.md) |
 | **module-design** | [module-design/README.md](../skills/module-design/README.md) | [module-design/SKILL.md](../skills/module-design/SKILL.md) | [module-design/SETUP.md](../skills/module-design/SETUP.md) |
 | **mysql-to-postgres-sql** | [mysql-to-postgres-sql/README.md](../skills/mysql-to-postgres-sql/README.md) | [mysql-to-postgres-sql/SKILL.md](../skills/mysql-to-postgres-sql/SKILL.md) | [mysql-to-postgres-sql/SETUP.md](../skills/mysql-to-postgres-sql/SETUP.md) |
@@ -213,6 +214,7 @@ Skills reference each other when a finding belongs in another workflow:
 | initiative-mapper | A mapped ticket is one unresolved decision | engineering-decision-discovery |
 | initiative-mapper | A mapped ticket is scoped enough for a PRD | prd-architect |
 | initiative-mapper | A mapped ticket already has an approved design | implementation-planner |
+| merge-conflict-analysis | Recommendations are ready to apply | loop-task-implementer |
 <!-- cross-skill-routing:end -->
 
 Full symmetric matrix (forward + reverse escalations):

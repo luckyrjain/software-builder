@@ -1,0 +1,9 @@
+---
+description: Analyze an in-progress git merge or rebase conflict: read both sides' commit messages and, where discoverable, the originating PR/issue text, then recommend a per-hunk resolution that preserves both intents where possible — and where genuinely incompatible, the one matching the merge's own stated goal, with the trade-off named explicitly. Use when a merge or rebase is stuck on conflicts and the resolution needs to preserve intent rather than guess. Keywords: merge conflict, resolve this merge conflict, rebase conflict, conflicting hunks, what caused this conflict. Not for a clean, already-mergeable diff (pr-review, local-diff-review), or actually applying the recommended resolution (loop-task-implementer).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the merge-conflict-analysis skill. Read `skills/merge-conflict-analysis/SKILL.md` and follow it.
+Phase index: `skills/merge-conflict-analysis/reference/phase-index.md` when present under the skill directory.

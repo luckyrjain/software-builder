@@ -102,6 +102,7 @@ contracts:
       - research_brief
       - issue_triage_report
       - initiative_map
+      - merge_conflict_analysis
       artifact_schema_versions:
         mr_review_report: 2
         rca_report: 1
@@ -139,6 +140,7 @@ contracts:
         research_brief: 1
         issue_triage_report: 1
         initiative_map: 1
+        merge_conflict_analysis: 1
       state_semantics:
         mr_review_report: current_state
         rca_report: current_state
@@ -176,6 +178,7 @@ contracts:
         research_brief: current_state
         issue_triage_report: current_state
         initiative_map: proposed_state
+        merge_conflict_analysis: current_state
       allowed_state_semantics:
         prd_report:
         - proposed_state
@@ -234,6 +237,8 @@ contracts:
         - current_state
         initiative_map:
         - proposed_state
+        merge_conflict_analysis:
+        - current_state
       payload_types:
         rca_report:
           assessment_metadata: mapping
@@ -542,6 +547,14 @@ contracts:
           recommendation: string
           repository_write_action: string
           automatic_downstream_invocation: boolean
+        merge_conflict_analysis:
+          title: string
+          conflict_summary: string
+          hunks: list
+          unresolved_questions: list
+          recommendation: string
+          repository_write_action: string
+          automatic_downstream_invocation: boolean
       required_sections:
         skill_result:
           required_fields:
@@ -776,6 +789,11 @@ contracts:
         external_actions: write
         unattended: false
         merge: true
+      merge-conflict-analysis:
+        repository: read
+        external_actions: none
+        unattended: false
+        merge: false
       migration-program-manager:
         repository: read
         external_actions: none
@@ -908,6 +926,7 @@ contracts:
       k8s-overprovisioning-datadog: leaf
       local-diff-review: leaf
       loop-task-implementer: orchestrator
+      merge-conflict-analysis: leaf
       migration-program-manager: orchestrator
       module-design: leaf
       mysql-to-postgres-sql: leaf
@@ -958,6 +977,7 @@ contracts:
       k8s-overprovisioning-datadog: leaf
       local-diff-review: leaf
       loop-task-implementer: orchestrator
+      merge-conflict-analysis: leaf
       migration-program-manager: orchestrator
       module-design: leaf
       mysql-to-postgres-sql: leaf
@@ -1243,6 +1263,10 @@ contracts:
         mode: canonical
         owners:
         - initiative-mapper
+      merge_conflict_analysis:
+        mode: canonical
+        owners:
+        - merge-conflict-analysis
   composition:
     artifact_types:
     - mr_context
@@ -1284,6 +1308,7 @@ contracts:
     - research_brief
     - issue_triage_report
     - initiative_map
+    - merge_conflict_analysis
     artifact_schemas:
       mr_context:
         fields:
@@ -1656,6 +1681,15 @@ contracts:
         - initiative_description
         - decision_tickets
         - sequencing
+        - unresolved_questions
+        - recommendation
+        - repository_write_action
+        - automatic_downstream_invocation
+      merge_conflict_analysis:
+        fields:
+        - title
+        - conflict_summary
+        - hunks
         - unresolved_questions
         - recommendation
         - repository_write_action
@@ -2098,6 +2132,11 @@ contracts:
           - verification_gates
           - traceability
         write_authority: repository-write
+      merge-conflict-analysis:
+        produces:
+        - merge_conflict_analysis
+        consumes: []
+        write_authority: read-only
       migration-program-manager:
         produces:
         - migration_status_rollup
@@ -4113,6 +4152,46 @@ skills:
       patterns:
       - \bimplement\b.*\b(task|ticket|change)\b.*\b(review|fix|until|loop)\b
       - \brepeat\b.*\b(review|fix)\b.*\b(0 issues|zero issues)\b
+  merge-conflict-analysis:
+    path: skills/merge-conflict-analysis
+    category: review
+    extends: read-only-leaf-review
+    install:
+      requires: []
+    composition:
+      invokes: []
+      escalation_targets:
+      - loop-task-implementer
+    capabilities:
+      required:
+      - host.report.write
+      - host.repository.read
+      optional: []
+    lint:
+      skill_md_max_lines: 180
+      target: merge-conflict-analysis
+    version: 1.0.0
+    type: leaf
+    permissions:
+      repository: read
+      external_actions: none
+      unattended: false
+      merge: false
+    output_contract:
+      produces:
+      - merge_conflict_analysis
+    dependencies: []
+    degraded_behavior:
+      missing_capability: host.repository.read
+      available_capabilities:
+      - host.report.write
+      behavior: BLOCKED
+    setup_freshness:
+      external_services: None — reads repository state only
+    routing:
+      patterns:
+      - \bmerge conflict\b
+      - \brebase conflict\b
   migration-program-manager:
     path: skills/migration-program-manager
     category: migration

@@ -1,0 +1,47 @@
+merge-conflict-analysis:
+  path: skills/merge-conflict-analysis
+  category: review
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    invokes: []
+    escalation_targets:
+    - loop-task-implementer
+  capabilities:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: merge-conflict-analysis
+  version: 1.0.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - merge_conflict_analysis
+  dependencies: []
+  degraded_behavior:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None — reads repository state only
+  routing:
+    # Bare, co-occurrence-free compound-phrase anchors, confirmed unused anywhere else in the
+    # registry at spec time (docs/superpowers/specs/2026-09-11-two-skill-port-design.md, Global
+    # Constraint 1) -- mirrors squad-map's and initiative-mapper's proven-safe shape rather than a
+    # generic verb+noun pattern needing its own collision sweep. Do not add exclude_patterns
+    # defensively; add one later only against a real, reproduced false positive (3 of the 5 prior
+    # ports this session shipped a defensive exclude that protected nothing or orphaned a
+    # legitimate request -- see the spec's Global Constraint 3).
+    patterns:
+    - \bmerge conflict\b
+    - \brebase conflict\b

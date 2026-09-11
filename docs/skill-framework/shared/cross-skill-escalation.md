@@ -1,7 +1,7 @@
 # Cross-skill escalation (shared)
 
-**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, domain-modeling, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, module-design, codebase-architecture-review, engineering-decision-discovery, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, local-diff-review, bug-diagnosis, research-brief, production-readiness-review, issue-triage, and
-initiative-mapper.
+**Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, domain-modeling, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, module-design, codebase-architecture-review, engineering-decision-discovery, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, local-diff-review, bug-diagnosis, research-brief, production-readiness-review, issue-triage,
+initiative-mapper, and merge-conflict-analysis.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -145,6 +145,7 @@ dispatch, and `codebase-architecture-review`'s `composition.invokes` does not ga
 | A mapped ticket is one unresolved decision | initiative-mapper → engineering-decision-discovery | `initiative_map` (ticket + evidence refs) | "Grill me on the unresolved decision for ticket `{ticket_id}` in `{initiative}`" |
 | A mapped ticket is scoped enough for a PRD | initiative-mapper → prd-architect | `initiative_map` (ticket + evidence) | "Write an implementation-ready PRD for ticket `{ticket_id}` in `{initiative}`" |
 | A mapped ticket already has an approved design | initiative-mapper → implementation-planner | `initiative_map` (ticket + evidence) | "Create the implementation plan for ticket `{ticket_id}` in `{initiative}`" |
+| Recommendations are ready to apply | merge-conflict-analysis → loop-task-implementer | `merge_conflict_analysis` (per-hunk recommendations + cited intent) | "Apply the recommended resolutions for the in-progress merge conflict" |
 
 Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local deltas only.
 
@@ -262,6 +263,7 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | General cited research question, not this codebase's own behavior | research-brief |
 | Raw, unscoped issue/bug/feature-request classification, human turn available | issue-triage |
 | Large, foggy, too-big-for-one-session effort decomposition | initiative-mapper |
+| In-progress git merge/rebase conflict needing a preserved-intent resolution recommendation | merge-conflict-analysis |
 
 See each skill's **when NOT to use** table in `SKILL.md`.
 
