@@ -472,6 +472,7 @@ def build_rollup(
                         "shadow_compare": json_safe(svc.get("shadow_compare")),
                         "config_cutover": json_safe(svc.get("config_cutover")),
                         "mr_url": json_safe(svc.get("mr_url", "")),
+                        "notes": json_safe(svc.get("notes", "")),
                     },
                     evidence_ref=str(Path(entry.workspace_root) / "MIGRATION_STATUS.yaml"),
                     last_updated=now_iso(),
