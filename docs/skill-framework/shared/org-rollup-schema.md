@@ -88,7 +88,7 @@ aggregates across workspaces) and additionally persists a `staleness_days` value
 | `service` | `services[].name` |
 | `status` | `blocked` if any of `scan_gate`/`shadow_compare`/`config_cutover` is `fail`; `stalled` if a gate has been `pending`/`not_run` past a consuming skill's own staleness threshold (not defined here); else `in_progress` or `done` |
 | `priority` | `services[].tier_focus` (`P0`/`P1`/`P2`; `dialect-only` maps to `null`) |
-| `value` | `{scan_gate, shadow_compare, config_cutover, mr_url}` verbatim |
+| `value` | `{scan_gate, shadow_compare, config_cutover, mr_url, notes}` verbatim |
 | `evidence_ref` | The `MIGRATION_STATUS.yaml` path itself |
 
 ### k8s-overprovisioning-datadog → `k8s_waste`

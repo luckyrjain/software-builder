@@ -373,6 +373,35 @@ class TestBuildRollup:
         json.dumps([i.to_dict() for i in items])  # must not raise
         assert items[0].value["mr_url"] == "2026-08-05"
 
+    def test_notes_field_flows_through_to_rollup_value(self, tmp_path):
+        # MIGRATION_STATUS.yaml's own `notes` field (documented in reference/report-format.md and
+        # SKILL.md as a rendered report column) used to never make it into RollupItem.value at
+        # all -- silently dropped between the source file and the JSON rollup, so the report's
+        # own Notes column had nothing to render regardless of what a service's notes said.
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text(
+            "schema_version: 1\nservices:\n  - name: svc-a\n    path: svc-a\n"
+            "    tier_focus: P0\n    scan_gate: pass\n    shadow_compare: pass\n    config_cutover: done\n"
+            "    notes: blocked on DBA sign-off\n",
+            encoding="utf-8",
+        )
+        manifest = [ManifestEntry(workspace_root=str(ws))]
+        items, gaps, new_state = build_rollup(manifest, {}, datetime.now(timezone.utc), staleness_threshold_days=14)
+        assert items[0].value["notes"] == "blocked on DBA sign-off"
+
+    def test_missing_notes_field_defaults_to_empty_string(self, tmp_path):
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / "MIGRATION_STATUS.yaml").write_text(
+            "schema_version: 1\nservices:\n  - name: svc-a\n    path: svc-a\n"
+            "    tier_focus: P0\n    scan_gate: pass\n    shadow_compare: pass\n    config_cutover: done\n",
+            encoding="utf-8",
+        )
+        manifest = [ManifestEntry(workspace_root=str(ws))]
+        items, gaps, new_state = build_rollup(manifest, {}, datetime.now(timezone.utc), staleness_threshold_days=14)
+        assert items[0].value["notes"] == ""
+
     def test_yaml_auto_typed_name_and_path_do_not_crash_squad_join(self, tmp_path):
         # A hand-edited MIGRATION_STATUS.yaml leaving 'name' or 'path' as an unquoted date- or
         # number-shaped value (e.g. a service literally named after a date or ticket number) is
