@@ -27,6 +27,7 @@ skill_types:
   k8s-overprovisioning-datadog: leaf
   local-diff-review: leaf
   loop-task-implementer: orchestrator
+  merge-conflict-analysis: leaf
   migration-program-manager: orchestrator
   module-design: leaf
   mysql-to-postgres-sql: leaf
@@ -312,3 +313,7 @@ artifact_ownership:
     mode: canonical
     owners:
     - initiative-mapper
+  merge_conflict_analysis:
+    mode: canonical
+    owners:
+    - merge-conflict-analysis

@@ -39,6 +39,7 @@ artifact_types:
 - research_brief
 - issue_triage_report
 - initiative_map
+- merge_conflict_analysis
 artifact_schemas:
   mr_context:
     fields:
@@ -411,6 +412,18 @@ artifact_schemas:
     - initiative_description
     - decision_tickets
     - sequencing
+    - unresolved_questions
+    - recommendation
+    - repository_write_action
+    - automatic_downstream_invocation
+  merge_conflict_analysis:
+    fields:
+    - title
+    - conflict_summary
+    - mode
+    - detected_by
+    - ours_theirs_note
+    - hunks
     - unresolved_questions
     - recommendation
     - repository_write_action
@@ -853,6 +866,11 @@ skills:
       - verification_gates
       - traceability
     write_authority: repository-write
+  merge-conflict-analysis:
+    produces:
+    - merge_conflict_analysis
+    consumes: []
+    write_authority: read-only
   migration-program-manager:
     produces:
     - migration_status_rollup

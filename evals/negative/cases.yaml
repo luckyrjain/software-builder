@@ -48,3 +48,4 @@ cases:
   - {skill: research-brief, prompt: "Understand the existing payments service and its current-state domain and bounded contexts.", expected_status: selected, expected_owner: domain-comprehension, forbidden_owner: research-brief}
   - {skill: issue-triage, prompt: "Run backlog tickets overnight and implement each one until zero issues.", expected_status: selected, expected_owner: backlog-runner, forbidden_owner: issue-triage}
   - {skill: initiative-mapper, prompt: "Write an implementation-ready PRD for adding a dark-mode toggle to settings.", expected_status: selected, expected_owner: prd-architect, forbidden_owner: initiative-mapper}
+  - {skill: merge-conflict-analysis, prompt: "Review this PR for correctness and regressions — the diff is already clean, no conflicts.", expected_status: selected, expected_owner: pr-review, forbidden_owner: merge-conflict-analysis}

@@ -76,6 +76,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | claude | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
 | claude | local-diff-review | BLOCKED | host.report.write, host.repository.read |
 | claude | loop-task-implementer | BLOCKED | host.role.isolation, host.ci.status, host.pull_request.write |
+| claude | merge-conflict-analysis | BLOCKED | host.report.write, host.repository.read |
 | claude | migration-program-manager | DEGRADED | — |
 | claude | module-design | BLOCKED | host.report.write, host.repository.read |
 | claude | mysql-to-postgres-sql | DEGRADED | — |
@@ -123,6 +124,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | cursor | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
 | cursor | local-diff-review | BLOCKED | host.report.write, host.repository.read |
 | cursor | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
+| cursor | merge-conflict-analysis | BLOCKED | host.report.write, host.repository.read |
 | cursor | migration-program-manager | BLOCKED | host.filesystem.read |
 | cursor | module-design | BLOCKED | host.report.write, host.repository.read |
 | cursor | mysql-to-postgres-sql | BLOCKED | host.repository.read_write |
@@ -170,6 +172,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | github-copilot | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
 | github-copilot | local-diff-review | BLOCKED | host.report.write, host.repository.read |
 | github-copilot | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
+| github-copilot | merge-conflict-analysis | BLOCKED | host.report.write, host.repository.read |
 | github-copilot | migration-program-manager | BLOCKED | host.filesystem.read |
 | github-copilot | module-design | BLOCKED | host.report.write, host.repository.read |
 | github-copilot | mysql-to-postgres-sql | BLOCKED | host.repository.read_write |
@@ -217,6 +220,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | kiro | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
 | kiro | local-diff-review | BLOCKED | host.report.write, host.repository.read |
 | kiro | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
+| kiro | merge-conflict-analysis | BLOCKED | host.report.write, host.repository.read |
 | kiro | migration-program-manager | BLOCKED | host.filesystem.read |
 | kiro | module-design | BLOCKED | host.report.write, host.repository.read |
 | kiro | mysql-to-postgres-sql | BLOCKED | host.repository.read_write |

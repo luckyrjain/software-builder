@@ -212,6 +212,11 @@ skills:
     degraded_modes:
       host.issue_tracker.read: task must be supplied as direct user text; cannot autonomously
         source tasks from a tracker query
+  merge-conflict-analysis:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
   migration-program-manager:
     required:
     - host.filesystem.read

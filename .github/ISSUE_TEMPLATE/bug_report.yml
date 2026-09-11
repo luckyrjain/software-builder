@@ -35,6 +35,7 @@ body:
         - k8s-overprovisioning-datadog
         - local-diff-review
         - loop-task-implementer
+        - merge-conflict-analysis
         - migration-program-manager
         - module-design
         - mysql-to-postgres-sql

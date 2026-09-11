@@ -120,6 +120,11 @@ skills:
     missing_capability: host.repository.read_write
     available_capabilities: []
     behavior: BLOCKED
+  merge-conflict-analysis:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
   migration-program-manager:
     missing_capability: host.filesystem.read
     available_capabilities: []

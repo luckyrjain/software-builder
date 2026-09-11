@@ -88,6 +88,7 @@ column.
 | `k8s-overprovisioning-datadog` | **Kubernetes MCP ❌** `kubernetes.metrics.history` | observability.metrics.query | FALLBACK | `datadog.query_metrics` |
 | `local-diff-review` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `loop-task-implementer` | `host.repository.read_write` | — | BLOCKED | — |
+| `merge-conflict-analysis` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `migration-program-manager` | `host.filesystem.read` | — | BLOCKED | — |
 | `module-design` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `mysql-to-postgres-sql` | `host.repository.read_write` | — | BLOCKED | — |

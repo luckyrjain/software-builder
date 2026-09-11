@@ -69,6 +69,8 @@ skills:
   loop-task-implementer:
     external_services: Git provider/API, CI provider (both repo-specific; no fixed
       MCP)
+  merge-conflict-analysis:
+    external_services: None — reads repository state only
   migration-program-manager:
     external_services: None (reads MIGRATION_STATUS.yaml + SQUAD_MAP.md on disk)
   module-design:

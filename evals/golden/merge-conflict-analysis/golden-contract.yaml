@@ -1,0 +1,128 @@
+schema_version: 1
+skill: merge-conflict-analysis
+case_id: golden-contract
+tier: 3
+description: >
+  An in-progress merge conflict produces a per-hunk resolution recommendation with both sides'
+  cited intent, never a written/staged/committed resolution. Also covers the detected mode and what
+  ours/theirs mean for it, a hunk with no discoverable originating context (unresolved question,
+  not guessed), and a hunk with genuinely incompatible intents (trade-off stated explicitly).
+recorded_output:
+  artifact: merge_conflict_analysis
+  repository_write_action: none
+  automatic_downstream_invocation: false
+  conflict_summary: "Merging feature/retry-logic into main — 2 conflicted files"
+  mode: merge
+  detected_by: "git rev-parse -q --verify MERGE_HEAD"
+  ours_theirs_note: "\"ours\" is main, the current branch (HEAD); \"theirs\" is feature/retry-logic (MERGE_HEAD). This is a merge, so the two are not inverted the way they would be during a rebase."
+  hunks:
+    - id: "H1"
+      file: "src/payment_client.py"
+      description: "Both branches added a retry loop to the same call site"
+      preserved_intent_ours: "main added exponential backoff with a 3-attempt cap (commit a1b2c3d: \"add retry cap to avoid thundering herd\")"
+      preserved_intent_theirs: "feature/retry-logic added idempotency-key generation before the same call (commit e4f5a6b: \"ensure retries are idempotent\")"
+      recommended_resolution: "Keep both: apply the idempotency-key generation first, then the capped exponential backoff around the call — the two changes touch adjacent, non-overlapping lines and both intents survive"
+      trade_off_note: "none — both intents preserved"
+    - id: "H2"
+      file: "src/config.py"
+      description: "main removed the legacy RETRY_TIMEOUT_MS constant; feature/retry-logic added a new usage of it"
+      preserved_intent_ours: "main's commit message states RETRY_TIMEOUT_MS was replaced repo-wide by RETRY_POLICY (commit 9c8d7e6: \"remove legacy retry timeout, superseded by RETRY_POLICY\")"
+      preserved_intent_theirs: "feature/retry-logic's new usage predates that removal and was never updated to use RETRY_POLICY"
+      recommended_resolution: "Drop the legacy constant per main's stated repo-wide migration; rewrite feature/retry-logic's new usage to read from RETRY_POLICY instead"
+      trade_off_note: "feature/retry-logic's literal reference to RETRY_TIMEOUT_MS does not survive as written — it is rewritten to use RETRY_POLICY, matching main's explicit repo-wide migration"
+  unresolved_questions:
+    - hunk: "H2"
+      file: "src/config.py"
+      missing_evidence: "No discoverable PR or issue text for either side beyond the two commit messages cited above"
+      impact: "The exact RETRY_POLICY field name to use is inferred from the constant's own definition, not confirmed against a design doc"
+  recommendation: "Resolve H1 (src/payment_client.py) by keeping both changes; resolve H2 (src/config.py) per main's stated migration, rewriting the new usage to RETRY_POLICY. Hand both to loop-task-implementer to apply."
+assertions:
+  - type: field_equals
+    path: artifact
+    value: merge_conflict_analysis
+  - type: field_equals
+    path: repository_write_action
+    value: none
+  - type: forbid_field_value
+    path: repository_write_action
+    value: apply_patch
+  - type: field_equals
+    path: automatic_downstream_invocation
+    value: false
+  - type: require_pattern
+    path: conflict_summary
+    pattern: "\\S"
+  # Mode: the operation is named, detection is git's own ref resolution (never a hardcoded
+  # `.git/...` path, which is wrong inside a linked worktree), and ours/theirs are spelled out
+  # because their meaning inverts between merge and rebase.
+  - type: field_in
+    path: mode
+    values: [merge, rebase, cherry-pick, revert, undetermined]
+  - type: field_equals
+    path: mode
+    value: merge
+  - type: require_pattern
+    path: detected_by
+    pattern: "git rev-parse"
+  - type: forbid_pattern
+    path: detected_by
+    pattern: "\\.git/"
+  - type: require_pattern
+    path: ours_theirs_note
+    pattern: "(?s)ours.*theirs"
+  # Hunk identity: exactly H1 then H2 and nothing else. A fabricated extra hunk — appended or
+  # inserted — fails one of these three, which the pre-strengthening assertion set did not catch.
+  - type: field_equals
+    path: hunks[0].id
+    value: "H1"
+  - type: field_equals
+    path: hunks[1].id
+    value: "H2"
+  - type: forbid_pattern
+    path: hunks[2]
+    pattern: "\\S"
+  - type: field_equals
+    path: hunks[0].file
+    value: "src/payment_client.py"
+  - type: field_equals
+    path: hunks[1].file
+    value: "src/config.py"
+  - type: field_equals
+    path: hunks[?id=='H1'].trade_off_note
+    value: "none — both intents preserved"
+  - type: require_pattern
+    path: hunks[?id=='H2'].trade_off_note
+    pattern: "does not survive as written"
+  - type: require_pattern
+    path: hunks[?id=='H1'].preserved_intent_ours
+    pattern: "exponential backoff"
+  - type: require_pattern
+    path: hunks[?id=='H1'].preserved_intent_theirs
+    pattern: "idempotency-key"
+  # recommended_resolution is pinned per hunk: H1 keeps both intents, H2 rewrites the feature-side
+  # usage onto main's stated migration. Neither may degrade into a bare side-pick ("just take
+  # mine"), which the pre-strengthening assertion set accepted silently.
+  - type: require_pattern
+    path: hunks[?id=='H1'].recommended_resolution
+    pattern: "(?s)keep both.*idempotency-key.*backoff"
+  - type: require_pattern
+    path: hunks[?id=='H2'].recommended_resolution
+    pattern: "RETRY_POLICY"
+  - type: require_pattern
+    path: hunks[?id=='H2'].recommended_resolution
+    pattern: "migration"
+  - type: forbid_pattern
+    path: hunks[?id=='H1'].recommended_resolution
+    pattern: "(just )?take (mine|theirs|ours)"
+  - type: forbid_pattern
+    path: hunks[?id=='H2'].recommended_resolution
+    pattern: "(just )?take (mine|theirs|ours)"
+  - type: require_pattern
+    path: unresolved_questions[?hunk=='H2'].missing_evidence
+    pattern: "No discoverable PR or issue text"
+  - type: require_pattern
+    path: recommendation
+    pattern: "loop-task-implementer"
+  - type: require_pattern
+    path: recommendation
+    pattern: "(?s)H1.*H2"
