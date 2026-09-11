@@ -961,6 +961,7 @@ skills:
       - project
       - merge_request_iid
       - head_sha
+      - expected_head_sha
     write_authority: comment
   pr-review:
     produces:
