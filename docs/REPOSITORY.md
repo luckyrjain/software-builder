@@ -67,7 +67,8 @@ software-builder/
     ├── tech-debt-assessor/        # Ranks debt by business impact x engineering drag x risk / effort
     ├── bug-diagnosis/             # Diagnose a non-incident bug or perf regression: repro, falsify hypotheses, report root cause
     ├── research-brief/            # Cited research findings for a bounded question, repository and/or external sources
-    └── issue-triage/              # Classify raw incoming issues/bugs/feature-requests: category, severity, duplicate, owner
+    ├── issue-triage/              # Classify raw incoming issues/bugs/feature-requests: category, severity, duplicate, owner
+    └── initiative-mapper/         # Break a large, foggy effort into a decision-ticket map before prd-architect/implementation-planner
 ```
 
 Each skill directory follows the same pattern:
@@ -95,6 +96,7 @@ Each skill directory follows the same pattern:
 | `implementation-planner` | automation | ambient | — | `make lint-implementation-planner` |
 | `incident-rca` | incident | ambient | — | `make lint-incident-rca` |
 | `incident-triage-agent` | incident | automation-only | incident-rca, squad-map | `make lint-incident-triage-agent` |
+| `initiative-mapper` | architecture | ambient | — | `make lint-initiative-mapper` |
 | `integration-test-creator` | testing | ambient | — | `make lint-integration-test-creator` |
 | `issue-triage` | analysis | ambient | — | `make lint-issue-triage` |
 | `k8s-overprovisioning-datadog` | platform | ambient | — | `make lint-k8s-skill` |

@@ -70,6 +70,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | claude | implementation-planner | BLOCKED | host.report.write, host.repository.read |
 | claude | incident-rca | BLOCKED | telemetry.logs.query |
 | claude | incident-triage-agent | BLOCKED | pager.webhook.receive |
+| claude | initiative-mapper | BLOCKED | host.report.write, host.repository.read |
 | claude | integration-test-creator | DEGRADED | — |
 | claude | issue-triage | BLOCKED | host.report.write, host.repository.read |
 | claude | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
@@ -116,6 +117,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | cursor | implementation-planner | BLOCKED | host.report.write, host.repository.read |
 | cursor | incident-rca | BLOCKED | telemetry.logs.query |
 | cursor | incident-triage-agent | BLOCKED | pager.webhook.receive |
+| cursor | initiative-mapper | BLOCKED | host.report.write, host.repository.read |
 | cursor | integration-test-creator | BLOCKED | host.repository.read_write |
 | cursor | issue-triage | BLOCKED | host.report.write, host.repository.read |
 | cursor | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
@@ -162,6 +164,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | github-copilot | implementation-planner | BLOCKED | host.report.write, host.repository.read |
 | github-copilot | incident-rca | BLOCKED | telemetry.logs.query |
 | github-copilot | incident-triage-agent | BLOCKED | pager.webhook.receive |
+| github-copilot | initiative-mapper | BLOCKED | host.report.write, host.repository.read |
 | github-copilot | integration-test-creator | BLOCKED | host.repository.read_write |
 | github-copilot | issue-triage | BLOCKED | host.report.write, host.repository.read |
 | github-copilot | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
@@ -208,6 +211,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | kiro | implementation-planner | BLOCKED | host.report.write, host.repository.read |
 | kiro | incident-rca | BLOCKED | telemetry.logs.query |
 | kiro | incident-triage-agent | BLOCKED | pager.webhook.receive |
+| kiro | initiative-mapper | BLOCKED | host.report.write, host.repository.read |
 | kiro | integration-test-creator | BLOCKED | host.repository.read_write |
 | kiro | issue-triage | BLOCKED | host.report.write, host.repository.read |
 | kiro | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |

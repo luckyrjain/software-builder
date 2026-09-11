@@ -61,6 +61,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 | Diagnose this bug, why is this failing, root cause of a test failure, performance regression diagnosis (non-incident), reproduce this bug | **bug-diagnosis** | incident-rca (a live production incident with a time window), loop-task-implementer (applying an already-diagnosed fix) |
 | Research this, find out whether, investigate this question, what does the documentation say, cited findings | **research-brief** | domain-comprehension (this codebase's own current-state behavior), engineering-decision-discovery (deciding between already-known options) |
 | Triage these issues, classify raw bugs/feature-requests, is this a duplicate of `<issue>`, which team owns this issue | **issue-triage** | incident-triage-agent (live paging-webhook incident, no human turn), backlog-runner (already-scoped tracker query it works through), squad-map (a bare "who owns this repo/service?" with no raw issue to classify — issue-triage recommends an owner only *for an issue it is triaging*, and escalates to squad-map when that ownership is unclear) |
+| Decision tickets, initiative map (the two phrases the registry's own patterns match), map this initiative, this effort is too big, decompose this into tickets, where do we even start | **initiative-mapper** | prd-architect (one already-scoped idea), implementation-planner (an already-approved design) |
 
 ## Disambiguation rules
 
@@ -92,6 +93,7 @@ When adding a new skill, add it here first; then each existing skill only needs 
 26. **A bug/test failure/perf regression with no active production time window** → bug-diagnosis directly; **an active production incident with a time window** → incident-rca directly.
 27. **A bounded research question needing cited findings** → research-brief directly; **this codebase's own current-state behavior** → domain-comprehension directly.
 28. **Raw, unscoped issues needing classification, a human turn available** → issue-triage directly; **a paging-webhook page-fire, no human turn available** → incident-triage-agent; **an already-scoped tracker query to work through** → backlog-runner directly.
+29. **A large, foggy effort with no clear starting sub-question** — in practice, a request that asks for **decision tickets** or an **initiative map** — → initiative-mapper directly; **one already-scoped idea** → prd-architect directly; **an already-approved design, on its own** → implementation-planner directly. An already-approved design or implementation-ready PRD named as *one ticket inside* a decision-ticket/initiative-map request stays with initiative-mapper: mixed ticket readiness is exactly what the map reports.
 
 ## Ambiguous requests — ask
 

@@ -92,6 +92,11 @@ skills:
     missing_capability: pager.webhook.receive
     available_capabilities: []
     behavior: BLOCKED
+  initiative-mapper:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
   integration-test-creator:
     missing_capability: host.repository.read_write
     available_capabilities: []

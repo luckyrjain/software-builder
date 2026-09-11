@@ -47,3 +47,4 @@ cases:
   - {skill: bug-diagnosis, prompt: "Diagnose this bug without repository read access.", missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
   - {skill: research-brief, missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
   - {skill: issue-triage, missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
+  - {skill: initiative-mapper, missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}

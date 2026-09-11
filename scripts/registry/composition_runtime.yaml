@@ -21,6 +21,7 @@ skill_types:
   implementation-planner: leaf
   incident-rca: leaf
   incident-triage-agent: trigger
+  initiative-mapper: leaf
   integration-test-creator: leaf
   issue-triage: leaf
   k8s-overprovisioning-datadog: leaf
@@ -307,3 +308,7 @@ artifact_ownership:
     mode: canonical
     owners:
     - issue-triage
+  initiative_map:
+    mode: canonical
+    owners:
+    - initiative-mapper

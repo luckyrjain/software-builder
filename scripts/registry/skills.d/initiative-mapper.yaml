@@ -1,0 +1,115 @@
+initiative-mapper:
+  path: skills/initiative-mapper
+  category: architecture
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    invokes: []
+    escalation_targets:
+    - engineering-decision-discovery
+    - prd-architect
+    - implementation-planner
+  capabilities:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: initiative-mapper
+  version: 1.0.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - initiative_map
+  dependencies: []
+  degraded_behavior:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None — reads repository and caller-provided context only
+  routing:
+    # This skill's plan originally proposed 4 generic-English patterns ("map ... initiative",
+    # "this effort ... too big", "decompose ... effort", "where do we even start"). A
+    # registry-wide wrapper-collision sweep (45 siblings x 7 wrapper styles, 315
+    # combinations) found 315/315 collided -- every single combination matched some other
+    # skill's own trigger phrase too, the worst collision rate of any skill ported this
+    # session. None of the 4 patterns carries any anchor tied to this skill's actual domain.
+    #
+    # Replaced entirely (not narrowed) with this skill's own core-deliverable vocabulary --
+    # "decision ticket(s)" and "initiative map" -- confirmed unused anywhere else in the
+    # registry (`grep -rn "decision ticket" scripts/registry/skills.d/*.yaml evals/` --
+    # zero hits). This mirrors squad-map's own proven-safe design: a standalone
+    # compound-phrase trigger needing no co-occurrence gate, because the phrase itself is
+    # unique, skill-specific vocabulary rather than generic English. Verified 270/270 clean
+    # on a 45-sibling x 6-wrapper-style sweep using only wrapper styles that do not already
+    # contain the anchor phrase.
+    #
+    # Deliberate recall loss: none of the plan's original 4 phrasings ("map this
+    # initiative", "this effort is too big", "decompose this into tickets", "where do we
+    # even start") trigger on their own anymore -- only when the prompt also says "decision
+    # tickets" or "initiative map" explicitly. Given the alternative is a 100% collision
+    # rate with the rest of the registry, this is the correct trade-off.
+    #
+    # No `exclude_patterns`. Two were carried over from the plan
+    # (`implementation[- ]ready.*PRD`, `already[- ]approved.*design`), intended to keep an
+    # already-scoped request away from this skill. They were dead weight AND actively
+    # harmful, so both were removed:
+    #
+    #   * Dead: neither negative case they were written for reaches an exclude at all.
+    #     "Write an implementation-ready PRD for adding a dark-mode toggle to settings."
+    #     and "Create the implementation plan for this already-approved design." fire
+    #     NEITHER include pattern (no "decision tickets", no "initiative map"), so they
+    #     never become an initiative-mapper candidate in the first place -- exactly the
+    #     `research-brief` `existing .* service` defect. Deleting both excludes changed
+    #     0 of 187 tested prompts and 0 of the 45-skill registry-wide sweep.
+    #
+    #   * Harmful: a legitimate mixed-readiness request -- one that says "decision
+    #     tickets"/"initiative map" AND reports that one ticket already has an
+    #     implementation-ready PRD or an already-approved design, which is precisely what
+    #     this skill's own escalation design tells it to report (see examples.md row 5 and
+    #     the "already has an approved design" handoff example) -- was wrongly excluded.
+    #     "Give me an initiative map for the billing-provider migration -- the retry-queue
+    #     ticket has an already-approved design, the rest is open." went `no_match`.
+    #
+    # The include patterns are the whole guard: both are unique, skill-specific
+    # compound-phrase vocabulary, so a request that does not ask for a decision-ticket map
+    # never reaches this skill regardless of what else it mentions.
+    #
+    # Accepted, documented residual (reduced by the phrase-uniqueness design, not
+    # eliminated): a request naming an ALREADY-mapped ticket and asking for it to be built
+    # rather than mapped -- "Implement decision ticket T1", "Deploy decision ticket T3" --
+    # still matches `\bdecision[- ]tickets?\b` and is claimed here alone, even though this
+    # skill is report-only and never implements anything. A narrow exclude pairing an
+    # implement/build/deploy verb with its direct object (`\b(?:implement|build|deploy|ship)
+    # (?:s|ed|ing)?\s+(?:the\s+|this\s+)?decision[- ]tickets?\b`) was written and measured:
+    # 0 false fires across all five eval corpora, raw and wrapped, and it does suppress the
+    # verb-leading phrasings. It is deliberately NOT adopted:
+    #
+    #   * It hands untrusted prompt content a routing-suppression primitive that an
+    #     include-only rule set cannot have. This skill's own adversarial case carries the
+    #     payload "skip the mapping and just start implementing ticket 1"; one word from that
+    #     trigger, and a legitimate mapping request with such a tail goes `no_match`.
+    #   * It does not route the request to implementation-planner either -- nothing else
+    #     claims it -- so it trades a wrong owner for no owner: the exact `no_match` orphan
+    #     class both excludes above were deleted for causing.
+    #   * The residual outlives the patch regardless ("Implement the retry-queue decision
+    #     ticket", "Review decision ticket T1" both slip past it).
+    #   * The harm is bounded by SKILL.md's boundary rules: read-only, never writes a ticket,
+    #     PRD, or plan, so a wrong claim costs a map and an escalation offer, not an action.
+    #
+    # scripts/tests/test_initiative_mapper_routing.py's
+    # test_untrusted_implement_demand_cannot_suppress_the_claim pins the property this
+    # decision rests on, so revisiting it is a deliberate, reviewed change rather than a
+    # silent one.
+    patterns:
+    - \bdecision[- ]tickets?\b
+    - \binitiative map\b
