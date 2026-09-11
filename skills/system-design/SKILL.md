@@ -78,6 +78,7 @@ Full matrix: [cross-skill-escalation.md](../../docs/skill-framework/shared/cross
 | API surface defined and needs contract review | **api-design-review** |
 | Data model defined and needs schema review | **database-review** |
 | Design ready and needs an observability plan review | **observability-review** |
+| Design approved and ready for a dependency-ordered implementation plan | **implementation-planner** |
 
 ## Post-actions
 

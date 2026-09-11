@@ -161,6 +161,7 @@ Skills reference each other when a finding belongs in another workflow:
 | system-design | Implementation-level design needs architecture validation | architecture-review |
 | architecture-review | Architecture decision approved, needs implementation-level design | system-design |
 | architecture-review | Architecture decision approved and ready to build | loop-task-implementer |
+| architecture-review | Architecture decision approved and needs a dependency-ordered multi-task plan first | implementation-planner |
 | architecture-review | A specific security/trust-boundary concern needs a deep audit | security-review |
 | architecture-review | The PRD itself has gaps, not the architecture | prd-architect |
 | codebase-architecture-review | A selected existing-code candidate needs one concrete module/interface/seam design | module-design |
@@ -178,6 +179,7 @@ Skills reference each other when a finding belongs in another workflow:
 | system-design | System design defines an API surface needing contract review | api-design-review |
 | system-design | System design defines a data model needing schema review | database-review |
 | system-design | System design ready, needs an observability plan review | observability-review |
+| system-design | Design approved and ready for a dependency-ordered implementation plan | implementation-planner |
 | api-design-review | API design finding looks exploitable | security-review |
 | api-design-review | Reviewing one already-merged MR's API change, not a standalone design | pr-review |
 | api-design-review | The API's underlying data model needs review | database-review |

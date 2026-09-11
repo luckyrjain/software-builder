@@ -13,6 +13,7 @@ graph TD
   architecture-review -.->|escalates| system-design
   architecture-review -.->|escalates| security-review
   architecture-review -.->|escalates| loop-task-implementer
+  architecture-review -.->|escalates| implementation-planner
   architecture-review -.->|escalates| prd-architect
   backlog-runner -->|invokes| loop-task-implementer
   bug-diagnosis -.->|escalates| loop-task-implementer
@@ -115,6 +116,7 @@ graph TD
   system-design -.->|escalates| api-design-review
   system-design -.->|escalates| database-review
   system-design -.->|escalates| observability-review
+  system-design -.->|escalates| implementation-planner
   tech-debt-assessor -.->|escalates| migration-program-manager
   tech-debt-assessor -.->|escalates| cost-optimization-sprint-planner
   test-writer -->|invokes| unit-test-creator

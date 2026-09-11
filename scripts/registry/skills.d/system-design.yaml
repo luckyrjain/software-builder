@@ -9,6 +9,7 @@ system-design:
     - api-design-review
     - database-review
     - observability-review
+    - implementation-planner
     consumes:
     - prd_report
     - architecture_review_report
