@@ -11,6 +11,7 @@ body:
         # GENERATED from skills.yaml — run make generate
         - api-design-review
         - api-test-creator
+        - architecture-remediation-loop
         - architecture-review
         - backlog-runner
         - bug-diagnosis

@@ -10,6 +10,13 @@ routes:
   api-test-creator:
     patterns:
     - \b(API|HTTP|REST)\b.*\b(tests?|testing suite)\b
+  architecture-remediation-loop:
+    patterns:
+    - \b(architecture remediation loop|whole[- ]codebase architecture (improvement|remediation)|architecture
+      (improvement|remediation) loop)\b
+    - \b(architecture|codebase)\b.*\b(remediation loop|convergence loop|until (zero|clean|convergence))\b
+    exclude_patterns:
+    - \b(PR|MR|pull request|merge request)\s*[#!]?\d+\b
   architecture-review:
     patterns:
     - \b(architecture review|ADR|architecture decision record|architecture design

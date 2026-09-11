@@ -2,6 +2,14 @@ graph TD
   api-design-review -.->|escalates| security-review
   api-design-review -.->|escalates| pr-review
   api-design-review -.->|escalates| database-review
+  architecture-remediation-loop -->|invokes| loop-task-implementer
+  architecture-remediation-loop -->|invokes| production-readiness-review
+  architecture-remediation-loop -.->|escalates| codebase-architecture-review
+  architecture-remediation-loop -.->|escalates| engineering-decision-discovery
+  architecture-remediation-loop -.->|escalates| module-design
+  architecture-remediation-loop -.->|escalates| loop-task-implementer
+  architecture-remediation-loop -.->|escalates| production-readiness-review
+  architecture-remediation-loop -.->|escalates| domain-comprehension
   architecture-review -.->|escalates| system-design
   architecture-review -.->|escalates| security-review
   architecture-review -.->|escalates| loop-task-implementer

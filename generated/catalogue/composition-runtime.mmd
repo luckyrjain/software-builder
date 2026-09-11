@@ -1,6 +1,7 @@
 graph TD
   api-design-review["api-design-review<br/>leaf"]
   api-test-creator["api-test-creator<br/>leaf"]
+  architecture-remediation-loop["architecture-remediation-loop<br/>orchestrator"]
   architecture-review["architecture-review<br/>leaf"]
   backlog-runner["backlog-runner<br/>trigger"]
   bug-diagnosis["bug-diagnosis<br/>leaf"]
@@ -51,6 +52,19 @@ graph TD
   api-design-review -.->|escalates| database-review
   api-design-review -.->|escalates| pr-review
   api-design-review -.->|escalates| security-review
+  architecture-remediation-loop -->|requires| codebase-architecture-review
+  architecture-remediation-loop -->|requires| engineering-decision-discovery
+  architecture-remediation-loop -->|requires| loop-task-implementer
+  architecture-remediation-loop -->|requires| module-design
+  architecture-remediation-loop -->|requires| production-readiness-review
+  architecture-remediation-loop ==>|handoff| loop-task-implementer
+  architecture-remediation-loop ==>|handoff| production-readiness-review
+  architecture-remediation-loop -.->|escalates| codebase-architecture-review
+  architecture-remediation-loop -.->|escalates| domain-comprehension
+  architecture-remediation-loop -.->|escalates| engineering-decision-discovery
+  architecture-remediation-loop -.->|escalates| loop-task-implementer
+  architecture-remediation-loop -.->|escalates| module-design
+  architecture-remediation-loop -.->|escalates| production-readiness-review
   architecture-review -.->|escalates| loop-task-implementer
   architecture-review -.->|escalates| prd-architect
   architecture-review -.->|escalates| security-review
@@ -207,15 +221,21 @@ graph TD
   capacity-planner -->|capacity_plan| production-readiness-review
   change-impact-analyzer -->|change_impact_report| implementation-planner
   change-impact-analyzer -->|change_impact_report| production-readiness-review
+  codebase-architecture-review -->|codebase_architecture_report| architecture-remediation-loop
   cost-optimization-sprint-planner -->|cost_optimization_sprint_rollup| weekly-squad-digest
   database-review -->|database_review_report| implementation-planner
   database-review -->|database_review_report| production-readiness-review
   dependency-upgrade-review -->|dependency_upgrade_report| implementation-planner
   dependency-upgrade-review -->|dependency_upgrade_report| production-readiness-review
   deployment-risk-review -->|deployment_risk_report| production-readiness-review
+  engineering-decision-discovery -->|engineering_decision_record| architecture-remediation-loop
   implementation-planner -->|implementation_plan| loop-task-implementer
+  backlog-runner -->|implementation_pr| architecture-remediation-loop
+  loop-task-implementer -->|implementation_pr| architecture-remediation-loop
+  mysql-to-postgres-sql -->|implementation_pr| architecture-remediation-loop
   k8s-overprovisioning-datadog -->|k8s_rightsizing_report| release-readiness-checker
   migration-program-manager -->|migration_status_rollup| weekly-squad-digest
+  module-design -->|module_design_spec| architecture-remediation-loop
   pr-gatekeeper -->|mr_review_report| production-readiness-review
   pr-gatekeeper -->|mr_review_report| release-readiness-checker
   pr-review -->|mr_review_report| production-readiness-review
@@ -227,6 +247,7 @@ graph TD
   prd-architect -->|prd_report| architecture-review
   prd-architect -->|prd_report| loop-task-implementer
   prd-architect -->|prd_report| system-design
+  production-readiness-review -->|production_readiness_report| architecture-remediation-loop
   production-readiness-review -->|production_readiness_report| release-readiness-checker
   incident-rca -->|rca_report| release-readiness-checker
   incident-triage-agent -->|rca_report| release-readiness-checker

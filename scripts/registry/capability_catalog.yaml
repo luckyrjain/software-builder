@@ -22,6 +22,17 @@ skills:
         mark status UNVERIFIED
       host.test_runner.execute: collection is generated but hand off for manual/CI
         execution instead of iterating to green locally
+  architecture-remediation-loop:
+    required:
+    - host.report.write
+    - codebase-architecture-review.invoke
+    - loop-task-implementer.invoke
+    - production-readiness-review.invoke
+    optional:
+    - name: engineering-decision-discovery.invoke
+      enables: candidate grilling and disposition
+    - name: module-design.invoke
+      enables: module/interface/seam design for candidates that need it
   architecture-review:
     required:
     - host.report.write

@@ -41,6 +41,7 @@ artifact_types:
 - initiative_map
 - merge_conflict_analysis
 - stakeholder_questionnaire
+- architecture_remediation_report
 artifact_schemas:
   mr_context:
     fields:
@@ -438,6 +439,17 @@ artifact_schemas:
     - recommendation
     - repository_write_action
     - automatic_downstream_invocation
+  architecture_remediation_report:
+    fields:
+    - review_scope
+    - converged
+    - cycles_run
+    - gate_a_status
+    - gate_b_status
+    - stopped_reason
+    - candidates
+    - batches
+    - ledger_ref
 creator_parity:
   skills:
   - unit-test-creator
@@ -507,6 +519,16 @@ skills:
       - session_token_budget
       - output_dir
       - specialist_inputs
+    write_authority: repository-write
+  architecture-remediation-loop:
+    produces:
+    - architecture_remediation_report
+    consumes:
+    - codebase_architecture_report
+    - engineering_decision_record
+    - module_design_spec
+    - implementation_pr
+    - production_readiness_report
     write_authority: repository-write
   architecture-review:
     produces:

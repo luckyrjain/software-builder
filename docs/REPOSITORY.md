@@ -50,6 +50,7 @@ software-builder/
     ├── production-readiness-review/ # Read-only rollup verdict for one exact PR/MR/release candidate
     ├── architecture-review/       # Architecture decision, risks, scale limits, failure modes, alternatives
     ├── codebase-architecture-review/ # Bounded, evidence-backed review of an existing codebase's architecture friction
+    ├── architecture-remediation-loop/ # Autonomous whole-codebase architecture remediation loop composed from existing skills
     ├── local-diff-review/          # Review changes since a fixed point (commit/branch/tag/merge-base), not a live PR/MR
     ├── engineering-decision-discovery/ # Interactive, evidence-backed challenge that surfaces and resolves unsettled engineering decisions
     ├── module-design/              # Evidence-backed design for one concrete module's contract, seams, dependencies, tests
@@ -80,6 +81,7 @@ Each skill directory follows the same pattern:
 |-------|----------|------------|------------------|-------------|
 | `api-design-review` | review | ambient | — | `make lint-api-design-review` |
 | `api-test-creator` | testing | ambient | — | `make lint-api-test-creator` |
+| `architecture-remediation-loop` | architecture | ambient | codebase-architecture-review, engineering-decision-discovery, module-design, loop-task-implementer, production-readiness-review | `make lint-architecture-remediation-loop` |
 | `architecture-review` | review | ambient | — | `make lint-architecture-review` |
 | `backlog-runner` | automation | automation-only | loop-task-implementer | `make lint-backlog-runner` |
 | `bug-diagnosis` | review | ambient | — | `make lint-bug-diagnosis` |

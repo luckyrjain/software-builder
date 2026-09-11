@@ -34,6 +34,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 |-------|----------------|-------------|-------|
 | **api-design-review** | [api-design-review/README.md](../skills/api-design-review/README.md) | [api-design-review/SKILL.md](../skills/api-design-review/SKILL.md) | [api-design-review/SETUP.md](../skills/api-design-review/SETUP.md) |
 | **api-test-creator** | [api-test-creator/README.md](../skills/api-test-creator/README.md) | [api-test-creator/SKILL.md](../skills/api-test-creator/SKILL.md) | [api-test-creator/SETUP.md](../skills/api-test-creator/SETUP.md) |
+| **architecture-remediation-loop** | [architecture-remediation-loop/README.md](../skills/architecture-remediation-loop/README.md) | [architecture-remediation-loop/SKILL.md](../skills/architecture-remediation-loop/SKILL.md) | [architecture-remediation-loop/SETUP.md](../skills/architecture-remediation-loop/SETUP.md) |
 | **architecture-review** | [architecture-review/README.md](../skills/architecture-review/README.md) | [architecture-review/SKILL.md](../skills/architecture-review/SKILL.md) | [architecture-review/SETUP.md](../skills/architecture-review/SETUP.md) |
 | **backlog-runner** | [backlog-runner/README.md](../skills/backlog-runner/README.md) | [backlog-runner/SKILL.md](../skills/backlog-runner/SKILL.md) | [backlog-runner/SETUP.md](../skills/backlog-runner/SETUP.md) |
 | **bug-diagnosis** | [bug-diagnosis/README.md](../skills/bug-diagnosis/README.md) | [bug-diagnosis/SKILL.md](../skills/bug-diagnosis/SKILL.md) | [bug-diagnosis/SETUP.md](../skills/bug-diagnosis/SETUP.md) |
@@ -217,6 +218,12 @@ Skills reference each other when a finding belongs in another workflow:
 | initiative-mapper | A mapped ticket already has an approved design | implementation-planner |
 | merge-conflict-analysis | Recommendations are ready to apply | loop-task-implementer |
 | stakeholder-questionnaire | The recipient's (future) answers would resolve a decision that still needs interrogating | engineering-decision-discovery |
+| architecture-remediation-loop | Every cycle — discover fresh architecture candidates for the ledger | codebase-architecture-review |
+| architecture-remediation-loop | Every candidate — grill and disposition before it can proceed | engineering-decision-discovery |
+| architecture-remediation-loop | An accepted candidate needs a concrete module/interface/seam design | module-design |
+| architecture-remediation-loop | A batch of accepted, dispositioned candidates is ready to implement | loop-task-implementer |
+| architecture-remediation-loop | This cycle's accepted batches are merge-confirmed; confirm the resulting state is clean before rediscovery | production-readiness-review |
+| architecture-remediation-loop | A candidate needs unfamiliar-domain context before disposition | domain-comprehension |
 | stakeholder-questionnaire | The recipient's (future) answers would become PRD input | prd-architect |
 <!-- cross-skill-routing:end -->
 

@@ -2,7 +2,7 @@
 
 [![Lint](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml/badge.svg)](https://github.com/luckyrjain/software-builder/actions/workflows/lint.yml)
 <!-- skills-count:start -->
-![Skills](https://img.shields.io/badge/skills-49-blue)
+![Skills](https://img.shields.io/badge/skills-50-blue)
 <!-- skills-count:end -->
 
 Host-agnostic, evidence-driven agent skills for software delivery: code review, incident response,

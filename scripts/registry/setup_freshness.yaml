@@ -12,6 +12,8 @@ skills:
       only
   api-test-creator:
     external_services: Newman CLI + reachable API base URL
+  architecture-remediation-loop:
+    external_services: None of its own — inherits whatever each composed skill requires
   architecture-review:
     external_services: None — reads supplied PRD/design content and repository only
   backlog-runner:
