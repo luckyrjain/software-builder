@@ -2286,6 +2286,7 @@ contracts:
           - project
           - merge_request_iid
           - head_sha
+          - expected_head_sha
         write_authority: comment
       pr-review:
         produces:
@@ -4723,6 +4724,7 @@ skills:
         - project
         - merge_request_iid
         - head_sha
+        - expected_head_sha
     capabilities:
       required:
       - gitlab.get_merge_request
