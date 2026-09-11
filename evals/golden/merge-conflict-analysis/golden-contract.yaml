@@ -1,0 +1,66 @@
+schema_version: 1
+skill: merge-conflict-analysis
+case_id: golden-contract
+tier: 3
+description: >
+  An in-progress merge conflict produces a per-hunk resolution recommendation with both sides'
+  cited intent, never a written/staged/committed resolution. Also covers a hunk with no
+  discoverable originating context (unresolved question, not guessed) and a hunk with genuinely
+  incompatible intents (trade-off stated explicitly).
+recorded_output:
+  artifact: merge_conflict_analysis
+  repository_write_action: none
+  automatic_downstream_invocation: false
+  conflict_summary: "Merging feature/retry-logic into main — 2 conflicted files"
+  hunks:
+    - file: "src/payment_client.py"
+      description: "Both branches added a retry loop to the same call site"
+      preserved_intent_ours: "main added exponential backoff with a 3-attempt cap (commit a1b2c3d: \"add retry cap to avoid thundering herd\")"
+      preserved_intent_theirs: "feature/retry-logic added idempotency-key generation before the same call (commit e4f5a6b: \"ensure retries are idempotent\")"
+      recommended_resolution: "Keep both: apply the idempotency-key generation first, then the capped exponential backoff around the call — the two changes touch adjacent, non-overlapping lines and both intents survive"
+      trade_off_note: "none — both intents preserved"
+    - file: "src/config.py"
+      description: "main removed the legacy RETRY_TIMEOUT_MS constant; feature/retry-logic added a new usage of it"
+      preserved_intent_ours: "main's commit message states RETRY_TIMEOUT_MS was replaced repo-wide by RETRY_POLICY (commit 9c8d7e6: \"remove legacy retry timeout, superseded by RETRY_POLICY\")"
+      preserved_intent_theirs: "feature/retry-logic's new usage predates that removal and was never updated to use RETRY_POLICY"
+      recommended_resolution: "Drop the legacy constant per main's stated migration goal; update feature/retry-logic's new usage to read from RETRY_POLICY instead"
+      trade_off_note: "feature/retry-logic's literal reference to RETRY_TIMEOUT_MS does not survive as written — it is rewritten to use RETRY_POLICY, matching main's explicit repo-wide migration"
+  unresolved_questions:
+    - hunk: "src/config.py"
+      missing_evidence: "No discoverable PR or issue text for either side beyond the two commit messages cited above"
+      impact: "The exact RETRY_POLICY field name to use is inferred from the constant's own definition, not confirmed against a design doc"
+  recommendation: "Resolve src/payment_client.py by keeping both changes; resolve src/config.py per main's stated migration, rewriting the new usage to RETRY_POLICY. Hand both to loop-task-implementer to apply."
+assertions:
+  - type: field_equals
+    path: artifact
+    value: merge_conflict_analysis
+  - type: field_equals
+    path: repository_write_action
+    value: none
+  - type: forbid_field_value
+    path: repository_write_action
+    value: apply_patch
+  - type: field_equals
+    path: automatic_downstream_invocation
+    value: false
+  - type: require_pattern
+    path: conflict_summary
+    pattern: "\\S"
+  - type: field_equals
+    path: hunks[?file=='src/payment_client.py'].trade_off_note
+    value: "none — both intents preserved"
+  - type: require_pattern
+    path: hunks[?file=='src/config.py'].trade_off_note
+    pattern: "does not survive as written"
+  - type: require_pattern
+    path: hunks[?file=='src/payment_client.py'].preserved_intent_ours
+    pattern: "exponential backoff"
+  - type: require_pattern
+    path: hunks[?file=='src/payment_client.py'].preserved_intent_theirs
+    pattern: "idempotency-key"
+  - type: require_pattern
+    path: unresolved_questions[?hunk=='src/config.py'].missing_evidence
+    pattern: "No discoverable PR or issue text"
+  - type: require_pattern
+    path: recommendation
+    pattern: "loop-task-implementer"
