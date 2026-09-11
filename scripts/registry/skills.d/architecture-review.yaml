@@ -9,6 +9,7 @@ architecture-review:
     - system-design
     - security-review
     - loop-task-implementer
+    - implementation-planner
     - prd-architect
     consumes:
     - system_design_spec

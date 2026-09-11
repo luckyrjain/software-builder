@@ -65,6 +65,7 @@ graph TD
   architecture-remediation-loop -.->|escalates| loop-task-implementer
   architecture-remediation-loop -.->|escalates| module-design
   architecture-remediation-loop -.->|escalates| production-readiness-review
+  architecture-review -.->|escalates| implementation-planner
   architecture-review -.->|escalates| loop-task-implementer
   architecture-review -.->|escalates| prd-architect
   architecture-review -.->|escalates| security-review
@@ -195,6 +196,7 @@ graph TD
   stakeholder-questionnaire -.->|escalates| prd-architect
   system-design -.->|escalates| api-design-review
   system-design -.->|escalates| database-review
+  system-design -.->|escalates| implementation-planner
   system-design -.->|escalates| observability-review
   tech-debt-assessor -.->|escalates| cost-optimization-sprint-planner
   tech-debt-assessor -.->|escalates| migration-program-manager
