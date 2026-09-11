@@ -30,6 +30,7 @@ graph TD
   dependency-upgrade-review -.->|escalates| security-review
   deployment-risk-review -.->|escalates| release-readiness-checker
   deployment-risk-review -.->|escalates| incident-triage-agent
+  deployment-risk-review -.->|escalates| resilience-review
   domain-comprehension -->|invokes| squad-map
   domain-modeling -.->|escalates| domain-comprehension
   domain-modeling -.->|escalates| module-design

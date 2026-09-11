@@ -88,6 +88,7 @@ Full matrix: [cross-skill-escalation.md](../../docs/skill-framework/shared/cross
 |-----------------------|------------|
 | Caller wants the full multi-repo release go/no-go sweep, not one change | **release-readiness-checker** |
 | This deploy already happened and something broke | **incident-triage-agent** |
+| Dependency risk finding names a hard dependency with no documented timeout/retry/fallback | **resilience-review** |
 
 ## Post-actions
 
