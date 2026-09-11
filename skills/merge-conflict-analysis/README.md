@@ -1,9 +1,11 @@
 # merge-conflict-analysis
 
-Analyzes an in-progress git merge or rebase conflict from live repository state — not a
-hypothetical or already-resolved one. It produces a report-only `MERGE_CONFLICT_ANALYSIS.md` /
-`merge_conflict_analysis`; it never resolves a hunk, stages, commits, or continues/aborts the
-merge or rebase.
+Analyzes an in-progress git conflict from live repository state — not a hypothetical or
+already-resolved one. Merges, rebases, cherry-picks, reverts, and the ref-less cases
+(`git merge --squash`, `git stash pop`) are all detected by asking git to resolve the ref or path
+itself, so it works unchanged inside a linked worktree where `.git` is a file rather than a
+directory. It produces a report-only `MERGE_CONFLICT_ANALYSIS.md` / `merge_conflict_analysis`; it
+never resolves a hunk, stages, commits, or continues/aborts the operation.
 
 Use it to cite both sides' intent from commit messages and, where discoverable, originating
 PR/issue text, recommend a per-hunk resolution that preserves both intents where possible, and —

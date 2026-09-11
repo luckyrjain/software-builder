@@ -14,7 +14,17 @@ For each conflicted file in `conflict_state`, for each conflict hunk (each `<<<<
 
 1. **Find each side's primary source.** Read the commit(s) that introduced each side's version of
    the hunk (`git log`, `git show`) — the commit message states intent directly more often than
-   the diff alone does. Where a commit message references an issue/ticket or the branch name
+   the diff alone does. Which ref names each side is mode-dependent — use the mode `conflict_state`
+   recorded ([inputs.md](inputs.md) step 5):
+
+   | Mode | Reading "ours" | Reading "theirs" |
+   |------|----------------|--------------------|
+   | merge | the current branch by name, or `HEAD` | the branch being merged in by name, or `MERGE_HEAD` |
+   | cherry-pick / revert | `HEAD` | `git show CHERRY_PICK_HEAD` / `git show REVERT_HEAD` |
+   | rebase | `HEAD` — the base already replayed onto | `git show REBASE_HEAD` / `git log -1 REBASE_HEAD` — the commit being replayed is **not** reachable by branch name the way a merge's two sides are; `REBASE_HEAD` exists during a conflicted rebase precisely for this |
+   | undetermined | `HEAD`, with the operation stated as unconfirmed | no ref available — read the working-tree stages (`git show :2:<path>` / `:3:<path>`) and say the commit-level intent could not be recovered |
+
+   Where a commit message references an issue/ticket or the branch name
    suggests a PR, check whether that text is present anywhere in the repository's own history
    (this skill has no external tracker access — cite only what's actually discoverable in-repo;
    an issue number with no corresponding commit-message context stays a bare reference, not

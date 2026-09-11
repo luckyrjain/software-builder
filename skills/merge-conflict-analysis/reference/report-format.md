@@ -20,17 +20,26 @@ any of them:
 ```markdown
 # Merge Conflict Analysis — <conflict_summary>
 
+## Mode
+
+| Field | Value |
+|-------|-------|
+| Git operation | merge / rebase / cherry-pick / revert / undetermined |
+| Detected by | `MERGE_HEAD` / `rebase-merge` / `rebase-apply` / `CHERRY_PICK_HEAD` / `REVERT_HEAD` / unmerged paths only |
+| "ours" means | <the current branch, or — under rebase — the base being replayed onto> |
+| "theirs" means | <the incoming branch/commit, or — under rebase — the commit being replayed (`REBASE_HEAD`)> |
+
 ## Conflicted hunks
 
-| File | Description | Preserved intent (ours) | Preserved intent (theirs) | Recommended resolution | Trade-off |
-|------|-------------|-----------------------------|------------------------------|----------------------------|-----------|
-| `<path>` | <what the hunk conflicts over> | <ours intent> | <theirs intent> | <recommendation> | <trade-off, or "none — both intents preserved"> |
+| ID | File | Description | Preserved intent (ours) | Preserved intent (theirs) | Recommended resolution | Trade-off |
+|----|------|-------------|-----------------------------|------------------------------|----------------------------|-----------|
+| `H1` | `<path>` | <what the hunk conflicts over> | <ours intent> | <theirs intent> | <recommendation> | <trade-off, or "none — both intents preserved"> |
 
 ## Unresolved questions
 
 | Hunk | Missing evidence | Impact |
 |------|---------------------|-----------|
-| `<file>` | <what is unavailable> | <what cannot be confidently recommended> |
+| `H#` | <what is unavailable> | <what cannot be confidently recommended> |
 
 ## Recommendation
 
@@ -39,6 +48,13 @@ any of them:
 
 ## Rules
 
+- `## Mode` is always present and always states the detected operation plus what "ours"/"theirs"
+  mean for *this* report — the meaning inverts between merge and rebase. When no ref identified the
+  operation (a squash-merge or `git stash pop`, which set none), the operation is `undetermined`,
+  the ours/theirs rows say "unconfirmed", and an Unresolved questions entry records it. Never guess
+  the operation.
+- Every hunk carries a stable `id` (`H1`, `H2`, …, in report order). Unresolved questions and the
+  Recommendation reference hunks by that id, not by prose position.
 - Every hunk cites both sides' actual intent, never a restatement of the diff text alone.
 - A resolution that drops part of either side's intent states the trade-off explicitly — never
   silently.

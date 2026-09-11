@@ -11,8 +11,14 @@ Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke
 
 ## Invocation
 
-> Ambient — ``conflict_state`` is detected from `.git/MERGE_HEAD` / `.git/rebase-merge` /
-> `.git/rebase-apply` in the current repository; no caller-supplied field is required.
+> Ambient — ``conflict_state`` is detected by asking git, never by testing a hardcoded `.git/...`
+> path: `git rev-parse -q --verify MERGE_HEAD` / `CHERRY_PICK_HEAD` / `REVERT_HEAD`, plus
+> `git rev-parse --git-path rebase-merge` / `rebase-apply` for a rebase, falling back to unmerged
+> paths in `git status --porcelain`. No caller-supplied field is required.
+
+**Run the smoke test at least once inside a linked worktree** (`git worktree add`), where `.git` is
+a file rather than a directory — that is exactly the layout a hardcoded `.git/MERGE_HEAD` check
+silently fails in.
 
 Example: a repository mid-merge with two conflicted files — `src/config.py` (one hunk where both
 sides add unrelated config keys to the same dict, safely combinable) and `src/pricing.py` (one
@@ -20,14 +26,17 @@ hunk where one side removes a discount branch the other side just modified).
 
 ## A correct minimal output contains
 
-1. A HARD STOP if no `.git/MERGE_HEAD`, `.git/rebase-merge`, or `.git/rebase-apply` is present.
-2. Which mode is active (merge vs. rebase) and which side is "ours" vs. "theirs", stated
-   explicitly.
-3. Every conflicted file and every hunk within it accounted for — none silently skipped.
-4. At least one hunk resolved by preserving both intents, with both intents cited from commit
+1. A HARD STOP when no ref-based check fires *and* `git status --porcelain` reports no unmerged
+   path.
+2. A `## Mode` section stating which operation is active (merge / rebase / cherry-pick / revert /
+   undetermined), what detected it, and which side is "ours" vs. "theirs".
+3. A stable `id` (`H1`, `H2`, …) on every hunk, referenced by the Unresolved questions and
+   Recommendation sections.
+4. Every conflicted file and every hunk within it accounted for — none silently skipped.
+5. At least one hunk resolved by preserving both intents, with both intents cited from commit
    history.
-5. At least one hunk with a named trade-off where the two intents are genuinely incompatible.
-6. `MERGE_CONFLICT_ANALYSIS.md` / `merge_conflict_analysis` emitted as a report only — no
+6. At least one hunk with a named trade-off where the two intents are genuinely incompatible.
+7. `MERGE_CONFLICT_ANALYSIS.md` / `merge_conflict_analysis` emitted as a report only — no
    `checkout --ours/--theirs`, `add`, `commit`, `rebase --continue`/`--abort`, or `merge --abort`,
    and no automatic downstream invocation.
 
@@ -35,7 +44,11 @@ hunk where one side removes a discount branch the other side just modified).
 
 | Condition | Expected behavior |
 |-----------|---------------------|
-| No merge or rebase in progress | HARD STOP — state plainly; no "describe a hypothetical conflict" mode |
+| No conflicting operation and no unmerged path | HARD STOP — state plainly; no "describe a hypothetical conflict" mode |
+| Running inside a linked worktree (`git worktree add`), mid-merge | Detected normally — `git rev-parse -q --verify MERGE_HEAD` succeeds even though `.git/MERGE_HEAD` does not exist |
+| A squash-merge or `git stash pop` left unmerged paths and no ref | Analyzed, with the operation recorded as `undetermined` and ours/theirs stated as unconfirmed — never guessed |
+| An operation is in progress but zero paths are unmerged | "Conflict markers already resolved; nothing to analyze — stage and commit to finish" — never an empty hunks list |
+| A conflicted rebase | "theirs" is read via `git show REBASE_HEAD`, not by branch name |
 | A hunk's originating commit message is a bare "fix" with no further context | Recorded as an unresolved question, never a guessed resolution |
 | No PR/issue text discoverable anywhere in-repo for a referenced ticket | Bare reference only — never fabricated ticket content |
 | Two sides' intents are genuinely incompatible and no merge/PR goal is discoverable | Recommend the more specific, more recently-authored intent, explicitly flagged as a judgment call |

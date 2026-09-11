@@ -14,11 +14,14 @@ continue/abort the merge or rebase.
 | 1 | "I'm stuck on a merge conflict between my feature branch and main — can you help me figure out how to resolve it?" | Inputs → Analyze → Report; hunk resolvable by preserving both intents | Happy path |
 | 2 | "This rebase conflict in src/pricing.py has one side removing the discount branch that the other side just modified — what should I do?" | Analyze finds genuinely incompatible intents; Report names the trade-off explicitly | Incompatible intents |
 | 3 | "There's a merge conflict in src/utils.py but the commit that introduced it just says 'fix'." | Analyze records an unresolved question — no discoverable originating context | Missing context |
-| 4 | "I think I might hit a merge conflict soon, can you walk me through what would happen?" | HARD STOP — no merge or rebase is actually in progress | Boundary rule |
+| 4 | "I think I might hit a merge conflict soon, can you walk me through what would happen?" | HARD STOP — nothing is in progress and nothing is unmerged (the routing patterns also do not claim a hypothetical like this) | Boundary rule |
 | 5 | "Just resolve this merge conflict and commit it for me, I don't need a report." | Rejected — report-only; the recommendation is emitted, never applied | Boundary rule |
 | 6 | "I already resolved the merge conflict — can you review the diff before I push?" | Wrong scope — nothing is in progress; offer `pr-review` / `local-diff-review` | Wrong-skill row |
 | 7 | "This rebase conflict analysis looks solid — go ahead and apply the recommended resolutions and stage them." | Cross-skill handoff — offer `loop-task-implementer`; do not invoke it automatically | Cross-skill handoff |
 | 8 | "Can you review my local diff before I open the PR, no conflicts, just want a sanity check?" | Wrong scope — no conflict at all; `local-diff-review` | Wrong-skill row |
+| 9 | "There's a merge conflict here" — run inside a linked worktree created by `git worktree add` | Detected normally: `git rev-parse -q --verify MERGE_HEAD` succeeds even though `.git` is a file and `.git/MERGE_HEAD` does not exist | Worktree-safe detection |
+| 10 | "There's a conflict from the stash pop I just did — what do the two sides want?" | Analyzed from unmerged paths; `## Mode` records the operation as `undetermined` and ours/theirs as unconfirmed | No-ref conflict state |
+| 11 | "We had a nasty merge conflict last sprint — is our branching strategy the real problem?" | Not this skill — the phrase is background for a process question, not a request to analyze a live conflict | Out of routing scope |
 
 ## Example: both intents preserved, no trade-off
 
@@ -31,9 +34,9 @@ non-overlapping changes.
 ```
 ## Conflicted hunks
 
-| File | Description | Preserved intent (ours) | Preserved intent (theirs) | Recommended resolution | Trade-off |
-|------|-------------|-----------------------------|------------------------------|----------------------------|-----------|
-| `src/config.py` | both sides add a distinct key to the same dict literal | adds `timeout_ms` for the new HTTP client | adds `retry_count` for the new retry policy | keep both keys in the dict | none — both intents preserved |
+| ID | File | Description | Preserved intent (ours) | Preserved intent (theirs) | Recommended resolution | Trade-off |
+|----|------|-------------|-----------------------------|------------------------------|----------------------------|-----------|
+| `H1` | `src/config.py` | both sides add a distinct key to the same dict literal | adds `timeout_ms` for the new HTTP client | adds `retry_count` for the new retry policy | keep both keys in the dict | none — both intents preserved |
 ```
 
 Both intents survive; nothing is dropped, so no trade-off is stated.
@@ -49,9 +52,9 @@ branch's discount percentage.
 ```
 ## Conflicted hunks
 
-| File | Description | Preserved intent (ours) | Preserved intent (theirs) | Recommended resolution | Trade-off |
-|------|-------------|-----------------------------|------------------------------|----------------------------|-----------|
-| `src/pricing.py` | one side removes the discount branch the other side just modified | updates the seasonal-discount percentage | removes the seasonal-discount branch entirely, citing it as dead code in the commit message | keep the removal (theirs) — the merge commit's own message states "drop seasonal discounts per pricing team decision" | drops the ours-side percentage update entirely; the seasonal-discount code path stops existing |
+| ID | File | Description | Preserved intent (ours) | Preserved intent (theirs) | Recommended resolution | Trade-off |
+|----|------|-------------|-----------------------------|------------------------------|----------------------------|-----------|
+| `H1` | `src/pricing.py` | one side removes the discount branch the other side just modified | updates the seasonal-discount percentage | removes the seasonal-discount branch entirely, citing it as dead code in the commit message | keep the removal (theirs, read via `git show REBASE_HEAD`) — the replayed commit's own message states "drop seasonal discounts per pricing team decision" | drops the ours-side percentage update entirely; the seasonal-discount code path stops existing |
 ```
 
 The merge's own stated goal breaks the tie; the dropped intent and the reason are both named rather
@@ -70,7 +73,7 @@ repository's history.
 
 | Hunk | Missing evidence | Impact |
 |------|---------------------|-----------|
-| `src/utils.py` | commit message is a bare "fix"; no issue/PR reference found in-repo | cannot state this side's intent beyond the diff itself — no confident recommendation possible |
+| `H2` (`src/utils.py`) | commit message is a bare "fix"; no issue/PR reference found in-repo | cannot state this side's intent beyond the diff itself — no confident recommendation possible |
 ```
 
 No resolution is guessed from the diff alone; the gap is named so a human can supply the missing
@@ -78,8 +81,9 @@ context.
 
 ## Degraded path: no merge or rebase in progress
 
-**Evidence:** the caller asks about a possible future merge conflict, but `.git/MERGE_HEAD`,
-`.git/rebase-merge`, and `.git/rebase-apply` are all absent.
+**Evidence:** the caller asks about a possible future merge conflict, but every ref check
+(`MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, the `rebase-merge`/`rebase-apply` directories
+git itself resolves) comes back empty and `git status --porcelain` reports no unmerged path.
 
 **Result:** HARD STOP. The skill states plainly that there is nothing to analyze — it has no
 "describe a hypothetical conflict" mode — rather than speculating about a conflict that does not

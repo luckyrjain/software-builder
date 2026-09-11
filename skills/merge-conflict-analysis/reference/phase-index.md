@@ -14,8 +14,10 @@ Reference loads: [lazy-load-index.md](lazy-load-index.md).
 
 | Caller situation | Behavior |
 |-------------------|----------|
-| An in-progress merge or rebase has conflicted files | Inputs → Analyze → Report |
-| No merge or rebase in progress | Inputs HARD STOP — state plainly; no Analyze phase |
+| An in-progress merge, rebase, cherry-pick, revert, squash-merge or stash pop has unmerged paths | Inputs → Analyze → Report |
+| Nothing in progress and no unmerged path | Inputs HARD STOP — state plainly; no Analyze phase |
+| An operation is in progress but nothing is unmerged | Inputs states "already resolved; stage and commit to finish" — no Analyze phase, no empty hunks list |
+| No ref identified the operation (squash-merge / `stash pop`) | Inputs proceeds from unmerged paths; `## Mode` records the operation as `undetermined` and ours/theirs as unconfirmed |
 | A hunk's originating context can't be found | Analyze records it as an unresolved question; Report never guesses a resolution |
 | Two sides' intents are genuinely incompatible | Analyze recommends the side matching the merge's stated goal (or the more specific, more recent intent as a flagged judgment call) and names the trade-off explicitly |
 | Scope becomes an already-clean/mergeable diff review, or actually applying the resolution | Offer the one applicable escalation; do not invoke it |

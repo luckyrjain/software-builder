@@ -420,6 +420,8 @@ artifact_schemas:
     fields:
     - title
     - conflict_summary
+    - mode
+    - ours_theirs_note
     - hunks
     - unresolved_questions
     - recommendation

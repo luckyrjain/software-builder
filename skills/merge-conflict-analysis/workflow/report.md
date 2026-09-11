@@ -16,9 +16,15 @@ form is `MERGE_CONFLICT_ANALYSIS.md`; its typed machine form is `merge_conflict_
 both as the read-only skill's response/artifact — never apply a resolution, stage, commit, or
 continue/abort the merge or rebase.
 
-Every hunk keeps its cited intent for both sides, its recommended resolution, and (where
-applicable) its trade-off note; a hunk whose context couldn't be found is an explicit unresolved
-question, never a guessed resolution.
+The `## Mode` section always states the operation `conflict_state` detected and what "ours" and
+"theirs" mean for this report — they invert between merge and rebase, and are `unconfirmed` when no
+ref identified the operation (a squash-merge or `git stash pop`), which also gets an unresolved
+question rather than a guess.
+
+Every hunk carries a stable `id` (`H1`, `H2`, … in report order), its cited intent for both sides,
+its recommended resolution, and (where applicable) its trade-off note; a hunk whose context
+couldn't be found is an explicit unresolved question, never a guessed resolution. Unresolved
+questions and the Recommendation reference hunks by id.
 
 Name the `loop-task-implementer` escalation only when the recommendations are ready to apply —
 never automatically invoke it.

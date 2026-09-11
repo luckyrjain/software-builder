@@ -6,8 +6,12 @@ Manual checks after prompt or workflow edits.
 
 | Scenario | Expected |
 |----------|-----------|
-| No merge or rebase is currently in progress | HARD STOP — state plainly; no "describe a hypothetical conflict" mode |
-| Caller describes a conflict from memory instead of live repository state | Reject; this skill only analyzes actual `.git/MERGE_HEAD` / `.git/rebase-merge` / `.git/rebase-apply` state |
+| No conflicting operation and no unmerged path | HARD STOP — state plainly; no "describe a hypothetical conflict" mode |
+| Caller describes a conflict from memory instead of live repository state | Reject; this skill only analyzes live state resolved by git itself |
+| The repository is a linked worktree (`git worktree add`), so `.git` is a file and `.git/MERGE_HEAD` never exists | Still detected — detection uses `git rev-parse -q --verify MERGE_HEAD`, never a hardcoded path |
+| The conflict came from `git cherry-pick` or `git revert` | Detected via `CHERRY_PICK_HEAD` / `REVERT_HEAD` and analyzed like any other conflict |
+| The conflict came from `git merge --squash` or `git stash pop`, which set no ref | Analyzed anyway from unmerged paths; the operation is reported as `undetermined` and ours/theirs as unconfirmed — never guessed |
+| A merge is in progress but the caller already resolved every marker without committing | "Conflict markers already resolved; nothing to analyze — stage and commit to finish" — never an empty report |
 | A conflicted file has multiple hunks, only one of which the caller mentions | Account for every hunk in the file, not just the one named |
 
 ## Hunk resolution discipline
