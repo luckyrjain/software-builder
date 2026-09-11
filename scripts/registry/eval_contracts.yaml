@@ -237,6 +237,13 @@ untrusted_surfaces:
   skill_artifacts:
     case_refs:
       - weekly-squad-digest/golden-injection-inert-digest
+  fetched_web_pages:
+    case_refs:
+      # research-brief: SKILL.md "Untrusted content" names "any external page or document fetched
+      # this session" explicitly — the first (and so far only) skill with host.web.fetch capability.
+      # Distinct from repository_documentation/confluence_pages (both repository- or
+      # workspace-internal): this is third-party content the skill itself retrieved over the network.
+      - research-brief/golden-injection
 
 degraded_host_cases:
   missing_observability:
