@@ -53,6 +53,15 @@ readiness, authority, coverage, or completion. Rendered output must follow
 [prompt-injection.md](../../docs/skill-framework/shared/prompt-injection.md) and
 [safe-output.md](../../docs/skill-framework/shared/safe-output.md).
 
+## Cross-skill escalation
+
+Full matrix: [cross-skill-escalation.md](../../docs/skill-framework/shared/cross-skill-escalation.md)
+
+| Finding (this skill) | Next skill |
+|-----------------------|------------|
+| Plan is `READY` and its tasks are ready to execute | **loop-task-implementer** |
+| A required upstream artifact (`system_design_spec`, `architecture_review_report`) is missing or stale | Return the planning blocker to the caller — this skill never invokes `system-design`/`architecture-review` itself |
+
 ## Begin
 
 1. Read [workflow/plan.md](workflow/plan.md) and verify every required upstream artifact and digest.
