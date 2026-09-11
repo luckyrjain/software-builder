@@ -3401,6 +3401,7 @@ skills:
       escalation_targets:
       - release-readiness-checker
       - incident-triage-agent
+      - resilience-review
       consumes:
       - assessment_context
       consume_fields:

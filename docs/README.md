@@ -193,6 +193,7 @@ Skills reference each other when a finding belongs in another workflow:
 | observability-review | Gaps found ahead of an upcoming release | deployment-risk-review |
 | deployment-risk-review | Caller wants the full multi-repo release go/no-go sweep, not one change | release-readiness-checker |
 | deployment-risk-review | Deploy already happened and something broke | incident-triage-agent |
+| deployment-risk-review | Dependency risk finding names a hard dependency with no documented timeout/retry/fallback | resilience-review |
 | tech-debt-assessor | A "Now" priority debt item is really a multi-service migration | migration-program-manager |
 | tech-debt-assessor | A "Now" priority debt item is really a resource/cost problem | cost-optimization-sprint-planner |
 | implementation-planner | Plan is approved and its tasks are ready to execute | loop-task-implementer |
