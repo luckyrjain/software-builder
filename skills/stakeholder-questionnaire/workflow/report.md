@@ -1,9 +1,10 @@
 ---
-workflow_version: 1.0
+workflow_version: 1.1
 phase: report
 produces:
   - STAKEHOLDER_QUESTIONNAIRE.md
   - stakeholder_questionnaire
+  - title
 consumes:
   - decision_context
   - recipient
@@ -15,6 +16,12 @@ consumes:
 Build the report using [reference/report-format.md](../reference/report-format.md). Its document
 form is `STAKEHOLDER_QUESTIONNAIRE.md`; its typed machine form is `stakeholder_questionnaire`.
 Emit both as the read-only skill's response/artifact — never send, post, or write either to disk.
+
+Bind `title` here, in this phase — it is the `# <Questionnaire title>` line
+[reference/report-format.md](../reference/report-format.md) opens with, and the same string is the
+`title` field of the typed `stakeholder_questionnaire`. Derive it from `decision_context` and
+`recipient`: it names the decision being unblocked, and the recipient's area when that is what
+distinguishes this questionnaire from another. Never `TBD`, `Untitled`, or the bare skill name.
 
 Every question keeps its theme grouping and most-important-first ordering; a "why this matters"
 line appears only where it was actually needed during drafting, not padded onto every question.

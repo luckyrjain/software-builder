@@ -8,9 +8,15 @@ Conventions: [smoke-test-conventions](../../../docs/skill-framework/shared/smoke
 
 ## Invocation
 
-> `decision_context: <a real decision the caller can't resolve alone>` `recipient: <a real role, e.g. "the payments team's on-call engineer, who knows the current retry budget">`
+> `Draft a questionnaire.` `decision_context: <a real decision the caller can't resolve alone>` `recipient: <a real role, e.g. "the payments engineer responsible for the retry budget, who knows the current budget">`
 
-Example: `decision_context: We need to decide on our retry budget for transient payment failures, but only the on-call payments engineer knows what our current production budget is and whether it's sustainable.` `recipient: the payments team's on-call engineer, who knows the current retry budget and SLA constraints.`
+Example: `Draft a questionnaire.` `decision_context: We need to decide on our retry budget for transient payment failures, but only the payments engineer responsible for it knows what our current production budget is and whether it's sustainable.` `recipient: the payments engineer responsible for the retry budget, who knows the current budget and SLA constraints.`
+
+The leading `Draft a questionnaire.` is load-bearing, not decoration: the registered routing pattern
+requires this skill's artifact to be the object of an active request, so a bare
+`decision_context:`/`recipient:` pair does not dispatch here on its own. Naming a person as
+"on-call" is also avoided deliberately — `on-call` is one of `incident-rca`'s own registered
+routing alternatives, and an invocation carrying it resolved to `incident-rca` alone.
 
 ## A correct minimal output contains
 

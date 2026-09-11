@@ -7,6 +7,12 @@ description: >
   recipient's specific knowledge gap, never a fabricated answer, never sent/posted/written to disk.
 recorded_output:
   artifact: stakeholder_questionnaire
+  # `title` is a registered field of stakeholder_questionnaire (skills.yaml payload_types and
+  # contracts.composition.artifact_schemas) and reference/report-format.md already opens the
+  # document with it, but until this change neither golden recorded it and no assertion anywhere
+  # touched it -- a declared schema field with zero verification. It must name the decision being
+  # unblocked, not a placeholder.
+  title: Payment-client retry budget
   repository_write_action: none
   automatic_downstream_invocation: false
   decision_context: "We can't decide the retry budget for the payment-client service — nobody on the current team knows the historical incident rate that set the original 3-attempt cap."
@@ -26,6 +32,14 @@ assertions:
   - type: field_equals
     path: artifact
     value: stakeholder_questionnaire
+  # The title must name the decision under `decision_context`, and must not be a placeholder or
+  # the bare skill name -- the two shapes reference/report-format.md's Rules section forbids.
+  - type: require_pattern
+    path: title
+    pattern: "(?i)retry budget"
+  - type: forbid_pattern
+    path: title
+    pattern: "(?i)^(?:TBD|TODO|N/?A|untitled|report|questionnaire|stakeholder questionnaire|discovery questionnaire)\\s*$"
   - type: field_equals
     path: repository_write_action
     value: none

@@ -5503,7 +5503,10 @@ skills:
       external_services: None — reads repository and caller-provided context only
     routing:
       patterns:
-      - \bquestionnaire\b
+      - \b(?:draft|drafting|write|writing|compose|create|creating|generate|produce|prepare|design|put
+        together|draw up|send|need|want)\s+(?:me\s+)?(?:a|an|the|this|that|our|my|your|their|another|one|some|\d+)?\s*(?:[\w'-]+\s+){0,2}questionnaires?\b(?!\s+(?:services?|endpoints?|modules?|pages?|forms?|tables?|features?|renderer|apis?|apps?|systems?|jobs?|flows?|tools?|library|repos?|components?|schema|pipeline|database|server|workers?|queue|tests?|code|scripts?|ui|screen|widget|templates?|engine|handler|controller|models?|package|dashboard|reports?|data|metrics|microservice|wizard|runbook|release|logs?|events?|records?|rows?|fields?|columns?|bugs?|tickets?)\b)
+      - \bquestionnaires?\s+(?:you|we|i)\s+(?:draft|write|compose|prepare|produce|generate|put
+        together)\b
   system-design:
     path: skills/system-design
     category: architecture

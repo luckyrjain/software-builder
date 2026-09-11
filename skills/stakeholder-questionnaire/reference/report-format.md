@@ -51,6 +51,11 @@ either:
 
 ## Rules
 
+- The opening `# <Questionnaire title>` names the decision being unblocked, plus the recipient's
+  area where that is what separates this questionnaire from another — "User-Profile Endpoint
+  Caching Strategy", "Payment-Client Retry Budget". It is the same string as the typed artifact's
+  `title` field, bound in [workflow/report.md](../workflow/report.md), and is never `TBD`,
+  `Untitled`, or the bare skill name.
 - Every question targets the actual gap between what `recipient` knows and what `decision_context`
   says is needed — never a generic checklist.
 - Every question is one idea, never compound.
