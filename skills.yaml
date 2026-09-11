@@ -2804,22 +2804,20 @@ skills:
     capabilities:
       required:
       - host.report.write
+      - codebase-architecture-review.invoke
       - loop-task-implementer.invoke
+      - production-readiness-review.invoke
       optional:
-      - name: codebase-architecture-review.invoke
-        enables: architecture-discovery cycle
       - name: engineering-decision-discovery.invoke
         enables: candidate grilling and disposition
       - name: module-design.invoke
         enables: module/interface/seam design for candidates that need it
-      - name: production-readiness-review.invoke
-        enables: holistic cumulative-branch gate
     lint:
       skill_md_max_lines: 180
       target: architecture-remediation-loop
     risk_class:
     - repository-write
-    version: 1.0.0
+    version: 1.1.0
     type: orchestrator
     authority: repository-write
     permissions:

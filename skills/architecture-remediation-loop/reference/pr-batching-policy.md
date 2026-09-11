@@ -42,8 +42,27 @@ tooling fix) never share a batch even if both are small.
   the provisional classification assumed.
 - **De-escalate** a candidate that turns out to be a small, localized change with no isolation benefit into
   a related batch — but only before that batch's loop-task-implementer invocation starts, never mid-task.
+- Each loop-task-implementer dispatch for a batch increments that batch's `batch_attempt_count` (see
+  [reference/candidate-ledger.md § Schema](candidate-ledger.md#schema)). A second consecutive `ESCALATED`
+  outcome for the same batch trips `REPEATED_BATCH_ESCALATION` — see
+  [SKILL.md § Circuit breakers](../SKILL.md#circuit-breakers); never dispatch the same batch a third time.
 
 ## 5. Sizing target
 
 Optimize for the smallest number of batches that preserves cohesion, reviewability, and per-batch
 rollback/bisect safety — not for one PR per candidate, and not for one PR for the whole cycle.
+
+## 6. Inter-batch dependencies
+
+Two batches dispatched in the same cycle share the same starting base branch — neither sees the other's
+unmerged code. If a candidate in batch B structurally depends on code only introduced by a candidate in
+batch A (e.g. B's fix assumes an interface A is introducing), dispatching both in parallel would build B
+against code that doesn't exist yet, the same failure mode backlog-runner's own
+[reference/queue-policy.md § 2 rule 4](../../backlog-runner/reference/queue-policy.md#2-queue-pull-and-ordering)
+documents for cross-ticket dependencies.
+
+Default: **sequence, don't stack.** A batch with a declared dependency on another batch is not dispatched
+until the dependency batch is merge-confirmed (workflow/converge.md § 1) — it stays `PENDING` this cycle,
+same as any other deferred candidate. Real cross-batch dependencies are expected to be uncommon (most
+candidates from one bounded `review_scope` are independent); when one is identified during batching or
+design, record it on both rows rather than guessing an implicit order.

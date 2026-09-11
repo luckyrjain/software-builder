@@ -222,7 +222,7 @@ Skills reference each other when a finding belongs in another workflow:
 | architecture-remediation-loop | Every candidate — grill and disposition before it can proceed | engineering-decision-discovery |
 | architecture-remediation-loop | An accepted candidate needs a concrete module/interface/seam design | module-design |
 | architecture-remediation-loop | A batch of accepted, dispositioned candidates is ready to implement | loop-task-implementer |
-| architecture-remediation-loop | Batches for this cycle are merge-ready; confirm the cumulative branch is clean before rediscovery | production-readiness-review |
+| architecture-remediation-loop | This cycle's accepted batches are merge-confirmed; confirm the resulting state is clean before rediscovery | production-readiness-review |
 | architecture-remediation-loop | A candidate needs unfamiliar-domain context before disposition | domain-comprehension |
 | stakeholder-questionnaire | The recipient's (future) answers would become PRD input | prd-architect |
 <!-- cross-skill-routing:end -->

@@ -52,7 +52,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 |------|-------|--------|---------------------|
 | claude | api-design-review | BLOCKED | host.report.write |
 | claude | api-test-creator | DEGRADED | — |
-| claude | architecture-remediation-loop | BLOCKED | host.report.write, loop-task-implementer.invoke |
+| claude | architecture-remediation-loop | BLOCKED | host.report.write, codebase-architecture-review.invoke, loop-task-implementer.invoke, production-readiness-review.invoke |
 | claude | architecture-review | BLOCKED | host.report.write |
 | claude | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
 | claude | bug-diagnosis | BLOCKED | host.report.write, host.repository.read |
@@ -102,7 +102,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | claude | who-owns-x-bot | BLOCKED | slack.slash_command.receive |
 | cursor | api-design-review | BLOCKED | host.report.write |
 | cursor | api-test-creator | BLOCKED | host.repository.read_write |
-| cursor | architecture-remediation-loop | BLOCKED | host.report.write, loop-task-implementer.invoke |
+| cursor | architecture-remediation-loop | BLOCKED | host.report.write, codebase-architecture-review.invoke, loop-task-implementer.invoke, production-readiness-review.invoke |
 | cursor | architecture-review | BLOCKED | host.report.write |
 | cursor | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
 | cursor | bug-diagnosis | BLOCKED | host.report.write, host.repository.read |
@@ -152,7 +152,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | cursor | who-owns-x-bot | BLOCKED | slack.slash_command.receive |
 | github-copilot | api-design-review | BLOCKED | host.report.write |
 | github-copilot | api-test-creator | BLOCKED | host.repository.read_write |
-| github-copilot | architecture-remediation-loop | BLOCKED | host.report.write, loop-task-implementer.invoke |
+| github-copilot | architecture-remediation-loop | BLOCKED | host.report.write, codebase-architecture-review.invoke, loop-task-implementer.invoke, production-readiness-review.invoke |
 | github-copilot | architecture-review | BLOCKED | host.report.write |
 | github-copilot | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
 | github-copilot | bug-diagnosis | BLOCKED | host.report.write, host.repository.read |
@@ -202,7 +202,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | github-copilot | who-owns-x-bot | BLOCKED | slack.slash_command.receive |
 | kiro | api-design-review | BLOCKED | host.report.write |
 | kiro | api-test-creator | BLOCKED | host.repository.read_write |
-| kiro | architecture-remediation-loop | BLOCKED | host.report.write, loop-task-implementer.invoke |
+| kiro | architecture-remediation-loop | BLOCKED | host.report.write, codebase-architecture-review.invoke, loop-task-implementer.invoke, production-readiness-review.invoke |
 | kiro | architecture-review | BLOCKED | host.report.write |
 | kiro | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
 | kiro | bug-diagnosis | BLOCKED | host.report.write, host.repository.read |

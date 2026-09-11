@@ -9,7 +9,9 @@ them into one traceable row per candidate across cycles.
 
 ```yaml
 candidate_ledger:
-  - candidate_id: "<from codebase_architecture_report, stable across cycles>"
+  - candidate_id: "<this ledger's own ID, assigned on first open — never assumed stable
+      against codebase-architecture-review's own local identifier across separate
+      invocations; dedup matches on scope + root cause instead, see workflow/discover.md § 4>"
     cycle_discovered: <int>
     scope: "<bounded paths/subsystem>"
     strength: Strong | Worth exploring | Speculative
@@ -21,11 +23,24 @@ candidate_ledger:
     needs_design: false
     module_design_spec_ref: null
     batch_id: null
+    batch_attempt_count: 0   # incremented each loop-task-implementer dispatch for this batch; see
+                             # reference/pr-batching-policy.md and SKILL.md § Circuit breakers
     pull_request_url: null
+    merge_confirmed: false   # set true only once Converge's merge checkpoint confirms the PR
+                             # landed on the effective base branch — see workflow/converge.md § 1
+    pull_request_merge_sha: null
     outcome: PENDING | COMPLETED | BLOCKED
-    source: architecture | holistic   # holistic = opened from a Gate B finding, not a Discover cycle
-    duplicate_of: null   # candidate_id, when disposition == DUPLICATE
+    source: architecture | holistic | regression   # holistic = opened from a Gate B finding;
+                                                     # regression = rediscovered after an earlier,
+                                                     # merge-confirmed row for the same root cause
+    duplicate_of: null      # candidate_id, when disposition == DUPLICATE
+    regressed_from: null    # candidate_id, when source == regression
 ```
+
+Disposition values above are the literal field values (underscore form). Prose elsewhere in this skill
+(SKILL.md, README.md, workflow/*.md) spells them with spaces for readability — e.g. "ACCEPT WITH
+MODIFICATION" in prose is always `ACCEPT_WITH_MODIFICATION` in the field; never write the spaced form to
+the `disposition` field itself.
 
 ## Disposition contract
 
@@ -36,7 +51,7 @@ Every candidate receives exactly one terminal disposition before it leaves Dispo
 | `ACCEPT` | Candidate and proposed remedy are both correct as evidenced | Yes |
 | `ACCEPT_WITH_MODIFICATION` | Underlying issue is valid; the stronger root-cause remedy is recorded in `modification` | Yes — implement the modification, not the original text |
 | `ALREADY_SATISFIED` | Current repository state already resolves it — evidence required | No |
-| `DUPLICATE` | Same root cause as an existing non-terminal-rejected row — `duplicate_of` set | No |
+| `DUPLICATE` | Same root cause as an existing, **not-yet-merge-confirmed** row — `duplicate_of` set; a match against an already merge-confirmed row is `source: regression` instead, never `DUPLICATE` (see workflow/discover.md § 4) | No |
 | `REJECT` | Incorrect, harmful, obsolete, or unjustified — evidence required | No |
 | `OUT_OF_SCOPE` | Real issue requiring genuinely external work — used sparingly | No |
 

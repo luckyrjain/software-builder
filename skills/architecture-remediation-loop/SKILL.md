@@ -35,11 +35,14 @@ Render ledger and report text only under [safe-output.md](../../docs/skill-frame
 4. **Batch** — group accepted candidates into PR batches by risk, size, and cohesion (this skill's own
    policy, below).
 5. **Implement** — invoke **loop-task-implementer** once per batch (one `implementation_task` describing
-   every candidate in that batch) → tests, review, commit, push, PR — all loop-task-implementer's own.
-6. **Holistic gate** — invoke **production-readiness-review** against the cumulative branch → fix every
-   accepted finding via another loop-task-implementer pass.
-7. **Reconverge** — repeat from step 1 with a **fresh** codebase-architecture-review run against the new
-   state, until both gates return zero actionable findings (see
+   every candidate in that batch) → tests, review, commit, push, PR — all loop-task-implementer's own. This
+   skill never merges; a batch's PR stays `HUMAN_ACTION_REQUIRED` until a human/caller merges it.
+6. **Merge checkpoint + holistic gate** — confirm every batch's PR actually merged (never assume from PR
+   text or `HUMAN_ACTION_REQUIRED` alone), then invoke **production-readiness-review** against the
+   merge-confirmed state → fix every accepted finding via another loop-task-implementer pass. Pending PRs
+   pause the cycle at `AWAITING_MERGE` rather than proceeding against unfixed code.
+7. **Reconverge** — repeat from step 1 with a **fresh** codebase-architecture-review run against the
+   merge-confirmed state, until both gates return zero actionable findings (see
    [reference/convergence-gates.md](reference/convergence-gates.md)).
 
 ## When to use / NOT to use
@@ -100,9 +103,11 @@ escalation/de-escalation). Every candidate ends in exactly one terminal state; n
 
 Stop and escalate when any applies: `max_cycles` reached with either gate still non-zero;
 `max_candidates_per_cycle` reached; a candidate's disposition is contested twice without decisive evidence;
-the same accepted finding survives two remediation passes; loop-task-implementer escalates the same batch
-twice; required scope exceeds authorization. See
-[reference/convergence-gates.md § Anti-gaming](reference/convergence-gates.md#anti-gaming).
+the same finding or Gate B dimension is unresolved across two consecutive cycles
+(`NO_MATERIAL_PROGRESS`); loop-task-implementer escalates the same batch twice; required scope exceeds
+authorization. `AWAITING_MERGE` (a batch's PR not yet merged) is a distinct, expected **pause**, not an
+escalation — re-invoking after the merge resumes normally. Full `stopped_reason` table and anti-gaming
+rules: [reference/convergence-gates.md](reference/convergence-gates.md#circuit-breakers-and-pause-states).
 
 ## Cross-skill escalation
 
@@ -128,10 +133,11 @@ follows `definition_of_done` — all defined in
 
 `definition_of_done`: required_artifacts=[`architecture_remediation_report`, one PR per batch via
 loop-task-implementer]; required_checks=[every discovered candidate terminally dispositioned; every
-accepted candidate implemented, tested, reviewed, committed, pushed; Gate A (fresh
-codebase-architecture-review) and Gate B (fresh production-readiness-review) both re-run after the last
-remediation pass of each cycle]; blocked_conditions=[`review_scope` or `repo_context` missing — HARD STOP;
-a circuit breaker above trips]; partial_result_behavior=reports cycles completed, ledger state, and which
+accepted candidate implemented, tested, reviewed, committed, pushed; every accepted batch's PR
+merge-confirmed before Gate A/B re-run; Gate A (fresh codebase-architecture-review) and Gate B (fresh
+production-readiness-review) both re-run against the merge-confirmed state after the last remediation pass
+of each cycle]; blocked_conditions=[`review_scope` or `repo_context` missing — HARD STOP; a circuit breaker
+above trips]; partial_result_behavior=reports cycles completed, ledger state, pending merges, and which
 gate is still non-zero; never fabricates convergence.
 
 Routing: [skill-routing.md](../../docs/skill-framework/shared/skill-routing.md) · shared conventions:

@@ -3,9 +3,10 @@
 **Autonomous whole-codebase architecture remediation loop, built entirely from existing skills.** Every
 cycle: **codebase-architecture-review** discovers candidates, **engineering-decision-discovery** grills and
 disposes each one, **module-design** designs the ones that need it, **loop-task-implementer** implements,
-tests, reviews, commits, pushes, and opens a PR per batch, and **production-readiness-review** holistically
-checks the cumulative branch. Repeats with a fresh architecture pass until both gates hit zero. No external
-architecture tool — codebase-architecture-review is the sole discovery engine.
+tests, reviews, commits, pushes, and opens a PR per batch — never merges — and once every batch's PR is
+merge-confirmed, **production-readiness-review** holistically checks the resulting state. Repeats with a
+fresh architecture pass until both gates hit zero. No external architecture tool —
+codebase-architecture-review is the sole discovery engine.
 
 ## What it does
 
@@ -18,9 +19,11 @@ architecture tool — codebase-architecture-review is the sole discovery engine.
 4. **Batches** accepted candidates by risk, size, and cohesion — large/high-risk ones get their own PR,
    small cohesive ones share one.
 5. **Implements each batch** via loop-task-implementer — its own Builder/Reviewer lens loop, adjudication,
-   commit/push/PR, unedited.
-6. **Runs a holistic gate** via production-readiness-review against the cumulative branch, fixing every
-   accepted finding before re-checking the architecture gate.
+   commit/push/PR, unedited. Never merges; a batch's PR waits at `HUMAN_ACTION_REQUIRED`.
+6. **Confirms each merge, then runs a holistic gate** — once every batch's PR is confirmed merged (checked
+   directly against the PR's own status, per backlog-runner's own precedent), production-readiness-review
+   checks the resulting state, fixing every accepted finding before re-checking the architecture gate. PRs
+   still pending pause the cycle at `AWAITING_MERGE` rather than scanning unfixed code.
 7. **Reconverges** — repeats from step 1 with a fresh architecture scan until both gates return zero
    actionable findings, or a circuit breaker stops the loop.
 

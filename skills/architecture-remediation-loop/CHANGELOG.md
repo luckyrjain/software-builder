@@ -3,6 +3,45 @@
 All notable changes to the architecture-remediation-loop skill. Per-file `workflow_version` in
 `workflow/*.md` frontmatter should match the version of the latest entry below that names that file.
 
+## [1.1.0] — 2026-09-11
+
+### Fixed
+- **Merge checkpoint (Critical):** this skill never merges, so a fresh Discover pass without confirming
+  the prior cycle's PRs actually landed would just rescan the unmerged base branch — and the old dedup
+  rule would silently fold the still-unfixed finding into `DUPLICATE`, letting the loop report
+  `converged: true` without anything having changed. `workflow/converge.md` § 1 now confirms every
+  accepted batch's PR is merge-confirmed (reusing backlog-runner's own merge-vs-open-PR distinction)
+  before Gate A/B run, pausing at `stopped_reason: AWAITING_MERGE` otherwise — an expected pause, not a
+  failure, and idempotently resumable since merge state is re-derived from each PR's own status, never
+  session memory.
+- `workflow/discover.md` § 4: rediscovering a candidate against an already merge-confirmed row is no
+  longer `DUPLICATE` (which would hide a regression) — it's a new row, `source: regression`.
+- `reference/convergence-gates.md` § Gate B: `production-readiness-review`'s own `UNKNOWN` verdict is now
+  handled explicitly (not silently treated as a pass or looped on forever) — two consecutive cycles with
+  the same unresolved finding or `UNKNOWN` dimension trips a new `NO_MATERIAL_PROGRESS` circuit breaker.
+- `reference/pr-batching-policy.md` § 6 (new): batches with an inter-batch dependency now sequence instead
+  of dispatching in parallel against code the dependency batch hasn't landed yet.
+- `workflow/remediate.md`: module-design's required `module_scope`/`change_goal`/`repository_evidence`
+  inputs are now explicitly mapped from the candidate row; batch retry is now tracked
+  (`batch_attempt_count`) instead of only asserted in prose.
+- Untrusted-content guard restated at each of the four downstream ingest phases (Discover, Disposition,
+  Remediate, Converge), per this repo's own normative rule, not only once in `SKILL.md`.
+- `capabilities.required` now correctly includes `codebase-architecture-review.invoke` and
+  `production-readiness-review.invoke` (both invoked unconditionally every cycle) — previously misclassified
+  `optional`.
+- `docs/skill-framework/shared/cross-skill-escalation.md`'s → production-readiness-review row now names
+  `assessment_context` (the actual consumed artifact), not `assessment_target` (one of its nested fields).
+- `evals/negative/cases.yaml`'s case replaced — the prior prompt shared no words with this skill's own
+  routing patterns and was never actually at risk of misrouting; the new one is a genuine near-miss
+  (contains "architecture" and loop-task-implementer's own trigger words) verified against the dispatcher.
+- `reference/report-format.md`: added the `stopped_reason` values above, `merge_attempted` (asserted
+  `false` invariant, resolving a golden fixture assertion that previously had no schema definition), and
+  per-batch `merged`/`pull_request_merge_sha`.
+- Found via a 5-persona adversarial review (correctness/consistency, architecture, security/guardrails,
+  adversarial break-it, registry/ops) — see the review's findings for full detail; two claimed anchor
+  breakages (README.md, pressure-tests.md) were investigated and found to be false positives against this
+  repo's actual GitHub-slug algorithm (`scripts/validate_references.py:github_style_slug`).
+
 ## [1.0.0] — 2026-09-11
 
 ### Added

@@ -20,10 +20,18 @@ was too shallow.
 
 ## Gate B — fresh production-readiness-review
 
-A fresh run against the cumulative branch state must return `verdict: READY`, or `CONDITIONAL` with only
-waivers the caller has explicitly accepted (never a waiver this skill invents on its own to force a green
-verdict). Every `BLOCKER`/`HIGH`/`MEDIUM`/actionable finding is routed back through Disposition → Remediate
-in the same cycle (see [workflow/converge.md](../workflow/converge.md)) before Gate A is re-checked.
+A fresh run, only after this cycle's merge checkpoint clears (see
+[workflow/converge.md § 1](../workflow/converge.md)) so the target is a real, single, merge-confirmed
+`source_revision` — never an undefined multi-PR "cumulative" state — must return `verdict: READY`, or
+`CONDITIONAL` with only waivers the caller has explicitly accepted (never a waiver this skill invents on
+its own to force a green verdict). Every `BLOCKER`/`HIGH`/`MEDIUM`/actionable finding is routed back
+through Disposition → Remediate in the same cycle before Gate A is re-checked.
+
+`verdict: UNKNOWN` on any required dimension is **not** a pass and is not treated as equivalent to a
+blocking finding either — production-readiness-review's own fail-closed contract means `UNKNOWN` reflects
+an evidence gap, not a fixable candidate. Record which dimension is `UNKNOWN` against this cycle; if the
+same dimension is still `UNKNOWN` on the next cycle's Gate B, the stall breaker below trips rather than
+looping indefinitely on an unresolvable gap.
 
 ## Anti-gaming
 
@@ -39,8 +47,23 @@ A valid terminal disposition requires evidence of a real problem (or its absence
 Zero means a fresh, full-scope, evidence-based pass found nothing actionable — not that nothing was looked
 for.
 
-## Circuit breakers
+## Circuit breakers and pause states
 
 See [SKILL.md § Circuit breakers](../SKILL.md#circuit-breakers) for the full list (`max_cycles`,
-`max_candidates_per_cycle`, contested disposition, repeated batch escalation). Hitting one stops the loop
-with `converged: false` and the current ledger state — never a fabricated `converged: true`.
+`max_candidates_per_cycle`, contested disposition, repeated batch escalation, no-material-progress). Hitting
+one stops the loop with `converged: false` and the current ledger state — never a fabricated
+`converged: true`. `stopped_reason` values:
+
+| `stopped_reason` | Meaning | Resumable by re-invoking? |
+|-------------------|---------|------------------------------|
+| `AWAITING_MERGE` | This cycle's accepted batches have PRs open but not yet merged (§ Gate B) | Yes — re-check is idempotent, re-derived from each PR's own status |
+| `NO_MATERIAL_PROGRESS` | Same finding or same Gate B dimension unresolved across two consecutive cycles | No — needs human/caller investigation first |
+| `MAX_CYCLES_REACHED` | `max_cycles` exhausted with either gate still non-zero | Yes, with a raised `max_cycles` if genuinely justified |
+| `MAX_CANDIDATES_REACHED` | `max_candidates_per_cycle` exhausted while candidates remain | Yes, next cycle picks up the deferral |
+| `CONTESTED_DISPOSITION` | A candidate's disposition was contested twice without decisive evidence | No — needs human/caller investigation first |
+| `REPEATED_BATCH_ESCALATION` | The same batch escalated from loop-task-implementer twice | No — needs human/caller investigation first |
+| `SCOPE_EXCEEDS_AUTHORIZATION` | Required work exceeds what `repo_context` authorizes | No — needs re-authorization |
+
+`AWAITING_MERGE` is the one pause state this skill expects to hit routinely for an unattended, non-merging
+loop — same status as loop-task-implementer's own `HUMAN_ACTION_REQUIRED`, just scoped to a whole cycle
+instead of one task.
