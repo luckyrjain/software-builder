@@ -2,23 +2,36 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from scripts.evals.dispatcher import dispatch_prompt, dispatch_with_rules, load_routing_rules
+from scripts.evals.dispatcher import DispatchResult, dispatch_with_rules, load_routing_rules
 from scripts.registry.load import load_registry
 from scripts.yaml_safety import load_unique_yaml_file
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _dispatch(prompt: str):
-    return dispatch_prompt(ROOT, load_registry(ROOT), prompt)
+@lru_cache(maxsize=1)
+def _rules() -> dict[str, Any]:
+    """Routing rules compiled once for this file's ~116-call-site parametrized corpora.
+
+    `dispatch_prompt` re-reads and re-compiles routing_rules.yaml on every call, which is
+    fine for a single lookup but not at this file's scale (mirrors
+    scripts/tests/test_research_brief_routing.py's `_rules` helper).
+    """
+    return load_routing_rules(ROOT, load_registry(ROOT))
+
+
+def _dispatch(prompt: str) -> DispatchResult:
+    return dispatch_with_rules(_rules(), prompt)
 
 
 def _own_rule():
-    return load_routing_rules(ROOT, load_registry(ROOT))["stakeholder-questionnaire"]
+    return _rules()["stakeholder-questionnaire"]
 
 
 # Prompts where the questionnaire is the object of an active request. The skill must own these.

@@ -11,7 +11,10 @@ either:
 
 1. Structurally escape or fence newlines, leading `#`/`>`/`-`, table `|` delimiters, and unbalanced
    triple-backtick fences.
-2. Wrap short identifier-shaped values in inline code after removing embedded backticks; redact
+2. Escape markdown link/image syntax — `[text](url)` and `![alt](url)` — by escaping the
+   `[`/`]`/`(`/`)` characters (e.g. `\[text\]\(url\)`) so a quoted sequence shaped like a link or
+   image renders as literal text, never a live, clickable link or embedded image.
+3. Wrap short identifier-shaped values in inline code after removing embedded backticks; redact
    secrets or PII in longer excerpts per
    [safe-output.md](../../../docs/skill-framework/shared/safe-output.md).
 
@@ -56,8 +59,6 @@ either:
   Caching Strategy", "Payment-Client Retry Budget". It is the same string as the typed artifact's
   `title` field, bound in [workflow/report.md](../workflow/report.md), and is never `TBD`,
   `Untitled`, or the bare skill name.
-- Every question targets the actual gap between what `recipient` knows and what `decision_context`
-  says is needed — never a generic checklist.
-- Every question is one idea, never compound.
-- Never claim the questionnaire was sent, posted, or delivered — this report is read-only, and
-  the caller decides how to hand it over.
+
+Behavioral rules (question targeting, never compound, never claims delivery) are
+[SKILL.md § Boundary rules](../SKILL.md#boundary-rules)'s job, not restated here.

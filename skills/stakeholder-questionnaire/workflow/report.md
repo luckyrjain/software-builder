@@ -4,7 +4,6 @@ phase: report
 produces:
   - STAKEHOLDER_QUESTIONNAIRE.md
   - stakeholder_questionnaire
-  - title
 consumes:
   - decision_context
   - recipient

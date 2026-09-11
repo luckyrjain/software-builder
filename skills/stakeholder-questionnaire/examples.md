@@ -102,8 +102,3 @@ the answers into a PRD.
 
 **Result:** Offer `prd-architect` — once the questionnaire is answered, the next step is turning
 those answers into product requirements.
-
----
-
-**Verification:** Every "resolves to stakeholder-questionnaire" row above contains the word
-"questionnaire" to anchor routing logic.

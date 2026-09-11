@@ -147,7 +147,7 @@ dispatch, and `codebase-architecture-review`'s `composition.invokes` does not ga
 | A mapped ticket already has an approved design | initiative-mapper → implementation-planner | `initiative_map` (ticket + evidence) | "Create the implementation plan for ticket `{ticket_id}` in `{initiative}`" |
 | Recommendations are ready to apply | merge-conflict-analysis → loop-task-implementer | `merge_conflict_analysis` (per-hunk recommendations + cited intent) | "Apply the recommended resolutions for the in-progress merge conflict" |
 | The recipient's (future) answers would resolve a decision that still needs interrogating | stakeholder-questionnaire → engineering-decision-discovery | `stakeholder_questionnaire` (decision context + questions) | "Grill me on the decision now that `{recipient}` has answered" |
-| The recipient's (future) answers would become PRD input | stakeholder-questionnaire → prd-architect | `stakeholder_questionnaire` (decision context + questions) | "Write a PRD for `{initiative}` once `{recipient}`'s answers are in" |
+| The recipient's (future) answers would become PRD input | stakeholder-questionnaire → prd-architect | `stakeholder_questionnaire` (decision context + questions) | "Write a PRD for `{title}` once `{recipient}`'s answers are in" |
 
 Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local deltas only.
 
