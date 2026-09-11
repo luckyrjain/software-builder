@@ -104,6 +104,7 @@ column.
 | `resilience-review` | `host.repository.read` | — | DEGRADED | `host.report.write` |
 | `security-review` | `host.report.write` | — | BLOCKED | — |
 | `squad-map` | **GitLab ❌** `gitlab.list_projects` | scm.merge_request.list | BLOCKED | — |
+| `stakeholder-questionnaire` | `host.repository.read` | — | BLOCKED | `host.report.write` |
 | `system-design` | `host.report.write` | — | BLOCKED | — |
 | `tech-debt-assessor` | `host.report.write` | — | BLOCKED | — |
 | `test-writer` | `host.repository.read` | — | BLOCKED | — |

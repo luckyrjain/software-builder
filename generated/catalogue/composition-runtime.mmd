@@ -41,6 +41,7 @@ graph TD
   resilience-review["resilience-review<br/>leaf"]
   security-review["security-review<br/>leaf"]
   squad-map["squad-map<br/>leaf"]
+  stakeholder-questionnaire["stakeholder-questionnaire<br/>leaf"]
   system-design["system-design<br/>leaf"]
   tech-debt-assessor["tech-debt-assessor<br/>leaf"]
   test-writer["test-writer<br/>router"]
@@ -175,6 +176,8 @@ graph TD
   research-brief -.->|escalates| engineering-decision-discovery
   research-brief -.->|escalates| prd-architect
   security-review -.->|escalates| dependency-upgrade-review
+  stakeholder-questionnaire -.->|escalates| engineering-decision-discovery
+  stakeholder-questionnaire -.->|escalates| prd-architect
   system-design -.->|escalates| api-design-review
   system-design -.->|escalates| database-review
   system-design -.->|escalates| observability-review

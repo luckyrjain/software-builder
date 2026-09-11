@@ -1,0 +1,119 @@
+stakeholder-questionnaire:
+  path: skills/stakeholder-questionnaire
+  category: product
+  extends: read-only-leaf-review
+  install:
+    requires: []
+  composition:
+    invokes: []
+    escalation_targets:
+    - engineering-decision-discovery
+    - prd-architect
+  capabilities:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
+  lint:
+    skill_md_max_lines: 180
+    target: stakeholder-questionnaire
+  version: 1.0.0
+  type: leaf
+  permissions:
+    repository: read
+    external_actions: none
+    unattended: false
+    merge: false
+  output_contract:
+    produces:
+    - stakeholder_questionnaire
+  dependencies: []
+  degraded_behavior:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
+  setup_freshness:
+    external_services: None — reads repository and caller-provided context only
+  routing:
+    # The bare `\bquestionnaire\b` anchor this skill shipped with was "co-occurrence-free" only in
+    # the narrow sense that no OTHER registered skill matches the word. That was never the risk.
+    # The risk is that "questionnaire" is an ordinary product noun, so ANY incidental mention of
+    # one -- inside a question that plainly belongs to another skill -- was claimed outright.
+    # Round 1 reproduced four of them live, each downgrading a clean sibling dispatch to
+    # `ambiguous`:
+    #   "Write a new-hire guide ... fill out the onboarding questionnaire in the HR system"
+    #                                          -> ambiguous(new-hire-guide, this skill)
+    #   "Find out whether our current user-research questionnaire methodology matches best
+    #    practice, citing sources"             -> ambiguous(research-brief, this skill)
+    #   "Write an implementation-ready PRD for the customer-satisfaction questionnaire feature."
+    #                                          -> ambiguous(prd-architect, this skill)
+    #   "Triage these incoming bug reports -- one is a broken link in the onboarding
+    #    questionnaire page."                  -> ambiguous(issue-triage, this skill)
+    # Unlike merge-conflict-analysis's round-1 problem (a negation defeating a bounded-gap
+    # pattern), this was a bare noun matching any mention of the artifact rather than an active
+    # request for one. Regression cases live in
+    # scripts/tests/test_stakeholder_questionnaire_routing.py.
+    #
+    # PATTERN 1 requires "questionnaire" to be the OBJECT of a create/prepare/send verb, with at
+    # most an optional "me", an optional determiner, and two modifier words in between. The tight
+    # window is load-bearing and was measured, not guessed. A free `[^.?!\n]{0,20..30}` gap (the
+    # shape first proposed for this fix) lets an unrelated object slip between the verb and the
+    # noun and reopens the whole class from the other side -- all of these matched it live:
+    #   "We need to fix the questionnaire service before the launch -- diagnose why it 500s."
+    #   "Write a spec for the questionnaire feature we scoped last week."
+    #   "Create a runbook for the questionnaire service's nightly export job."
+    #   "Send me a summary of the questionnaire module's tech debt."
+    #   "Make sure the questionnaire endpoint validates uploaded files -- security review please."
+    # Restricting the gap to determiner + <=2 modifiers drops all 14 reproduced verb-trap prompts
+    # while keeping every documented positive and 18 realistic request phrasings.
+    #
+    # THE TRAILING NEGATIVE LOOKAHEAD closes the last reproduced hole, which the tight gap alone
+    # does not: the ATTRIBUTIVE COMPOUND, where "questionnaire" modifies the real head noun and
+    # names a system under discussion rather than the artifact being asked for --
+    #   "We want the questionnaire service to scale to 10k RPS; forecast the capacity."
+    #   "Write the questionnaire service's runbook."
+    #   "Design the questionnaire schema for the new tenant model."
+    #   "Prepare the questionnaire release notes for Friday's deploy."
+    # Ten of these reproduced live against the tight-gap pattern. The lookahead is a narrowing
+    # INSIDE the include pattern, never an `exclude_patterns` entry: the dispatcher applies
+    # excludes as a whole-prompt veto over the entire skill, which merge-conflict-analysis's
+    # round-3 fix had to undo after it silently vetoed an unrelated pattern.
+    #
+    # The alternative narrowing -- a closed-class ALLOWLIST of what may follow "questionnaire"
+    # (punctuation, prepositions, pronouns, clause openers) -- was built and measured on the same
+    # corpora and scores identically (0 false positives, 0 missed positives). It was rejected on
+    # FAILURE MODE, not on score: an unlisted follower there silently DROPS a real request
+    # ("Draft a questionnaire tailored to the platform lead", "... ordered by importance"),
+    # whereas an unlisted head noun here merely lets one extra candidate through. The repo's own
+    # precedent (merge-conflict-analysis's rejected resolution-verb gate) treats a dropped
+    # documented positive as the worse outcome. The head-noun list is therefore best-effort by
+    # design; it degrades to the tight-gap behavior, never to silence.
+    #
+    # PATTERN 2 covers the one documented positive pattern 1 structurally cannot reach:
+    # examples.md's boundary-rule row, "The questionnaire you draft shouldn't need to be sent".
+    # The verb follows the noun there, so it needs its own shape. It is deliberately anchored on
+    # an intervening first/second-person pronoun rather than a bare reverse gap: a plain
+    # `questionnaire ... <verb>` window re-captures "the questionnaire we send to customers has a
+    # typo -- fix the template", "how the questionnaire is sent to respondents", and "why the
+    # questionnaire draft endpoint returns 500", all reproduced live. With the pronoun required,
+    # the phrase means the questionnaire THIS SKILL is being asked to produce.
+    #
+    # PLURAL (round-1 Finding 6): every anchor is `questionnaires?`. Multi-recipient phrasing
+    # ("Draft questionnaires for both the DBA and the SRE lead") is the same request, and the
+    # plural introduced no new match across the collision corpus, the background corpus, or the
+    # registry-wide sibling sweep. Pinned by test_plural_questionnaire_request_routes_here.
+    #
+    # ACCEPTED, MEASURED RESIDUAL -- stated as a decision, not an unknown. examples.md row 6
+    # ("We ran the questionnaire with the infra team and got their answers. Now turn these
+    # answers into a PRD.") no longer reaches this skill at all; it resolves to `prd-architect`
+    # alone, which is exactly what that row's own "Resolves to" column documents. The narrowing
+    # therefore also REPAIRED a downgrade the bare anchor was causing. What remains open is an
+    # attributive compound whose head noun is not in the list below; it costs one extra
+    # `ambiguous` candidate and never removes the correct sibling. Pinned by
+    # test_attributive_compound_residual_is_bounded.
+    patterns:
+    - \b(?:draft|drafting|write|writing|compose|create|creating|generate|produce|prepare|design|put
+      together|draw up|send|need|want)\s+(?:me\s+)?(?:a|an|the|this|that|our|my|your|their|another|one|some|\d+)?\s*(?:[\w'-]+\s+){0,2}questionnaires?\b(?!\s+(?:services?|endpoints?|modules?|pages?|forms?|tables?|features?|renderer|apis?|apps?|systems?|jobs?|flows?|tools?|library|repos?|components?|schema|pipeline|database|server|workers?|queue|tests?|code|scripts?|ui|screen|widget|templates?|engine|handler|controller|models?|package|dashboard|reports?|data|metrics|microservice|wizard|runbook|release|logs?|events?|records?|rows?|fields?|columns?|bugs?|tickets?)\b)
+    - \bquestionnaires?\s+(?:you|we|i)\s+(?:draft|write|compose|prepare|produce|generate|put
+      together)\b

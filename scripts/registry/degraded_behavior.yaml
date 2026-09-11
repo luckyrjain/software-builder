@@ -197,6 +197,11 @@ skills:
     missing_capability: gitlab.list_projects
     available_capabilities: []
     behavior: BLOCKED
+  stakeholder-questionnaire:
+    missing_capability: host.repository.read
+    available_capabilities:
+    - host.report.write
+    behavior: BLOCKED
   system-design:
     missing_capability: host.report.write
     available_capabilities: []

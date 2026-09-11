@@ -92,6 +92,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | claude | resilience-review | BLOCKED | host.report.write |
 | claude | security-review | BLOCKED | host.report.write |
 | claude | squad-map | BLOCKED | gitlab.list_projects |
+| claude | stakeholder-questionnaire | BLOCKED | host.report.write, host.repository.read |
 | claude | system-design | BLOCKED | host.report.write |
 | claude | tech-debt-assessor | BLOCKED | host.report.write |
 | claude | test-writer | BLOCKED | host.repository.read |
@@ -140,6 +141,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | cursor | resilience-review | BLOCKED | host.report.write |
 | cursor | security-review | BLOCKED | host.report.write |
 | cursor | squad-map | BLOCKED | gitlab.list_projects |
+| cursor | stakeholder-questionnaire | BLOCKED | host.report.write, host.repository.read |
 | cursor | system-design | BLOCKED | host.report.write |
 | cursor | tech-debt-assessor | BLOCKED | host.report.write |
 | cursor | test-writer | BLOCKED | host.repository.read |
@@ -188,6 +190,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | github-copilot | resilience-review | BLOCKED | host.report.write |
 | github-copilot | security-review | BLOCKED | host.report.write |
 | github-copilot | squad-map | BLOCKED | gitlab.list_projects |
+| github-copilot | stakeholder-questionnaire | BLOCKED | host.report.write, host.repository.read |
 | github-copilot | system-design | BLOCKED | host.report.write |
 | github-copilot | tech-debt-assessor | BLOCKED | host.report.write |
 | github-copilot | test-writer | BLOCKED | host.repository.read |
@@ -236,6 +239,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | kiro | resilience-review | BLOCKED | host.report.write |
 | kiro | security-review | BLOCKED | host.report.write |
 | kiro | squad-map | BLOCKED | gitlab.list_projects |
+| kiro | stakeholder-questionnaire | BLOCKED | host.report.write, host.repository.read |
 | kiro | system-design | BLOCKED | host.report.write |
 | kiro | tech-debt-assessor | BLOCKED | host.report.write |
 | kiro | test-writer | BLOCKED | host.repository.read |

@@ -1,0 +1,9 @@
+---
+description: Turn a decision the caller can't resolve alone into a discovery questionnaire for one named recipient who holds the missing knowledge — questions targeted at the gap between what the recipient knows and what the caller needs back, grouped by theme, most-important-first. Use when the blocker is a person's knowledge, not a decision the caller can reason through alone. Keywords: questionnaire, draft a questionnaire, discovery questionnaire, questions for the stakeholder, ask them these questions. Not for a decision the caller can answer with enough interrogation (engineering-decision-discovery), or turning answers into a PRD (prd-architect).
+alwaysApply: false
+---
+
+<!-- GENERATED from skills.yaml + SKILL.md — do not edit; run make generate -->
+
+Invoke the stakeholder-questionnaire skill. Read `skills/stakeholder-questionnaire/SKILL.md` and follow it.
+Phase index: `skills/stakeholder-questionnaire/reference/phase-index.md` when present under the skill directory.

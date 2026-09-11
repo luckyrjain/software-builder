@@ -49,3 +49,4 @@ cases:
   - {skill: issue-triage, missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
   - {skill: initiative-mapper, missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
   - {skill: merge-conflict-analysis, missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
+  - {skill: stakeholder-questionnaire, missing_capability: host.repository.read, available_capabilities: [host.report.write], expected_behavior: BLOCKED}
