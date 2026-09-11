@@ -1,4 +1,4 @@
-.PHONY: install install-incident-rca-deps install-claude lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-domain-modeling lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-codebase-architecture-review lint-engineering-decision-discovery lint-local-diff-review lint-bug-diagnosis lint-research-brief lint-issue-triage lint-initiative-mapper lint-merge-conflict-analysis lint-stakeholder-questionnaire setup-hooks setup validate-registry validate-operational-upkeep generate generate-check verify-github-ruleset kubesense-errors
+.PHONY: install install-incident-rca-deps install-claude lint lint-framework lint-pr-review lint-pr-gatekeeper lint-k8s-skill lint-k8s lint-incident-rca lint-incident-triage-agent lint-domain-comprehension lint-domain-modeling lint-squad-map lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-migration-program-manager lint-cost-optimization-sprint-planner lint-mysql-to-postgres-sql lint-loop-task-implementer lint-backlog-runner lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-test-writer lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-codebase-architecture-review lint-architecture-remediation-loop lint-engineering-decision-discovery lint-local-diff-review lint-bug-diagnosis lint-research-brief lint-issue-triage lint-initiative-mapper lint-merge-conflict-analysis lint-stakeholder-questionnaire setup-hooks setup validate-registry validate-operational-upkeep generate generate-check verify-github-ruleset kubesense-errors
 .PHONY: lint-change-impact-analyzer
 .PHONY: lint-implementation-planner
 .PHONY: lint-resilience-review
@@ -212,7 +212,7 @@ lint: lint-static lint-suites
 # across skills via `make -jN` and, only for the dominant scripts/tests/ suite, within
 # it via pytest-xdist (see PYTEST_XDIST_FLAG above). `make lint` still runs both groups
 # locally, in this order.
-lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-domain-modeling lint-codebase-architecture-review lint-engineering-decision-discovery lint-local-diff-review lint-bug-diagnosis lint-research-brief lint-issue-triage lint-initiative-mapper lint-merge-conflict-analysis lint-stakeholder-questionnaire lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
+lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-domain-modeling lint-codebase-architecture-review lint-architecture-remediation-loop lint-engineering-decision-discovery lint-local-diff-review lint-bug-diagnosis lint-research-brief lint-issue-triage lint-initiative-mapper lint-merge-conflict-analysis lint-stakeholder-questionnaire lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
 
 # koalaman/shellcheck-alpine below is pinned by digest, not the mutable :stable tag -- a Docker
 # tag can be silently repointed after review the same way a mutable git ref can, which is exactly
@@ -804,6 +804,19 @@ lint-codebase-architecture-review:
 		"## Framework" "## Begin"; do \
 		grep -Fqx "$$heading" $(SKILLS_DIR)/codebase-architecture-review/SKILL.md || \
 			{ echo "error: $(SKILLS_DIR)/codebase-architecture-review/SKILL.md must contain heading $$heading" >&2; exit 1; }; \
+	done
+	@echo "  ok"
+
+lint-architecture-remediation-loop:
+	@python3 scripts/lint_skills.py --skill architecture-remediation-loop
+	@echo "lint-architecture-remediation-loop: required SKILL.md headings"
+	@for heading in \
+		"## When to use / NOT to use" "## Deliverable" "## Required inputs" \
+		"## Prerequisites" "## Workflow" "## Candidate ledger and PR-batching policy" \
+		"## Circuit breakers" "## Cross-skill escalation" "## Post-actions" \
+		"## Framework" "## Begin"; do \
+		grep -Fqx "$$heading" $(SKILLS_DIR)/architecture-remediation-loop/SKILL.md || \
+			{ echo "error: $(SKILLS_DIR)/architecture-remediation-loop/SKILL.md must contain heading $$heading" >&2; exit 1; }; \
 	done
 	@echo "  ok"
 

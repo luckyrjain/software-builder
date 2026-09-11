@@ -1,7 +1,7 @@
 # Cross-skill escalation (shared)
 
 **Normative.** Symmetric escalation matrix for pr-review, pr-gatekeeper, incident-rca, incident-triage-agent, k8s-overprovisioning-datadog, domain-comprehension, domain-modeling, squad-map, who-owns-x-bot, new-hire-guide, release-readiness-checker, mysql-to-postgres-sql, loop-task-implementer, backlog-runner, migration-program-manager, cost-optimization-sprint-planner, weekly-squad-digest, prd-architect, test-writer, unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator, architecture-review, system-design, module-design, codebase-architecture-review, engineering-decision-discovery, api-design-review, database-review, security-review, performance-review, capacity-planner, observability-review, deployment-risk-review, dependency-upgrade-review, tech-debt-assessor, change-impact-analyzer, resilience-review, implementation-planner, local-diff-review, bug-diagnosis, research-brief, production-readiness-review, issue-triage,
-initiative-mapper, merge-conflict-analysis, and stakeholder-questionnaire.
+initiative-mapper, merge-conflict-analysis, stakeholder-questionnaire, and architecture-remediation-loop.
 
 **Consumers:** `SKILL.md` in each skill (link here; keep ≤10 skill-specific rows max).
 
@@ -147,6 +147,12 @@ dispatch, and `codebase-architecture-review`'s `composition.invokes` does not ga
 | A mapped ticket already has an approved design | initiative-mapper → implementation-planner | `initiative_map` (ticket + evidence) | "Create the implementation plan for ticket `{ticket_id}` in `{initiative}`" |
 | Recommendations are ready to apply | merge-conflict-analysis → loop-task-implementer | `merge_conflict_analysis` (per-hunk recommendations + cited intent) | "Apply the recommended resolutions for the in-progress merge conflict" |
 | The recipient's (future) answers would resolve a decision that still needs interrogating | stakeholder-questionnaire → engineering-decision-discovery | `stakeholder_questionnaire` (decision context + questions) | "Grill me on the decision now that `{recipient}` has answered" |
+| Every cycle — discover fresh architecture candidates for the ledger | architecture-remediation-loop → codebase-architecture-review | `review_scope` | "Review architecture friction in `{scope}`" |
+| Every candidate — grill and disposition before it can proceed | architecture-remediation-loop → engineering-decision-discovery | Candidate ID, scope, evidence, falsification result | "Grill me on the unresolved decisions for candidate `{candidate_id}` in `{scope}` using the attached evidence" |
+| An accepted candidate needs a concrete module/interface/seam design | architecture-remediation-loop → module-design | `engineering_decision_record` (resolved decisions + evidence refs) | "Design the module/interface/seam for `{scope}` using the resolved decision record" |
+| A batch of accepted, dispositioned candidates is ready to implement | architecture-remediation-loop → loop-task-implementer | `implementation_task` (batch candidate IDs, evidence, disposition, design spec) | "Implement the accepted candidates in batch `{batch_id}` for `{scope}`" |
+| This cycle's accepted batches are merge-confirmed; confirm the resulting state is clean before rediscovery | architecture-remediation-loop → production-readiness-review | `assessment_context` (merge-confirmed `source_revision` + inputs) | "Is the merge-confirmed state for `{scope}` production ready?" |
+| A candidate needs unfamiliar-domain context before disposition | architecture-remediation-loop → domain-comprehension | Candidate ID, bounded scope, domain gap | "Map the current-state domain for `{scope}` using candidate `{candidate_id}`" |
 | The recipient's (future) answers would become PRD input | stakeholder-questionnaire → prd-architect | `stakeholder_questionnaire` (decision context + questions) | "Write a PRD for `{title}` once `{recipient}`'s answers are in" |
 
 Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local deltas only.
@@ -267,6 +273,7 @@ When `MYSQL_TO_PG_SQL_REWRITES.md` exists in the workspace deliverable directory
 | Large, foggy, too-big-for-one-session effort decomposition | initiative-mapper |
 | In-progress git merge/rebase conflict needing a preserved-intent resolution recommendation | merge-conflict-analysis |
 | The blocker is one named person's knowledge, not the caller's own reasoning | stakeholder-questionnaire |
+| Autonomous, repeated, whole-codebase architecture remediation loop to convergence | architecture-remediation-loop |
 
 See each skill's **when NOT to use** table in `SKILL.md`.
 

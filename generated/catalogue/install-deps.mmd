@@ -1,4 +1,9 @@
 graph TD
+  architecture-remediation-loop --> codebase-architecture-review
+  architecture-remediation-loop --> engineering-decision-discovery
+  architecture-remediation-loop --> module-design
+  architecture-remediation-loop --> loop-task-implementer
+  architecture-remediation-loop --> production-readiness-review
   backlog-runner --> loop-task-implementer
   cost-optimization-sprint-planner --> k8s-overprovisioning-datadog
   cost-optimization-sprint-planner --> squad-map
