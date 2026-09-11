@@ -50,14 +50,14 @@ makes. The caller applies the resolution itself, or hands it to `loop-task-imple
 
 | Input | Required | Default |
 |-------|----------|---------|
-| *(none — detected from live repository state)* | — | The operation is detected with git's own ref/path resolution — `git rev-parse -q --verify MERGE_HEAD` / `CHERRY_PICK_HEAD` / `REVERT_HEAD`, plus `git rev-parse --git-path rebase-merge` / `rebase-apply` — never a hardcoded `.git/...` path, which is wrong inside a linked worktree or a submodule. A squash-merge or `git stash pop` sets no ref at all: unmerged paths in `git status --porcelain` are the fallback, with the operation recorded as undetermined |
+| *(none — detected from live repository state)* | — | The operation is detected with git's own ref/path resolution — `git rev-parse -q --verify MERGE_HEAD` / `CHERRY_PICK_HEAD` / `REVERT_HEAD`, plus `git rev-parse --git-path rebase-merge` / `rebase-apply` — never a hardcoded `.git/...` path, which is wrong inside a linked worktree or a submodule. `rebase-apply` serves two operations, so its `rebasing` / `applying` marker file separates an apply-backend rebase from a `git am` session. A squash-merge or `git stash pop` sets no ref at all: unmerged paths in `git status --porcelain` are the fallback, with the operation recorded as undetermined |
 
 **HARD STOP** if no conflicting operation is in progress *and* no unmerged path exists — this skill
 has no "describe a hypothetical conflict" mode. If an operation is in progress but nothing is
 unmerged, establish which of the two situations holds before saying anything: markers already
-resolved (finish with a commit under a merge, `git rebase --continue` under a rebase — never
-`git commit` during a rebase), or a rebase deliberately paused at an `edit`/`break` stop, which was
-never a conflict at all.
+resolved — `git commit` finishes a *merge* only; a rebase, cherry-pick, revert or `git am` needs
+its own `--continue`, since a bare commit there strands the rest of the sequencer — or a rebase
+deliberately paused at an `edit`/`break` stop, which was never a conflict at all.
 
 Details: [workflow/inputs.md](workflow/inputs.md).
 

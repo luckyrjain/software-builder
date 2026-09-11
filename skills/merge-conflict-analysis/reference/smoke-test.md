@@ -47,8 +47,12 @@ hunk where one side removes a discount branch the other side just modified).
 | No conflicting operation and no unmerged path | HARD STOP — state plainly; no "describe a hypothetical conflict" mode |
 | Running inside a linked worktree (`git worktree add`), mid-merge | Detected normally — `git rev-parse -q --verify MERGE_HEAD` succeeds even though `.git/MERGE_HEAD` does not exist |
 | A squash-merge or `git stash pop` left unmerged paths and no ref | Analyzed, with the operation recorded as `undetermined` and ours/theirs stated as unconfirmed — never guessed |
-| An operation is in progress but zero paths are unmerged | "Conflict markers already resolved; nothing to analyze — stage and commit to finish" — never an empty hunks list |
+| An operation is in progress but zero paths are unmerged | "Conflict markers already resolved; nothing to analyze" plus the **mode-correct** finisher — `git commit` for a merge, `git rebase --continue` / `git cherry-pick --continue` / `git revert --continue` / `git am --continue` for the others, never a bare commit for those — and never an empty hunks list |
+| A multi-commit `git cherry-pick A..B` or `git revert X Y` is mid-sequence | The advice states that `--continue` advances the sequencer and that more commits remain — a bare `git commit` strands them with the operation still reported in progress |
+| An `edit`/`break` pause, or a `rebase-apply` / `git am` stop | `MERGE_MSG` is only a conflict-stop marker for the `rebase-merge` backend; under `rebase-apply` and `git am` it is always absent, so it is never read there |
+| A conflicted `git am` (a `rebase-apply` directory holding `applying`) | Reported as an `am` session, not a rebase; the finisher named is `git am --continue` |
 | A conflicted rebase | "theirs" is read via `git show REBASE_HEAD`, not by branch name |
+| A conflicted `git revert` | "theirs" is `REVERT_HEAD^` (or stage 3), never `REVERT_HEAD` — the reverted commit is the merge base |
 | A hunk's originating commit message is a bare "fix" with no further context | Recorded as an unresolved question, never a guessed resolution |
 | No PR/issue text discoverable anywhere in-repo for a referenced ticket | Bare reference only — never fabricated ticket content |
 | Two sides' intents are genuinely incompatible and no merge/PR goal is discoverable | Recommend the more specific, more recently-authored intent, explicitly flagged as a judgment call |

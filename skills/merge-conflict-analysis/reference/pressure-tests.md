@@ -9,9 +9,12 @@ Manual checks after prompt or workflow edits.
 | No conflicting operation and no unmerged path | HARD STOP — state plainly; no "describe a hypothetical conflict" mode |
 | Caller describes a conflict from memory instead of live repository state | Reject; this skill only analyzes live state resolved by git itself |
 | The repository is a linked worktree (`git worktree add`), so `.git` is a file and `.git/MERGE_HEAD` never exists | Still detected — detection uses `git rev-parse -q --verify MERGE_HEAD`, never a hardcoded path |
-| The conflict came from `git cherry-pick` or `git revert` | Detected via `CHERRY_PICK_HEAD` / `REVERT_HEAD` and analyzed like any other conflict |
+| The conflict came from `git cherry-pick` | Detected via `CHERRY_PICK_HEAD`; "theirs" is that commit, and the finisher is `git cherry-pick --continue` |
+| The conflict came from `git revert` | Detected via `REVERT_HEAD`, but "theirs" is `REVERT_HEAD^` — the reverted commit is the merge base, and its own diff is the inverse of the incoming side |
+| The conflict came from `git am`, which reuses the `rebase-apply` directory | Reported as an `am` session (`rebase-apply/applying`), not a rebase; the finisher is `git am --continue` |
 | The conflict came from `git merge --squash` or `git stash pop`, which set no ref | Analyzed anyway from unmerged paths; the operation is reported as `undetermined` and ours/theirs as unconfirmed — never guessed |
-| A merge is in progress but the caller already resolved every marker without committing | "Conflict markers already resolved; nothing to analyze — stage and commit to finish" — never an empty report |
+| A merge is in progress but the caller already resolved every marker without committing | "Conflict markers already resolved; nothing to analyze — stage and `git commit` to finish the merge" — never an empty report |
+| A cherry-pick, revert, rebase or `am` is in progress but every marker is already resolved | Same statement with the mode's own `--continue`, never a bare `git commit`; for a multi-commit range, that more commits remain in the sequencer |
 | A conflicted file has multiple hunks, only one of which the caller mentions | Account for every hunk in the file, not just the one named |
 
 ## Hunk resolution discipline

@@ -24,10 +24,10 @@ any of them:
 
 | Field | Value |
 |-------|-------|
-| Git operation | merge / rebase / cherry-pick / revert / undetermined |
-| Detected by | `MERGE_HEAD` / `rebase-merge` / `rebase-apply` / `CHERRY_PICK_HEAD` / `REVERT_HEAD` / unmerged paths only |
+| Git operation | merge / rebase / cherry-pick / revert / `git am` / undetermined |
+| Detected by | `MERGE_HEAD` / `rebase-merge` / `rebase-apply` + `rebasing` / `rebase-apply` + `applying` / `CHERRY_PICK_HEAD` / `REVERT_HEAD` / unmerged paths only |
 | "ours" means | <the current branch, or — under rebase — the base being replayed onto> |
-| "theirs" means | <the incoming branch/commit, or — under rebase — the commit being replayed (`REBASE_HEAD`)> |
+| "theirs" means | <the incoming branch/commit; under rebase the commit being replayed (`REBASE_HEAD`); under **revert** the *parent* of the reverted commit (`REVERT_HEAD^`), never `REVERT_HEAD` itself> |
 
 ## Conflicted hunks
 
@@ -49,9 +49,11 @@ any of them:
 ## Rules
 
 - `## Mode` is always present and always states the detected operation plus what "ours"/"theirs"
-  mean for *this* report — the meaning inverts between merge and rebase. When no ref identified the
-  operation (a squash-merge or `git stash pop`, which set none), the operation is `undetermined`,
-  the ours/theirs rows say "unconfirmed", and an Unresolved questions entry records it. Never guess
+  mean for *this* report — the meaning inverts between merge and rebase, and again for a revert,
+  whose "theirs" is `REVERT_HEAD^` rather than `REVERT_HEAD` (the reverted commit is the merge
+  base; git's markers name that side `parent of <sha>`). When no ref identified the operation (a
+  squash-merge or `git stash pop`, which set none), the operation is `undetermined`, the
+  ours/theirs rows say "unconfirmed", and an Unresolved questions entry records it. Never guess
   the operation.
 - Every hunk carries a stable `id` (`H1`, `H2`, …, in report order). Unresolved questions and the
   Recommendation reference hunks by that id, not by prose position.

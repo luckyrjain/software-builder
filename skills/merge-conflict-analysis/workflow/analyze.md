@@ -20,9 +20,17 @@ For each conflicted file in `conflict_state`, for each conflict hunk (each `<<<<
    | Mode | Reading "ours" | Reading "theirs" |
    |------|----------------|--------------------|
    | merge | the current branch by name, or `HEAD` | the branch being merged in by name, or `MERGE_HEAD` |
-   | cherry-pick / revert | `HEAD` | `git show CHERRY_PICK_HEAD` / `git show REVERT_HEAD` |
+   | cherry-pick | `HEAD` | `git show CHERRY_PICK_HEAD` — its content *is* stage 3 |
+   | revert | `HEAD` | content: `git show REVERT_HEAD^:<path>`, or stage 3 directly (`git show :3:<path>`). Intent: `git show REVERT_HEAD` — but that prints the commit being **undone**, the inverse of what theirs contains, so read it as "what is being removed, and why"; `git show -R REVERT_HEAD` prints the change actually being applied |
    | rebase | `HEAD` — the base already replayed onto | `git show REBASE_HEAD` / `git log -1 REBASE_HEAD` — the commit being replayed is **not** reachable by branch name the way a merge's two sides are; `REBASE_HEAD` exists during a conflicted rebase precisely for this |
+   | `git am` / apply-backend rebase | `HEAD` | no commit ref for the incoming side yet — read stage 3 (`git show :3:<path>`) and the patch at `$(git rev-parse --git-path rebase-apply)/patch` |
    | undetermined | `HEAD`, with the operation stated as unconfirmed | no ref available — read the working-tree stages (`git show :2:<path>` / `:3:<path>`) and say the commit-level intent could not be recovered |
+
+   A revert is the one mode where the "theirs" ref and the "theirs" content come apart:
+   `REVERT_HEAD` is the merge **base**, not the incoming side, and git's own marker labels that
+   side `>>>>>>> parent of <sha>`. Citing `REVERT_HEAD`'s diff as theirs' content inverts the
+   analysis. Stage 3 is authoritative in every mode — use it to check any ref reading that looks
+   surprising.
 
    Where a commit message references an issue/ticket or the branch name
    suggests a PR, check whether that text is present anywhere in the repository's own history

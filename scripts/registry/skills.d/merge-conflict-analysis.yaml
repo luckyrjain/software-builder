@@ -61,15 +61,35 @@ merge-conflict-analysis:
     # (`\S*[./]\S*`) closes the same hole from the other side: git names a real file there, so
     # "Merge conflict in the generated protobuf files" (no dot, no slash) still does not match.
     #
-    # THE EXCLUDE (round 2) is narrowly scoped to ONE reproduced false positive: a negation
-    # sitting inside pattern 1's `{0,40}` gap. "There is no merge conflict here -- just review the
-    # PR" matched pattern 1 (the gap happily spans "no") and turned a clean pr-review selection
-    # into `ambiguous`. The 12-character gap is deliberately much tighter than pattern 1's 40: it
-    # reaches across "no"/"not"/"isn't" and an article or two, but not across a whole clause, so
-    # it cannot swallow a legitimate request that merely contains a negation somewhere else
-    # ("There's a merge conflict and I'm not sure which side to keep -- analyze it" still routes
-    # here). Verified against every ACTIVE_REQUESTS, BACKGROUND_MENTIONS, and
-    # SIBLING_CONFLICT_VOCABULARY case plus the sibling positive-eval corpus.
+    # THE NEGATION GUARD (round 2, relocated in round 3) closes ONE reproduced false positive: a
+    # negation sitting inside pattern 1's `{0,40}` gap. "There is no merge conflict here -- just
+    # review the PR" matched pattern 1 (the gap happily spans "no") and turned a clean pr-review
+    # selection into `ambiguous`.
+    #
+    # Round 2 implemented it as an `exclude_patterns` entry. Round 3 proved that placement wrong:
+    # scripts/evals/dispatcher.py applies excludes as a WHOLE-PROMPT VETO over the entire skill
+    # (`any(include) and not any(exclude)`), never per-pattern. So a prompt carrying a negation
+    # near the words "merge conflict" AND git's own conflict output was vetoed on pattern 4 too,
+    # even though pattern 4's match has nothing to do with the negation. Three prompts reproduced
+    # it live, all returning `no_match`:
+    #   "I have no merge conflict locally but CI says CONFLICT (content): Merge conflict in src/a.py"
+    #   "We did not have a merge conflict before, but now git says CONFLICT (content): Merge conflict in src/app.py"
+    #   "There is no merge conflict according to the UI, yet: CONFLICT (content): Merge conflict in lib/x.py"
+    # Making the exclude case-SENSITIVE was proposed and measured against those three: it does NOT
+    # fix them. Their negations are ordinary lowercase prose, so a lowercase-only exclude still
+    # fires and still vetoes pattern 4. The guard had to move, not change case.
+    #
+    # It now lives INSIDE patterns 1 and 3 as a tempered gap -- every gap character is required
+    # not to begin a negation word: `(?:(?!<negations>)[^.?!\n]){0,40}`. That scopes the guard to
+    # exactly the two patterns whose gap can swallow a negation, and makes it structurally
+    # incapable of suppressing pattern 4 (git's literal output) or pattern 2, neither of which has
+    # a gap. `exclude_patterns` is gone entirely: this skill needs no whole-prompt veto. The
+    # tempered gap preserves round 2's own property -- a legitimate request that merely contains a
+    # negation elsewhere ("There's a merge conflict and I'm not sure which side to keep -- analyze
+    # it") still routes here, because the negation is not inside the gap. Verified against every
+    # ACTIVE_REQUESTS, BACKGROUND_MENTIONS, NEGATED_CONFLICT_MENTIONS, GIT_OWN_CONFLICT_OUTPUT and
+    # SIBLING_CONFLICT_VOCABULARY case plus the sibling positive-eval corpus. Pinned by
+    # test_git_output_survives_a_negation_elsewhere_in_the_prompt.
     #
     # ACCEPTED RESIDUAL, stated as a decision rather than an unknown (round 2, Finding 3). A
     # present-tense mention of a conflict that is still only BACKGROUND for another domain's
@@ -89,18 +109,43 @@ merge-conflict-analysis:
     #     does each side want?" and examples.md's own worktree row ("There's a merge conflict
     #     here"), both documented positives.
     # The same judgment call issue-triage's final round and initiative-mapper's round 2 made for
-    # their own residuals. Two backstops bound the cost: every one of these prompts was
-    # `no_match` before this skill existed (no sibling's patterns claim them either, verified on
-    # the live dispatcher), so the outcome is a candidate where there was no owner, never a
-    # stolen one; and workflow/inputs.md HARD STOPs on live repository state when no operation is
-    # in progress and nothing is unmerged, so a background mention cannot produce a fabricated
-    # analysis. Pinned by test_present_tense_background_mentions_are_an_accepted_residual.
+    # their own residuals. The second backstop still holds unconditionally: workflow/inputs.md
+    # HARD STOPs on live repository state when no operation is in progress and nothing is
+    # unmerged, so a background mention can never produce a fabricated analysis.
+    #
+    # THE RESIDUAL'S COST, STATED ACCURATELY (corrected in round 3). Round 2 claimed a second,
+    # broader backstop: "every one of these prompts was `no_match` before this skill existed, so
+    # the outcome is a candidate where there was no owner, never a stolen one." That claim is true
+    # ONLY for the four prompts pinned in PRESENT_TENSE_BACKGROUND_RESIDUAL (still re-derived live
+    # by test_residual_class_had_no_other_owner_to_steal_from). It is NOT true of the class. Round
+    # 3 reproduced prompts where the residual DOWNGRADES an already-clean sibling dispatch:
+    #   "We have a merge conflict in the payments module right now -- help me decide whether to
+    #    restructure the module ownership."      rules minus this skill -> engineering-decision-discovery
+    #                                            full rules             -> ambiguous (edd + this skill)
+    # Same for "Grill me on the plan to split it up" and "challenge my plan to move to trunk-based
+    # development" framings. The downgrade is `selected` -> `ambiguous`, never an outright steal --
+    # engineering-decision-discovery stays in the candidate set in every reproduced case.
+    #
+    # Two narrowings were built and measured before accepting this, not assumed:
+    #   * Excluding engineering-decision-discovery's own trigger phrases ("help me decide", "grill
+    #     me", "challenge my plan", ...) does suppress all three residual prompts -- and also
+    #     suppresses "I have a merge conflict here -- help me decide which side to keep", a
+    #     genuine request for THIS skill, handing it to engineering-decision-discovery alone. That
+    #     trades `ambiguous` for a confidently wrong owner: strictly worse.
+    #   * A cross-clause variant (conflict noun in one clause, decision phrase in another) fails
+    #     on both ends: it still suppresses the same legitimate request, and it misses the
+    #     sentence-separated residual ("There is a rebase conflict ... . Grill me on the plan").
+    # The two clause shapes are word-for-word identical; only the referent of the decision request
+    # differs, which is semantic, not lexical. Pinned as-is by
+    # test_present_tense_background_mentions_are_an_accepted_residual (ownerless-before cases) and
+    # test_residual_downgrades_a_clean_sibling_dispatch_to_ambiguous (the corrected bound).
     patterns:
-    - \b(?:there(?:'s| is| are)|i(?:'m| am) stuck on|i(?:'ve| have)|we(?:'ve| have))\b[^.?!\n]{0,40}\b(?:merge|rebase)
+    - \b(?:there(?:'s| is| are)|i(?:'m| am) stuck on|i(?:'ve| have)|we(?:'ve|
+      have))\b(?:(?!\b(?:no|not|isn'?t|wasn'?t|aren'?t|weren'?t|never)\b)[^.?!\n]){0,40}\b(?:merge|rebase)
       conflicts?\b
     - \b(?:this|these|my|our) (?:merge|rebase) conflicts?\b
     - \b(?:resolv(?:e|ing)|analy[sz](?:e|ing)|fix|fixing|understand|understanding|explain|walk
-      me through|help me with)\b[^.?!\n]{0,24}\b(?:merge|rebase) conflicts?\b
+      me through|help me
+      with)\b(?:(?!\b(?:no|not|isn'?t|wasn'?t|aren'?t|weren'?t|never)\b)[^.?!\n]){0,24}\b(?:merge|rebase)
+      conflicts?\b
     - (?-i:\bCONFLICT\s*\([a-zA-Z/ _-]+\):|\bMerge conflict in \S*[./]\S*)
-    exclude_patterns:
-    - \b(?:no|not|isn'?t|wasn'?t|aren'?t|weren'?t|never)\b[^.?!\n]{0,12}\b(?:merge|rebase) conflicts?\b

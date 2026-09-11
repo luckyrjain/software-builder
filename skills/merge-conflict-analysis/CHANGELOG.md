@@ -20,3 +20,18 @@
   `ours_theirs_note`), gives every hunk a stable `id` (`H1`, `H2`, …), reads a rebase's "theirs"
   side via `git show REBASE_HEAD`, and says plainly when an operation is in progress but every
   marker is already resolved instead of emitting an empty hunks list.
+- A revert's "theirs" is `REVERT_HEAD^`, not `REVERT_HEAD` — a revert runs the merge with the
+  roles swapped, so the reverted commit is the merge base (stage 1) and git labels the incoming
+  side `parent of <sha>`. Reverified against a live conflicted `git revert`; cherry-pick keeps the
+  straightforward reading (`CHERRY_PICK_HEAD` *is* stage 3).
+- The "already resolved, nothing to analyze" statement is mode-correct: `git commit` finishes a
+  merge only. Cherry-pick and revert are sequencer operations like rebase — a bare commit there
+  lands one commit, clears the head ref, and leaves the remaining range unapplied with the
+  sequencer still active, so the advice names `git cherry-pick --continue` / `git revert
+  --continue` and says more commits may remain.
+- `MERGE_MSG` is used as a conflict-stop marker only under the `rebase-merge` backend. The
+  `rebase-apply` backend and `git am` never write it even when genuinely stopped on a conflict,
+  and neither has an `edit`/`break` stop to be confused with. `rebase-apply` is shared by both, so
+  its `rebasing` / `applying` marker file distinguishes an apply-backend rebase from a `git am`
+  session, which is finished with `git am --continue`. Where those two leave a clean tree the
+  patch never applied at all — reported as such, not as "already resolved".

@@ -117,8 +117,13 @@ def test_sibling_conflict_vocabulary_does_not_route_to_merge_conflict_analysis(p
 # --- Round 2, Finding 1: negation inside pattern 1's gap -------------------------------------
 # Pattern 1 allows up to 40 characters between its trigger phrase and the conflict noun, and a
 # bare "no" fits there comfortably: "There is no merge conflict here — just review the PR" matched
-# it and downgraded a clean pr-review selection to `ambiguous`. The narrow negation exclude closes
-# it. These are reproduced false positives, not defensive guesses.
+# it and downgraded a clean pr-review selection to `ambiguous`. A negation guard closes it. These
+# are reproduced false positives, not defensive guesses.
+#
+# Round 3 relocated that guard from `exclude_patterns` into the gap of patterns 1 and 3 (see
+# `test_git_output_survives_a_negation_elsewhere_in_the_prompt` below and the routing comment in
+# scripts/registry/skills.d/merge-conflict-analysis.yaml). The behavior these tests assert is
+# unchanged; only where the guard lives changed.
 NEGATED_CONFLICT_MENTIONS = [
     "There is no merge conflict here — just review the PR",
     "There's no merge conflict here — just review the PR",
@@ -134,10 +139,10 @@ def test_negated_conflict_mentions_do_not_route_to_merge_conflict_analysis(promp
 
 
 @pytest.mark.parametrize("prompt", NEGATED_CONFLICT_MENTIONS)
-def test_negation_exclude_never_leaves_a_prompt_ownerless(prompt: str) -> None:
-    """An exclude must never strip the only candidate and orphan the request.
+def test_negation_guard_never_leaves_a_prompt_ownerless(prompt: str) -> None:
+    """A narrowing must never strip the only candidate and orphan the request.
 
-    This is the failure mode issue-triage's own fragment documents at length: an exclude that
+    This is the failure mode issue-triage's own fragment documents at length: a narrowing that
     defers to a sibling has to leave that sibling actually holding the prompt. Every negated
     phrasing above still says "review the PR", so pr-review owns it outright.
     """
@@ -155,13 +160,50 @@ def test_negation_exclude_never_leaves_a_prompt_ownerless(prompt: str) -> None:
     ],
 )
 def test_negation_elsewhere_in_the_prompt_still_routes_here(prompt: str) -> None:
-    """The exclude's 12-character gap is deliberately much tighter than pattern 1's 40.
+    """The guard only rejects a negation *inside* the trigger-to-noun gap.
 
-    It reaches across a negation plus an article, not across a whole clause, so a legitimate
-    request that merely contains "not"/"no" somewhere else keeps its owner.
+    A legitimate request that merely contains "not"/"no" somewhere else — past the conflict noun,
+    or in a different clause — keeps its owner.
     """
     result = _dispatch(prompt)
     assert "merge-conflict-analysis" in result.candidates, (prompt, result)
+
+
+# --- Round 3, Finding 1: the negation guard must not veto git's own output -------------------
+# scripts/evals/dispatcher.py applies `exclude_patterns` as a WHOLE-PROMPT VETO over the whole
+# skill (`any(include) and not any(exclude)`), not per-pattern. Round 2 put the negation guard
+# there, so any prompt that paired a negated conflict mention with git's literal conflict output
+# lost pattern 4 as well and fell all the way to `no_match`. All three prompts below reproduced
+# that live. The guard now lives inside patterns 1 and 3 as a tempered gap, which cannot reach
+# pattern 4 at all.
+#
+# A case-SENSITIVE exclude was the first fix proposed for this and was measured against these
+# three prompts: it does not fix them. Their negations are lowercase prose, so a lowercase-only
+# exclude fires exactly as before and still vetoes pattern 4.
+NEGATION_PLUS_GIT_OUTPUT = [
+    "I have no merge conflict locally but CI says CONFLICT (content): Merge conflict in src/a.py",
+    "We did not have a merge conflict before, but now git says CONFLICT (content): Merge conflict"
+    " in src/app.py",
+    "There is no merge conflict according to the UI, yet: CONFLICT (content): Merge conflict in"
+    " lib/x.py",
+]
+
+
+@pytest.mark.parametrize("prompt", NEGATION_PLUS_GIT_OUTPUT)
+def test_git_output_survives_a_negation_elsewhere_in_the_prompt(prompt: str) -> None:
+    result = _dispatch(prompt)
+    assert result.status == "selected", (prompt, result)
+    assert result.owner == "merge-conflict-analysis", (prompt, result)
+
+
+def test_the_skill_declares_no_whole_prompt_exclude() -> None:
+    """Structural guard on the Finding-1 fix, not a restatement of it.
+
+    The dispatcher's exclude semantics are whole-skill, so re-introducing an `exclude_patterns`
+    entry here silently reopens the pattern-4 veto above. Keep the narrowing inside the include
+    patterns that actually need it.
+    """
+    assert _own_rule().exclude == (), _own_rule().exclude
 
 
 # --- Round 2, Finding 2: git's own conflict output, pasted verbatim -------------------------
@@ -235,15 +277,83 @@ def test_present_tense_background_mentions_are_an_accepted_residual(prompt: str)
 
 @pytest.mark.parametrize("prompt", PRESENT_TENSE_BACKGROUND_RESIDUAL)
 def test_residual_class_had_no_other_owner_to_steal_from(prompt: str) -> None:
-    """Bounds the residual's cost: these prompts were ownerless before this skill existed.
+    """Bounds the cost of THESE FOUR prompts: they were ownerless before this skill existed.
 
     Re-derived live rather than asserted from memory — every sibling's patterns are loaded and
-    this skill's are removed. The outcome of the residual is therefore "a candidate where there
-    was none", never "a sibling's prompt taken away".
+    this skill's are removed. For the four entries above the outcome of the residual is therefore
+    "a candidate where there was none", never "a sibling's prompt taken away".
+
+    This does NOT generalize to the whole residual class; see
+    `test_residual_downgrades_a_clean_sibling_dispatch_to_ambiguous` for the counterexample round 3
+    reproduced, and the corrected bound in the routing comment.
     """
     rules = dict(load_routing_rules(ROOT, load_registry(ROOT)))
     del rules["merge-conflict-analysis"]
     assert dispatch_with_rules(rules, prompt).status == "no_match", (prompt, rules.keys())
+
+
+# --- Round 3, Finding 6: the residual's real, narrower bound ---------------------------------
+# Round 2 documented the residual as costless because "every residual prompt was `no_match` before
+# this skill existed". That is true of the four prompts pinned above and false of the class. Each
+# prompt below independently matches engineering-decision-discovery's own trigger phrases on its
+# own merits, resolves to that skill ALONE with this skill's rules removed, and becomes `ambiguous`
+# once they are restored — an already-working sibling dispatch degraded by this skill's residual.
+#
+# It is a downgrade, not a steal: engineering-decision-discovery stays in the candidate set every
+# time. Two narrowings were built and measured before accepting it (both recorded in the routing
+# comment): excluding engineering-decision-discovery's trigger phrases, and a cross-clause variant
+# of the same. Both suppress "I have a merge conflict here — help me decide which side to keep" —
+# a genuine request for THIS skill — and hand it to engineering-decision-discovery alone, trading
+# `ambiguous` for a confidently wrong owner. The residual clause and the legitimate clause are
+# word-for-word identical; only the referent of the decision request differs.
+SIBLING_DOWNGRADE_RESIDUAL = [
+    "We have a merge conflict in the payments module right now — help me decide whether to"
+    " restructure the module ownership.",
+    "There is a rebase conflict every time we touch the auth service. Grill me on the plan to"
+    " split it up.",
+    "We have a merge conflict blocking the release train — challenge my plan to move to"
+    " trunk-based development.",
+]
+
+
+@pytest.mark.parametrize("prompt", SIBLING_DOWNGRADE_RESIDUAL)
+def test_residual_downgrades_a_clean_sibling_dispatch_to_ambiguous(prompt: str) -> None:
+    """Pins the corrected, honest bound on the residual's cost.
+
+    Both halves are re-derived live so the claim stays falsifiable: without this skill's rules the
+    prompt is owned outright by engineering-decision-discovery; with them it is `ambiguous`.
+    """
+    full = dict(load_routing_rules(ROOT, load_registry(ROOT)))
+    without = {k: v for k, v in full.items() if k != "merge-conflict-analysis"}
+
+    before = dispatch_with_rules(without, prompt)
+    assert before.status == "selected", (prompt, before)
+    assert before.owner == "engineering-decision-discovery", (prompt, before)
+
+    after = dispatch_with_rules(full, prompt)
+    assert after.status == "ambiguous", (prompt, after)
+    assert set(after.candidates) == {"engineering-decision-discovery", "merge-conflict-analysis"}, (
+        prompt,
+        after,
+    )
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "I have a merge conflict here — help me decide which side to keep.",
+        "This merge conflict is blocking us; help me decide which side to keep.",
+    ],
+)
+def test_a_decision_phrase_about_the_conflict_itself_still_reaches_this_skill(prompt: str) -> None:
+    """Why the Finding-6 residual is not closed by excluding the sibling's trigger phrases.
+
+    These prompts are structurally identical to `SIBLING_DOWNGRADE_RESIDUAL` — conflict clause,
+    separator, decision phrase — but the decision *is* the conflict resolution, so this skill
+    belongs in the candidate set. Any exclude keyed on the sibling's vocabulary drops these too.
+    """
+    result = _dispatch(prompt)
+    assert "merge-conflict-analysis" in result.candidates, (prompt, result)
 
 
 def _positive_cases() -> list[tuple[str, str]]:
@@ -289,15 +399,15 @@ def _own_rule():
     ],
 )
 def test_round2_additions_contribute_no_new_capture_over_the_sibling_corpus(skill: str, prompt: str) -> None:
-    """Isolates the round-2 additions inside the registry-wide sweep.
+    """Isolates the round-2 git-output pattern inside the registry-wide sweep.
 
-    The sweep above passes for whole-rule reasons, so it cannot say whether the newly added
-    git-output pattern is what is (or isn't) firing. This one checks that pattern on its own
-    against every sibling positive prompt, and separately checks that the negation exclude is
-    inert over the corpus — an exclude that fired here would mean it is doing something other
-    than suppressing a negated conflict mention.
+    The sweep above passes for whole-rule reasons, so it cannot say whether the added git-output
+    pattern is what is (or isn't) firing. This one checks that pattern on its own against every
+    sibling positive prompt.
+
+    The negation guard is no longer a separate exclude to check here — round 3 moved it inside
+    patterns 1 and 3, where the sweep above already exercises it. `test_the_skill_declares_no_
+    whole_prompt_exclude` keeps it from reappearing as a whole-skill veto.
     """
     git_output_pattern = _own_rule().include[-1]
     assert not git_output_pattern.search(prompt), (skill, prompt, git_output_pattern.pattern)
-    for excluded in _own_rule().exclude:
-        assert not excluded.search(prompt), (skill, prompt, excluded.pattern)
