@@ -24,6 +24,10 @@ architecture_remediation_report:
       REJECT: <int>
       OUT_OF_SCOPE: <int>
     open: <int>   # disposition still null — only nonzero when stopped_reason is set
+    regressions: <int>   # rows with source: regression this run — a merge-confirmed fix rediscovered by
+                          # a later Discover pass; visible here even once the regression row itself
+                          # closes REJECT/ALREADY_SATISFIED, so it's never silently indistinguishable
+                          # from an unrelated first-time candidate at the summary level
   batches:
     - batch_id: "<id>"
       candidate_ids: []

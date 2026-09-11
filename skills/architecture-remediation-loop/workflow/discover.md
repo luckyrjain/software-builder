@@ -1,5 +1,5 @@
 ---
-workflow_version: 1.2
+workflow_version: 1.3
 phase: discover
 produces:
   - candidate_ledger
@@ -33,9 +33,10 @@ prior row (§ 4) does.
 3. For every retained candidate (`Strong` / `Worth exploring` / `Speculative`, each with its falsification
    result), open a new row in the candidate ledger per
    [reference/candidate-ledger.md § Schema](../reference/candidate-ledger.md#schema) — copy its scope,
-   evidence, confidence, and falsification result verbatim; do not re-derive or restate them.
-   codebase-architecture-review's own local identifier is not guaranteed stable across independent
-   invocations, so dedup (§ 4) never keys on ID equality alone.
+   evidence, confidence, and falsification result verbatim; do not re-derive or restate them. Set
+   `cycle_discovered` to the current `cycles_run` value (see
+   [workflow/converge.md § 5](converge.md)). codebase-architecture-review's own local identifier is not
+   guaranteed stable across independent invocations, so dedup (§ 4) never keys on ID equality alone.
 4. **Deduplicate against the existing ledger** (cycle 2+ only), matching on scope + root cause **and**
    evidence overlap (shared file paths/line ranges across `evidence_refs`) — codebase-architecture-review's
    own candidate phrasing is not guaranteed stable between invocations, so text similarity alone is not

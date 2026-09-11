@@ -42,6 +42,11 @@ tooling fix) never share a batch even if both are small.
   the provisional classification assumed.
 - **De-escalate** a candidate that turns out to be a small, localized change with no isolation benefit into
   a related batch — but only before that batch's loop-task-implementer invocation starts, never mid-task.
+- **A candidate any other row's `depends_on_batch` references must not move batches** without also
+  re-pointing every such dependent row's `depends_on_batch` to the new `batch_id` in the same step —
+  moving it silently would let the dependent dispatch against a batch that no longer contains the code it
+  depends on (see [§ 6](#6-inter-batch-dependencies)). If re-pointing isn't possible before the dependent
+  batch would otherwise dispatch, escalate the dependent too rather than let it proceed unguarded.
 - Each loop-task-implementer dispatch for a batch increments that batch's `batch_attempt_count` (see
   [reference/candidate-ledger.md § Schema](candidate-ledger.md#schema)). A second consecutive `ESCALATED`
   outcome for the same batch trips `REPEATED_BATCH_ESCALATION` — see
@@ -69,3 +74,10 @@ design, record it explicitly as `depends_on_batch` (the dependency's `batch_id`)
 candidate's own ledger row — see
 [reference/candidate-ledger.md § Schema](candidate-ledger.md#schema) — never as an implicit ordering
 assumption that doesn't survive a session boundary.
+
+**No dependency cycles.** Before dispatching any batch, walk its `depends_on_batch` chain; if it ever
+returns to a batch already in the chain (A depends on B, B depends on A, directly or transitively), both
+batches would stay `PENDING` forever with nothing to force them out — do not dispatch either. Disposition
+one of the two candidates differently instead (e.g. `ACCEPT_WITH_MODIFICATION` removing the circular
+assumption, or `OUT_OF_SCOPE` if the two genuinely can't land independently) rather than batching a cycle
+that can never resolve on its own.

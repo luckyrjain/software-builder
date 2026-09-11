@@ -3,6 +3,27 @@
 All notable changes to the architecture-remediation-loop skill. Per-file `workflow_version` in
 `workflow/*.md` frontmatter should match the version of the latest entry below that names that file.
 
+## [1.1.2] — 2026-09-11
+
+### Fixed
+- Found via a third, fresh review pass (correctness + adversarial break-it, targeting specifically the
+  merge checkpoint, the `source: regression` split, and `depends_on_batch`):
+- **Medium-High:** escalating or de-escalating a candidate another row's `depends_on_batch` references
+  could silently invalidate that dependency (the referenced batch merges without the code the dependent
+  actually needs). `pr-batching-policy.md` § 4 now forbids moving a depended-on candidate without
+  re-pointing every dependent row in the same step.
+- **Medium:** `depends_on_batch` had no cycle detection — two mutually-dependent batches would stay
+  `PENDING` forever, rescued only incidentally by the stall breaker after wasted cycles. § 6 now requires
+  walking the dependency chain before dispatch and dispositioning one side differently instead of batching
+  an unresolvable cycle.
+- **Medium:** a regression (`source: regression`) was invisible at the report's summary level — the old,
+  merge-confirmed row just stayed `COMPLETED` forever with no visible signal. `report-format.md` gained a
+  `candidates.regressions` count.
+- `cycle_discovered` was defined in the ledger schema but never actually set by any workflow step;
+  `discover.md` now sets it from `cycles_run`.
+- `remediate.md` said to "attach `module_design_spec`" to a row, but the schema field is
+  `module_design_spec_ref` (a pointer, matching this repo's own `_ref` convention) — reworded.
+
 ## [1.1.1] — 2026-09-11
 
 ### Fixed
