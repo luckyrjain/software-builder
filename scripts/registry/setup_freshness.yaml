@@ -109,6 +109,8 @@ skills:
     external_services: None — reads supplied code/design content and repository only
   squad-map:
     external_services: GitLab MCP, Datadog MCP
+  stakeholder-questionnaire:
+    external_services: None — reads repository and caller-provided context only
   system-design:
     external_services: None — reads supplied architecture decision/PRD content and
       repository only

@@ -462,6 +462,11 @@ skills:
         signals only, confidence capped at LOW
       datadog.list_service_definitions: skip the service alias crosswalk; ownership
         stays repo-level only
+  stakeholder-questionnaire:
+    required:
+    - host.report.write
+    - host.repository.read
+    optional: []
   system-design:
     required:
     - host.report.write

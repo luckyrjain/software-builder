@@ -74,6 +74,7 @@ Each skill is a self-contained directory copied to `~/.cursor/skills/<name>/` on
 | **resilience-review** | [resilience-review/README.md](../skills/resilience-review/README.md) | [resilience-review/SKILL.md](../skills/resilience-review/SKILL.md) | [resilience-review/SETUP.md](../skills/resilience-review/SETUP.md) |
 | **security-review** | [security-review/README.md](../skills/security-review/README.md) | [security-review/SKILL.md](../skills/security-review/SKILL.md) | [security-review/SETUP.md](../skills/security-review/SETUP.md) |
 | **squad-map** | [squad-map/README.md](../skills/squad-map/README.md) | [squad-map/SKILL.md](../skills/squad-map/SKILL.md) | [squad-map/SETUP.md](../skills/squad-map/SETUP.md) |
+| **stakeholder-questionnaire** | [stakeholder-questionnaire/README.md](../skills/stakeholder-questionnaire/README.md) | [stakeholder-questionnaire/SKILL.md](../skills/stakeholder-questionnaire/SKILL.md) | [stakeholder-questionnaire/SETUP.md](../skills/stakeholder-questionnaire/SETUP.md) |
 | **system-design** | [system-design/README.md](../skills/system-design/README.md) | [system-design/SKILL.md](../skills/system-design/SKILL.md) | [system-design/SETUP.md](../skills/system-design/SETUP.md) |
 | **tech-debt-assessor** | [tech-debt-assessor/README.md](../skills/tech-debt-assessor/README.md) | [tech-debt-assessor/SKILL.md](../skills/tech-debt-assessor/SKILL.md) | [tech-debt-assessor/SETUP.md](../skills/tech-debt-assessor/SETUP.md) |
 | **test-writer** | [test-writer/README.md](../skills/test-writer/README.md) | [test-writer/SKILL.md](../skills/test-writer/SKILL.md) | [test-writer/SETUP.md](../skills/test-writer/SETUP.md) |
@@ -215,6 +216,8 @@ Skills reference each other when a finding belongs in another workflow:
 | initiative-mapper | A mapped ticket is scoped enough for a PRD | prd-architect |
 | initiative-mapper | A mapped ticket already has an approved design | implementation-planner |
 | merge-conflict-analysis | Recommendations are ready to apply | loop-task-implementer |
+| stakeholder-questionnaire | The recipient's (future) answers would resolve a decision that still needs interrogating | engineering-decision-discovery |
+| stakeholder-questionnaire | The recipient's (future) answers would become PRD input | prd-architect |
 <!-- cross-skill-routing:end -->
 
 Full symmetric matrix (forward + reverse escalations):

@@ -262,6 +262,9 @@ routes:
   squad-map:
     patterns:
     - \b(squad map|ownership map|CODEOWNERS|service ownership map)\b
+  stakeholder-questionnaire:
+    patterns:
+    - \bquestionnaire\b
   system-design:
     patterns:
     - \b(system design|technical design doc|component design|data model design)\b

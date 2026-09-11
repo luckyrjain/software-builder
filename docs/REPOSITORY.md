@@ -69,7 +69,8 @@ software-builder/
     ├── research-brief/            # Cited research findings for a bounded question, repository and/or external sources
     ├── issue-triage/              # Classify raw incoming issues/bugs/feature-requests: category, severity, duplicate, owner
     ├── initiative-mapper/         # Break a large, foggy effort into a decision-ticket map before prd-architect/implementation-planner
-    └── merge-conflict-analysis/     # In-progress git merge/rebase conflict: per-hunk resolution recommendation with cited intent, never applied
+    ├── merge-conflict-analysis/     # In-progress git merge/rebase conflict: per-hunk resolution recommendation with cited intent, never applied
+    └── stakeholder-questionnaire/   # Turn an unresolvable decision into a discovery questionnaire for the person who holds the missing knowledge
 ```
 
 Each skill directory follows the same pattern:
@@ -119,6 +120,7 @@ Each skill directory follows the same pattern:
 | `resilience-review` | review | ambient | — | `make lint-resilience-review` |
 | `security-review` | review | ambient | — | `make lint-security-review` |
 | `squad-map` | architecture | ambient | — | `make lint-squad-map` |
+| `stakeholder-questionnaire` | product | ambient | — | `make lint-stakeholder-questionnaire` |
 | `system-design` | architecture | ambient | — | `make lint-system-design` |
 | `tech-debt-assessor` | platform | ambient | — | `make lint-tech-debt-assessor` |
 | `test-writer` | product | ambient | unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator | `make lint-test-writer` |

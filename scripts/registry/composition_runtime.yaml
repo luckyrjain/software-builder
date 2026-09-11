@@ -43,6 +43,7 @@ skill_types:
   resilience-review: leaf
   security-review: leaf
   squad-map: leaf
+  stakeholder-questionnaire: leaf
   system-design: leaf
   tech-debt-assessor: leaf
   test-writer: router
@@ -317,3 +318,7 @@ artifact_ownership:
     mode: canonical
     owners:
     - merge-conflict-analysis
+  stakeholder_questionnaire:
+    mode: canonical
+    owners:
+    - stakeholder-questionnaire

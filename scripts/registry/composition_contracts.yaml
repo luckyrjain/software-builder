@@ -40,6 +40,7 @@ artifact_types:
 - issue_triage_report
 - initiative_map
 - merge_conflict_analysis
+- stakeholder_questionnaire
 artifact_schemas:
   mr_context:
     fields:
@@ -425,6 +426,15 @@ artifact_schemas:
     - ours_theirs_note
     - hunks
     - unresolved_questions
+    - recommendation
+    - repository_write_action
+    - automatic_downstream_invocation
+  stakeholder_questionnaire:
+    fields:
+    - title
+    - decision_context
+    - recipient
+    - questions
     - recommendation
     - repository_write_action
     - automatic_downstream_invocation
@@ -1163,6 +1173,11 @@ skills:
     - ownership_lookup
     consumes:
     - mr_context
+    write_authority: read-only
+  stakeholder-questionnaire:
+    produces:
+    - stakeholder_questionnaire
+    consumes: []
     write_authority: read-only
   system-design:
     produces:

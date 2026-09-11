@@ -51,6 +51,7 @@ body:
         - resilience-review
         - security-review
         - squad-map
+        - stakeholder-questionnaire
         - system-design
         - tech-debt-assessor
         - test-writer
