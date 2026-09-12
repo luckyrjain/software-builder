@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import json
+import sys
 import tomllib
 from pathlib import Path
 
-from scripts.release_info import read_distribution_version
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.release_info import read_distribution_version  # noqa: E402
 
 # JSON manifests whose version field must track VERSION -- a guard against
 # forgetting to bump these files during releases, caught early by a pre-commit
@@ -67,7 +72,12 @@ def drifted_plugin_versions(repo_root: Path) -> list[str]:
     Returns a list of error messages (one per drift detected). Empty list means all
     manifests are in sync.
     """
-    distribution_version = read_distribution_version(repo_root)
+    try:
+        distribution_version = read_distribution_version(repo_root)
+    except (OSError, ValueError) as exc:
+        # OSError (not just ValueError) so a VERSION file that exists but isn't readable
+        # (e.g. a permission error) prints a clean error instead of an uncaught traceback.
+        return [f"error: {exc}"]
     errors = _drifted_json_versions(repo_root, distribution_version)
     errors.extend(_drifted_toml_versions(repo_root, distribution_version))
     return errors
@@ -75,9 +85,7 @@ def drifted_plugin_versions(repo_root: Path) -> list[str]:
 
 def main() -> int:
     """CLI entrypoint: validate version sync, print errors, exit 1 if any drift found."""
-    import sys
-
-    repo_root = Path.cwd()
+    repo_root = ROOT
     errors = drifted_plugin_versions(repo_root)
     for error in errors:
         print(error, file=sys.stderr)
@@ -85,6 +93,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    import sys
-
     sys.exit(main())
