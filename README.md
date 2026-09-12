@@ -111,9 +111,8 @@ bash scripts/install.sh --agent claude-project --target-dir /path/to/project loo
 # Cursor — one project only (omit --target-dir for global ~/.cursor/skills)
 bash scripts/install.sh --agent cursor --target-dir /path/to/project loop-task-implementer
 
-# ChatGPT / Codex — common manual location; adjust if your runtime uses another path
-mkdir -p ~/.agents/skills
-cp -R loop-task-implementer ~/.agents/skills/loop-task-implementer
+# ChatGPT / Codex — universal Agent Skills target
+bash scripts/install.sh --agent agents loop-task-implementer
 test -f ~/.agents/skills/loop-task-implementer/SKILL.md
 ```
 
@@ -148,8 +147,8 @@ Each skill directory has three entry points:
 |------|----------------------|-----------------------|-------|
 | **Cursor** | `bash scripts/install.sh --agent cursor` (global) or `--target-dir <repo>` for `<repo>/.cursor/skills/`; in-repo `.cursor/rules/` also works | Background agents, separate chats, or worktrees | Restart Cursor after installation. |
 | **Claude Code** | `--agent claude-user`, `--agent claude-project`, or `make install-claude` | Subagents, fresh sessions, or worktrees | Start a new session after installation. |
-| **ChatGPT / Codex** | Copy selected skills to the runtime's supported directory, commonly `~/.agents/skills/` | Separate tasks or fresh agent sessions; worktrees where available | Use repository connectors for remote state and local Git for implementation when available. |
-| **GitHub Copilot** | Copy skills to `.github/skills/` (project) or `~/.copilot/skills/` (personal); `.claude/skills/` and `~/.agents/skills/` also work per GitHub's docs | Separate tasks or fresh agent sessions | Discovery is documented, not yet independently verified — see [docs/agent-compatibility.md](docs/agent-compatibility.md). |
+| **ChatGPT / Codex** | `bash scripts/install.sh --agent agents` — installs to the universal `~/.agents/skills/` target Codex runtimes commonly read | Separate tasks or fresh agent sessions; worktrees where available | Use repository connectors for remote state and local Git for implementation when available. |
+| **GitHub Copilot** | `bash scripts/install.sh --agent agents` populates the shared `.agents/skills/` target Copilot's docs also recognize; for its dedicated dirs, copy skills manually to `.github/skills/` (project) or `~/.copilot/skills/` (personal) | Separate tasks or fresh agent sessions | Discovery is documented, not yet independently verified — see [docs/agent-compatibility.md](docs/agent-compatibility.md). |
 | **Kiro** | Open this repository and use `.kiro/steering/<skill>.md` | Kiro specs plus separate role contexts | No installer copy is required for in-repo use. |
 | **Generic repository agent** | Point the agent directly at `skills/<skill>/SKILL.md` | Host-dependent; otherwise use the documented sequential fallback | State the active role and provide only that role's input package. |
 
@@ -204,7 +203,12 @@ routes to skills in another category.
 | [pr-gatekeeper](skills/pr-gatekeeper/) | Push webhook | Runs `pr-review` on every push to an open MR and applies unattended posting policy | [README](skills/pr-gatekeeper/README.md) · [SETUP](skills/pr-gatekeeper/SETUP.md) |
 | [release-readiness-checker](skills/release-readiness-checker/) | “Is this release ready?” | Aggregates review, Kubernetes, and incident signals into a release go/no-go report | [README](skills/release-readiness-checker/README.md) · [SETUP](skills/release-readiness-checker/SETUP.md) |
 | [production-readiness-review](skills/production-readiness-review/) | “Is PR #123 production ready?” | Read-only rollup of trusted CI, code-review, build-provenance, SCM-policy, change-impact, deployment-risk, and specialist-review evidence into one fail-closed verdict for one exact PR/MR/release candidate | [README](skills/production-readiness-review/README.md) · [SETUP](skills/production-readiness-review/SETUP.md) |
+| [architecture-remediation-loop](skills/architecture-remediation-loop/) | “Run the architecture remediation loop for this repo” | Composed loop: `codebase-architecture-review` finds candidates, `engineering-decision-discovery` disposes each one, `module-design` designs, `loop-task-implementer` ships — batched by risk until a fresh review and `production-readiness-review` both return zero findings | [README](skills/architecture-remediation-loop/README.md) · [SETUP](skills/architecture-remediation-loop/SETUP.md) |
+| [local-diff-review](skills/local-diff-review/) | “Review the diff since main” | Reviews local/uncommitted changes since a fixed point (commit, branch, tag, merge-base) along Standards and Spec axes, for diffs that aren't a PR/MR yet | [README](skills/local-diff-review/README.md) · [SETUP](skills/local-diff-review/SETUP.md) |
+| [merge-conflict-analysis](skills/merge-conflict-analysis/) | “Help me resolve this merge conflict” | Reads both sides' commit/PR intent and recommends a per-hunk resolution for an in-progress merge, rebase, cherry-pick, or stash-pop conflict | [README](skills/merge-conflict-analysis/README.md) · [SETUP](skills/merge-conflict-analysis/SETUP.md) |
 | [initiative-mapper](skills/initiative-mapper/) | “Map this initiative into decision tickets” | Breaks one large, foggy effort into a decision-ticket map with dependency edges, each ticket routed to `engineering-decision-discovery`, `prd-architect`, `implementation-planner`, or left unresolved | [README](skills/initiative-mapper/README.md) · [SETUP](skills/initiative-mapper/SETUP.md) |
+| [engineering-decision-discovery](skills/engineering-decision-discovery/) | “Grill me on this plan” / “What decisions are missing?” | Interactive, one-frontier-at-a-time challenge that surfaces and resolves the engineering decisions a bounded scope hasn't made yet | [README](skills/engineering-decision-discovery/README.md) · [SETUP](skills/engineering-decision-discovery/SETUP.md) |
+| [stakeholder-questionnaire](skills/stakeholder-questionnaire/) | “Draft a questionnaire for `<name>` about `<decision>`” | Turns a decision only a named stakeholder can resolve into a themed, most-important-first discovery questionnaire; never sends or posts it | [README](skills/stakeholder-questionnaire/README.md) · [SETUP](skills/stakeholder-questionnaire/SETUP.md) |
 | [prd-architect](skills/prd-architect/) | “Write a PRD for …” / “Should we build this?” | Validates ideas and turns specs into implementation-ready PRDs with Build Readiness gating | [README](skills/prd-architect/README.md) · [SETUP](skills/prd-architect/SETUP.md) |
 | [change-impact-analyzer](skills/change-impact-analyzer/) | “What services/contracts are affected by this change?” | Bounded, evidence-backed impact analysis for designs and exact PR/MR heads | [README](skills/change-impact-analyzer/README.md) · [SETUP](skills/change-impact-analyzer/SETUP.md) |
 | [research-brief](skills/research-brief/) | “Research this question, citing sources: …” | Read-only, cited answer from repository and (optionally) external primary sources; uncitable claims are marked `UNKNOWN` | [README](skills/research-brief/README.md) · [SETUP](skills/research-brief/SETUP.md) |
@@ -222,12 +226,15 @@ routes to skills in another category.
 |-------|--------|--------------|------|
 | [incident-rca](skills/incident-rca/) | “RCA for … between …” | Multi-source post-incident investigation across observability and delivery systems | [README](skills/incident-rca/README.md) · [SETUP](skills/incident-rca/SETUP.md) |
 | [incident-triage-agent](skills/incident-triage-agent/) | Paging webhook | Produces page-fire triage and incident-resolved postmortem drafts | [README](skills/incident-triage-agent/README.md) · [SETUP](skills/incident-triage-agent/SETUP.md) |
+| [issue-triage](skills/issue-triage/) | “Triage these issues” | Classifies raw, unscoped issues/bugs/feature requests by category, severity, duplicate-of, and recommended owning skill or squad | [README](skills/issue-triage/README.md) · [SETUP](skills/issue-triage/SETUP.md) |
+| [bug-diagnosis](skills/bug-diagnosis/) | “Why is this test failing?” | Confirms a minimal repro, falsifies candidate root causes with evidence, and reports the confirmed root cause — report-only, never fixes it | [README](skills/bug-diagnosis/README.md) · [SETUP](skills/bug-diagnosis/SETUP.md) |
 
 ### Architecture, ownership, and onboarding
 
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
 | [domain-comprehension](skills/domain-comprehension/) | “Map the domain …” | Evidence-backed bounded contexts, ownership, dependencies, and business flows | [README](skills/domain-comprehension/README.md) · [SETUP](skills/domain-comprehension/SETUP.md) |
+| [domain-modeling](skills/domain-modeling/) | “Sharpen the domain model for this feature” | Challenges terminology against `CONTEXT.md`, invents edge-case scenarios, and proposes an ADR draft as the domain model firms up during active work | [README](skills/domain-modeling/README.md) · [SETUP](skills/domain-modeling/SETUP.md) |
 | [squad-map](skills/squad-map/) | “Who owns …?” | Maps repositories and services to squads using GitLab, Datadog, and CODEOWNERS evidence | [README](skills/squad-map/README.md) · [SETUP](skills/squad-map/SETUP.md) |
 | [who-owns-x-bot](skills/who-owns-x-bot/) | `/who-owns <name>` | Returns one Slack-ready ownership answer by delegating to `squad-map` | [README](skills/who-owns-x-bot/README.md) · [SETUP](skills/who-owns-x-bot/SETUP.md) |
 | [new-hire-guide](skills/new-hire-guide/) | “Onboard `<name>` to `<squad>`” | Builds a squad-scoped onboarding tour from ownership and domain evidence | [README](skills/new-hire-guide/README.md) · [SETUP](skills/new-hire-guide/SETUP.md) |
@@ -240,7 +247,9 @@ design, and dedicated single-domain reviews.
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
 | [architecture-review](skills/architecture-review/) | “Architecture review for `<feature>`” | Architecture decision, risks, scale limits, failure modes, security, operability, alternatives | [README](skills/architecture-review/README.md) · [SETUP](skills/architecture-review/SETUP.md) |
+| [codebase-architecture-review](skills/codebase-architecture-review/) | “Review this codebase's architecture” | Bounded, evidence-backed scan of an existing codebase for architecture friction and refactoring candidates | [README](skills/codebase-architecture-review/README.md) · [SETUP](skills/codebase-architecture-review/SETUP.md) |
 | [system-design](skills/system-design/) | “Design the implementation for `<feature>`” | Components, APIs, events, data model, state machines, consistency, retries, capacity, rollout | [README](skills/system-design/README.md) · [SETUP](skills/system-design/SETUP.md) |
+| [module-design](skills/module-design/) | “Design this module” | Evidence-backed design for one module's contract, ownership, seams, dependencies, state, and errors before implementation | [README](skills/module-design/README.md) · [SETUP](skills/module-design/SETUP.md) |
 | [api-design-review](skills/api-design-review/) | “Review the API design for `<feature>`” | REST/GraphQL/gRPC/async-event review: compatibility, pagination, idempotency, versioning, authZ | [README](skills/api-design-review/README.md) · [SETUP](skills/api-design-review/SETUP.md) |
 | [database-review](skills/database-review/) | “Review this schema/migration” | Schema, indexing, locking, transactions, migrations, query plans, replication, partitioning | [README](skills/database-review/README.md) · [SETUP](skills/database-review/SETUP.md) |
 | [security-review](skills/security-review/) | “Security review of `<target>`” | Dedicated authN/authZ, secrets, injection, SSRF, tenant isolation, crypto, dependency exposure | [README](skills/security-review/README.md) · [SETUP](skills/security-review/SETUP.md) |
@@ -284,7 +293,7 @@ MCP is **skill-specific**, not a prerequisite for installing or browsing the rep
 | `k8s-overprovisioning-datadog` | At least one sufficient evidence source: read-only Kubernetes MCP or Datadog |
 | `cost-optimization-sprint-planner` | Datadog for its namespace pre-filter; then inherits the Kubernetes skill's per-deployment routing |
 | `backlog-runner` | Jira or GitHub Issues access |
-| `prd-architect`, `architecture-review`, `system-design`, `api-design-review`, `database-review`, `security-review`, `performance-review`, `capacity-planner`, `observability-review`, `deployment-risk-review`, `dependency-upgrade-review`, `tech-debt-assessor`, `change-impact-analyzer` | No MCP; analysis and report-drafting skills that read supplied content (and, at most, read-only repository access) |
+| `prd-architect`, `architecture-review`, `codebase-architecture-review`, `system-design`, `module-design`, `api-design-review`, `database-review`, `security-review`, `performance-review`, `capacity-planner`, `observability-review`, `deployment-risk-review`, `dependency-upgrade-review`, `tech-debt-assessor`, `change-impact-analyzer`, `domain-modeling`, `engineering-decision-discovery`, `stakeholder-questionnaire`, `issue-triage`, `bug-diagnosis`, `local-diff-review`, `merge-conflict-analysis` | No MCP; analysis and report-drafting skills that read supplied content (and, at most, read-only repository access) |
 | Composed skills | Inherit the capabilities of the skills they call |
 
 Read the selected skill's `SETUP.md` before its first real run. The complete required/optional matrix
