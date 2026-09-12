@@ -43,3 +43,10 @@ build/
 # graphify skill output: locally-generated knowledge graph (cache, graph.json/html, report).
 # Regenerate with `graphify update .` -- not a deliverable, and the cache alone runs ~19M.
 /graphify-out/
+
+# cli/ (the sb package): build-time-populated snapshot directories, never committed
+cli/sb/_vendored/
+cli/sb/_registry_snapshot/
+cli/dist/
+cli/build/
+cli/*.egg-info/

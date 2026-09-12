@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "software-builder-cli"
+version = "1.4.0"
+description = "Standalone sb CLI: doctor/list/explain/compatibility for installed software-builder skills, no checkout required."
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = ["PyYAML>=6.0.3"]
+
+[project.scripts]
+sb = "sb.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sb"]
+# _vendored/ and _registry_snapshot/ are gitignored, build-time-populated directories (see
+# scripts/build_sb_snapshot.py) -- hatchling's default wheel file selection follows VCS tracking,
+# which would silently ship an EMPTY wheel for both if not force-included here. `artifacts`
+# includes matching paths regardless of gitignore state, as long as they exist on disk at build
+# time.
+artifacts = ["sb/_vendored/**", "sb/_registry_snapshot/**"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
