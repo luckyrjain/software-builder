@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts import install_engine
 from scripts.install_engine import install_skill
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -150,6 +151,38 @@ def test_reinstall_backup_survives_a_missing_system_tmp_dir(
     assert (
         dest_root / "demo-skill" / "SKILL.md"
     ).read_text(encoding="utf-8") == "---\nname: demo-skill\ndescription: Demo test skill.\n---\n\nA minimal test skill.\n"
+
+
+def test_keyboard_interrupt_during_staging_propagates_after_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """install.sh's own INT/TERM trap (on_install_interrupt) runs cleanup_failed_install()
+    and then `exit 130`, terminating the whole process -- it does NOT fall through to
+    per-skill failure bookkeeping and continue to the next skill, the way an ordinary
+    validation failure (a plain `return 1`) does. A Ctrl-C mid-install must behave the same
+    way here: cleanup still runs, but the interrupt propagates out of install_skill() instead
+    of being swallowed into a normal InstallOutcome(status="failed", ...) that a future
+    multi-skill caller could mistake for just one more failed skill."""
+    repo = _minimal_repo(tmp_path)
+    dest_root = tmp_path / "dest"
+
+    seen_stage_dirs: list[Path] = []
+
+    def _interrupt(stage_dir: Path, **_kwargs: object) -> list[str]:
+        seen_stage_dirs.append(stage_dir)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(install_engine, "validate_tree", _interrupt)
+
+    with pytest.raises(KeyboardInterrupt):
+        install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor")
+
+    assert seen_stage_dirs, "validate_tree was never reached"
+    # cleanup ran before propagating: the staging dir is gone, nothing landed at the
+    # destination, and held_lock's own finally released the lock.
+    assert not seen_stage_dirs[0].exists()
+    assert not (dest_root / "demo-skill").exists()
+    assert not list(dest_root.glob(".demo-skill.lock*"))
 
 
 def test_symlinked_destination_is_refused(tmp_path: Path) -> None:

@@ -268,7 +268,19 @@ def install_skill(
 
             os.replace(stage_dir, skill_dest)
             stage_dir = None  # now living at skill_dest; nothing left to clean up on success
-        except BaseException as exc:
+        except (KeyboardInterrupt, SystemExit):
+            # Mirrors install.sh's own INT/TERM trap: on_install_interrupt() runs
+            # cleanup_failed_install() and then `exit 130`, terminating the whole process
+            # rather than falling through to per-skill failure bookkeeping the way an
+            # ordinary validation failure does (which returns 1 and lets a multi-skill loop
+            # continue to the next skill). Re-raising here after cleanup is the Python
+            # equivalent: it propagates out through this `with held_lock(...)` block --
+            # whose own `finally` still releases the lock on the way out, same as any other
+            # exit path -- instead of being swallowed into a normal InstallOutcome that a
+            # future multi-skill caller could mistake for just one more failed skill.
+            _cleanup_failed_install(stage_dir, backup_dir, skill_dest)
+            raise
+        except Exception as exc:
             _cleanup_failed_install(stage_dir, backup_dir, skill_dest)
             message = str(exc) if str(exc) else f"{type(exc).__name__} during install"
             return InstallOutcome(skill_id, skill_dest, "failed", message)
