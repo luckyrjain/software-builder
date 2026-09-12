@@ -45,9 +45,28 @@ def test_vendored_code_and_snapshot_data_work_together_end_to_end(tmp_path: Path
     # already-cached package (using its __path__, not re-searching sys.path) and silently import
     # THIS CHECKOUT's scripts.doctor instead of the vendored copy -- defeating the point of this
     # test. Clear it before inserting the vendored path onto sys.path, not just after.
-    for name in list(sys.modules):
-        if name == "scripts" or name.startswith("scripts."):
-            del sys.modules[name]
+    #
+    # Snapshot the real entries first and restore them verbatim in `finally` -- merely deleting
+    # and leaving them absent corrupts every OTHER test that shares this xdist worker process
+    # afterward. A later `import scripts.yaml_safety` (e.g. test_yaml_safety.py's
+    # test_rejects_excessive_nesting) would otherwise re-import a *second*, distinct module
+    # object, while code imported earlier in the same worker (e.g. host_registry.py's
+    # `from scripts.yaml_safety import load_unique_yaml_file`, bound at collection time) keeps
+    # its reference to the *original* module object -- so a test's `monkeypatch.setattr` on the
+    # newly-reimported module silently has no effect on the original one other code still calls.
+    # Restoring the exact original objects keeps every name in sys.modules resolving to the one
+    # canonical module the rest of the process already holds references to, same as before this
+    # test ran. Reproduced directly: this is what made test_yaml_safety.py/
+    # test_generic_package_security.py/test_verify_release_bundle_extract.py fail, but only
+    # under pytest-xdist with exactly 2 workers (CI's PYTEST_XDIST_WORKERS=2) sharing a worker
+    # with this test -- not under -n auto locally, where a different worker count hides it.
+    saved_modules = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == "scripts" or name.startswith("scripts.")
+    }
+    for name in saved_modules:
+        del sys.modules[name]
 
     sys.path.insert(0, str(vendored))
     try:
@@ -78,3 +97,4 @@ def test_vendored_code_and_snapshot_data_work_together_end_to_end(tmp_path: Path
         for name in list(sys.modules):
             if name == "scripts" or name.startswith("scripts."):
                 del sys.modules[name]
+        sys.modules.update(saved_modules)
