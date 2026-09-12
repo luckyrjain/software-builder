@@ -46,16 +46,27 @@ SNAPSHOT_ROOT = CLI_ROOT / "sb" / "_registry_snapshot"
 _CODE_PATHSPEC = "scripts/*.py"
 _CODE_EXCLUDE_PREFIX = "scripts/tests/"
 
-# Every data file the four target commands read, verified empirically (see module docstring).
-# scripts/registry/*.yaml also pulls in scripts/registry/skills.d/*.yaml's ~50 source fragments
-# alongside the ~11 real config files -- harmless (small, unused by any of the four commands,
-# which read the already-materialized skills.yaml instead) and not filtered out, since excluding
-# them would need extra logic for no functional benefit.
+# Every data file the four diagnostics commands read, plus what `sb install` additionally
+# needs, verified empirically (see module docstring). scripts/registry/*.yaml also pulls in
+# scripts/registry/skills.d/*.yaml's ~50 source fragments alongside the ~11 real config files
+# -- harmless (small, unused by any of the four commands, which read the already-materialized
+# skills.yaml instead) and not filtered out, since excluding them would need extra logic for no
+# functional benefit.
+#
+# The three scripts/*.py entries below are shared runtime scripts package_skill.py's
+# _shared_script() injects into installed bundles for certain skill categories --
+# test_creator_write_guard.py + git_paths.py for TEST_CREATOR_SKILL_SET, yaml_safety.py for
+# YAML_SAFETY_SKILL_SET. They live outside scripts/registry/ so the pathspecs above never pick
+# them up on their own; without them here, `sb install` fails for every skill in either set
+# once this snapshot (not a live checkout) is the only thing package_skill.py can see.
 _DATA_PATHSPECS = (
     "skills.yaml",
     "agent-hosts.yaml",
     "VERSION",
     "scripts/registry/*.yaml",
+    "scripts/test_creator_write_guard.py",
+    "scripts/git_paths.py",
+    "scripts/yaml_safety.py",
     "skills/**",
     "docs/skill-framework/**",
 )
