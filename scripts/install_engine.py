@@ -17,10 +17,23 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import tempfile
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
+
+from scripts.install_support import registry_skill_ids
+from scripts.package_skill import package_skill, validate_skill_name
+from scripts.reference_utils import (
+    OWNERSHIP_CORRUPT_OWNERSHIP,
+    OWNERSHIP_SOFTWARE_BUILDER_OWNED,
+    OWNERSHIP_SYMLINK,
+    OWNERSHIP_UNOWNED,
+    classify_install_destination,
+)
+from scripts.validate_references import validate_tree
 
 DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS = 30.0
 DEFAULT_LOCK_STALE_SECONDS = 300.0
@@ -166,3 +179,100 @@ def held_lock(
         yield
     finally:
         shutil.rmtree(lock_dir, ignore_errors=True)
+
+
+_BLOCKING_OWNERSHIP_STATES = frozenset(
+    {OWNERSHIP_SYMLINK, OWNERSHIP_UNOWNED, OWNERSHIP_CORRUPT_OWNERSHIP}
+)
+_OWNERSHIP_BLOCK_MESSAGES = {
+    OWNERSHIP_SYMLINK: "refusing to install over a symlink at {dest}",
+    OWNERSHIP_UNOWNED: "refusing to install over an unowned directory at {dest} (not installed by software-builder)",
+    OWNERSHIP_CORRUPT_OWNERSHIP: "refusing to install over {dest}: install manifest is missing, unreadable, or names a different skill",
+}
+
+
+@dataclass(frozen=True)
+class InstallOutcome:
+    skill_id: str
+    dest: Path
+    status: str  # "installed" | "dry_run" | "failed"
+    message: str
+
+
+def _cleanup_failed_install(stage_dir: Path | None, backup_dir: Path | None, skill_dest: Path) -> None:
+    """Mirrors install.sh's cleanup_failed_install: discard the failed staging attempt, and
+    if a previous install was moved aside into backup_dir and nothing currently occupies
+    skill_dest, restore it."""
+    if stage_dir is not None and stage_dir.exists():
+        shutil.rmtree(stage_dir, ignore_errors=True)
+    if backup_dir is not None and backup_dir.exists():
+        backed_up_skill = backup_dir / "skill"
+        if not skill_dest.exists() and backed_up_skill.exists():
+            os.replace(backed_up_skill, skill_dest)
+        shutil.rmtree(backup_dir, ignore_errors=True)
+
+
+def install_skill(
+    skill_id: str,
+    *,
+    repo_root: Path,
+    dest_root: Path,
+    host_label: str,
+    dry_run: bool = False,
+) -> InstallOutcome:
+    """Install one skill from repo_root into dest_root/skill_id, following install.sh's own
+    install_skill() sequence: validate -> early ownership check -> (dry-run short-circuit) ->
+    lock -> stage (same filesystem as dest_root) -> package -> validate references -> re-check
+    ownership -> back up any existing software-builder-owned install -> atomic replace ->
+    clean up the backup on success, or restore it and discard the stage on any failure.
+    """
+    try:
+        validate_skill_name(skill_id)
+    except ValueError as exc:
+        return InstallOutcome(skill_id, dest_root / skill_id, "failed", str(exc))
+
+    if skill_id not in set(registry_skill_ids(repo_root)):
+        return InstallOutcome(
+            skill_id, dest_root / skill_id, "failed", f"{skill_id!r} is not in skills.yaml"
+        )
+
+    skill_dest = dest_root / skill_id
+    classification = classify_install_destination(skill_dest, skill_id=skill_id)
+    if classification in _BLOCKING_OWNERSHIP_STATES:
+        message = _OWNERSHIP_BLOCK_MESSAGES[classification].format(dest=skill_dest)
+        return InstallOutcome(skill_id, skill_dest, "failed", message)
+
+    if dry_run:
+        return InstallOutcome(skill_id, skill_dest, "dry_run", f"would install {skill_id} to {skill_dest}")
+
+    dest_root.mkdir(parents=True, exist_ok=True)
+    with held_lock(dest_root, skill_id):
+        stage_dir: Path | None = None
+        backup_dir: Path | None = None
+        try:
+            stage_dir = Path(tempfile.mkdtemp(dir=dest_root, prefix=f".{skill_id}.staging."))
+            package_skill(skill=skill_id, repo_root=repo_root, dest=stage_dir, host=host_label)
+
+            errors = validate_tree(stage_dir, check_anchors=False, installed_package=True)
+            if errors:
+                raise ValueError("; ".join(errors))
+
+            reclassification = classify_install_destination(skill_dest, skill_id=skill_id)
+            if reclassification in _BLOCKING_OWNERSHIP_STATES:
+                message = _OWNERSHIP_BLOCK_MESSAGES[reclassification].format(dest=skill_dest)
+                raise ValueError(message)
+
+            if reclassification == OWNERSHIP_SOFTWARE_BUILDER_OWNED:
+                backup_dir = Path(tempfile.mkdtemp(dir=dest_root, prefix=f".{skill_id}.backup."))
+                os.replace(skill_dest, backup_dir / "skill")
+
+            os.replace(stage_dir, skill_dest)
+            stage_dir = None  # now living at skill_dest; nothing left to clean up on success
+        except BaseException as exc:
+            _cleanup_failed_install(stage_dir, backup_dir, skill_dest)
+            message = str(exc) if str(exc) else f"{type(exc).__name__} during install"
+            return InstallOutcome(skill_id, skill_dest, "failed", message)
+
+        if backup_dir is not None:
+            shutil.rmtree(backup_dir, ignore_errors=True)
+        return InstallOutcome(skill_id, skill_dest, "installed", f"installed {skill_id} to {skill_dest}")
