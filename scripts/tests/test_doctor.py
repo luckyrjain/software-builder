@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -672,3 +673,93 @@ def test_agent_default_install_root_scans_the_hosts_own_user_scope_targets(
 
     assert exit_code == 0
     assert "installed (" in capsys.readouterr().out
+
+
+def _write_surface_fixture(tmp_path: Path) -> None:
+    """A minimal repo (agent-hosts.yaml + skills.yaml + VERSION) with a "claude" host whose LOCAL
+    surface has host.repository.read_write AVAILABLE and whose CLOUD surface has it UNAVAILABLE
+    (Candidate 2's per-surface capability overrides), and one skill that requires it -- modeled on
+    scripts/tests/test_compatibility_resolver.py's _raw_registry/_host_registry fixture shape,
+    the existing pattern for building an agent-hosts.yaml under tmp_path.
+    """
+    agent_hosts = {
+        "schema_version": 1,
+        "targets": [
+            {"id": "claude-project", "scope": "project", "path": "{project_root}/.claude/skills"},
+        ],
+        "hosts": [
+            {
+                "id": "claude",
+                "surfaces": [
+                    {
+                        "kind": "LOCAL",
+                        "discovery": [
+                            {"target": "claude-project", "mode": "NATIVE", "precedence": 10},
+                        ],
+                        "capabilities": {"host.repository.read_write": "AVAILABLE"},
+                    },
+                    {
+                        "kind": "CLOUD",
+                        "discovery": [
+                            {"target": "claude-project", "mode": "NATIVE", "precedence": 10},
+                        ],
+                        "capabilities": {"host.repository.read_write": "UNAVAILABLE"},
+                    },
+                ],
+                "capabilities": {"host.repository.read_write": "UNKNOWN"},
+                "isolation": {"mode": "UNKNOWN"},
+                "constraints": [],
+                "verification": "UNVERIFIED",
+                "evidence": [],
+                "maintainer_support": "BEST_EFFORT",
+            },
+        ],
+    }
+    (tmp_path / "agent-hosts.yaml").write_text(
+        yaml.safe_dump(agent_hosts, sort_keys=False), encoding="utf-8"
+    )
+
+    skills = {
+        "schema_version": 1,
+        "skills": {
+            "demo-skill": {
+                "path": "demo-skill",
+                "category": "test",
+                "invocation": "ambient",
+                "hosts": {"claude": {"install": True}},
+                "install": {"requires": []},
+                "lint": {"skill_md_max_lines": 180, "target": "demo-skill"},
+                "composition": {"invokes": []},
+                "capabilities": {"required": ["host.repository.read_write"], "optional": []},
+                "risk_class": ["repository-write"],
+            },
+        },
+    }
+    (tmp_path / "skills.yaml").write_text(yaml.safe_dump(skills, sort_keys=False), encoding="utf-8")
+
+    (tmp_path / "VERSION").write_text("1.0.0\n", encoding="utf-8")
+
+
+def test_surface_flag_changes_available_capabilities_for_agent(tmp_path: Path, capsys) -> None:
+    from scripts.doctor import main
+
+    _write_surface_fixture(tmp_path)
+
+    exit_code_local = main(["--repo-root", str(tmp_path), "--agent", "claude", "--surface", "LOCAL"])
+    exit_code_cloud = main(["--repo-root", str(tmp_path), "--agent", "claude", "--surface", "CLOUD"])
+
+    assert exit_code_local == 0
+    assert exit_code_cloud == 1  # BLOCKED: host.repository.read_write unavailable on CLOUD
+
+
+def test_surface_flag_unknown_surface_fails_with_message(tmp_path: Path, capsys) -> None:
+    from scripts.doctor import main
+
+    _write_surface_fixture(tmp_path)
+
+    code = main(
+        ["--repo-root", str(tmp_path), "--agent", "claude", "--surface", "NOT_A_REAL_SURFACE"]
+    )
+
+    assert code == 2
+    assert "NOT_A_REAL_SURFACE" in capsys.readouterr().err

@@ -74,6 +74,7 @@ class DiscoveryBinding:
 class SurfaceSpec:
     kind: str
     discovery: tuple[DiscoveryBinding, ...] = field(default_factory=tuple)
+    capabilities: "CapabilitySpec" = field(default_factory=lambda: CapabilitySpec())
 
 
 @dataclass(frozen=True)
@@ -154,6 +155,7 @@ class _RawDiscoveryBinding:
 class _RawSurface:
     kind: str
     discovery: tuple[_RawDiscoveryBinding, ...]
+    capabilities: CapabilitySpec
 
 
 @dataclass(frozen=True)
@@ -360,16 +362,24 @@ def _parse_surfaces(raw: Any, host_label: str, errors: list[str]) -> list[_RawSu
         item = _mapping(raw_item, label, errors)
         if item is None:
             continue
-        _unknown_fields(item, frozenset({"discovery", "kind"}), label, errors)
+        _unknown_fields(item, frozenset({"capabilities", "discovery", "kind"}), label, errors)
         kind = _enum(item.get("kind"), ALLOWED_SURFACES, f"{label}.kind", errors)
         discovery = _parse_discovery(item.get("discovery"), label, errors)
-        if kind is None:
+        raw_capabilities = item.get("capabilities")
+        capabilities = (
+            _parse_capabilities(raw_capabilities, label, errors)
+            if raw_capabilities is not None
+            else CapabilitySpec()
+        )
+        if kind is None or capabilities is None:
             continue
         if kind in seen:
             errors.append(f"{label}.kind is duplicated: {kind!r}")
             continue
         seen.add(kind)
-        surfaces.append(_RawSurface(kind=kind, discovery=tuple(discovery)))
+        surfaces.append(
+            _RawSurface(kind=kind, discovery=tuple(discovery), capabilities=capabilities)
+        )
     return surfaces
 
 
@@ -643,7 +653,13 @@ def parse_host_registry(path: Path, *, today: date | None = None) -> HostRegistr
                         precedence=binding.precedence,
                     )
                 )
-            surfaces.append(SurfaceSpec(kind=surface.kind, discovery=tuple(discovery)))
+            surfaces.append(
+                SurfaceSpec(
+                    kind=surface.kind,
+                    discovery=tuple(discovery),
+                    capabilities=surface.capabilities,
+                )
+            )
         # Every _RawHost field except `surfaces` carries over to HostSpec unchanged;
         # only `surfaces` needs its discovery bindings' target_id resolved to a
         # TargetSpec above. Copying the rest by field name means a new scalar

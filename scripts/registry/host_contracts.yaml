@@ -4,6 +4,7 @@ capability_families:
   - discover_files
   - read_repo
   - write_repo
+  - report_output
   - git
   - scm
   - subagents
@@ -21,6 +22,7 @@ hosts:
       discover_files: full
       read_repo: full
       write_repo: full
+      report_output: full
       git: full
       scm: degraded
       subagents: degraded
@@ -35,6 +37,7 @@ hosts:
       discover_files: full
       read_repo: full
       write_repo: full
+      report_output: full
       git: full
       scm: degraded
       subagents: full
@@ -49,6 +52,7 @@ hosts:
       discover_files: full
       read_repo: full
       write_repo: full
+      report_output: full
       git: full
       scm: full
       subagents: full
@@ -63,6 +67,7 @@ hosts:
       discover_files: degraded
       read_repo: degraded
       write_repo: degraded
+      report_output: full
       git: unsupported
       scm: full
       subagents: degraded
@@ -77,6 +82,7 @@ hosts:
       discover_files: full
       read_repo: full
       write_repo: full
+      report_output: full
       git: full
       scm: degraded
       subagents: degraded
@@ -91,6 +97,7 @@ hosts:
       discover_files: degraded
       read_repo: degraded
       write_repo: degraded
+      report_output: full
       git: degraded
       scm: degraded
       subagents: unsupported
