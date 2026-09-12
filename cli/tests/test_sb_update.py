@@ -256,8 +256,6 @@ def test_real_github_api_plumbing_only() -> None:
     an "assets" list) -- or, just as validly, a clear 404 if no release exists at all yet,
     which this test also accepts rather than treating as a plumbing failure.
     """
-    import urllib.error
-
     from sb._update import RELEASES_LATEST_URL, fetch_latest_release
 
     assert "luckyrjain/software-builder" in RELEASES_LATEST_URL
