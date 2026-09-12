@@ -14,7 +14,7 @@ from sb._paths import registry_snapshot_root, vendored_scripts_root
 sys.path.insert(0, str(vendored_scripts_root()))
 
 from scripts.doctor import cmd_doctor  # noqa: E402
-from scripts.registry.cli import cmd_explain, cmd_list  # noqa: E402
+from scripts.registry.cli import cmd_compatibility, cmd_explain, cmd_list  # noqa: E402
 from scripts.registry.compatibility_resolver import (  # noqa: E402
     UnknownHostError,
     available_capabilities,
@@ -119,6 +119,12 @@ def main(argv: list[str] | None = None) -> int:
     explain_parser = subparsers.add_parser("explain", help="explain one skill's canonical metadata")
     explain_parser.add_argument("skill_id", help="registered skill identifier")
 
+    compatibility_parser = subparsers.add_parser(
+        "compatibility", help="resolve host x skill capability compatibility"
+    )
+    compatibility_parser.add_argument("--host", required=True, help="host id or alias from agent-hosts.yaml")
+    compatibility_parser.add_argument("--skill", help="limit to one skill id")
+
     args = parser.parse_args(argv)
 
     if args.command is None:
@@ -130,6 +136,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_list(registry_snapshot_root())
     if args.command == "explain":
         return cmd_explain(registry_snapshot_root(), args.skill_id)
+    if args.command == "compatibility":
+        return cmd_compatibility(registry_snapshot_root(), args.host, args.skill)
 
     print(f"error: unknown command {args.command!r}", file=sys.stderr)
     return 2
