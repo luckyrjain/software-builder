@@ -236,9 +236,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--surface",
-        help="informational only for now: agent-hosts.yaml's HostSpec.capabilities is not yet "
-        "nested per surface (see scripts/registry/compatibility_resolver.py), so this does not "
-        "yet change which capabilities are considered available",
+        help="surface kind (e.g. LOCAL, CLOUD) from agent-hosts.yaml; narrows available "
+        "capabilities to that surface's overrides where the host declares any (Candidate 2)",
     )
     parser.add_argument(
         "--install-root",
@@ -270,13 +269,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         host_id = args.agent
         host_verification = host.verification
-        available = set(available_capabilities(host))
-        if args.surface is not None:
-            print(
-                f"note: --surface {args.surface!r} does not yet affect capability resolution "
-                "(agent-hosts.yaml capabilities are host-level, not per-surface)",
-                file=sys.stderr,
-            )
+        available = set(available_capabilities(host, args.surface))
     elif args.available is not None:
         available = {item.strip() for item in args.available.split(",") if item.strip()}
 
