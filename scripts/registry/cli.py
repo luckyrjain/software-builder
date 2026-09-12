@@ -18,6 +18,7 @@ from scripts.registry.canonical_manifest import (
     validate_canonical_manifest,
 )
 from scripts.registry.capability_family_sync import validate_capability_families
+from scripts.registry.compatibility_resolver import UnknownHostError, resolve, resolve_host
 from scripts.registry.composition_runtime import handoff_allowed, validate_composition_runtime
 from scripts.registry.crosscheck import find_stale_generated_adapters, validate_registry
 from scripts.registry.generators import collect_outputs
@@ -197,6 +198,40 @@ def cmd_validate_hosts(root: Path) -> int:
             print(f"error: {error}", file=sys.stderr)
         return 1
     print("ok: agent host registry validates")
+    return 0
+
+
+def cmd_compatibility(root: Path, host_id: str, skill_id: str | None) -> int:
+    try:
+        host_registry = parse_host_registry(root / "agent-hosts.yaml")
+    except HostRegistryParseError as exc:
+        for error in exc.errors:
+            print(f"error: {error}", file=sys.stderr)
+        return 2
+
+    try:
+        resolve_host(host_registry, host_id)
+    except UnknownHostError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    registry = load_registry(root)
+    if skill_id is not None:
+        if skill_id not in registry.skills:
+            print(f"error: unknown skill {skill_id!r}", file=sys.stderr)
+            return 1
+        skill_ids = [skill_id]
+    else:
+        skill_ids = sorted(registry.skills)
+
+    for sid in skill_ids:
+        result = resolve(host_registry, registry, host_id, sid)
+        line = f"{result.host_id} {result.skill_id}: {result.status}"
+        if result.missing_required:
+            line += f" (missing required: {', '.join(result.missing_required)})"
+        elif result.missing_optional:
+            line += f" (missing optional: {', '.join(result.missing_optional)})"
+        print(line)
     return 0
 
 
@@ -393,6 +428,13 @@ def main(argv: list[str] | None = None) -> int:
         help="validate the declarative agent host registry",
     )
 
+    compatibility_parser = subparsers.add_parser(
+        "compatibility",
+        help="resolve host x skill capability compatibility (Candidate 4)",
+    )
+    compatibility_parser.add_argument("--host", required=True, help="host id or alias from agent-hosts.yaml")
+    compatibility_parser.add_argument("--skill", help="limit to one skill id (default: every registered skill)")
+
     subparsers.add_parser("list", help="list registered skills and their canonical metadata")
 
     explain_parser = subparsers.add_parser(
@@ -461,6 +503,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_command(lambda: cmd_validate_agent_skills(ROOT))
     if args.command == "validate-hosts":
         return _run_command(lambda: cmd_validate_hosts(ROOT))
+    if args.command == "compatibility":
+        return _run_command(lambda: cmd_compatibility(ROOT, args.host, args.skill))
     if args.command == "list":
         return _run_command(lambda: cmd_list(ROOT))
     if args.command == "explain":
