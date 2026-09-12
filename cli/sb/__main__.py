@@ -28,6 +28,9 @@ from scripts.registry.host_registry import (  # noqa: E402
     HostSpec,
     resolve_target_path,
 )
+from scripts.install_engine import install_skill, uninstall_skill  # noqa: E402
+from scripts.install_support import cmd_verify  # noqa: E402
+from scripts.registry.install_resolver import install_selectors, resolve_install_destinations  # noqa: E402
 
 
 def _package_version() -> str:
@@ -111,6 +114,59 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     )
 
 
+def _resolve_destinations(agent: str, target_dir: Path | None) -> list[tuple[Path, str]]:
+    host_registry = parse_host_registry(registry_snapshot_root() / "agent-hosts.yaml")
+    return resolve_install_destinations(host_registry, agent, home=Path.home(), target_dir=target_dir)
+
+
+def _cmd_install(args: argparse.Namespace) -> int:
+    try:
+        destinations = _resolve_destinations(args.host, args.target_dir)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    installed = failed = 0
+    for skill_id in args.skill_ids:
+        for dest_root, host_label in destinations:
+            outcome = install_skill(
+                skill_id,
+                repo_root=registry_snapshot_root(),
+                dest_root=dest_root,
+                host_label=host_label,
+                dry_run=args.dry_run,
+            )
+            print(outcome.message)
+            if outcome.status == "failed":
+                failed += 1
+            elif outcome.status == "installed":
+                installed += 1
+    if len(args.skill_ids) * len(destinations) > 1:
+        print(f"installed: {installed}, failed: {failed}", file=sys.stderr)
+    return 1 if failed else 0
+
+
+def _cmd_uninstall(args: argparse.Namespace) -> int:
+    try:
+        destinations = _resolve_destinations(args.host, args.target_dir)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    uninstalled = failed = 0
+    for skill_id in args.skill_ids:
+        for dest_root, _host_label in destinations:
+            outcome = uninstall_skill(skill_id, dest_root=dest_root, dry_run=args.dry_run)
+            print(outcome.message)
+            if outcome.status == "failed":
+                failed += 1
+            elif outcome.status == "uninstalled":
+                uninstalled += 1
+    if len(args.skill_ids) * len(destinations) > 1:
+        print(f"uninstalled: {uninstalled}, failed: {failed}", file=sys.stderr)
+    return 1 if failed else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="sb")
     parser.add_argument(
@@ -147,6 +203,21 @@ def main(argv: list[str] | None = None) -> int:
         help="surface kind (e.g. LOCAL, CLOUD) from agent-hosts.yaml",
     )
 
+    install_parser = subparsers.add_parser("install", help="install one or more skills")
+    install_parser.add_argument("skill_ids", nargs="+", help="registered skill id(s)")
+    install_parser.add_argument("--host", required=True, help=f"install selector: {', '.join(install_selectors())}")
+    install_parser.add_argument("--target-dir", type=Path, default=None, help="project root for project-scope targets")
+    install_parser.add_argument("--dry-run", action="store_true")
+
+    uninstall_parser = subparsers.add_parser("uninstall", help="uninstall one or more skills")
+    uninstall_parser.add_argument("skill_ids", nargs="+", help="registered skill id(s)")
+    uninstall_parser.add_argument("--host", required=True, help=f"install selector: {', '.join(install_selectors())}")
+    uninstall_parser.add_argument("--target-dir", type=Path, default=None, help="project root for project-scope targets")
+    uninstall_parser.add_argument("--dry-run", action="store_true")
+
+    verify_parser = subparsers.add_parser("verify", help="verify an installed skill's integrity")
+    verify_parser.add_argument("installed_path", type=Path)
+
     args = parser.parse_args(argv)
 
     if args.command is None:
@@ -160,6 +231,12 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_explain(registry_snapshot_root(), args.skill_id)
     if args.command == "compatibility":
         return cmd_compatibility(registry_snapshot_root(), args.host, args.skill, args.surface)
+    if args.command == "install":
+        return _cmd_install(args)
+    if args.command == "uninstall":
+        return _cmd_uninstall(args)
+    if args.command == "verify":
+        return cmd_verify(args.installed_path)
 
     print(f"error: unknown command {args.command!r}", file=sys.stderr)
     return 2
