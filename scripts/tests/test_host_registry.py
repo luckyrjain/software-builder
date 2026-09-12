@@ -514,3 +514,48 @@ def test_observed_at_must_be_an_iso_date(tmp_path: Path) -> None:
 
 def test_checked_in_registry_declares_an_evidence_max_age(tmp_path: Path) -> None:
     assert parse_host_registry(ROOT / "agent-hosts.yaml").evidence_max_age_days == 90
+
+
+def test_surface_level_capabilities_override_host_level(tmp_path: Path) -> None:
+    raw = _valid_registry()
+    host = raw["hosts"][1]
+    assert host["id"] == "claude"
+    host["surfaces"] = [
+        {
+            "kind": "LOCAL",
+            "discovery": [
+                {"target": "claude-user", "mode": "NATIVE", "precedence": 10},
+            ],
+            "capabilities": {
+                "host.repository.read_write": "AVAILABLE",
+            },
+        },
+        {
+            "kind": "CLOUD",
+            "discovery": [
+                {"target": "claude-user", "mode": "NATIVE", "precedence": 10},
+            ],
+            "capabilities": {
+                "host.repository.read_write": "UNAVAILABLE",
+            },
+        },
+    ]
+
+    registry = _parse(tmp_path, raw)
+    resolved_host = registry.hosts["claude"]
+
+    local_surface = next(s for s in resolved_host.surfaces if s.kind == "LOCAL")
+    cloud_surface = next(s for s in resolved_host.surfaces if s.kind == "CLOUD")
+    assert local_surface.capabilities.state_for("host.repository.read_write") == "AVAILABLE"
+    assert cloud_surface.capabilities.state_for("host.repository.read_write") == "UNAVAILABLE"
+    # host-level capabilities are untouched and still there for names no surface overrides
+    assert resolved_host.capabilities.state_for("host.filesystem.read") == "AVAILABLE"
+
+
+def test_surface_without_capabilities_block_parses_unchanged(tmp_path: Path) -> None:
+    # _valid_registry() declares no per-surface capabilities anywhere -- this must keep
+    # parsing exactly as it does today.
+    registry = _parse(tmp_path, _valid_registry())
+    for host in registry.hosts.values():
+        for surface in host.surfaces:
+            assert surface.capabilities.values == ()
