@@ -27,6 +27,7 @@ from typing import Iterator
 from scripts.install_support import registry_skill_ids
 from scripts.package_skill import package_skill, validate_skill_name
 from scripts.reference_utils import (
+    OWNERSHIP_ABSENT,
     OWNERSHIP_CORRUPT_OWNERSHIP,
     OWNERSHIP_SOFTWARE_BUILDER_OWNED,
     OWNERSHIP_SYMLINK,
@@ -288,3 +289,37 @@ def install_skill(
         if backup_dir is not None:
             shutil.rmtree(backup_dir, ignore_errors=True)
         return InstallOutcome(skill_id, skill_dest, "installed", f"installed {skill_id} to {skill_dest}")
+
+
+@dataclass(frozen=True)
+class UninstallOutcome:
+    skill_id: str
+    dest: Path
+    status: str  # "uninstalled" | "absent" | "dry_run" | "failed"
+    message: str
+
+
+def uninstall_skill(skill_id: str, *, dest_root: Path, dry_run: bool = False) -> UninstallOutcome:
+    """Remove one installed skill from dest_root/skill_id, following install.sh's own
+    uninstall_skill() sequence: lock -> classify ownership -> ABSENT is a warning, not a
+    failure -> SYMLINK/UNOWNED/CORRUPT_OWNERSHIP block with a specific message -> a
+    software-builder-owned install is removed outright (no staging/backup needed, unlike
+    install -- there is nothing to roll back to).
+    """
+    skill_dest = dest_root / skill_id
+    dest_root.mkdir(parents=True, exist_ok=True)
+    with held_lock(dest_root, skill_id):
+        classification = classify_install_destination(skill_dest, skill_id=skill_id)
+        if classification == OWNERSHIP_ABSENT:
+            return UninstallOutcome(skill_id, skill_dest, "absent", f"not installed: {skill_dest}")
+        if classification in _BLOCKING_OWNERSHIP_STATES:
+            message = _OWNERSHIP_BLOCK_MESSAGES[classification].format(dest=skill_dest).replace(
+                "install over", "remove"
+            )
+            return UninstallOutcome(skill_id, skill_dest, "failed", message)
+
+        if dry_run:
+            return UninstallOutcome(skill_id, skill_dest, "dry_run", f"would uninstall {skill_id} from {skill_dest}")
+
+        shutil.rmtree(skill_dest)
+        return UninstallOutcome(skill_id, skill_dest, "uninstalled", f"uninstalled {skill_id} from {skill_dest}")
