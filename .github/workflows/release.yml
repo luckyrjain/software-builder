@@ -92,3 +92,14 @@ jobs:
             "dist/software-builder-${VERSION}.tar.gz" \
             "dist/software-builder-${VERSION}.sha256" \
             "dist/software-builder-${VERSION}.files.sha256"
+
+      - name: Build and upload sb wheel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.tag.outputs.name }}
+        run: |
+          python3 scripts/build_sb_snapshot.py
+          python3 -m build --wheel --outdir dist/sb-wheel cli/
+          WHEEL_PATH="$(ls dist/sb-wheel/software_builder_cli-*.whl)"
+          sha256sum "$WHEEL_PATH" > "${WHEEL_PATH}.sha256"
+          gh release upload "$RELEASE_TAG" "$WHEEL_PATH" "${WHEEL_PATH}.sha256" --clobber

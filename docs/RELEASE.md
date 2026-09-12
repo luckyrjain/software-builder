@@ -115,17 +115,19 @@ python3 scripts/doctor.py --available gitlab.get_merge_request,gitlab.get_merge_
 
 `cli/` packages a standalone `sb` CLI (`software-builder-cli` on PyPI-style tooling) for an
 installed skill with no software-builder checkout present: read-only diagnostics -- `sb doctor`,
-`sb list`, `sb explain`, `sb compatibility` -- plus `sb install`, `sb uninstall`, and `sb verify`,
-which perform real installs/uninstalls/verification (locking, staged/backed-up atomic replace,
-ownership checks) against a live install destination. It vendors the relevant `scripts/` modules
-and a snapshot of the registry data (`skills.yaml`, `agent-hosts.yaml`, `VERSION`, `skills/`,
-`docs/skill-framework/`, `RELEASE-MANIFEST.json`) at build time rather than depending on this
-repository at runtime.
+`sb list`, `sb explain`, `sb compatibility` -- plus `sb install`, `sb uninstall`, `sb verify`, and
+`sb update`, which perform real installs/uninstalls/verification/upgrades (locking, staged/backed-up
+atomic replace, ownership checks, checksum-verified pip upgrades) against a live install
+destination. It vendors the relevant `scripts/` modules and a snapshot of the registry data
+(`skills.yaml`, `agent-hosts.yaml`, `VERSION`, `skills/`, `docs/skill-framework/`,
+`RELEASE-MANIFEST.json`) at build time rather than depending on this repository at runtime.
 
 This is a separate, independently-versioned artifact from the tarball release process documented
 above: `cli/pyproject.toml` carries its own version, and building it does not go through
 `scripts/package_release.py` or the release-contract/bundle-verification steps that gate a
-tagged tarball release.
+tagged tarball release. Publishing it, however, is no longer a separate step: `.github/workflows/release.yml`
+builds and uploads the sb wheel and its checksum sidecar as part of the same tagged-release job
+described below, so a tagged release publishes both the tarball and the sb wheel together.
 
 Build order:
 
@@ -139,9 +141,10 @@ python -m build cli/
 `python -m build` then produces the wheel from `cli/`, which hatchling force-includes both
 directories via its `artifacts` config (see `cli/pyproject.toml`) despite them being gitignored.
 
-This is currently a manual step -- there is no CI/release-automation wiring for building or
-publishing the `sb` wheel yet. That's future work, not something this section claims is already
-done.
+In CI, `.github/workflows/release.yml` runs this same build order and uploads the resulting wheel
+plus a `sha256sum`-generated checksum sidecar as GitHub Release assets on the tagged-release job,
+which `sb update` then fetches, verifies, and installs via pip. Building it locally with the
+commands above is still supported for manual/local use.
 
 ## Breaking changes
 

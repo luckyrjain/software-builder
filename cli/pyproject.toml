@@ -24,3 +24,6 @@ artifacts = ["sb/_vendored/**", "sb/_registry_snapshot/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: makes a real network call; not part of the default fast loop",
+]

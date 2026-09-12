@@ -31,6 +31,7 @@ from scripts.registry.host_registry import (  # noqa: E402
 from scripts.install_engine import install_skill, uninstall_skill  # noqa: E402
 from scripts.install_support import cmd_verify  # noqa: E402
 from scripts.registry.install_resolver import install_selectors, resolve_install_destinations  # noqa: E402
+from sb._update import run_update  # noqa: E402
 
 
 def _package_version() -> str:
@@ -235,6 +236,14 @@ def main(argv: list[str] | None = None) -> int:
     verify_parser = subparsers.add_parser("verify", help="verify an installed skill's integrity")
     verify_parser.add_argument("installed_path", type=Path)
 
+    update_parser = subparsers.add_parser("update", help="check for and install a newer sb release")
+    update_parser.add_argument(
+        "--channel", default="stable", help="release channel (only 'stable' is supported today)"
+    )
+    update_parser.add_argument(
+        "--check", action="store_true", help="only check for an update, do not install it"
+    )
+
     args = parser.parse_args(argv)
 
     if args.command is None:
@@ -254,6 +263,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_uninstall(args)
     if args.command == "verify":
         return cmd_verify(args.installed_path)
+    if args.command == "update":
+        return run_update(channel=args.channel, check_only=args.check)
 
     print(f"error: unknown command {args.command!r}", file=sys.stderr)
     return 2
