@@ -43,6 +43,22 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Fix root README skill-table gaps and navigation (2026-09-12)
+
+- Added the 10 skills registered in `skills.yaml` but missing from the top-level `README.md` skills
+  tables (`architecture-remediation-loop`, `bug-diagnosis`, `codebase-architecture-review`,
+  `domain-modeling`, `engineering-decision-discovery`, `issue-triage`, `local-diff-review`,
+  `merge-conflict-analysis`, `module-design`, `stakeholder-questionnaire`) — each had a full
+  README/SETUP/SKILL.md and counted toward the `skills-50` badge, but was undiscoverable from the
+  doc most readers start at.
+- Replaced the manual `mkdir ~/.agents/skills && cp -R` install steps for ChatGPT/Codex and GitHub
+  Copilot with `scripts/install.sh --agent agents`, the installer flag that already does this (per
+  `scripts/README.md`'s "universal Agent Skills target" section, which already pointed back at this
+  README for the guidance it never actually had).
+- Added a full section-linked table of contents (was a single-line nav), License and PRs-welcome
+  badges, and wrapped each skills-category table in a collapsed `<details>` block so the ~300-line
+  page with 50 skill rows doesn't render as one wall of text by default.
+
 ### Add bug-diagnosis skill (2026-09-09)
 
 - Added a new framework-compliant, ambient, read-only skill: `bug-diagnosis` (diagnoses a
