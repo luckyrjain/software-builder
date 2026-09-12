@@ -126,7 +126,7 @@ def _cmd_install(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    installed = failed = 0
+    installed = failed = dry_run = 0
     for skill_id in args.skill_ids:
         for dest_root, host_label in destinations:
             outcome = install_skill(
@@ -141,8 +141,13 @@ def _cmd_install(args: argparse.Namespace) -> int:
                 failed += 1
             elif outcome.status == "installed":
                 installed += 1
+            elif outcome.status == "dry_run":
+                dry_run += 1
     if len(args.skill_ids) * len(destinations) > 1:
-        print(f"installed: {installed}, failed: {failed}", file=sys.stderr)
+        if args.dry_run:
+            print(f"would install: {dry_run}, failed: {failed}", file=sys.stderr)
+        else:
+            print(f"installed: {installed}, failed: {failed}", file=sys.stderr)
     return 1 if failed else 0
 
 
@@ -153,7 +158,7 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    uninstalled = failed = 0
+    uninstalled = failed = dry_run = 0
     for skill_id in args.skill_ids:
         for dest_root, _host_label in destinations:
             outcome = uninstall_skill(skill_id, dest_root=dest_root, dry_run=args.dry_run)
@@ -162,8 +167,13 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
                 failed += 1
             elif outcome.status == "uninstalled":
                 uninstalled += 1
+            elif outcome.status == "dry_run":
+                dry_run += 1
     if len(args.skill_ids) * len(destinations) > 1:
-        print(f"uninstalled: {uninstalled}, failed: {failed}", file=sys.stderr)
+        if args.dry_run:
+            print(f"would uninstall: {dry_run}, failed: {failed}", file=sys.stderr)
+        else:
+            print(f"uninstalled: {uninstalled}, failed: {failed}", file=sys.stderr)
     return 1 if failed else 0
 
 
@@ -203,7 +213,14 @@ def main(argv: list[str] | None = None) -> int:
         help="surface kind (e.g. LOCAL, CLOUD) from agent-hosts.yaml",
     )
 
-    install_parser = subparsers.add_parser("install", help="install one or more skills")
+    install_parser = subparsers.add_parser(
+        "install",
+        help="install one or more skills",
+        description=(
+            "Install one or more skills. Does not check for shadowing installs at other "
+            "precedence levels or full registry-wide selector coverage, unlike install.sh."
+        ),
+    )
     install_parser.add_argument("skill_ids", nargs="+", help="registered skill id(s)")
     install_parser.add_argument("--host", required=True, help=f"install selector: {', '.join(install_selectors())}")
     install_parser.add_argument("--target-dir", type=Path, default=None, help="project root for project-scope targets")
