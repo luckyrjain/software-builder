@@ -24,10 +24,13 @@ rebuilt from scratch on every run, never committed.
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from scripts.release_info import RELEASE_MANIFEST_NAME, git_source_sha, read_distribution_version
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI_ROOT = ROOT / "cli"
@@ -93,6 +96,22 @@ def build_snapshot(repo_root: Path = ROOT) -> tuple[int, int]:
 
     data_files = _tracked_files(repo_root, *_DATA_PATHSPECS)
     _copy_files(repo_root, data_files, SNAPSHOT_ROOT)
+
+    # package_skill.py's _release_provenance() needs a Git HEAD or a RELEASE-MANIFEST.json at
+    # whatever `repo_root` it's given -- and the installed `sb` CLI passes this snapshot
+    # directory (registry_snapshot_root()) as that `repo_root`. Once this snapshot is copied out
+    # of the checkout and shipped inside a wheel, it has neither a `.git` of its own nor an
+    # enclosing one, so `sb install` would otherwise hard-fail with "release provenance requires
+    # a readable Git HEAD" on every real install. Capture that provenance now, while repo_root
+    # (the real checkout) still has both, and write it into the snapshot so _release_provenance's
+    # existing RELEASE-MANIFEST.json fallback picks it up.
+    release_manifest = {
+        "distribution_version": read_distribution_version(repo_root),
+        "source_sha": git_source_sha(repo_root),
+    }
+    (SNAPSHOT_ROOT / RELEASE_MANIFEST_NAME).write_text(
+        json.dumps(release_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
     return len(code_files), len(data_files)
 

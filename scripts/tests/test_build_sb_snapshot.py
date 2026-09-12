@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 import pytest
 
 from scripts.build_sb_snapshot import build_snapshot
+from scripts.release_info import RELEASE_MANIFEST_NAME, SEMVER_RE, SHA_RE
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -27,6 +29,24 @@ def test_build_snapshot_populates_both_output_directories() -> None:
     assert (snapshot / "skills" / "pr-review" / "SKILL.md").is_file()
     assert code_count > 0
     assert data_count > 0
+
+
+@pytest.mark.mutates_repository_root
+def test_build_snapshot_writes_release_manifest_for_provenance() -> None:
+    """The snapshot is shipped inside the sb wheel with neither its own nor an enclosing .git,
+    so package_skill.py's _release_provenance() falls back to reading a RELEASE-MANIFEST.json
+    at its repo_root (the snapshot dir, once installed) instead of shelling out to git -- without
+    this file, `sb install` fails on every real install with "release provenance requires a
+    readable Git HEAD"."""
+    build_snapshot(ROOT)
+
+    snapshot = ROOT / "cli" / "sb" / "_registry_snapshot"
+    manifest_path = snapshot / RELEASE_MANIFEST_NAME
+    assert manifest_path.is_file()
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert SEMVER_RE.fullmatch(manifest["distribution_version"])
+    assert SHA_RE.fullmatch(manifest["source_sha"])
 
 
 @pytest.mark.mutates_repository_root
