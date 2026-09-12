@@ -35,6 +35,16 @@ def test_vendored_code_and_snapshot_data_work_together_end_to_end(tmp_path: Path
     vendored = ROOT / "cli" / "sb" / "_vendored"
     snapshot = ROOT / "cli" / "sb" / "_registry_snapshot"
 
+    # The top-level `from scripts.build_sb_snapshot import build_snapshot` above already cached
+    # this checkout's real `scripts` package in sys.modules. Without clearing it here first,
+    # `importlib.import_module("scripts.doctor")` below would resolve as a submodule of that
+    # already-cached package (using its __path__, not re-searching sys.path) and silently import
+    # THIS CHECKOUT's scripts.doctor instead of the vendored copy -- defeating the point of this
+    # test. Clear it before inserting the vendored path onto sys.path, not just after.
+    for name in list(sys.modules):
+        if name == "scripts" or name.startswith("scripts."):
+            del sys.modules[name]
+
     sys.path.insert(0, str(vendored))
     try:
         import importlib
@@ -44,6 +54,10 @@ def test_vendored_code_and_snapshot_data_work_together_end_to_end(tmp_path: Path
         compatibility_resolver = importlib.import_module("scripts.registry.compatibility_resolver")
         host_registry_module = importlib.import_module("scripts.registry.host_registry")
         load_module = importlib.import_module("scripts.registry.load")
+
+        # Prove the loaded module really came from the vendored tree, not this checkout --
+        # this assertion is what would have caught the sys.modules-caching bug above.
+        assert Path(doctor.__file__).resolve().is_relative_to(vendored.resolve())
 
         assert registry_cli.cmd_list(snapshot) == 0
         assert registry_cli.cmd_explain(snapshot, "pr-review") == 0
