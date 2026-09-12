@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 import pytest
 
 from scripts.build_sb_snapshot import build_snapshot
+from scripts.install_engine import install_skill
+from scripts.release_info import RELEASE_MANIFEST_NAME, SEMVER_RE, SHA_RE
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -27,6 +30,66 @@ def test_build_snapshot_populates_both_output_directories() -> None:
     assert (snapshot / "skills" / "pr-review" / "SKILL.md").is_file()
     assert code_count > 0
     assert data_count > 0
+
+
+@pytest.mark.mutates_repository_root
+def test_build_snapshot_writes_release_manifest_for_provenance() -> None:
+    """The snapshot is shipped inside the sb wheel with neither its own nor an enclosing .git,
+    so package_skill.py's _release_provenance() falls back to reading a RELEASE-MANIFEST.json
+    at its repo_root (the snapshot dir, once installed) instead of shelling out to git -- without
+    this file, `sb install` fails on every real install with "release provenance requires a
+    readable Git HEAD"."""
+    build_snapshot(ROOT)
+
+    snapshot = ROOT / "cli" / "sb" / "_registry_snapshot"
+    manifest_path = snapshot / RELEASE_MANIFEST_NAME
+    assert manifest_path.is_file()
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert SEMVER_RE.fullmatch(manifest["distribution_version"])
+    assert SHA_RE.fullmatch(manifest["source_sha"])
+
+
+@pytest.mark.mutates_repository_root
+def test_real_snapshot_has_the_shared_scripts_test_creator_and_yaml_safety_skills_need(
+    tmp_path: Path,
+) -> None:
+    """Regression test for the bug _DATA_PATHSPECS's three scripts/*.py entries fix:
+    package_skill() needs test_creator_write_guard.py + git_paths.py from repo_root/scripts/ for
+    every TEST_CREATOR_SKILL_SET skill, and yaml_safety.py for every YAML_SAFETY_SKILL_SET skill
+    -- and without those three files in the snapshot, installing any of those 9 skills from the
+    shipped `sb` wheel fails outright. Installs one skill from each set via install_skill(), the
+    same way test_install_engine_install.py's tests do, but against the REAL snapshot (ROOT),
+    not a synthetic minimal fixture -- a synthetic fixture never needed these shared scripts and
+    so never caught this bug across 4 prior tasks; only the real snapshot proves it's fixed."""
+    build_snapshot(ROOT)
+    snapshot = ROOT / "cli" / "sb" / "_registry_snapshot"
+
+    test_creator_outcome = install_skill(
+        "unit-test-creator",
+        repo_root=snapshot,
+        dest_root=tmp_path / "test-creator-dest",
+        host_label="cursor",
+    )
+    assert test_creator_outcome.status == "installed", test_creator_outcome.message
+    assert (
+        tmp_path
+        / "test-creator-dest"
+        / "unit-test-creator"
+        / "scripts"
+        / "test_creator_write_guard.py"
+    ).is_file()
+
+    yaml_safety_outcome = install_skill(
+        "domain-comprehension",
+        repo_root=snapshot,
+        dest_root=tmp_path / "yaml-safety-dest",
+        host_label="cursor",
+    )
+    assert yaml_safety_outcome.status == "installed", yaml_safety_outcome.message
+    assert (
+        tmp_path / "yaml-safety-dest" / "domain-comprehension" / "scripts" / "yaml_safety.py"
+    ).is_file()
 
 
 @pytest.mark.mutates_repository_root

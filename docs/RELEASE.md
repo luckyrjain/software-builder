@@ -113,11 +113,14 @@ python3 scripts/doctor.py --available gitlab.get_merge_request,gitlab.get_merge_
 
 ## sb CLI (pipx distribution)
 
-`cli/` packages a standalone `sb` CLI (`software-builder-cli` on PyPI-style tooling) that wraps
-read-only diagnostics -- `sb doctor`, `sb list`, `sb explain`, `sb compatibility` -- for an
-installed skill with no software-builder checkout present. It vendors the relevant `scripts/`
-modules and a snapshot of the registry data (`skills.yaml`, `agent-hosts.yaml`, `VERSION`,
-`skills/`) at build time rather than depending on this repository at runtime.
+`cli/` packages a standalone `sb` CLI (`software-builder-cli` on PyPI-style tooling) for an
+installed skill with no software-builder checkout present: read-only diagnostics -- `sb doctor`,
+`sb list`, `sb explain`, `sb compatibility` -- plus `sb install`, `sb uninstall`, and `sb verify`,
+which perform real installs/uninstalls/verification (locking, staged/backed-up atomic replace,
+ownership checks) against a live install destination. It vendors the relevant `scripts/` modules
+and a snapshot of the registry data (`skills.yaml`, `agent-hosts.yaml`, `VERSION`, `skills/`,
+`docs/skill-framework/`, `RELEASE-MANIFEST.json`) at build time rather than depending on this
+repository at runtime.
 
 This is a separate, independently-versioned artifact from the tarball release process documented
 above: `cli/pyproject.toml` carries its own version, and building it does not go through

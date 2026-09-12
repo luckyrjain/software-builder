@@ -84,3 +84,27 @@ def test_sb_wheel_builds_installs_and_runs(tmp_path: Path) -> None:
     )
     assert result.returncode == 0
     assert "claude pr-review:" in result.stdout
+
+    target_dir = tmp_path / "target-repo"
+    target_dir.mkdir()
+
+    install_result = subprocess.run(
+        [str(sb_executable), "install", "pr-review", "--host", "cursor", "--target-dir", str(target_dir)],
+        check=False, capture_output=True, text=True,
+    )
+    assert install_result.returncode == 0, install_result.stderr
+    installed_path = target_dir / ".cursor" / "skills" / "pr-review"
+    assert (installed_path / "SKILL.md").is_file()
+
+    verify_result = subprocess.run(
+        [str(sb_executable), "verify", str(installed_path)],
+        check=False, capture_output=True, text=True,
+    )
+    assert verify_result.returncode == 0, verify_result.stderr
+
+    uninstall_result = subprocess.run(
+        [str(sb_executable), "uninstall", "pr-review", "--host", "cursor", "--target-dir", str(target_dir)],
+        check=False, capture_output=True, text=True,
+    )
+    assert uninstall_result.returncode == 0, uninstall_result.stderr
+    assert not installed_path.exists()

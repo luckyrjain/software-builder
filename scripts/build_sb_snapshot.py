@@ -24,10 +24,13 @@ rebuilt from scratch on every run, never committed.
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from scripts.release_info import RELEASE_MANIFEST_NAME, git_source_sha, read_distribution_version
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI_ROOT = ROOT / "cli"
@@ -43,16 +46,27 @@ SNAPSHOT_ROOT = CLI_ROOT / "sb" / "_registry_snapshot"
 _CODE_PATHSPEC = "scripts/*.py"
 _CODE_EXCLUDE_PREFIX = "scripts/tests/"
 
-# Every data file the four target commands read, verified empirically (see module docstring).
-# scripts/registry/*.yaml also pulls in scripts/registry/skills.d/*.yaml's ~50 source fragments
-# alongside the ~11 real config files -- harmless (small, unused by any of the four commands,
-# which read the already-materialized skills.yaml instead) and not filtered out, since excluding
-# them would need extra logic for no functional benefit.
+# Every data file the four diagnostics commands read, plus what `sb install` additionally
+# needs, verified empirically (see module docstring). scripts/registry/*.yaml also pulls in
+# scripts/registry/skills.d/*.yaml's ~50 source fragments alongside the ~11 real config files
+# -- harmless (small, unused by any of the four commands, which read the already-materialized
+# skills.yaml instead) and not filtered out, since excluding them would need extra logic for no
+# functional benefit.
+#
+# The three scripts/*.py entries below are shared runtime scripts package_skill.py's
+# _shared_script() injects into installed bundles for certain skill categories --
+# test_creator_write_guard.py + git_paths.py for TEST_CREATOR_SKILL_SET, yaml_safety.py for
+# YAML_SAFETY_SKILL_SET. They live outside scripts/registry/ so the pathspecs above never pick
+# them up on their own; without them here, `sb install` fails for every skill in either set
+# once this snapshot (not a live checkout) is the only thing package_skill.py can see.
 _DATA_PATHSPECS = (
     "skills.yaml",
     "agent-hosts.yaml",
     "VERSION",
     "scripts/registry/*.yaml",
+    "scripts/test_creator_write_guard.py",
+    "scripts/git_paths.py",
+    "scripts/yaml_safety.py",
     "skills/**",
     "docs/skill-framework/**",
 )
@@ -93,6 +107,22 @@ def build_snapshot(repo_root: Path = ROOT) -> tuple[int, int]:
 
     data_files = _tracked_files(repo_root, *_DATA_PATHSPECS)
     _copy_files(repo_root, data_files, SNAPSHOT_ROOT)
+
+    # package_skill.py's _release_provenance() needs a Git HEAD or a RELEASE-MANIFEST.json at
+    # whatever `repo_root` it's given -- and the installed `sb` CLI passes this snapshot
+    # directory (registry_snapshot_root()) as that `repo_root`. Once this snapshot is copied out
+    # of the checkout and shipped inside a wheel, it has neither a `.git` of its own nor an
+    # enclosing one, so `sb install` would otherwise hard-fail with "release provenance requires
+    # a readable Git HEAD" on every real install. Capture that provenance now, while repo_root
+    # (the real checkout) still has both, and write it into the snapshot so _release_provenance's
+    # existing RELEASE-MANIFEST.json fallback picks it up.
+    release_manifest = {
+        "distribution_version": read_distribution_version(repo_root),
+        "source_sha": git_source_sha(repo_root),
+    }
+    (SNAPSHOT_ROOT / RELEASE_MANIFEST_NAME).write_text(
+        json.dumps(release_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
     return len(code_files), len(data_files)
 

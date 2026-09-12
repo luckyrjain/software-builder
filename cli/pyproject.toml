@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "software-builder-cli"
 version = "1.4.0"
-description = "Standalone sb CLI: doctor/list/explain/compatibility for installed software-builder skills, no checkout required."
+description = "Standalone sb CLI: doctor/list/explain/compatibility plus install/uninstall/verify for software-builder skills, no checkout required."
 requires-python = ">=3.12"
 license = "MIT"
 dependencies = ["PyYAML>=6.0.3"]
