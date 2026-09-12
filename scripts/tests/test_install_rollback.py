@@ -108,7 +108,7 @@ broken-skill:
             # system python3 that doesn't have this repo's dependencies (PyYAML)
             # installed, so install.sh fails with ModuleNotFoundError before
             # ever reaching the behavior under test.
-            "PATH": os.environ.get("PATH", ""),
+            "PATH": f"{ROOT / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
         },
         capture_output=True,
         text=True,
@@ -148,7 +148,7 @@ def test_install_list_does_not_write_skills(tmp_path: Path) -> None:
             # system python3 that doesn't have this repo's dependencies (PyYAML)
             # installed, so install.sh fails with ModuleNotFoundError before
             # ever reaching the behavior under test.
-            "PATH": os.environ.get("PATH", ""),
+            "PATH": f"{ROOT / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
         },
         capture_output=True,
         text=True,
@@ -219,7 +219,7 @@ def test_multi_skill_run_continues_past_a_failure_and_reports_a_summary(tmp_path
         env={
             "HOME": str(home),
             "PYTHONDONTWRITEBYTECODE": "1",
-            "PATH": os.environ.get("PATH", ""),
+            "PATH": f"{ROOT / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
         },
         capture_output=True,
         text=True,
@@ -245,7 +245,7 @@ def test_multi_skill_uninstall_continues_past_a_failure_and_reports_a_summary(
     env = {
         "HOME": str(home),
         "PYTHONDONTWRITEBYTECODE": "1",
-        "PATH": os.environ.get("PATH", ""),
+        "PATH": f"{ROOT / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
     }
 
     install = subprocess.run(
