@@ -33,7 +33,8 @@ def _run_checkout_doctor(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_sb_doctor_matches_checkout_doctor_for_one_skill() -> None:
-    sb_result = _run_sb("doctor", "--skill", "pr-review")
+    sb_result = _run_sb("doctor", "--skill", "pr-review", "--install-root", "/nonexistent")
     checkout_result = _run_checkout_doctor("--skill", "pr-review", "--install-root", "/nonexistent")
 
+    assert sb_result.returncode == checkout_result.returncode
     assert sb_result.stdout == checkout_result.stdout

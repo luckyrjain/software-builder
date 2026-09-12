@@ -58,6 +58,10 @@ def _default_install_roots_for_host(host: HostSpec, *, home: Path) -> list[Path]
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
+    if args.agent is not None and args.available is not None:
+        print("error: --agent and --available are mutually exclusive", file=sys.stderr)
+        return 2
+
     root = registry_snapshot_root()
     host_id: str | None = None
     host_verification: str | None = None

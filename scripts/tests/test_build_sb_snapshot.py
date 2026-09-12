@@ -5,11 +5,14 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 from scripts.build_sb_snapshot import build_snapshot
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.mutates_repository_root
 def test_build_snapshot_populates_both_output_directories() -> None:
     code_count, data_count = build_snapshot(ROOT)
 
@@ -26,6 +29,7 @@ def test_build_snapshot_populates_both_output_directories() -> None:
     assert data_count > 0
 
 
+@pytest.mark.mutates_repository_root
 def test_vendored_code_and_snapshot_data_work_together_end_to_end(tmp_path: Path) -> None:
     """The real proof: import the VENDORED copy (not this checkout's own scripts package) and
     run cmd_list/cmd_explain/cmd_doctor/compatibility_resolver.resolve against the snapshot --

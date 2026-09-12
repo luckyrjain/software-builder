@@ -111,6 +111,35 @@ python3 scripts/doctor.py --available gitlab.get_merge_request,gitlab.get_merge_
 - A major-version bump (see below) is the signal that an upgrade or rollback may need manual
   migration steps; check `CHANGELOG.md` first.
 
+## sb CLI (pipx distribution)
+
+`cli/` packages a standalone `sb` CLI (`software-builder-cli` on PyPI-style tooling) that wraps
+read-only diagnostics -- `sb doctor`, `sb list`, `sb explain`, `sb compatibility` -- for an
+installed skill with no software-builder checkout present. It vendors the relevant `scripts/`
+modules and a snapshot of the registry data (`skills.yaml`, `agent-hosts.yaml`, `VERSION`,
+`skills/`) at build time rather than depending on this repository at runtime.
+
+This is a separate, independently-versioned artifact from the tarball release process documented
+above: `cli/pyproject.toml` carries its own version, and building it does not go through
+`scripts/package_release.py` or the release-contract/bundle-verification steps that gate a
+tagged tarball release.
+
+Build order:
+
+```bash
+python3 scripts/build_sb_snapshot.py
+python -m build cli/
+```
+
+`scripts/build_sb_snapshot.py` populates `cli/sb/_vendored/` and `cli/sb/_registry_snapshot/`
+(both gitignored, rebuilt from scratch on every run) from this checkout's git-tracked files;
+`python -m build` then produces the wheel from `cli/`, which hatchling force-includes both
+directories via its `artifacts` config (see `cli/pyproject.toml`) despite them being gitignored.
+
+This is currently a manual step -- there is no CI/release-automation wiring for building or
+publishing the `sb` wheel yet. That's future work, not something this section claims is already
+done.
+
 ## Breaking changes
 
 Which change requires which bump — and what to do when a release or install goes wrong — is in

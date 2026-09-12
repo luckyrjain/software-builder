@@ -24,6 +24,7 @@ CLI_ROOT = ROOT / "cli"
 
 
 @pytest.mark.slow
+@pytest.mark.mutates_repository_root
 def test_sb_wheel_builds_installs_and_runs(tmp_path: Path) -> None:
     build_snapshot(ROOT)
 
@@ -65,3 +66,21 @@ def test_sb_wheel_builds_installs_and_runs(tmp_path: Path) -> None:
     )
     assert result.returncode == 0
     assert "Skill: pr-review" in result.stdout
+
+    result = subprocess.run(
+        [str(sb_executable), "doctor", "--skill", "pr-review", "--install-root", "/nonexistent"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode in (0, 1)
+    assert "pr-review:" in result.stdout
+
+    result = subprocess.run(
+        [str(sb_executable), "compatibility", "--host", "claude", "--skill", "pr-review"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "claude pr-review:" in result.stdout
