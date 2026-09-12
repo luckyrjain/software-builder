@@ -46,3 +46,20 @@ def test_sb_compatibility_rejects_unknown_host() -> None:
 
     assert result.returncode == 2
     assert "unknown host" in result.stderr
+
+
+def test_sb_compatibility_surface_matches_checkout() -> None:
+    sb_result = _run_sb("compatibility", "--host", "claude", "--skill", "pr-review", "--surface", "LOCAL")
+    checkout_result = _run_checkout_registry_cli(
+        "compatibility", "--host", "claude", "--skill", "pr-review", "--surface", "LOCAL"
+    )
+
+    assert sb_result.returncode == checkout_result.returncode == 0
+    assert sb_result.stdout == checkout_result.stdout
+
+
+def test_sb_compatibility_rejects_unknown_surface() -> None:
+    result = _run_sb("compatibility", "--host", "claude", "--surface", "NOT_A_REAL_SURFACE")
+
+    assert result.returncode == 2
+    assert "NOT_A_REAL_SURFACE" in result.stderr

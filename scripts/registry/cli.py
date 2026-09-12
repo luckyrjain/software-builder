@@ -201,7 +201,7 @@ def cmd_validate_hosts(root: Path) -> int:
     return 0
 
 
-def cmd_compatibility(root: Path, host_id: str, skill_id: str | None) -> int:
+def cmd_compatibility(root: Path, host_id: str, skill_id: str | None, surface_kind: str | None = None) -> int:
     try:
         host_registry = parse_host_registry(root / "agent-hosts.yaml")
     except HostRegistryParseError as exc:
@@ -210,10 +210,20 @@ def cmd_compatibility(root: Path, host_id: str, skill_id: str | None) -> int:
         return 2
 
     try:
-        resolve_host(host_registry, host_id)
+        host = resolve_host(host_registry, host_id)
     except UnknownHostError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+
+    if surface_kind is not None:
+        declared_surfaces = {surface.kind for surface in host.surfaces}
+        if surface_kind not in declared_surfaces:
+            print(
+                f"error: unknown surface {surface_kind!r} for host {host_id!r} "
+                f"(declared surfaces: {sorted(declared_surfaces)})",
+                file=sys.stderr,
+            )
+            return 2
 
     registry = load_registry(root)
     if skill_id is not None:
@@ -225,7 +235,7 @@ def cmd_compatibility(root: Path, host_id: str, skill_id: str | None) -> int:
         skill_ids = sorted(registry.skills)
 
     for sid in skill_ids:
-        result = resolve(host_registry, registry, host_id, sid)
+        result = resolve(host_registry, registry, host_id, sid, surface_kind)
         line = f"{result.host_id} {result.skill_id}: {result.status}"
         if result.missing_required:
             line += f" (missing required: {', '.join(result.missing_required)})"
@@ -434,6 +444,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     compatibility_parser.add_argument("--host", required=True, help="host id or alias from agent-hosts.yaml")
     compatibility_parser.add_argument("--skill", help="limit to one skill id (default: every registered skill)")
+    compatibility_parser.add_argument(
+        "--surface",
+        help="surface kind (e.g. LOCAL, CLOUD) from agent-hosts.yaml; narrows resolution to "
+        "that surface's overrides where the host declares any (Candidate 2)",
+    )
 
     subparsers.add_parser("list", help="list registered skills and their canonical metadata")
 
@@ -504,7 +519,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "validate-hosts":
         return _run_command(lambda: cmd_validate_hosts(ROOT))
     if args.command == "compatibility":
-        return _run_command(lambda: cmd_compatibility(ROOT, args.host, args.skill))
+        return _run_command(lambda: cmd_compatibility(ROOT, args.host, args.skill, args.surface))
     if args.command == "list":
         return _run_command(lambda: cmd_list(ROOT))
     if args.command == "explain":
