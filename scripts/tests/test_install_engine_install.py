@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -183,6 +186,47 @@ def test_keyboard_interrupt_during_staging_propagates_after_cleanup(
     assert not seen_stage_dirs[0].exists()
     assert not (dest_root / "demo-skill").exists()
     assert not list(dest_root.glob(".demo-skill.lock*"))
+
+
+def test_live_held_lock_yields_a_failed_outcome_instead_of_raising(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A concurrent/stuck lock must surface as InstallOutcome(status="failed"), not an
+    unhandled LockTimeoutError -- mirrors test_install_engine_locking.py's
+    test_live_held_lock_times_out_with_a_clear_error's real-subprocess-holder technique, but
+    through install_skill() itself so a multi-skill `sb install` run can keep going instead of
+    crashing mid-run. install_skill() doesn't expose held_lock's wait_timeout, so it's shortened
+    here by wrapping the module-level held_lock the same way other tests in this file patch
+    install_engine's module globals (e.g. the KeyboardInterrupt test's validate_tree patch)."""
+    real_held_lock = install_engine.held_lock
+
+    @contextmanager
+    def _short_wait_held_lock(dest_root: Path, skill_id: str, **_kwargs: object):
+        with real_held_lock(dest_root, skill_id, wait_timeout=2.0):
+            yield
+
+    monkeypatch.setattr(install_engine, "held_lock", _short_wait_held_lock)
+
+    repo = _minimal_repo(tmp_path)
+    dest_root = tmp_path / "dest"
+    dest_root.mkdir()
+
+    holder = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        lock_dir = dest_root / ".demo-skill.lock"
+        lock_dir.mkdir()
+        (lock_dir / "pid").write_text(str(holder.pid), encoding="utf-8")
+        (lock_dir / "acquired_at").write_text(str(time.time()), encoding="utf-8")
+
+        outcome = install_skill(
+            "demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor"
+        )
+
+        assert outcome.status == "failed"
+        assert "timed out waiting for lock" in outcome.message
+    finally:
+        holder.terminate()
+        holder.wait(timeout=5)
 
 
 def test_symlinked_destination_is_refused(tmp_path: Path) -> None:

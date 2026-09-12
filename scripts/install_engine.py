@@ -246,49 +246,60 @@ def install_skill(
     if dry_run:
         return InstallOutcome(skill_id, skill_dest, "dry_run", f"would install {skill_id} to {skill_dest}")
 
-    dest_root.mkdir(parents=True, exist_ok=True)
-    with held_lock(dest_root, skill_id):
-        stage_dir: Path | None = None
-        backup_dir: Path | None = None
-        try:
-            stage_dir = Path(tempfile.mkdtemp(dir=dest_root, prefix=f".{skill_id}.staging."))
-            package_skill(skill=skill_id, repo_root=repo_root, dest=stage_dir, host=host_label)
+    try:
+        dest_root.mkdir(parents=True, exist_ok=True)
+        with held_lock(dest_root, skill_id):
+            stage_dir: Path | None = None
+            backup_dir: Path | None = None
+            try:
+                stage_dir = Path(tempfile.mkdtemp(dir=dest_root, prefix=f".{skill_id}.staging."))
+                package_skill(skill=skill_id, repo_root=repo_root, dest=stage_dir, host=host_label)
 
-            errors = validate_tree(stage_dir, check_anchors=False, installed_package=True)
-            if errors:
-                raise ValueError("; ".join(errors))
+                errors = validate_tree(stage_dir, check_anchors=False, installed_package=True)
+                if errors:
+                    raise ValueError("; ".join(errors))
 
-            reclassification = classify_install_destination(skill_dest, skill_id=skill_id)
-            if reclassification in _BLOCKING_OWNERSHIP_STATES:
-                message = _OWNERSHIP_BLOCK_MESSAGES[reclassification].format(dest=skill_dest)
-                raise ValueError(message)
+                reclassification = classify_install_destination(skill_dest, skill_id=skill_id)
+                if reclassification in _BLOCKING_OWNERSHIP_STATES:
+                    message = _OWNERSHIP_BLOCK_MESSAGES[reclassification].format(dest=skill_dest)
+                    raise ValueError(message)
 
-            if reclassification == OWNERSHIP_SOFTWARE_BUILDER_OWNED:
-                backup_dir = Path(tempfile.mkdtemp(dir=dest_root, prefix=f".{skill_id}.backup."))
-                os.replace(skill_dest, backup_dir / "skill")
+                if reclassification == OWNERSHIP_SOFTWARE_BUILDER_OWNED:
+                    backup_dir = Path(tempfile.mkdtemp(dir=dest_root, prefix=f".{skill_id}.backup."))
+                    os.replace(skill_dest, backup_dir / "skill")
 
-            os.replace(stage_dir, skill_dest)
-            stage_dir = None  # now living at skill_dest; nothing left to clean up on success
-        except (KeyboardInterrupt, SystemExit):
-            # Mirrors install.sh's own INT/TERM trap: on_install_interrupt() runs
-            # cleanup_failed_install() and then `exit 130`, terminating the whole process
-            # rather than falling through to per-skill failure bookkeeping the way an
-            # ordinary validation failure does (which returns 1 and lets a multi-skill loop
-            # continue to the next skill). Re-raising here after cleanup is the Python
-            # equivalent: it propagates out through this `with held_lock(...)` block --
-            # whose own `finally` still releases the lock on the way out, same as any other
-            # exit path -- instead of being swallowed into a normal InstallOutcome that a
-            # future multi-skill caller could mistake for just one more failed skill.
-            _cleanup_failed_install(stage_dir, backup_dir, skill_dest)
-            raise
-        except Exception as exc:
-            _cleanup_failed_install(stage_dir, backup_dir, skill_dest)
-            message = str(exc) if str(exc) else f"{type(exc).__name__} during install"
-            return InstallOutcome(skill_id, skill_dest, "failed", message)
+                os.replace(stage_dir, skill_dest)
+                stage_dir = None  # now living at skill_dest; nothing left to clean up on success
+            except (KeyboardInterrupt, SystemExit):
+                # Mirrors install.sh's own INT/TERM trap: on_install_interrupt() runs
+                # cleanup_failed_install() and then `exit 130`, terminating the whole process
+                # rather than falling through to per-skill failure bookkeeping the way an
+                # ordinary validation failure does (which returns 1 and lets a multi-skill loop
+                # continue to the next skill). Re-raising here after cleanup is the Python
+                # equivalent: it propagates out through this `with held_lock(...)` block --
+                # whose own `finally` still releases the lock on the way out, same as any other
+                # exit path -- instead of being swallowed into a normal InstallOutcome that a
+                # future multi-skill caller could mistake for just one more failed skill.
+                _cleanup_failed_install(stage_dir, backup_dir, skill_dest)
+                raise
+            except Exception as exc:
+                _cleanup_failed_install(stage_dir, backup_dir, skill_dest)
+                message = str(exc) if str(exc) else f"{type(exc).__name__} during install"
+                return InstallOutcome(skill_id, skill_dest, "failed", message)
 
-        if backup_dir is not None:
-            shutil.rmtree(backup_dir, ignore_errors=True)
-        return InstallOutcome(skill_id, skill_dest, "installed", f"installed {skill_id} to {skill_dest}")
+            if backup_dir is not None:
+                shutil.rmtree(backup_dir, ignore_errors=True)
+            return InstallOutcome(skill_id, skill_dest, "installed", f"installed {skill_id} to {skill_dest}")
+    except (LockTimeoutError, OSError) as exc:
+        # A concurrent/stuck lock (LockTimeoutError) or a failure acquiring it in the first
+        # place (OSError from dest_root.mkdir, e.g. permission denied) must become a failed
+        # outcome, not an unhandled traceback -- install.sh's own lock-acquire failure is a
+        # plain `return 1` that lets a multi-skill run continue to the next skill; a raised
+        # exception here would instead crash `sb`'s multi-skill CLI loop mid-run. Only the
+        # lock-acquisition step is covered here -- OSErrors raised once inside the lock (e.g.
+        # during staging) are already handled by the inner `except Exception` above, which
+        # returns rather than raises, so they never reach this outer handler.
+        return InstallOutcome(skill_id, skill_dest, "failed", str(exc))
 
 
 @dataclass(frozen=True)
@@ -305,6 +316,11 @@ def uninstall_skill(skill_id: str, *, dest_root: Path, dry_run: bool = False) ->
     failure -> SYMLINK/UNOWNED/CORRUPT_OWNERSHIP block with a specific message -> a
     software-builder-owned install is removed outright (no staging/backup needed, unlike
     install -- there is nothing to roll back to).
+
+    Deliberate divergence from install.sh: this does not re-check registry membership
+    (install.sh's own registry_check_skill-equivalent) the way install_skill() does, so a
+    since-deregistered skill can still be uninstalled -- ownership classification alone still
+    bounds what gets touched, so this is arguably safer, not a gap.
     """
     try:
         validate_skill_name(skill_id)
@@ -312,23 +328,34 @@ def uninstall_skill(skill_id: str, *, dest_root: Path, dry_run: bool = False) ->
         return UninstallOutcome(skill_id, dest_root / skill_id, "failed", str(exc))
 
     skill_dest = dest_root / skill_id
-    dest_root.mkdir(parents=True, exist_ok=True)
-    with held_lock(dest_root, skill_id):
-        classification = classify_install_destination(skill_dest, skill_id=skill_id)
-        if classification == OWNERSHIP_ABSENT:
-            return UninstallOutcome(skill_id, skill_dest, "absent", f"not installed: {skill_dest}")
-        if classification in _BLOCKING_OWNERSHIP_STATES:
-            message = _OWNERSHIP_BLOCK_MESSAGES[classification].format(dest=skill_dest).replace(
-                "install over", "remove"
+    try:
+        dest_root.mkdir(parents=True, exist_ok=True)
+        with held_lock(dest_root, skill_id):
+            classification = classify_install_destination(skill_dest, skill_id=skill_id)
+            if classification == OWNERSHIP_ABSENT:
+                return UninstallOutcome(skill_id, skill_dest, "absent", f"not installed: {skill_dest}")
+            if classification in _BLOCKING_OWNERSHIP_STATES:
+                message = _OWNERSHIP_BLOCK_MESSAGES[classification].replace(
+                    "install over", "remove"
+                ).format(dest=skill_dest)
+                return UninstallOutcome(skill_id, skill_dest, "failed", message)
+
+            if dry_run:
+                return UninstallOutcome(
+                    skill_id, skill_dest, "dry_run", f"would uninstall {skill_id} from {skill_dest}"
+                )
+
+            try:
+                shutil.rmtree(skill_dest)
+            except Exception as exc:
+                message = str(exc) if str(exc) else f"{type(exc).__name__} during uninstall"
+                return UninstallOutcome(skill_id, skill_dest, "failed", message)
+            return UninstallOutcome(
+                skill_id, skill_dest, "uninstalled", f"uninstalled {skill_id} from {skill_dest}"
             )
-            return UninstallOutcome(skill_id, skill_dest, "failed", message)
-
-        if dry_run:
-            return UninstallOutcome(skill_id, skill_dest, "dry_run", f"would uninstall {skill_id} from {skill_dest}")
-
-        try:
-            shutil.rmtree(skill_dest)
-        except Exception as exc:
-            message = str(exc) if str(exc) else f"{type(exc).__name__} during uninstall"
-            return UninstallOutcome(skill_id, skill_dest, "failed", message)
-        return UninstallOutcome(skill_id, skill_dest, "uninstalled", f"uninstalled {skill_id} from {skill_dest}")
+    except (LockTimeoutError, OSError) as exc:
+        # See install_skill()'s matching handler: a concurrent/stuck lock or a failure
+        # acquiring it (e.g. permission denied on dest_root.mkdir) must become a failed
+        # outcome, not an unhandled traceback, so a multi-skill `sb uninstall` run can
+        # continue to the next skill instead of crashing mid-run.
+        return UninstallOutcome(skill_id, skill_dest, "failed", str(exc))
