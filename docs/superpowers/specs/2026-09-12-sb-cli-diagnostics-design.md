@@ -107,12 +107,20 @@ path; see Task breakdown).
   inherits it for free via vendoring.
 - `sb list` — identical to `python3 -m scripts.registry list`.
 - `sb explain <skill-id>` — identical to `python3 -m scripts.registry explain <skill-id>`.
-- `sb compatibility --host HOST [--surface KIND] [--skill ID]` — **new** subcommand, added to
+- `sb compatibility --host HOST [--skill ID]` — **new** subcommand, added to
   `scripts/registry/cli.py` itself (shared code, not sb-only), wrapping
   `compatibility_resolver.resolve`/`resolve_matrix`. Prints one line per (host, skill) result (or a
   single result when `--skill` narrows it), reusing `CompatibilityResult`'s existing fields
   (`status`, `missing_required`, `missing_optional`, `discoverable`). No new resolution logic —
-  this command's only job is CLI plumbing around what Phase 1 already built.
+  this command's only job is CLI plumbing around what already exists.
+
+  **No `--surface` flag in this slice.** `main`'s `compatibility_resolver.resolve()` does not yet
+  accept a `surface_kind` parameter as of this writing — that lands in the still-open PR #256
+  (Phase 1, "per-surface capabilities"). Adding a `--surface` flag with no backing implementation
+  now would be dead scaffolding. This branch is built against `main` as-is (confirmed with the
+  user) so it stays independently mergeable rather than stacking on an unmerged PR; `--surface`
+  support for both `sb compatibility` and `sb doctor` becomes a small, separate fast-follow once
+  #256 merges (see Explicitly Deferred).
 
 All four commands are read-only: no flag in this slice writes to disk, installs, uninstalls, or
 mutates a manifest.
@@ -152,6 +160,11 @@ let a new dependency silently miss the bundle" shape as `scripts/check_platform_
 
 ## Explicitly deferred (separate specs)
 
+- `--surface` support for `sb compatibility` (new flag) and real `--surface` behavior for `sb
+  doctor` (today vendored as-is from `main`'s existing no-op) — both need
+  `compatibility_resolver.resolve(..., surface_kind=...)`, which only exists on the still-open PR
+  #256. Small, mechanical fast-follow once #256 merges to `main` and this package's vendored copy
+  picks it up naturally — not attempted in this plan.
 - `sb install <skill> --host X --scope Y`, `sb uninstall`, `sb verify` — a Python port of
   `install.sh`'s locking (`test_install_concurrency.py`'s stale-lock/reclaim semantics), ownership
   hardening, manifest read/write, and rollback-on-validation-failure behavior
