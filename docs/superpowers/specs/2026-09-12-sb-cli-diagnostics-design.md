@@ -171,10 +171,20 @@ hand-edits the vendored copy instead of re-running the snapshot step).
 `compatibility_resolver.resolve_matrix`'s existing test fixtures in
 `scripts/tests/test_compatibility_resolver.py` — same fixture-building conventions, no new pattern.
 
-**Build-step test**: a test asserting `scripts/build_sb_snapshot.py` actually
-copies every file `cli/sb/_vendored/` and `cli/sb/_registry_snapshot/` need (fails loudly if a new
-`scripts/registry/*.py` module `doctor.py` starts importing isn't in the copy list — same "don't
-let a new dependency silently miss the bundle" shape as `scripts/check_platform_files.py`).
+**Vendoring is glob-based, not a hand-maintained allowlist.** `scripts/build_sb_snapshot.py` copies
+the *entire* `scripts/` tree (every `.py` file, excluding `scripts/tests/`) and every `*.yaml` file
+directly under the repo root plus every `*.yaml` file directly under `scripts/registry/` (this
+already covers `skills.yaml`, `agent-hosts.yaml`, `capability_catalog.yaml`,
+`capability_families.yaml`, `host_contracts.yaml`, and the rest — a glob, not a curated list, so a
+new registry YAML or a new `scripts/registry/*.py` module is included automatically with zero
+maintenance, rather than risking a silently-stale hand list).
+
+**Build-step test**: rather than diffing a copy list against imports (which a glob makes
+unnecessary), the test is a real functional smoke check: run the snapshot step into a temp
+directory, then actually `import` the vendored `scripts.doctor` and `scripts.registry.cli` from
+that temp copy and call `cmd_doctor`/`cmd_list` against the vendored `_registry_snapshot/` — if
+anything the glob missed breaks an import or a read, this fails loudly and directly, not via a
+whitelist comparison.
 
 ## Explicitly deferred (separate specs)
 
