@@ -269,6 +269,15 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         host_id = args.agent
         host_verification = host.verification
+        if args.surface is not None:
+            declared_surfaces = {surface.kind for surface in host.surfaces}
+            if args.surface not in declared_surfaces:
+                print(
+                    f"error: unknown surface {args.surface!r} for host {args.agent!r} "
+                    f"(declared surfaces: {sorted(declared_surfaces)})",
+                    file=sys.stderr,
+                )
+                return 2
         available = set(available_capabilities(host, args.surface))
     elif args.available is not None:
         available = {item.strip() for item in args.available.split(",") if item.strip()}

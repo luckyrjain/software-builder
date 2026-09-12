@@ -709,3 +709,16 @@ def test_surface_flag_changes_available_capabilities_for_agent(tmp_path: Path, c
 
     assert exit_code_local == 0
     assert exit_code_cloud == 1  # BLOCKED: host.repository.read_write unavailable on CLOUD
+
+
+def test_surface_flag_unknown_surface_fails_with_message(tmp_path: Path, capsys) -> None:
+    from scripts.doctor import main
+
+    _write_surface_fixture(tmp_path)
+
+    code = main(
+        ["--repo-root", str(tmp_path), "--agent", "claude", "--surface", "NOT_A_REAL_SURFACE"]
+    )
+
+    assert code == 2
+    assert "NOT_A_REAL_SURFACE" in capsys.readouterr().err
