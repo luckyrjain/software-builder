@@ -306,6 +306,11 @@ def uninstall_skill(skill_id: str, *, dest_root: Path, dry_run: bool = False) ->
     software-builder-owned install is removed outright (no staging/backup needed, unlike
     install -- there is nothing to roll back to).
     """
+    try:
+        validate_skill_name(skill_id)
+    except ValueError as exc:
+        return UninstallOutcome(skill_id, dest_root / skill_id, "failed", str(exc))
+
     skill_dest = dest_root / skill_id
     dest_root.mkdir(parents=True, exist_ok=True)
     with held_lock(dest_root, skill_id):
@@ -321,5 +326,9 @@ def uninstall_skill(skill_id: str, *, dest_root: Path, dry_run: bool = False) ->
         if dry_run:
             return UninstallOutcome(skill_id, skill_dest, "dry_run", f"would uninstall {skill_id} from {skill_dest}")
 
-        shutil.rmtree(skill_dest)
+        try:
+            shutil.rmtree(skill_dest)
+        except Exception as exc:
+            message = str(exc) if str(exc) else f"{type(exc).__name__} during uninstall"
+            return UninstallOutcome(skill_id, skill_dest, "failed", message)
         return UninstallOutcome(skill_id, skill_dest, "uninstalled", f"uninstalled {skill_id} from {skill_dest}")

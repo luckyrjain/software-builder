@@ -7,6 +7,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+import scripts.install_engine as install_engine
 from scripts.install_engine import uninstall_skill
 
 
@@ -85,4 +88,35 @@ def test_uninstall_dry_run_makes_no_changes(tmp_path: Path) -> None:
     outcome = uninstall_skill("demo-skill", dest_root=dest_root, dry_run=True)
 
     assert outcome.status == "dry_run"
+    assert dest.exists()
+
+
+def test_uninstall_rejects_a_skill_id_with_a_path_separator(tmp_path: Path) -> None:
+    dest_root = tmp_path / "dest"
+    dest_root.mkdir()
+
+    outcome = uninstall_skill("../escape", dest_root=dest_root)
+
+    assert outcome.status == "failed"
+    assert not (tmp_path / "escape").exists()  # nothing touched outside dest_root
+
+
+def test_uninstall_reports_failure_when_rmtree_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    dest_root = tmp_path / "dest"
+    dest = _owned_install(dest_root, "demo-skill")
+    real_rmtree = install_engine.shutil.rmtree
+
+    def _boom(path: Path, *args: object, **kwargs: object) -> None:
+        # Only the terminal removal of the skill itself should fail; held_lock's own
+        # lock-directory cleanup (a separate shutil.rmtree call) must still work normally.
+        if Path(path) == dest:
+            raise OSError("permission denied")
+        real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(install_engine.shutil, "rmtree", _boom)
+
+    outcome = uninstall_skill("demo-skill", dest_root=dest_root)
+
+    assert outcome.status == "failed"
+    assert "permission denied" in outcome.message
     assert dest.exists()
