@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -632,6 +633,46 @@ def test_main_agent_unknown_host_fails_with_message(capsys) -> None:
 
     assert code == 2
     assert "unknown host 'not-a-real-host'" in capsys.readouterr().err
+
+
+def test_agent_default_install_root_scans_the_hosts_own_user_scope_targets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Exercises the real, checked-in ROOT registries directly (no --repo-root override), the same
+    # way this file's other --agent tests do (test_cmd_doctor_agent_flag_derives_..., etc.) --
+    # rather than a synthetic tmp_path skills.yaml/agent-hosts.yaml. The real "claude" host is
+    # verification: VERIFIED and declares host.filesystem.read/host.repository.read_write as
+    # AVAILABLE (agent-hosts.yaml); "unit-test-creator" only needs host.test_runner.execute
+    # beyond that, missing here, so it resolves to DEGRADED -- not BLOCKED and not
+    # UNVERIFIED_HOST/VERSION_MISMATCH -- which keeps exit_code at 0 regardless of install status,
+    # isolating this assertion to what _default_install_roots_for_host contributes: resolving
+    # "claude"'s own LOCAL surface -> claude-user target (~/.claude/skills, scope user) against a
+    # faked home directory.
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+
+    from scripts.release_info import read_distribution_version
+
+    installed_dir = fake_home / ".claude" / "skills" / "unit-test-creator"
+    installed_dir.mkdir(parents=True)
+    (installed_dir / ".software-builder-manifest.json").write_text(
+        json.dumps(
+            {
+                "distribution_version": read_distribution_version(ROOT),
+                "source_sha": "0" * 40,
+                "files": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    from scripts.doctor import main
+
+    exit_code = main(["--agent", "claude", "--skill", "unit-test-creator"])
+
+    assert exit_code == 0
+    assert "installed (" in capsys.readouterr().out
 
 
 def _write_surface_fixture(tmp_path: Path) -> None:

@@ -6,7 +6,7 @@
 .PHONY: lint-python
 .PHONY: validate-agent-skills
 .PHONY: validate-hosts
-.PHONY: lint-static lint-suites lint-framework-tests lint-scripts-shellcheck lint-platform-files lint-plugin-version-sync
+.PHONY: lint-static lint-suites lint-framework-tests lint-cli-tests lint-scripts-shellcheck lint-platform-files lint-plugin-version-sync
 .PHONY: lint-loop-task-implementer-skill lint-loop-task-implementer-scripts
 
 # ALL_SKILLS (the full skill roster) and every per-skill install-<skill> /
@@ -236,7 +236,7 @@ lint-scripts-shellcheck:
 		fi; \
 	done
 
-lint-suites: lint-pr-review lint-loop-task-implementer lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-domain-comprehension lint-squad-map lint-migration-program-manager lint-mysql-to-postgres-sql lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-change-impact-analyzer lint-resilience-review lint-implementation-planner lint-production-readiness-review lint-framework-tests
+lint-suites: lint-pr-review lint-loop-task-implementer lint-pr-gatekeeper lint-k8s-skill lint-incident-rca lint-domain-comprehension lint-squad-map lint-migration-program-manager lint-mysql-to-postgres-sql lint-weekly-squad-digest lint-unit-test-creator lint-integration-test-creator lint-contract-test-creator lint-e2e-test-creator lint-api-test-creator lint-change-impact-analyzer lint-resilience-review lint-implementation-planner lint-production-readiness-review lint-framework-tests lint-cli-tests
 
 lint-pr-review: lint-pr-review-skill lint-pr-review-scripts
 
@@ -1113,6 +1113,19 @@ lint-framework-tests:
 		python3 -m pytest $(PYTEST_XDIST_FLAG) scripts/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run metadata footer tests" >&2; \
+	fi
+
+# sb doctor/list/explain/compatibility CLI tests -- previously the ONLY thing exercising
+# cli/tests/ was a developer running pytest there by hand; nothing in make/CI touched it.
+# cli/tests/conftest.py's session-scoped autouse fixture builds cli/sb/_vendored/ and
+# cli/sb/_registry_snapshot/ (via scripts/build_sb_snapshot.py) before any test runs, so this
+# target doesn't need to invoke that script itself.
+lint-cli-tests:
+	@echo "lint-cli-tests: cli/tests/ suite"
+	@if python3 -c "import pytest" >/dev/null 2>&1; then \
+		cd cli && python3 -m pytest tests/ -q || exit 1; \
+	else \
+		echo "pytest not installed — install with 'python3 -m pip install pytest' to run cli/tests/" >&2; \
 	fi
 
 # Fetch KubeSense error logs with full body via SPL REST API.

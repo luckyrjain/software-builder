@@ -19,6 +19,15 @@ def _write_repo(tmp_path: Path, *, distribution_version: str, plugin_version: st
     return tmp_path
 
 
+def _write_cli_pyproject(tmp_path: Path, *, version: str) -> None:
+    cli_dir = tmp_path / "cli"
+    cli_dir.mkdir(exist_ok=True)
+    (cli_dir / "pyproject.toml").write_text(
+        f'[project]\nname = "software-builder-cli"\nversion = "{version}"\n',
+        encoding="utf-8",
+    )
+
+
 def test_matching_versions_report_no_drift(tmp_path: Path) -> None:
     repo = _write_repo(tmp_path, distribution_version="1.4.0", plugin_version="1.4.0")
     assert drifted_plugin_versions(repo) == []
@@ -49,3 +58,19 @@ def test_main_exits_nonzero_on_drift(tmp_path: Path, capsys) -> None:
 def test_main_exits_zero_when_clean(tmp_path: Path) -> None:
     repo = _write_repo(tmp_path, distribution_version="1.4.0", plugin_version="1.4.0")
     assert main(["--repo-root", str(repo)]) == 0
+
+
+def test_cli_pyproject_version_drift_is_reported(tmp_path: Path) -> None:
+    (tmp_path / "VERSION").write_text("1.4.0\n", encoding="utf-8")
+    _write_cli_pyproject(tmp_path, version="1.3.0")
+
+    errors = drifted_plugin_versions(tmp_path)
+
+    assert any("cli/pyproject.toml" in error and "1.3.0" in error for error in errors)
+
+
+def test_cli_pyproject_matching_version_reports_no_drift(tmp_path: Path) -> None:
+    (tmp_path / "VERSION").write_text("1.4.0\n", encoding="utf-8")
+    _write_cli_pyproject(tmp_path, version="1.4.0")
+
+    assert drifted_plugin_versions(tmp_path) == []

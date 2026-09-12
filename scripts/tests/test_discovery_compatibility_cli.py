@@ -86,3 +86,33 @@ def test_dynamic_output_escapes_terminal_and_markdown_controls() -> None:
 def test_canonical_output_requires_host_contracts(tmp_path) -> None:
     with pytest.raises(ValueError, match="host contracts required"):
         _host_profiles(tmp_path, canonical=True)
+
+
+def test_compatibility_prints_status_for_known_host_and_skill() -> None:
+    result = _run_cli("compatibility", "--host", "claude", "--skill", "pr-review")
+
+    assert result.returncode == 0
+    assert "claude pr-review:" in result.stdout
+
+
+def test_compatibility_defaults_to_every_skill_when_skill_omitted() -> None:
+    result = _run_cli("compatibility", "--host", "claude")
+
+    assert result.returncode == 0
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    assert len(lines) > 1
+    assert any("pr-review" in line for line in lines)
+
+
+def test_compatibility_rejects_unknown_host() -> None:
+    result = _run_cli("compatibility", "--host", "does-not-exist")
+
+    assert result.returncode == 2
+    assert "unknown host" in result.stderr
+
+
+def test_compatibility_rejects_unknown_skill() -> None:
+    result = _run_cli("compatibility", "--host", "claude", "--skill", "does-not-exist")
+
+    assert result.returncode == 1
+    assert "unknown skill" in result.stderr
