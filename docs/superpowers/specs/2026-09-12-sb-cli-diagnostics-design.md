@@ -108,11 +108,21 @@ path; see Task breakdown).
 ## Commands (this slice)
 
 - `sb doctor [--skill ID] [--agent HOST] [--surface KIND] [--install-root PATH ...]` — same
-  output shape as `python3 -m scripts.doctor`, but `--install-root` defaults to **every** target
-  `scripts/registry/install_resolver.py` can resolve for the given `--agent` (via
-  `resolve_target_path` against `Path.home()`), not just `~/.cursor/skills`. This same default-scan
-  fix lands in `scripts/doctor.py` itself first (shared code, checkout users benefit too), and `sb`
-  inherits it for free via vendoring.
+  output shape as `python3 -m scripts.doctor`, but `--install-root` defaults to **every user-scope
+  target the resolved host's own surfaces declare**, not just `~/.cursor/skills`. Concretely: after
+  `resolve_host(host_registry, args.agent)` resolves a `HostSpec`, default `install_roots` to
+  `resolve_target_path(binding.target, home=Path.home(), target_dir=None)` for every
+  `binding in surface.discovery` across `host.surfaces`, filtered to `binding.target.scope ==
+  "user"` (a project-scope target needs a `--target-dir` doctor has no context for outside a
+  specific project, so those are left for an explicit `--install-root`, matching today's
+  behavior). This reads directly off `agent-hosts.yaml`'s already-resolved discovery bindings — not
+  `scripts/registry/install_resolver.py`, whose `SELECTORS` vocabulary (`"cursor-project"`,
+  `"claude-user"`, `"all"`, ...) is install.sh's own destination-selector strings, a different and
+  finer-grained vocabulary than the host ids/aliases `doctor --agent` actually takes (`"claude"`,
+  `"cursor"`) — passing `args.agent` straight into `install_resolver.resolve_install_destinations`
+  would raise `unknown --agent 'claude'` for exactly the host ids doctor already resolves. This
+  same default-scan fix lands in `scripts/doctor.py` itself first (shared code, checkout users
+  benefit too), and `sb` inherits it for free via vendoring.
 - `sb list` — identical to `python3 -m scripts.registry list`.
 - `sb explain <skill-id>` — identical to `python3 -m scripts.registry explain <skill-id>`.
 - `sb compatibility --host HOST [--skill ID]` — **new** subcommand, added to
@@ -208,5 +218,6 @@ let a new dependency silently miss the bundle" shape as `scripts/check_platform_
   implementation plan.
 - **Ambiguity check:** "identical output" for the parity tests is made concrete (byte-for-byte
   stdout/exit code against the same fixture); "every target" for `sb doctor`'s default install-root
-  scan is made concrete (every target `install_resolver.py` can resolve for the given `--agent`,
-  not an open-ended "smart" discovery).
+  scan is made concrete (every user-scope discovery target the resolved `HostSpec`'s own surfaces
+  declare, not an open-ended "smart" discovery, and explicitly not routed through
+  `install_resolver.py`'s differently-scoped selector vocabulary).
