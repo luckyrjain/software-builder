@@ -6,7 +6,7 @@
 .PHONY: lint-python
 .PHONY: validate-agent-skills
 .PHONY: validate-hosts
-.PHONY: lint-static lint-suites lint-framework-tests lint-scripts-shellcheck lint-platform-files
+.PHONY: lint-static lint-suites lint-framework-tests lint-scripts-shellcheck lint-platform-files lint-plugin-version-sync
 .PHONY: lint-loop-task-implementer-skill lint-loop-task-implementer-scripts
 
 # ALL_SKILLS (the full skill roster) and every per-skill install-<skill> /
@@ -85,6 +85,9 @@ lint-python:
 
 lint-actions-pinning:
 	@python3 scripts/check_pinned_actions.py
+
+lint-plugin-version-sync:
+	@python3 scripts/check_plugin_version_sync.py
 
 lint-actions-security:
 	@if command -v zizmor >/dev/null 2>&1; then \
@@ -212,7 +215,7 @@ lint: lint-static lint-suites
 # across skills via `make -jN` and, only for the dominant scripts/tests/ suite, within
 # it via pytest-xdist (see PYTEST_XDIST_FLAG above). `make lint` still runs both groups
 # locally, in this order.
-lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-domain-modeling lint-codebase-architecture-review lint-architecture-remediation-loop lint-engineering-decision-discovery lint-local-diff-review lint-bug-diagnosis lint-research-brief lint-issue-triage lint-initiative-mapper lint-merge-conflict-analysis lint-stakeholder-questionnaire lint-requirements-lock lint-python lint-actions-pinning lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
+lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-domain-modeling lint-codebase-architecture-review lint-architecture-remediation-loop lint-engineering-decision-discovery lint-local-diff-review lint-bug-diagnosis lint-research-brief lint-issue-triage lint-initiative-mapper lint-merge-conflict-analysis lint-stakeholder-questionnaire lint-requirements-lock lint-python lint-actions-pinning lint-plugin-version-sync lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
 
 # koalaman/shellcheck-alpine below is pinned by digest, not the mutable :stable tag -- a Docker
 # tag can be silently repointed after review the same way a mutable git ref can, which is exactly

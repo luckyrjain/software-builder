@@ -11,6 +11,7 @@ host:
   discover_files: full|degraded|unsupported
   read_repo: full|degraded|unsupported
   write_repo: full|degraded|unsupported
+  report_output: full|degraded|unsupported
   git: full|degraded|unsupported
   scm: full|degraded|unsupported
   subagents: full|degraded|unsupported
@@ -19,6 +20,8 @@ host:
   browser: full|degraded|unsupported
   connectors: full|degraded|unsupported
 ```
+
+`report_output` covers report/chat/artifact output surfaced back to the user, distinct from `write_repo`'s repository write access.
 
 The machine-readable source is `scripts/registry/host_contracts.yaml`. Runtime/tooling code must resolve support through `scripts.registry.host_adapter.capability_support(...)`; unknown hosts, unknown capability families, and undeclared support values fail closed rather than inventing behavior.
 

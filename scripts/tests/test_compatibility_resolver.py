@@ -130,6 +130,45 @@ def test_available_capabilities_excludes_unavailable_and_unknown(tmp_path: Path)
     assert available_capabilities(registry.hosts["cursor"]) == frozenset({"host.repository.read"})
 
 
+def test_available_capabilities_prefers_surface_override(tmp_path: Path) -> None:
+    from scripts.registry.compatibility_resolver import available_capabilities
+
+    raw = _raw_registry(capabilities={"host.repository.read_write": "AVAILABLE"})
+    raw["hosts"][0]["surfaces"][0]["capabilities"] = {
+        "host.repository.read_write": "UNAVAILABLE",
+    }
+    path = tmp_path / "agent-hosts.yaml"
+    path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    registry = parse_host_registry(path)
+    host = registry.hosts["cursor"]
+
+    assert "host.repository.read_write" not in available_capabilities(host, surface_kind="LOCAL")
+    # No surface_kind given -- host-level behavior is unchanged (back-compat)
+    assert "host.repository.read_write" in available_capabilities(host)
+
+
+def test_available_capabilities_falls_back_to_host_level_for_unmentioned_names(tmp_path: Path) -> None:
+    from scripts.registry.compatibility_resolver import available_capabilities
+
+    raw = _raw_registry(
+        capabilities={
+            "host.repository.read_write": "AVAILABLE",
+            "host.filesystem.read": "AVAILABLE",
+        },
+    )
+    raw["hosts"][0]["surfaces"][0]["capabilities"] = {
+        "host.repository.read_write": "UNAVAILABLE",
+    }
+    path = tmp_path / "agent-hosts.yaml"
+    path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    registry = parse_host_registry(path)
+    host = registry.hosts["cursor"]
+
+    available = available_capabilities(host, surface_kind="LOCAL")
+    assert "host.repository.read_write" not in available  # surface override wins
+    assert "host.filesystem.read" in available  # falls back to host-level
+
+
 def test_is_discoverable_true_with_a_discovery_binding(tmp_path: Path) -> None:
     from scripts.registry.compatibility_resolver import is_discoverable
 

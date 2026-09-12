@@ -57,6 +57,7 @@ def test_eval_and_host_coverage_are_explicit() -> None:
         "discover_files",
         "read_repo",
         "write_repo",
+        "report_output",
         "git",
         "scm",
         "subagents",
