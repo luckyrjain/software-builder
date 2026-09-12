@@ -4,6 +4,8 @@
 <!-- skills-count:start -->
 ![Skills](https://img.shields.io/badge/skills-50-blue)
 <!-- skills-count:end -->
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 Host-agnostic, evidence-driven agent skills for software delivery: code review, incident response,
 architecture discovery, Kubernetes optimization, migrations, release readiness, and autonomous
@@ -16,9 +18,30 @@ Cursor, Claude Code, ChatGPT/Codex, Kiro, GitHub Copilot, and other repository-c
 instructions, role boundaries, evidence rules, and reusable outputs while leaving model choice and
 execution to the host agent.
 
-**Start here:** [Prerequisites](#prerequisites) · [3-minute quickstart](#3-minute-quickstart) ·
-[How it works](#how-it-works) · [Agent support](#install-for-your-specific-coding-agent) · [Skills](#skills) ·
-[Integrations](#mcp-and-external-integrations) · [Documentation](#documentation)
+## Contents
+
+- [Why use it?](#why-use-it)
+- [Prerequisites](#prerequisites)
+  - [To use the skills](#to-use-the-skills)
+  - [For multi-agent implementation workflows](#for-multi-agent-implementation-workflows)
+  - [Only for contributing to this repository](#only-for-contributing-to-this-repository)
+- [3-minute quickstart](#3-minute-quickstart)
+- [How it works](#how-it-works)
+- [Install for your specific coding agent](#install-for-your-specific-coding-agent)
+  - [Verification status](#verification-status)
+- [Install](#install)
+- [Skills](#skills)
+  - [Build, review, and release](#build-review-and-release)
+  - [Incidents and reliability](#incidents-and-reliability)
+  - [Architecture, ownership, and onboarding](#architecture-ownership-and-onboarding)
+  - [Architecture and specialized design review](#architecture-and-specialized-design-review)
+  - [Infrastructure and cost](#infrastructure-and-cost)
+  - [Migrations and program reporting](#migrations-and-program-reporting)
+- [MCP and external integrations](#mcp-and-external-integrations)
+- [Development and verification](#development-and-verification)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Why use it?
 
@@ -195,6 +218,9 @@ routes to skills in another category.
 
 ### Build, review, and release
 
+<details>
+<summary>22 skills — click to expand</summary>
+
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
 | [loop-task-implementer](skills/loop-task-implementer/) | “Implement issue 42 and open a PR” | Isolated Builder → two-lens Reviewer → adjudication → remediation → PR loop | [README](skills/loop-task-implementer/README.md) · [SETUP](skills/loop-task-implementer/SETUP.md) |
@@ -220,7 +246,12 @@ routes to skills in another category.
 | [e2e-test-creator](skills/e2e-test-creator/) | “Write an e2e test for the checkout journey” | Full user-journey browser tests (Playwright/Cypress/Selenium); asserts on user-visible outcomes only | [README](skills/e2e-test-creator/README.md) · [SETUP](skills/e2e-test-creator/SETUP.md) |
 | [api-test-creator](skills/api-test-creator/) | “Write a Postman/API test for `POST /api/orders`” | Black-box request/response assertions (Postman/Newman) against a real running API — no browser | [README](skills/api-test-creator/README.md) · [SETUP](skills/api-test-creator/SETUP.md) |
 
+</details>
+
 ### Incidents and reliability
+
+<details>
+<summary>4 skills — click to expand</summary>
 
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
@@ -229,7 +260,12 @@ routes to skills in another category.
 | [issue-triage](skills/issue-triage/) | “Triage these issues” | Classifies raw, unscoped issues/bugs/feature requests by category, severity, duplicate-of, and recommended owning skill or squad | [README](skills/issue-triage/README.md) · [SETUP](skills/issue-triage/SETUP.md) |
 | [bug-diagnosis](skills/bug-diagnosis/) | “Why is this test failing?” | Confirms a minimal repro, falsifies candidate root causes with evidence, and reports the confirmed root cause — report-only, never fixes it | [README](skills/bug-diagnosis/README.md) · [SETUP](skills/bug-diagnosis/SETUP.md) |
 
+</details>
+
 ### Architecture, ownership, and onboarding
+
+<details>
+<summary>5 skills — click to expand</summary>
 
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
@@ -239,10 +275,15 @@ routes to skills in another category.
 | [who-owns-x-bot](skills/who-owns-x-bot/) | `/who-owns <name>` | Returns one Slack-ready ownership answer by delegating to `squad-map` | [README](skills/who-owns-x-bot/README.md) · [SETUP](skills/who-owns-x-bot/SETUP.md) |
 | [new-hire-guide](skills/new-hire-guide/) | “Onboard `<name>` to `<squad>`” | Builds a squad-scoped onboarding tour from ownership and domain evidence | [README](skills/new-hire-guide/README.md) · [SETUP](skills/new-hire-guide/SETUP.md) |
 
+</details>
+
 ### Architecture and specialized design review
 
 Fills the gap between `prd-architect` and implementation: architecture decisions, implementation-oriented
 design, and dedicated single-domain reviews.
+
+<details>
+<summary>14 skills — click to expand</summary>
 
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
@@ -261,20 +302,32 @@ design, and dedicated single-domain reviews.
 | [dependency-upgrade-review](skills/dependency-upgrade-review/) | “Review upgrading `<dependency>` to `<version>`” | Breaking changes, CVEs, API differences, transitive dependencies, rollout risk | [README](skills/dependency-upgrade-review/README.md) · [SETUP](skills/dependency-upgrade-review/SETUP.md) |
 | [tech-debt-assessor](skills/tech-debt-assessor/) | “Rank this tech debt backlog” | Ranks debt by business impact × engineering drag × operational risk ÷ effort | [README](skills/tech-debt-assessor/README.md) · [SETUP](skills/tech-debt-assessor/SETUP.md) |
 
+</details>
+
 ### Infrastructure and cost
+
+<details>
+<summary>2 skills — click to expand</summary>
 
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
 | [k8s-overprovisioning-datadog](skills/k8s-overprovisioning-datadog/) | “Is `<service>` overprovisioned?” | Kubernetes MCP-first analysis with per-capability Datadog fallback for CPU, memory, replicas, waste, and optional cost | [README](skills/k8s-overprovisioning-datadog/README.md) · [SETUP](skills/k8s-overprovisioning-datadog/SETUP.md) |
 | [cost-optimization-sprint-planner](skills/cost-optimization-sprint-planner/) | “Plan a cost-optimization sprint” | Sweeps deployments for waste and ranks monthly savings by squad | [README](skills/cost-optimization-sprint-planner/README.md) · [SETUP](skills/cost-optimization-sprint-planner/SETUP.md) |
 
+</details>
+
 ### Migrations and program reporting
+
+<details>
+<summary>3 skills — click to expand</summary>
 
 | Skill | Invoke | What it does | Docs |
 |-------|--------|--------------|------|
 | [mysql-to-postgres-sql](skills/mysql-to-postgres-sql/) | “Rewrite MySQL SQL for PostgreSQL” | Scans and rewrites native SQL and JDBC usage for PostgreSQL | [README](skills/mysql-to-postgres-sql/README.md) · [SETUP](skills/mysql-to-postgres-sql/SETUP.md) |
 | [migration-program-manager](skills/migration-program-manager/) | “Migration status across all repos” | Rolls up `MIGRATION_STATUS.yaml` files by squad, risk, blockers, and staleness | [README](skills/migration-program-manager/README.md) · [SETUP](skills/migration-program-manager/SETUP.md) |
 | [weekly-squad-digest](skills/weekly-squad-digest/) | Scheduled trigger | Combines migration and cost rollups into one squad-grouped digest | [README](skills/weekly-squad-digest/README.md) · [SETUP](skills/weekly-squad-digest/SETUP.md) |
+
+</details>
 
 ## MCP and external integrations
 
