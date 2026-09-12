@@ -19,7 +19,12 @@ from scripts.registry.compatibility_resolver import (
     available_capabilities,
     resolve_host,
 )
-from scripts.registry.host_registry import HostRegistryParseError, parse_host_registry
+from scripts.registry.host_registry import (
+    HostRegistryParseError,
+    HostSpec,
+    parse_host_registry,
+    resolve_target_path,
+)
 from scripts.registry.models import CapabilityPath, SkillEntry
 from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS
@@ -44,6 +49,31 @@ def _installed_manifest(skill_dest: Path) -> dict[str, object] | None:
         # A missing or corrupt manifest just means "can't determine install
         # status" for this skill -- not a doctor-run failure.
         return None
+
+
+def _default_install_roots_for_host(host: HostSpec, *, home: Path) -> list[Path]:
+    """Every install destination this host's surfaces declare at user scope, resolved against
+    `home`, in discovery order with duplicates removed.
+
+    Project-scope targets need a --target-dir this command has no context for outside a specific
+    project (unlike install.sh, doctor has no notion of "the current project"), so those are left
+    for an explicit --install-root; this only widens the previous single hardcoded
+    ~/.cursor/skills default to every user-scope target the resolved host actually declares,
+    it does not attempt project discovery. A host with no user-scope surface (e.g. kiro, whose
+    only discovery target is repo-root-fixed and project-scoped) correctly yields an empty list --
+    reporting "not installed" for such a host by default is accurate, not a gap.
+    """
+    roots: list[Path] = []
+    seen: set[Path] = set()
+    for surface in host.surfaces:
+        for binding in surface.discovery:
+            if binding.target.scope != "user":
+                continue
+            resolved = resolve_target_path(binding.target, home=home, target_dir=None)
+            if resolved not in seen:
+                seen.add(resolved)
+                roots.append(resolved)
+    return roots
 
 
 @dataclass(frozen=True)
@@ -245,7 +275,9 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         type=Path,
         default=[],
-        help="installed skills directory (repeatable; defaults to ~/.cursor/skills)",
+        help="installed skills directory (repeatable; with --agent, defaults to every "
+        "user-scope target that host's surfaces declare; without --agent, defaults to "
+        "~/.cursor/skills)",
     )
     args = parser.parse_args(argv)
 
@@ -282,7 +314,10 @@ def main(argv: list[str] | None = None) -> int:
 
     install_roots = list(args.install_root)
     if not install_roots:
-        install_roots = [Path.home() / ".cursor" / "skills"]
+        if host_id is not None:
+            install_roots = _default_install_roots_for_host(host, home=Path.home())
+        else:
+            install_roots = [Path.home() / ".cursor" / "skills"]
 
     try:
         return cmd_doctor(
