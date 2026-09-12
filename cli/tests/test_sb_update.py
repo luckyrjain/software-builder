@@ -145,6 +145,90 @@ def test_install_update_runs_pip_install_upgrade_on_checksum_match(
     assert "--upgrade" in called_args
 
 
+def test_install_update_translates_download_url_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    import urllib.error
+
+    def fake_urlopen(*a, **k):
+        raise urllib.error.URLError("connection reset")
+
+    monkeypatch.setattr("sb._update.urllib.request.urlopen", fake_urlopen)
+
+    result = UpdateCheckResult(
+        current_version="1.0.0",
+        latest_version="9.9.9",
+        update_available=True,
+        wheel_url="https://example.invalid/wheel",
+        checksum_url="https://example.invalid/checksum",
+    )
+    with pytest.raises(UpdateError, match="could not download"):
+        install_update(result)
+
+
+def test_install_update_rejects_malformed_checksum_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_download(url: str, **kwargs):
+        if url == "https://example.invalid/wheel":
+            return b"not a real wheel"
+        return b"   \n"  # whitespace-only sidecar
+
+    monkeypatch.setattr("sb._update._download", fake_download)
+
+    result = UpdateCheckResult(
+        current_version="1.0.0",
+        latest_version="9.9.9",
+        update_available=True,
+        wheel_url="https://example.invalid/wheel",
+        checksum_url="https://example.invalid/checksum",
+    )
+    with pytest.raises(UpdateError, match="malformed checksum file"):
+        install_update(result)
+
+
+def test_install_update_translates_pip_install_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    wheel_bytes = b"not a real wheel, just bytes for the checksum test"
+    real_checksum = hashlib.sha256(wheel_bytes).hexdigest()
+
+    def fake_download(url: str, **kwargs):
+        if url == "https://example.invalid/wheel":
+            return wheel_bytes
+        return f"{real_checksum}  software_builder_cli-9.9.9-py3-none-any.whl\n".encode()
+
+    monkeypatch.setattr("sb._update._download", fake_download)
+
+    result = UpdateCheckResult(
+        current_version="1.0.0",
+        latest_version="9.9.9",
+        update_available=True,
+        wheel_url="https://example.invalid/wheel",
+        checksum_url="https://example.invalid/checksum",
+    )
+    with patch("sb._update.subprocess.run") as mock_run:
+        import subprocess
+
+        mock_run.side_effect = subprocess.CalledProcessError(returncode=1, cmd=["pip"])
+        with pytest.raises(UpdateError, match="pip install failed"):
+            install_update(result)
+
+
+def test_run_update_reports_clean_error_when_install_fails(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        "sb._update.urllib.request.urlopen",
+        lambda *a, **k: _mock_urlopen_json(_FAKE_RELEASE_NEWER),
+    )
+    monkeypatch.setattr("sb._update._installed_version_or_unknown", lambda: "1.0.0")
+
+    def fake_install(result):
+        raise UpdateError("pip install failed (exit 1) -- sb may be partially upgraded")
+
+    monkeypatch.setattr("sb._update.install_update", fake_install)
+
+    exit_code = run_update(channel="stable", check_only=False)
+
+    assert exit_code == 2
+    assert "error: pip install failed" in capsys.readouterr().err
+
+
 def test_run_update_check_only_does_not_install(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "sb._update.urllib.request.urlopen",

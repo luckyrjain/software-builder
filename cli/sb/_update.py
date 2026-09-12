@@ -47,7 +47,10 @@ def _installed_version_or_unknown() -> str:
 
 
 def _version_tuple(version: str) -> tuple[int, ...]:
-    return tuple(int(part) for part in version.split("."))
+    try:
+        return tuple(int(part) for part in version.split("."))
+    except ValueError as exc:
+        raise UpdateError(f"could not parse version {version!r}") from exc
 
 
 def fetch_latest_release(*, timeout: float = 10.0) -> dict:
@@ -100,8 +103,13 @@ def check_for_update(*, channel: str = "stable") -> UpdateCheckResult:
 
 def _download(url: str, *, timeout: float = 30.0) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": "sb-update"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return response.read()
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.read()
+    except urllib.error.HTTPError as exc:
+        raise UpdateError(f"download failed: {exc.code} {exc.reason} ({url})") from exc
+    except urllib.error.URLError as exc:
+        raise UpdateError(f"could not download {url}: {exc.reason}") from exc
 
 
 def install_update(result: UpdateCheckResult) -> None:
@@ -112,7 +120,10 @@ def install_update(result: UpdateCheckResult) -> None:
         )
     wheel_bytes = _download(result.wheel_url)
     checksum_line = _download(result.checksum_url).decode("utf-8")
-    expected_checksum = checksum_line.split()[0].strip()
+    checksum_parts = checksum_line.split()
+    if not checksum_parts:
+        raise UpdateError(f"malformed checksum file at {result.checksum_url}")
+    expected_checksum = checksum_parts[0].strip()
     actual_checksum = hashlib.sha256(wheel_bytes).hexdigest()
     if actual_checksum != expected_checksum:
         raise UpdateError(
@@ -122,10 +133,16 @@ def install_update(result: UpdateCheckResult) -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         wheel_path = Path(tmp_dir) / f"{_WHEEL_NAME_PREFIX}{result.latest_version}-py3-none-any.whl"
         wheel_path.write_bytes(wheel_bytes)
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--upgrade", str(wheel_path)],
-            check=True,
-        )
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--upgrade", str(wheel_path)],
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise UpdateError(
+                f"pip install failed (exit {exc.returncode}) -- sb may be partially upgraded; "
+                "re-run 'sb update' or reinstall manually"
+            ) from exc
 
 
 def run_update(*, channel: str, check_only: bool) -> int:
