@@ -637,77 +637,38 @@ def test_main_agent_unknown_host_fails_with_message(capsys) -> None:
 def test_agent_default_install_root_scans_the_hosts_own_user_scope_targets(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # An isolated repo fixture (its own skills.yaml + agent-hosts.yaml under tmp_path), following
-    # the same schema-valid shape scripts/tests/test_github_copilot_host.py's fixture uses --
-    # this file's existing --agent tests (test_cmd_doctor_agent_flag_derives_..., etc.) exercise
-    # the real checked-in ROOT registries instead, which isn't isolated enough here: every real
-    # skill requires capabilities the real "claude" host never declares AVAILABLE, so exit_code
-    # would be 1 (BLOCKED) regardless of install status. A minimal "claude" host whose only
-    # surface is LOCAL -> claude-user (~/.claude/skills, scope user) -- agent-hosts.yaml's real
-    # claude host shape -- paired with a single capability-less skill keeps this test isolated to
-    # exactly what _default_install_roots_for_host does.
+    # Exercises the real, checked-in ROOT registries directly (no --repo-root override), the same
+    # way this file's other --agent tests do (test_cmd_doctor_agent_flag_derives_..., etc.) --
+    # rather than a synthetic tmp_path skills.yaml/agent-hosts.yaml. The real "claude" host is
+    # verification: VERIFIED and declares host.filesystem.read/host.repository.read_write as
+    # AVAILABLE (agent-hosts.yaml); "unit-test-creator" only needs host.test_runner.execute
+    # beyond that, missing here, so it resolves to DEGRADED -- not BLOCKED and not
+    # UNVERIFIED_HOST/VERSION_MISMATCH -- which keeps exit_code at 0 regardless of install status,
+    # isolating this assertion to what _default_install_roots_for_host contributes: resolving
+    # "claude"'s own LOCAL surface -> claude-user target (~/.claude/skills, scope user) against a
+    # faked home directory.
     fake_home = tmp_path / "home"
     fake_home.mkdir()
     monkeypatch.setattr(Path, "home", lambda: fake_home)
 
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    (repo / "VERSION").write_text("1.0.0", encoding="utf-8")
-    (repo / "agent-hosts.yaml").write_text(
-        """
-schema_version: 1
-targets:
-  - id: claude-user
-    scope: user
-    path: ~/.claude/skills
-hosts:
-  - id: claude
-    surfaces:
-      - kind: LOCAL
-        discovery:
-          - target: claude-user
-            mode: NATIVE
-            precedence: 10
-    capabilities: {}
-    isolation:
-      mode: UNKNOWN
-    constraints: []
-    verification: UNVERIFIED
-    evidence: []
-    maintainer_support: BEST_EFFORT
-""",
-        encoding="utf-8",
-    )
-    (repo / "skills.yaml").write_text(
-        """
-schema_version: 1
-skills:
-  demo:
-    path: demo
-    category: testing
-    invocation: ambient
-    hosts:
-      claude: {install: true}
-    install:
-      requires: []
-    lint:
-      skill_md_max_lines: 180
-      target: demo
-    risk_class: [read-only]
-""",
-        encoding="utf-8",
-    )
+    from scripts.release_info import read_distribution_version
 
-    installed_dir = fake_home / ".claude" / "skills" / "demo"
+    installed_dir = fake_home / ".claude" / "skills" / "unit-test-creator"
     installed_dir.mkdir(parents=True)
     (installed_dir / ".software-builder-manifest.json").write_text(
-        json.dumps({"distribution_version": "1.0.0", "source_sha": "0" * 40, "files": {}}),
+        json.dumps(
+            {
+                "distribution_version": read_distribution_version(ROOT),
+                "source_sha": "0" * 40,
+                "files": {},
+            }
+        ),
         encoding="utf-8",
     )
 
     from scripts.doctor import main
 
-    exit_code = main(["--repo-root", str(repo), "--agent", "claude"])
+    exit_code = main(["--agent", "claude", "--skill", "unit-test-creator"])
 
     assert exit_code == 0
     assert "installed (" in capsys.readouterr().out
