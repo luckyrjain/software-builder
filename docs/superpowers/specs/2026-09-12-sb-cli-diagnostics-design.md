@@ -47,9 +47,11 @@ scripts/build_sb_snapshot.py (new, standalone — see below)
         ├─► copies scripts/doctor.py, scripts/registry/*.py (unmodified)
         │     into cli/sb/_vendored/scripts/...
         │
-        └─► copies skills.yaml, agent-hosts.yaml, capability_*.yaml,
-              host_contracts.yaml (unmodified)
-              into cli/sb/_registry_snapshot/...
+        └─► copies skills.yaml, agent-hosts.yaml, scripts/registry/*.yaml,
+              skills/** (every skill's real SKILL.md/reference/ files —
+              validate_canonical_manifest checks these exist), and
+              docs/skill-framework/** (unmodified, git-tracked only)
+              into cli/sb/_registry_snapshot/... (~11M total)
         │
         ▼
 cli/ (own pyproject.toml, own build backend e.g. hatchling)
@@ -171,13 +173,27 @@ hand-edits the vendored copy instead of re-running the snapshot step).
 `compatibility_resolver.resolve_matrix`'s existing test fixtures in
 `scripts/tests/test_compatibility_resolver.py` — same fixture-building conventions, no new pattern.
 
-**Vendoring is glob-based, not a hand-maintained allowlist.** `scripts/build_sb_snapshot.py` copies
-the *entire* `scripts/` tree (every `.py` file, excluding `scripts/tests/`) and every `*.yaml` file
-directly under the repo root plus every `*.yaml` file directly under `scripts/registry/` (this
-already covers `skills.yaml`, `agent-hosts.yaml`, `capability_catalog.yaml`,
-`capability_families.yaml`, `host_contracts.yaml`, and the rest — a glob, not a curated list, so a
-new registry YAML or a new `scripts/registry/*.py` module is included automatically with zero
-maintenance, rather than risking a silently-stale hand list).
+**Vendoring is git-tracked-files-based, not a hand-maintained allowlist, and it's bigger than YAML
+alone.** Empirically verified (not assumed) by running `cmd_list` against a directory containing
+only `skills.yaml`/`agent-hosts.yaml`/`scripts/registry/*.yaml`: it fails per-skill with `missing
+entrypoint .../skills/<id>/SKILL.md` — `cmd_list`/`cmd_explain` go through
+`validate_canonical_manifest`, which checks each skill's actual `entrypoint` file exists on disk.
+So the snapshot must include the full `skills/` tree (every skill's real `SKILL.md` + `reference/`
+files), plus `docs/skill-framework/` (the P1 contract docs `scripts/registry/layers.py` checks for:
+`runtime-contract.md`, `host-adapter-contract.md`, `eval-contract.md`). Measured total: `skills/`
+7.3M + `docs/` 2.2M + `scripts/` (minus `tests/`) 1.8M ≈ 11M — trivial for a pip package, not a
+reason to special-case or bypass the validation instead.
+
+`scripts/build_sb_snapshot.py` therefore uses `git ls-files` (its own minimal invocation, not
+`scripts/package_release.py`'s private `_tracked_files` — that function is a release-tarball
+implementation detail returning tar-specific metadata, not a general "list files" API, and
+leading-underscore names are this codebase's own convention for module-private) scoped to
+`skills/`, `docs/skill-framework/`, `scripts/` (minus `tests/`), and the root `skills.yaml`/
+`agent-hosts.yaml`/`*.yaml` files, copying each into the matching relative path under
+`cli/sb/_registry_snapshot/` (data) or `cli/sb/_vendored/` (code, `scripts/` only). Git-tracked
+only — same reasoning as `package_release.py`: untracked local cruft can never leak into what
+ships. A glob/git-ls-files-driven copy, not a curated list, so a new registry YAML, a new
+`scripts/registry/*.py` module, or a new skill is included automatically with zero maintenance.
 
 **Build-step test**: rather than diffing a copy list against imports (which a glob makes
 unnecessary), the test is a real functional smoke check: run the snapshot step into a temp
