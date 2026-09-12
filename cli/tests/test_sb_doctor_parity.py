@@ -38,3 +38,27 @@ def test_sb_doctor_matches_checkout_doctor_for_one_skill() -> None:
 
     assert sb_result.returncode == checkout_result.returncode
     assert sb_result.stdout == checkout_result.stdout
+
+
+def test_sb_doctor_surface_matches_checkout() -> None:
+    sb_result = _run_sb(
+        "doctor", "--skill", "pr-review", "--agent", "claude", "--surface", "LOCAL",
+        "--install-root", "/nonexistent",
+    )
+    checkout_result = _run_checkout_doctor(
+        "--skill", "pr-review", "--agent", "claude", "--surface", "LOCAL",
+        "--install-root", "/nonexistent",
+    )
+
+    assert sb_result.returncode == checkout_result.returncode
+    assert sb_result.stdout == checkout_result.stdout
+
+
+def test_sb_doctor_rejects_unknown_surface() -> None:
+    result = _run_sb(
+        "doctor", "--agent", "claude", "--surface", "NOT_A_REAL_SURFACE",
+        "--install-root", "/nonexistent",
+    )
+
+    assert result.returncode == 2
+    assert "NOT_A_REAL_SURFACE" in result.stderr

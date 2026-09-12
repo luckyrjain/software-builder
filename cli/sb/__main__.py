@@ -81,7 +81,16 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
             return 2
         host_id = args.agent
         host_verification = host.verification
-        available = set(available_capabilities(host))
+        if args.surface is not None:
+            declared_surfaces = {surface.kind for surface in host.surfaces}
+            if args.surface not in declared_surfaces:
+                print(
+                    f"error: unknown surface {args.surface!r} for host {args.agent!r} "
+                    f"(declared surfaces: {sorted(declared_surfaces)})",
+                    file=sys.stderr,
+                )
+                return 2
+        available = set(available_capabilities(host, args.surface))
     elif args.available is not None:
         available = {item.strip() for item in args.available.split(",") if item.strip()}
 
@@ -117,6 +126,11 @@ def main(argv: list[str] | None = None) -> int:
         "--install-root", action="append", type=Path, default=[],
         help="installed skills directory (repeatable)",
     )
+    doctor_parser.add_argument(
+        "--surface",
+        help="surface kind (e.g. LOCAL, CLOUD) from agent-hosts.yaml; narrows available "
+        "capabilities to that surface's overrides where the host declares any",
+    )
 
     subparsers.add_parser("list", help="list registered skills and their canonical metadata")
 
@@ -128,6 +142,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     compatibility_parser.add_argument("--host", required=True, help="host id or alias from agent-hosts.yaml")
     compatibility_parser.add_argument("--skill", help="limit to one skill id")
+    compatibility_parser.add_argument(
+        "--surface",
+        help="surface kind (e.g. LOCAL, CLOUD) from agent-hosts.yaml",
+    )
 
     args = parser.parse_args(argv)
 
@@ -141,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "explain":
         return cmd_explain(registry_snapshot_root(), args.skill_id)
     if args.command == "compatibility":
-        return cmd_compatibility(registry_snapshot_root(), args.host, args.skill)
+        return cmd_compatibility(registry_snapshot_root(), args.host, args.skill, args.surface)
 
     print(f"error: unknown command {args.command!r}", file=sys.stderr)
     return 2
