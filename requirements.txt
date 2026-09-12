@@ -4,6 +4,7 @@
 # requirements.txt --generate-hashes --python-version 3.12 -o requirements.lock`) so every
 # run resolves identical versions. Bump a version here, then regenerate requirements.lock
 # in the same PR.
+build>=1.2.2
 pytest>=9.1.1
 pytest-xdist>=3.8.0
 packaging>=26.3

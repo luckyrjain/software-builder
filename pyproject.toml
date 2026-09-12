@@ -42,4 +42,5 @@ markers = [
     """mutates_repository_root: test briefly writes real files onto the actual repository root \
 (not a tmp_path fixture) and must not run concurrently with any other test; see \
 scripts/tests/conftest.py's _serialize_against_repository_root_mutation fixture.""",
+    "slow: builds a real wheel and installs it into a throwaway venv; not part of the default fast loop, run explicitly",
 ]
