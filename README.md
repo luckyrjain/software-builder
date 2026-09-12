@@ -145,6 +145,14 @@ Kiro needs no copy step when this repository is open; its discovery files live u
 
 ## How it works
 
+```mermaid
+flowchart LR
+    A["Discover<br/>skill via SKILL.md"] --> B["Route<br/>to workflow phase"]
+    B --> C["Execute with boundaries<br/>read-only stays read-only;<br/>roles isolated"]
+    C --> D["Verify<br/>evidence-cited, exact-commit"]
+    D --> E["Stop safely<br/>PR or human-action gate"]
+```
+
 1. **Discover** — the host finds a skill through its installed directory, Cursor rule, Kiro steering
    file, or a direct `SKILL.md` reference.
 2. **Route** — the skill decides which workflow phase or related skill applies to the request.
