@@ -189,7 +189,10 @@ reason to special-case or bypass the validation instead.
 implementation detail returning tar-specific metadata, not a general "list files" API, and
 leading-underscore names are this codebase's own convention for module-private) scoped to
 `skills/`, `docs/skill-framework/`, `scripts/` (minus `tests/`), and the root `skills.yaml`/
-`agent-hosts.yaml`/`*.yaml` files, copying each into the matching relative path under
+`agent-hosts.yaml`/`VERSION` files (`VERSION` is required too — `cmd_doctor` calls
+`read_distribution_version(root)` — confirmed by running all four target code paths, `cmd_list`,
+`cmd_explain`, `cmd_doctor`, and `compatibility_resolver.resolve`, end-to-end against exactly this
+file set), copying each into the matching relative path under
 `cli/sb/_registry_snapshot/` (data) or `cli/sb/_vendored/` (code, `scripts/` only). Git-tracked
 only — same reasoning as `package_release.py`: untracked local cruft can never leak into what
 ships. A glob/git-ls-files-driven copy, not a curated list, so a new registry YAML, a new
