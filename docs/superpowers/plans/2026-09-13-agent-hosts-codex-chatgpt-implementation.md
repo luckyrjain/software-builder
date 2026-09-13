@@ -13,7 +13,11 @@
 tier evidence, `UNVERIFIED`, `BEST_EFFORT`) and `kiro` (not install.sh-resolvable, explicit
 constraint sentence) already established. The new target is registered in
 `scripts/registry/install_resolver.UNREACHABLE_TARGETS` so `check_target_reachability` stays green.
-No schema changes anywhere (`host_registry.py`, `schema.py`, `host_adapter.py` are all untouched).
+`host_registry.py` and `host_adapter.py` are untouched. `schema.py` required one approved
+exception: adding codex/chatgpt would otherwise have forced retrofitting all 50 skills in
+`skills.yaml` to explicitly declare codex/chatgpt support, so `_parse_hosts`'s "every skill must
+declare every known host" check was loosened to "iterate only hosts a skill actually declared,"
+paired with a compensating regression test pinning the generator-critical hosts.
 
 **Tech Stack:** Pure YAML data addition + Python dict entry; existing test infrastructure only.
 
@@ -202,6 +206,11 @@ Expected: all pass, including the updated `test_checked_in_host_registry_validat
 `test_unreachable_allowlist_entries_each_carry_a_reason` (both already generalize over every
 registered target/`UNREACHABLE_TARGETS` entry, so they cover the new target automatically with no
 test change).
+
+Note: if a task ends up touching shared parsing code such as `schema.py`'s `_parse_hosts` (not
+expected for this task, but see the schema exception noted in the design spec), also run the full
+`python3 -m pytest scripts/tests/ -q` — a task's own file/keyword scope can miss regressions in
+untouched tests that depend on the same shared code.
 
 - [ ] **Step 7: Verify the motivating bug is actually fixed, end to end**
 

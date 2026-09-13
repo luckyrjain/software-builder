@@ -1501,14 +1501,18 @@ skills:
 def test_every_skill_declares_the_generator_critical_hosts() -> None:
     """generate_cursor.py, generate_kiro.py, and generate_compatibility.py all do unconditional
     entry.hosts["cursor"]/["claude"]/["kiro"] lookups with no .get() fallback -- a skill missing
-    any of these three keys would pass schema validation cleanly (since _parse_hosts no longer
+    any of these four keys would pass schema validation cleanly (since _parse_hosts no longer
     requires every skill to declare every known host, to allow codex/chatgpt to stay optional
     per-skill) and then crash with a bare KeyError inside `make generate` instead of a clear
-    validation error. This pins the invariant the generators actually depend on at test time."""
+    validation error. `github-copilot` is included too: it has a live entry in
+    `_PER_HOST_ALLOWED_DISCOVERY` (scripts/registry/schema.py), so a skill omitting it from
+    `hosts:` would silently skip that discovery-vocabulary validation entirely under the loosened
+    check -- a real hole the three-host set alone doesn't close. This pins the invariant the
+    generators (and that validation) actually depend on at test time."""
     from scripts.registry.schema import parse_registry
 
     registry = parse_registry(ROOT / "skills.yaml")
-    required = {"cursor", "claude", "kiro"}
+    required = {"cursor", "claude", "kiro", "github-copilot"}
     for skill_id, entry in registry.skills.items():
         missing = required - set(entry.hosts)
         assert not missing, f"skills.{skill_id}.hosts is missing generator-critical host(s): {sorted(missing)}"

@@ -2,7 +2,7 @@
 
 **Status:** Approved (user-approved in brainstorming dialogue 2026-09-13)
 **Date:** 2026-09-13
-**Type:** Data/registry addition (no schema change)
+**Type:** Data/registry addition, plus one approved `schema.py` exception (see below)
 **Target:** `luckyrjain/software-builder`
 **Spec path:** `docs/superpowers/specs/2026-09-13-agent-hosts-codex-chatgpt-design.md`
 
@@ -25,6 +25,13 @@ error: unknown host 'codex' (known hosts: ['claude', 'cursor', 'github-copilot',
 This spec adds `codex` and `chatgpt` host entries so `sb compatibility`/`sb doctor --host
 codex|chatgpt` work, and so `scripts/registry/generate_agent_compatibility.py`'s generated
 compatibility doc includes them.
+
+**Schema exception (approved mid-implementation):** adding codex/chatgpt as known hosts would
+otherwise have required retrofitting all 50 skills in `skills.yaml` to explicitly declare
+codex/chatgpt support in their `hosts:` block. That retrofit was rejected in favor of a smaller,
+targeted change to `scripts/registry/schema.py`'s `_parse_hosts` — loosen "every skill must
+declare every known host" to "iterate only hosts a skill actually declared" — plus a compensating
+regression test guarding the hosts generator code still depends on unconditionally.
 
 ## Scope decisions from brainstorming
 
