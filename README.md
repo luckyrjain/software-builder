@@ -193,7 +193,9 @@ Canonical, evidence-gated host compatibility (see [docs/agent-compatibility.md](
 
 | Host | Verification | Maintainer support |
 |------|--------------|---------------------|
+| chatgpt | UNVERIFIED | BEST_EFFORT |
 | claude | VERIFIED | BEST_EFFORT |
+| codex | UNVERIFIED | BEST_EFFORT |
 | cursor | UNVERIFIED | BEST_EFFORT |
 | github-copilot | UNVERIFIED | BEST_EFFORT |
 | kiro | UNVERIFIED | BEST_EFFORT |

@@ -8,6 +8,15 @@ what is declared in `agent-hosts.yaml`, verified by whatever evidence is actuall
 
 ## Hosts
 
+### chatgpt
+- **Verification:** UNVERIFIED
+- **Maintainer support:** BEST_EFFORT
+- **Isolation:** UNKNOWN
+- **Discovery surfaces:** LOCAL \(codex-chatgpt-plugin-root\)
+- **Capabilities:** host.filesystem.read=UNKNOWN, host.repository.read_write=UNKNOWN
+- **Evidence:** DOCUMENTATION: docs/skill-framework/shared/host-adapter-contract.md#packaging-validation \(ChatGPT uses the same portable skill package contract as Codex; no ChatGPT-only prompt copy is maintained\)
+- **Constraints:** not install.sh-resolvable: codex-chatgpt-plugin-root is a generated, validated whole-repository packaging artifact \(.codex-plugin/plugin.json\), not a per-user or per-target-repo install destination -- there is no \`--agent chatgpt\` selector and none should be added without first correcting this constraint
+
 ### claude
 - **Verification:** VERIFIED
 - **Maintainer support:** BEST_EFFORT
@@ -15,6 +24,15 @@ what is declared in `agent-hosts.yaml`, verified by whatever evidence is actuall
 - **Discovery surfaces:** LOCAL \(claude-project, claude-user\)
 - **Capabilities:** host.filesystem.read=AVAILABLE, host.repository.read_write=AVAILABLE
 - **Evidence:** RUNTIME: Ran \`bash scripts/install.sh --agent claude-project --target-dir \<scratch-repo\> squad-map\` from inside a live Claude Code session operating on this repository; confirmed the skill landed at \`\<scratch-repo\>/.claude/skills/squad-map/SKILL.md\` \(claude-project discovery target\) and re-read it back through the same session's filesystem access -- Claude Code is itself the host being verified, so this session's own read/write of the repository under test is the runtime observation. Isolation \(subagents/worktrees\) was not exercised by this run and stays UNKNOWN.
+
+### codex
+- **Verification:** UNVERIFIED
+- **Maintainer support:** BEST_EFFORT
+- **Isolation:** UNKNOWN
+- **Discovery surfaces:** LOCAL \(codex-chatgpt-plugin-root\)
+- **Capabilities:** host.filesystem.read=UNKNOWN, host.repository.read_write=UNKNOWN
+- **Evidence:** DOCUMENTATION: docs/skill-framework/shared/host-adapter-contract.md#packaging-validation \(Codex / ChatGPT: .codex-plugin/plugin.json is valid and exposes the canonical skill tree\)
+- **Constraints:** not install.sh-resolvable: codex-chatgpt-plugin-root is a generated, validated whole-repository packaging artifact \(.codex-plugin/plugin.json\), not a per-user or per-target-repo install destination -- there is no \`--agent codex\` selector and none should be added without first correcting this constraint
 
 ### cursor
 - **Verification:** UNVERIFIED
@@ -50,6 +68,56 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 
 | Host | Skill | Status | Missing capability |
 |------|-------|--------|---------------------|
+| chatgpt | api-design-review | BLOCKED | host.report.write |
+| chatgpt | api-test-creator | BLOCKED | host.repository.read_write |
+| chatgpt | architecture-remediation-loop | BLOCKED | host.report.write, codebase-architecture-review.invoke, loop-task-implementer.invoke, production-readiness-review.invoke |
+| chatgpt | architecture-review | BLOCKED | host.report.write |
+| chatgpt | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
+| chatgpt | bug-diagnosis | BLOCKED | host.report.write, host.repository.read |
+| chatgpt | capacity-planner | BLOCKED | host.report.write |
+| chatgpt | change-impact-analyzer | BLOCKED | host.report.write |
+| chatgpt | codebase-architecture-review | BLOCKED | host.report.write, host.repository.read |
+| chatgpt | contract-test-creator | BLOCKED | host.repository.read_write |
+| chatgpt | cost-optimization-sprint-planner | BLOCKED | host.filesystem.read |
+| chatgpt | database-review | BLOCKED | host.report.write |
+| chatgpt | dependency-upgrade-review | BLOCKED | host.report.write |
+| chatgpt | deployment-risk-review | BLOCKED | host.report.write |
+| chatgpt | domain-comprehension | BLOCKED | host.repository.read |
+| chatgpt | domain-modeling | BLOCKED | host.report.write, host.repository.read |
+| chatgpt | e2e-test-creator | BLOCKED | host.repository.read_write |
+| chatgpt | engineering-decision-discovery | BLOCKED | host.report.write, host.repository.read |
+| chatgpt | implementation-planner | BLOCKED | host.report.write, host.repository.read |
+| chatgpt | incident-rca | BLOCKED | telemetry.logs.query |
+| chatgpt | incident-triage-agent | BLOCKED | pager.webhook.receive |
+| chatgpt | initiative-mapper | BLOCKED | host.report.write, host.repository.read |
+| chatgpt | integration-test-creator | BLOCKED | host.repository.read_write |
+| chatgpt | issue-triage | BLOCKED | host.report.write, host.repository.read |
+| chatgpt | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
+| chatgpt | local-diff-review | BLOCKED | host.report.write, host.repository.read |
+| chatgpt | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
+| chatgpt | merge-conflict-analysis | BLOCKED | host.report.write, host.repository.read |
+| chatgpt | migration-program-manager | BLOCKED | host.filesystem.read |
+| chatgpt | module-design | BLOCKED | host.report.write, host.repository.read |
+| chatgpt | mysql-to-postgres-sql | BLOCKED | host.repository.read_write |
+| chatgpt | new-hire-guide | BLOCKED | host.repository.read |
+| chatgpt | observability-review | BLOCKED | host.report.write |
+| chatgpt | performance-review | BLOCKED | host.report.write |
+| chatgpt | pr-gatekeeper | BLOCKED | gitlab.get_merge_request |
+| chatgpt | pr-review | BLOCKED | gitlab.get_merge_request, gitlab.get_merge_request_diffs |
+| chatgpt | prd-architect | BLOCKED | host.report.write |
+| chatgpt | production-readiness-review | BLOCKED | host.report.write |
+| chatgpt | release-readiness-checker | BLOCKED | host.report.write |
+| chatgpt | research-brief | BLOCKED | host.report.write, host.repository.read |
+| chatgpt | resilience-review | BLOCKED | host.report.write |
+| chatgpt | security-review | BLOCKED | host.report.write |
+| chatgpt | squad-map | BLOCKED | gitlab.list_projects |
+| chatgpt | stakeholder-questionnaire | BLOCKED | host.report.write, host.repository.read |
+| chatgpt | system-design | BLOCKED | host.report.write |
+| chatgpt | tech-debt-assessor | BLOCKED | host.report.write |
+| chatgpt | test-writer | BLOCKED | host.repository.read |
+| chatgpt | unit-test-creator | BLOCKED | host.repository.read_write |
+| chatgpt | weekly-squad-digest | BLOCKED | scheduler.cron.trigger |
+| chatgpt | who-owns-x-bot | BLOCKED | slack.slash_command.receive |
 | claude | api-design-review | BLOCKED | host.report.write |
 | claude | api-test-creator | DEGRADED | — |
 | claude | architecture-remediation-loop | BLOCKED | host.report.write, codebase-architecture-review.invoke, loop-task-implementer.invoke, production-readiness-review.invoke |
@@ -100,6 +168,56 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | claude | unit-test-creator | DEGRADED | — |
 | claude | weekly-squad-digest | BLOCKED | scheduler.cron.trigger |
 | claude | who-owns-x-bot | BLOCKED | slack.slash_command.receive |
+| codex | api-design-review | BLOCKED | host.report.write |
+| codex | api-test-creator | BLOCKED | host.repository.read_write |
+| codex | architecture-remediation-loop | BLOCKED | host.report.write, codebase-architecture-review.invoke, loop-task-implementer.invoke, production-readiness-review.invoke |
+| codex | architecture-review | BLOCKED | host.report.write |
+| codex | backlog-runner | BLOCKED | scheduler.cron.trigger, host.issue_tracker.read |
+| codex | bug-diagnosis | BLOCKED | host.report.write, host.repository.read |
+| codex | capacity-planner | BLOCKED | host.report.write |
+| codex | change-impact-analyzer | BLOCKED | host.report.write |
+| codex | codebase-architecture-review | BLOCKED | host.report.write, host.repository.read |
+| codex | contract-test-creator | BLOCKED | host.repository.read_write |
+| codex | cost-optimization-sprint-planner | BLOCKED | host.filesystem.read |
+| codex | database-review | BLOCKED | host.report.write |
+| codex | dependency-upgrade-review | BLOCKED | host.report.write |
+| codex | deployment-risk-review | BLOCKED | host.report.write |
+| codex | domain-comprehension | BLOCKED | host.repository.read |
+| codex | domain-modeling | BLOCKED | host.report.write, host.repository.read |
+| codex | e2e-test-creator | BLOCKED | host.repository.read_write |
+| codex | engineering-decision-discovery | BLOCKED | host.report.write, host.repository.read |
+| codex | implementation-planner | BLOCKED | host.report.write, host.repository.read |
+| codex | incident-rca | BLOCKED | telemetry.logs.query |
+| codex | incident-triage-agent | BLOCKED | pager.webhook.receive |
+| codex | initiative-mapper | BLOCKED | host.report.write, host.repository.read |
+| codex | integration-test-creator | BLOCKED | host.repository.read_write |
+| codex | issue-triage | BLOCKED | host.report.write, host.repository.read |
+| codex | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
+| codex | local-diff-review | BLOCKED | host.report.write, host.repository.read |
+| codex | loop-task-implementer | BLOCKED | host.repository.read_write, host.role.isolation, host.ci.status, host.pull_request.write |
+| codex | merge-conflict-analysis | BLOCKED | host.report.write, host.repository.read |
+| codex | migration-program-manager | BLOCKED | host.filesystem.read |
+| codex | module-design | BLOCKED | host.report.write, host.repository.read |
+| codex | mysql-to-postgres-sql | BLOCKED | host.repository.read_write |
+| codex | new-hire-guide | BLOCKED | host.repository.read |
+| codex | observability-review | BLOCKED | host.report.write |
+| codex | performance-review | BLOCKED | host.report.write |
+| codex | pr-gatekeeper | BLOCKED | gitlab.get_merge_request |
+| codex | pr-review | BLOCKED | gitlab.get_merge_request, gitlab.get_merge_request_diffs |
+| codex | prd-architect | BLOCKED | host.report.write |
+| codex | production-readiness-review | BLOCKED | host.report.write |
+| codex | release-readiness-checker | BLOCKED | host.report.write |
+| codex | research-brief | BLOCKED | host.report.write, host.repository.read |
+| codex | resilience-review | BLOCKED | host.report.write |
+| codex | security-review | BLOCKED | host.report.write |
+| codex | squad-map | BLOCKED | gitlab.list_projects |
+| codex | stakeholder-questionnaire | BLOCKED | host.report.write, host.repository.read |
+| codex | system-design | BLOCKED | host.report.write |
+| codex | tech-debt-assessor | BLOCKED | host.report.write |
+| codex | test-writer | BLOCKED | host.repository.read |
+| codex | unit-test-creator | BLOCKED | host.repository.read_write |
+| codex | weekly-squad-digest | BLOCKED | scheduler.cron.trigger |
+| codex | who-owns-x-bot | BLOCKED | slack.slash_command.receive |
 | cursor | api-design-review | BLOCKED | host.report.write |
 | cursor | api-test-creator | BLOCKED | host.repository.read_write |
 | cursor | architecture-remediation-loop | BLOCKED | host.report.write, codebase-architecture-review.invoke, loop-task-implementer.invoke, production-readiness-review.invoke |

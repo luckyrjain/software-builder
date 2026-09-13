@@ -343,7 +343,7 @@ def _parse_hosts(
             f"skills.{skill_id}.hosts declares host(s) not present in agent-hosts.yaml: {unknown}"
         )
     hosts: dict[str, HostDiscoverySpec] = {}
-    for host_id in sorted(host_ids):
+    for host_id in sorted(mapping):
         label = f"skills.{skill_id}.hosts.{host_id}"
         host_raw = _require_mapping(mapping.get(host_id), label)
         if _HOST_FIELD_KIND.get(host_id, "discovery") == "install":

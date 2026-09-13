@@ -61,6 +61,16 @@ targets:
   - id: kiro-generated
     scope: project
     path: "{project_root}/.kiro/steering"
+  # Codex and ChatGPT both consume the exact same generated, validated whole-repository packaging
+  # artifact (.codex-plugin/plugin.json, checked by
+  # scripts/registry/host_portability._plugin_errors) -- "the same portable skill package contract;
+  # no ChatGPT-only prompt copy is maintained" per
+  # docs/skill-framework/shared/host-adapter-contract.md's Packaging validation section. Like
+  # kiro-generated above, this is not an install.sh destination: there is no `--agent codex` or
+  # `--agent chatgpt` selector, and none should be added without first correcting this constraint.
+  - id: codex-chatgpt-plugin-root
+    scope: project
+    path: "{project_root}/.codex-plugin"
   # GitHub Copilot's own dedicated discovery paths (Candidate 12), per GitHub's official docs
   # (see the copilot host's evidence entry below). Copilot's docs also state it recognizes
   # .claude/skills, .agents/skills (project) and ~/.agents/skills (user) as alternatives, with no
@@ -179,4 +189,54 @@ hosts:
         first correcting this constraint"
     verification: UNVERIFIED
     evidence: []
+    maintainer_support: BEST_EFFORT
+
+  - id: codex
+    surfaces:
+      - kind: LOCAL
+        discovery:
+          - target: codex-chatgpt-plugin-root
+            mode: ADAPTER
+            precedence: 10
+    capabilities:
+      host.filesystem.read: UNKNOWN
+      host.repository.read_write: UNKNOWN
+    isolation:
+      mode: UNKNOWN
+    constraints:
+      - "not install.sh-resolvable: codex-chatgpt-plugin-root is a generated, validated
+        whole-repository packaging artifact (.codex-plugin/plugin.json), not a per-user or
+        per-target-repo install destination -- there is no `--agent codex` selector and none should
+        be added without first correcting this constraint"
+    verification: UNVERIFIED
+    evidence:
+      - kind: DOCUMENTATION
+        reference: "docs/skill-framework/shared/host-adapter-contract.md#packaging-validation
+          (Codex / ChatGPT: .codex-plugin/plugin.json is valid and exposes the canonical skill
+          tree)"
+    maintainer_support: BEST_EFFORT
+
+  - id: chatgpt
+    surfaces:
+      - kind: LOCAL
+        discovery:
+          - target: codex-chatgpt-plugin-root
+            mode: ADAPTER
+            precedence: 10
+    capabilities:
+      host.filesystem.read: UNKNOWN
+      host.repository.read_write: UNKNOWN
+    isolation:
+      mode: UNKNOWN
+    constraints:
+      - "not install.sh-resolvable: codex-chatgpt-plugin-root is a generated, validated
+        whole-repository packaging artifact (.codex-plugin/plugin.json), not a per-user or
+        per-target-repo install destination -- there is no `--agent chatgpt` selector and none
+        should be added without first correcting this constraint"
+    verification: UNVERIFIED
+    evidence:
+      - kind: DOCUMENTATION
+        reference: "docs/skill-framework/shared/host-adapter-contract.md#packaging-validation
+          (ChatGPT uses the same portable skill package contract as Codex; no ChatGPT-only prompt
+          copy is maintained)"
     maintainer_support: BEST_EFFORT
