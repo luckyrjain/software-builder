@@ -25,6 +25,7 @@ from scripts.registry.host_portability import (
     _claude_marketplace_errors,
     _plugin_errors,
     _runtime_host_branch_errors,
+    validate_host_adapter_contract_doc,
     validate_host_portability,
 )
 
@@ -54,6 +55,34 @@ def test_host_adapter_interface_rejects_mixed_type_host_keys(tmp_path: Path) -> 
     errors = validate_host_adapter_interface(tmp_path)
 
     assert errors and errors[0].startswith("error: host adapter interface:")
+
+
+def test_host_adapter_contract_doc_matches_capabilities() -> None:
+    assert validate_host_adapter_contract_doc(ROOT) == []
+
+
+def test_host_adapter_contract_doc_missing_reports_no_error(tmp_path: Path) -> None:
+    assert validate_host_adapter_contract_doc(tmp_path) == []
+
+
+def test_host_adapter_contract_doc_drift_is_reported(tmp_path: Path) -> None:
+    doc_dir = tmp_path / "docs" / "skill-framework" / "shared"
+    doc_dir.mkdir(parents=True)
+    (doc_dir / "host-adapter-contract.md").write_text(
+        "# Host Adapter Contract\n\n"
+        "## Required adapter surface\n\n"
+        "```yaml\n"
+        "host:\n"
+        "  discover_files: full|degraded|unsupported\n"
+        "  read_repo: full|degraded|unsupported\n"
+        "```\n",
+        encoding="utf-8",
+    )
+
+    errors = validate_host_adapter_contract_doc(tmp_path)
+
+    assert errors and errors[0].startswith("error: ")
+    assert "host-adapter-contract.md" in errors[0]
 
 
 def test_host_adapter_identity_rejects_extra_parity_keys(tmp_path: Path) -> None:
@@ -101,7 +130,19 @@ def test_runtime_host_branch_detector_scans_workflow_and_reference_docs(tmp_path
 
 
 def test_host_packaging_semantics_validate() -> None:
-    assert validate_host_portability(ROOT) == []
+    errors = validate_host_portability(ROOT)
+    assert errors == []
+
+
+def test_validate_host_portability_includes_contract_doc_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        host_portability_module,
+        "validate_host_adapter_contract_doc",
+        lambda root: ["error: contract-doc-marker"],
+    )
+    assert "error: contract-doc-marker" in validate_host_portability(ROOT)
 
 
 def test_missing_host_parity_expected_reports_exactly_one_error(
