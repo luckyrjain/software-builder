@@ -1498,6 +1498,22 @@ skills:
     assert entry.hosts["kiro"].discovery == "manual"
 
 
+def test_every_skill_declares_the_generator_critical_hosts() -> None:
+    """generate_cursor.py, generate_kiro.py, and generate_compatibility.py all do unconditional
+    entry.hosts["cursor"]/["claude"]/["kiro"] lookups with no .get() fallback -- a skill missing
+    any of these three keys would pass schema validation cleanly (since _parse_hosts no longer
+    requires every skill to declare every known host, to allow codex/chatgpt to stay optional
+    per-skill) and then crash with a bare KeyError inside `make generate` instead of a clear
+    validation error. This pins the invariant the generators actually depend on at test time."""
+    from scripts.registry.schema import parse_registry
+
+    registry = parse_registry(ROOT / "skills.yaml")
+    required = {"cursor", "claude", "kiro"}
+    for skill_id, entry in registry.skills.items():
+        missing = required - set(entry.hosts)
+        assert not missing, f"skills.{skill_id}.hosts is missing generator-critical host(s): {sorted(missing)}"
+
+
 def test_resolve_registry_profiles_noop_without_profiles_key() -> None:
     from scripts.registry.schema import resolve_registry_profiles
 

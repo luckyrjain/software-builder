@@ -59,7 +59,7 @@ _PER_HOST_ALLOWED_DISCOVERY: dict[str, frozenset[str]] = {
 
 
 def _skill_host_ids(skills_yaml_path: Path) -> frozenset[str]:
-    """The set of host ids a skill's `hosts:` block may/must declare.
+    """The set of host ids a skill's `hosts:` block may declare (declaring any other id is an error).
 
     Driven by agent-hosts.yaml (the canonical host-identity registry, Candidate 2) when it exists next
     to the parsed skills.yaml; falls back to this repository's current host set only when no such file
