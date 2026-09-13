@@ -96,9 +96,13 @@ def test_rejects_unapproved_github_copilot_discovery_value(tmp_path: Path) -> No
     )
 
 
-def test_skill_missing_github_copilot_key_fails_closed(tmp_path: Path) -> None:
-    """Once agent-hosts.yaml declares github-copilot, every skill's hosts: block must declare it
-    too (Candidate 3) -- confirms this isn't silently optional for a newly added host."""
+def test_skill_declaring_unknown_host_fails_closed(tmp_path: Path) -> None:
+    """`_parse_hosts` now only iterates hosts a skill actually declared (Candidate 2's per-surface
+    loosening), so omitting a known host like github-copilot from `hosts:` is no longer, by itself,
+    a parse error -- that guarantee is covered instead by
+    test_every_skill_declares_the_generator_critical_hosts in test_registry.py. What still fails
+    closed is the `unknown = sorted(set(mapping) - host_ids)` check in `_parse_hosts`
+    (scripts/registry/schema.py): declaring a host id that isn't in agent-hosts.yaml at all."""
     from scripts.registry.schema import RegistryParseError, parse_registry
 
     (tmp_path / "agent-hosts.yaml").write_text(
@@ -117,6 +121,7 @@ skills:
       cursor: {discovery: rule}
       claude: {install: true}
       kiro: {discovery: manual}
+      nonexistent-host: {discovery: manual}
     install:
       requires: []
     lint:
@@ -130,7 +135,7 @@ skills:
     with pytest.raises(RegistryParseError) as excinfo:
         parse_registry(skills_path)
 
-    assert any("hosts.github-copilot" in error for error in excinfo.value.errors)
+    assert any("skills.demo.hosts" in error and "nonexistent-host" in error for error in excinfo.value.errors)
 
 
 def test_broken_sibling_agent_hosts_yaml_fails_closed_instead_of_falling_back(tmp_path: Path) -> None:

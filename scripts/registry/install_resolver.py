@@ -85,6 +85,12 @@ UNREACHABLE_TARGETS: dict[str, str] = {
         "modeled from GitHub's published discovery paths but not yet exposed as a selector; "
         "Copilot also reads the universal target, which `--agent agents` already installs to"
     ),
+    "codex-chatgpt-plugin-root": (
+        "consumed via .codex-plugin/plugin.json, a generated and validated whole-repository "
+        "packaging artifact (scripts/registry/host_portability._plugin_errors), never installed "
+        "per-user or per-target-repo by install.sh -- see the codex/chatgpt hosts' own "
+        "'not install.sh-resolvable' constraint"
+    ),
 }
 
 

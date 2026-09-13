@@ -375,7 +375,7 @@ def test_rejects_unsupported_schema_version(tmp_path: Path) -> None:
 def test_checked_in_host_registry_validates() -> None:
     registry = parse_host_registry(ROOT / "agent-hosts.yaml")
 
-    assert sorted(registry.hosts) == ["claude", "cursor", "github-copilot", "kiro"]
+    assert sorted(registry.hosts) == ["chatgpt", "claude", "codex", "cursor", "github-copilot", "kiro"]
     # claude carries a real RUNTIME evidence entry (an actual install + discovery + read-back
     # exercised from inside a live Claude Code session against this repository) and is VERIFIED;
     # every other host here has no RUNTIME evidence yet and stays UNVERIFIED (spec Section 26 --
@@ -425,6 +425,33 @@ def test_checked_in_github_copilot_host_has_documentation_evidence() -> None:
     assert len(host.evidence) == 1
     assert host.evidence[0].kind == "DOCUMENTATION"
     assert host.evidence[0].reference.startswith("https://docs.github.com/")
+
+
+def test_checked_in_codex_and_chatgpt_share_the_plugin_root_target() -> None:
+    """Codex and ChatGPT consume the identical .codex-plugin/plugin.json packaging artifact
+    (host-adapter-contract.md: "the same portable skill package contract; no ChatGPT-only prompt
+    copy is maintained"), so both hosts' discovery bindings must resolve to the same target --
+    and, like kiro, that target must not be install.sh-resolvable."""
+    registry = parse_host_registry(ROOT / "agent-hosts.yaml")
+
+    assert "codex-chatgpt-plugin-root" in registry.targets
+
+    for host_id in ("codex", "chatgpt"):
+        host = registry.hosts[host_id]
+        bindings = [binding for surface in host.surfaces for binding in surface.discovery]
+        assert len(bindings) == 1
+        assert bindings[0].target.id == "codex-chatgpt-plugin-root"
+        assert bindings[0].mode == "ADAPTER"
+        assert host.verification == "UNVERIFIED"
+        assert len(host.evidence) == 1
+        assert host.evidence[0].kind == "DOCUMENTATION"
+        assert host.constraints.values, f"{host_id} must document why it's not install.sh-resolvable"
+        assert "not install.sh-resolvable" in host.constraints.values[0]
+
+    from scripts.registry.install_resolver import install_selectors
+
+    assert "codex" not in install_selectors()
+    assert "chatgpt" not in install_selectors()
 
 
 def test_registry_cli_validates_hosts() -> None:

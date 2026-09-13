@@ -59,7 +59,7 @@ _PER_HOST_ALLOWED_DISCOVERY: dict[str, frozenset[str]] = {
 
 
 def _skill_host_ids(skills_yaml_path: Path) -> frozenset[str]:
-    """The set of host ids a skill's `hosts:` block may/must declare.
+    """The set of host ids a skill's `hosts:` block may declare (declaring any other id is an error).
 
     Driven by agent-hosts.yaml (the canonical host-identity registry, Candidate 2) when it exists next
     to the parsed skills.yaml; falls back to this repository's current host set only when no such file
@@ -343,7 +343,7 @@ def _parse_hosts(
             f"skills.{skill_id}.hosts declares host(s) not present in agent-hosts.yaml: {unknown}"
         )
     hosts: dict[str, HostDiscoverySpec] = {}
-    for host_id in sorted(host_ids):
+    for host_id in sorted(mapping):
         label = f"skills.{skill_id}.hosts.{host_id}"
         host_raw = _require_mapping(mapping.get(host_id), label)
         if _HOST_FIELD_KIND.get(host_id, "discovery") == "install":
