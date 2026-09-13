@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import re
+import yaml
 from pathlib import Path
 from typing import Any
 
 from scripts.registry.host_adapter import (
+    CAPABILITIES,
     HOSTS,
     expected_surface,
     load_host_parity_expected,
@@ -29,6 +31,45 @@ HOST_BRANCH_RE = re.compile(
     rf")",
     re.I | re.M,
 )
+
+_CONTRACT_DOC_CAPABILITY_BLOCK_RE = re.compile(
+    r"## Required adapter surface\n.*?```yaml\n(.*?)\n```",
+    re.DOTALL,
+)
+
+
+def host_adapter_contract_doc_path(root: Path) -> Path:
+    return root / "docs" / "skill-framework" / "shared" / "host-adapter-contract.md"
+
+
+def validate_host_adapter_contract_doc(root: Path) -> list[str]:
+    """host-adapter-contract.md's "## Required adapter surface" section restates the capability
+    family list from host_adapter.CAPABILITIES as prose documentation, with no code path enforcing
+    the two stay in sync -- commit 5edd34e had to fix a real drift here by hand (report_output was
+    added to CAPABILITIES but not to this doc) with no guard added at the time. This closes that gap.
+    """
+    path = host_adapter_contract_doc_path(root)
+    if not path.is_file():
+        return []
+    markdown = path.read_text(encoding="utf-8")
+    match = _CONTRACT_DOC_CAPABILITY_BLOCK_RE.search(markdown)
+    if not match:
+        return ["error: host-adapter-contract.md is missing its ## Required adapter surface yaml block"]
+    try:
+        parsed = yaml.safe_load(match.group(1))
+    except yaml.YAMLError as exc:
+        return [f"error: host-adapter-contract.md capability block is not valid yaml: {exc}"]
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("host"), dict):
+        return ["error: host-adapter-contract.md capability block must be a mapping under a top-level 'host:' key"]
+    documented = set(parsed["host"])
+    if documented != CAPABILITIES:
+        missing = sorted(CAPABILITIES - documented)
+        extra = sorted(documented - CAPABILITIES)
+        return [
+            "error: host-adapter-contract.md capability family list drifted from "
+            f"host_adapter.CAPABILITIES: missing={missing}, extra={extra}",
+        ]
+    return []
 
 
 def _generated_surface_errors(root: Path, directory: Path, suffix: str, skills: set[str], host: str) -> list[str]:
@@ -116,6 +157,7 @@ def validate_host_portability(root: Path) -> list[str]:
     """
     errors = validate_host_adapter_interface(root)
     errors.extend(validate_host_adapter_identities(root))
+    errors.extend(validate_host_adapter_contract_doc(root))
     try:
         registry = parse_registry(root / "skills.yaml")
         skills = set(registry.skills)
