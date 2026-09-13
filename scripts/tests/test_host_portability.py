@@ -132,8 +132,17 @@ def test_runtime_host_branch_detector_scans_workflow_and_reference_docs(tmp_path
 def test_host_packaging_semantics_validate() -> None:
     errors = validate_host_portability(ROOT)
     assert errors == []
-    # Verify the new host-adapter-contract.md check runs as part of the aggregate.
-    assert validate_host_adapter_contract_doc(ROOT) == []
+
+
+def test_validate_host_portability_includes_contract_doc_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        host_portability_module,
+        "validate_host_adapter_contract_doc",
+        lambda root: ["error: contract-doc-marker"],
+    )
+    assert "error: contract-doc-marker" in validate_host_portability(ROOT)
 
 
 def test_missing_host_parity_expected_reports_exactly_one_error(

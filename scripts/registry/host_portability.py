@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-import yaml
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +17,7 @@ from scripts.registry.load import load_deprecated_skills
 from scripts.registry.routing_sync import validate_skill_routing_references
 from scripts.registry.schema import parse_registry
 from scripts.registry.skill_frontmatter_schema import automation_only_guard_errors
-from scripts.yaml_safety import load_unique_frontmatter, require_mapping
+from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_frontmatter, load_unique_yaml, require_mapping
 
 # Flag actual host-specific execution branches while allowing neutral prose that
 # merely lists supported hosts or links to host setup guidance.
@@ -33,13 +32,9 @@ HOST_BRANCH_RE = re.compile(
 )
 
 _CONTRACT_DOC_CAPABILITY_BLOCK_RE = re.compile(
-    r"## Required adapter surface\n.*?```yaml\n(.*?)\n```",
-    re.DOTALL,
+    r"^## Required adapter surface\n(?:(?!^## ).)*?```yaml\n(.*?)\n```",
+    re.DOTALL | re.MULTILINE,
 )
-
-
-def host_adapter_contract_doc_path(root: Path) -> Path:
-    return root / "docs" / "skill-framework" / "shared" / "host-adapter-contract.md"
 
 
 def validate_host_adapter_contract_doc(root: Path) -> list[str]:
@@ -48,16 +43,19 @@ def validate_host_adapter_contract_doc(root: Path) -> list[str]:
     the two stay in sync -- commit 5edd34e had to fix a real drift here by hand (report_output was
     added to CAPABILITIES but not to this doc) with no guard added at the time. This closes that gap.
     """
-    path = host_adapter_contract_doc_path(root)
+    path = root / "docs" / "skill-framework" / "shared" / "host-adapter-contract.md"
     if not path.is_file():
         return []
     markdown = path.read_text(encoding="utf-8")
     match = _CONTRACT_DOC_CAPABILITY_BLOCK_RE.search(markdown)
     if not match:
-        return ["error: host-adapter-contract.md is missing its ## Required adapter surface yaml block"]
+        return [
+            "error: host-adapter-contract.md is missing its ## Required adapter surface yaml block "
+            "(expected a fenced ```yaml block under that heading)",
+        ]
     try:
-        parsed = yaml.safe_load(match.group(1))
-    except yaml.YAMLError as exc:
+        parsed = load_unique_yaml(match.group(1))
+    except YAML_SAFETY_ERRORS as exc:
         return [f"error: host-adapter-contract.md capability block is not valid yaml: {exc}"]
     if not isinstance(parsed, dict) or not isinstance(parsed.get("host"), dict):
         return ["error: host-adapter-contract.md capability block must be a mapping under a top-level 'host:' key"]
