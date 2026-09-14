@@ -1,5 +1,6 @@
 {
   "name": "software-builder",
+  "version": "1.4.0",
   "description": "Portable, evidence-driven software delivery skills for code review, incident response, architecture, testing, migrations, release readiness, and implementation workflows.",
   "author": {
     "name": "Lucky Jain"

@@ -27,6 +27,24 @@ Provenance recording fails closed, so a directory that has neither -- e.g. GitHu
 `.git/` stripped out -- cannot install: `distribution_version`/`source_sha` are required, not
 best-effort, so there is no third, degraded path.
 
+## Installing a versioned plugin bundle
+
+Every tagged release also publishes a plugin bundle for Claude Code / Codex, an alternative to
+adding this repository as a live (`main`-tracking) plugin marketplace source:
+
+```bash
+curl -LO https://github.com/luckyrjain/software-builder/releases/download/v1.4.0/software-builder-plugin-1.4.0.tar.gz
+curl -LO https://github.com/luckyrjain/software-builder/releases/download/v1.4.0/software-builder-plugin-1.4.0.tar.gz.sha256
+shasum -c software-builder-plugin-1.4.0.tar.gz.sha256
+tar -xzf software-builder-plugin-1.4.0.tar.gz
+```
+
+Then add the extracted `software-builder/` directory as a local plugin marketplace source in your
+Claude Code / Codex client. The bundle is the same deterministic, git-tracked-only skill set
+`python3 -m scripts.registry package-generic` produces, plus `.claude-plugin/` and `.codex-plugin/`
+(built via `python3 -m scripts.registry package-plugin`) -- one archive works as a plugin source for
+both hosts and as a generic bundle for any other.
+
 ## Release contract
 
 `scripts/release_contract.yaml` is the machine-readable policy a release must satisfy: the tag
