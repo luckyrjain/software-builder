@@ -11,17 +11,19 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: write
+# Each job below declares its own permissions; job-level permissions replace (not merge with)
+# this block, so nothing is granted here.
+permissions: {}
 
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      id-token: write
+      contents: write # gh release create/upload and the release-tag checkout
+      id-token: write # cosign's keyless OIDC signing
     outputs:
       hashes: ${{ steps.hash.outputs.hashes }}
+      tag: ${{ steps.tag.outputs.name }}
     steps:
       - name: Resolve release tag
         id: tag
@@ -103,6 +105,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.tag.outputs.name }}
         run: |
+          set -euo pipefail
           python3 scripts/build_sb_snapshot.py
           python3 -m build --wheel --outdir dist/sb-wheel cli/
           WHEEL_PATH="$(ls dist/sb-wheel/software_builder_cli-*.whl)"
@@ -140,6 +143,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.tag.outputs.name }}
         run: |
+          set -euo pipefail
           VERSION="${RELEASE_TAG#v}"
           ARTIFACTS=(
             "dist/software-builder-${VERSION}.tar.gz"
@@ -162,6 +166,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ steps.tag.outputs.name }}
         run: |
+          set -euo pipefail
           VERSION="${RELEASE_TAG#v}"
           HASHES=$(sha256sum \
             "dist/software-builder-${VERSION}.tar.gz" \
@@ -174,10 +179,11 @@ jobs:
   provenance:
     needs: release
     permissions:
-      actions: read
-      id-token: write
-      contents: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+      actions: read # generator reads this workflow run's metadata to build provenance
+      id-token: write # generator signs the provenance keylessly via OIDC
+      contents: write # generator's own asset upload (see upload-assets/upload-tag-name below)
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
       base64-subjects: ${{ needs.release.outputs.hashes }}
       upload-assets: true
+      upload-tag-name: ${{ needs.release.outputs.tag }}

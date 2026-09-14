@@ -54,6 +54,16 @@ def _check_uses(workflow_path: Path, uses: str) -> list[str]:
     if uses.startswith("./") or uses.startswith("docker://"):
         return []
 
+    # The SLSA generator's own reusable workflows require a `@vX.Y.Z` tag reference: their
+    # internal builder-fetch logic parses the ref and only accepts `refs/tags/vX.Y.Z`, so a SHA
+    # pin here breaks the job outright rather than adding safety. This isn't a gap in this
+    # repo's supply-chain story either — the generator independently verifies its own builder
+    # binary against that binary's own release provenance at run time, and its internal jobs
+    # already run under their own narrow, separately-scoped permissions. Exempt only this exact
+    # repo+path prefix, not slsa-framework actions in general.
+    if uses.startswith("slsa-framework/slsa-github-generator/.github/workflows/"):
+        return []
+
     match = _ACTION_REF_RE.match(uses)
     if not match:
         return [f"{workflow_path}: unrecognized action reference {uses!r} (expected owner/repo@ref)"]

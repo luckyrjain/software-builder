@@ -114,11 +114,12 @@ published.
 
 Every release artifact (the tarball, the `sb` wheel, the plugin bundle, and the wheel's SBOM) is
 signed keylessly via [Sigstore](https://www.sigstore.dev/) — no private key to trust, just GitHub
-Actions' own OIDC identity and the public Rekor transparency log:
+Actions' own OIDC identity and the public Rekor transparency log. Verifying `--bundle` requires
+cosign v3.0 or newer:
 
 ```bash
 cosign verify-blob --bundle software-builder-1.4.0.tar.gz.cosign.bundle \
-  --certificate-identity-regexp 'https://github.com/luckyrjain/software-builder/\.github/workflows/release\.yml@.*' \
+  --certificate-identity-regexp 'https://github\.com/luckyrjain/software-builder/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   software-builder-1.4.0.tar.gz
 ```

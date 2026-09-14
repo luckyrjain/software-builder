@@ -105,6 +105,36 @@ def test_docker_reference_is_exempt(tmp_path: Path) -> None:
     assert find_unpinned_actions(workflow) == []
 
 
+def test_slsa_generator_tag_ref_is_exempt(tmp_path: Path) -> None:
+    # The SLSA generator's reusable workflows require a `@vX.Y.Z` tag (their internal
+    # builder-fetch logic rejects a SHA), so this one specific path prefix is exempt.
+    workflow = tmp_path / "slsa.yml"
+    workflow.write_text(
+        "jobs:\n"
+        "  provenance:\n"
+        "    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0\n",
+        encoding="utf-8",
+    )
+    assert find_unpinned_actions(workflow) == []
+
+
+def test_unrelated_slsa_framework_action_still_flagged(tmp_path: Path) -> None:
+    # Regression: the exemption must match the exact repo+path prefix, not any
+    # slsa-framework/* reference — an unrelated slsa-framework action with a mutable tag
+    # should still be rejected like any other unpinned action.
+    workflow = tmp_path / "slsa-other.yml"
+    workflow.write_text(
+        "jobs:\n"
+        "  build:\n"
+        "    steps:\n"
+        "      - uses: slsa-framework/slsa-verifier@v2\n",
+        encoding="utf-8",
+    )
+    errors = find_unpinned_actions(workflow)
+    assert len(errors) == 1
+    assert "mutable ref" in errors[0]
+
+
 def test_short_sha_still_flagged(tmp_path: Path) -> None:
     # A short (abbreviated) commit SHA isn't stable the way a full 40-char SHA is — GitHub
     # itself only guarantees uniqueness for the full form, and a short prefix could
