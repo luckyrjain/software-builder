@@ -11,12 +11,19 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: write
+# Each job below declares its own permissions; job-level permissions replace (not merge with)
+# this block, so nothing is granted here.
+permissions: {}
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # gh release create/upload and the release-tag checkout
+      id-token: write # cosign's keyless OIDC signing
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+      tag: ${{ steps.tag.outputs.name }}
     steps:
       - name: Resolve release tag
         id: tag
@@ -98,11 +105,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.tag.outputs.name }}
         run: |
+          set -euo pipefail
           python3 scripts/build_sb_snapshot.py
           python3 -m build --wheel --outdir dist/sb-wheel cli/
           WHEEL_PATH="$(ls dist/sb-wheel/software_builder_cli-*.whl)"
           sha256sum "$WHEEL_PATH" > "${WHEEL_PATH}.sha256"
           gh release upload "$RELEASE_TAG" "$WHEEL_PATH" "${WHEEL_PATH}.sha256" --clobber
+          echo "WHEEL_PATH=$WHEEL_PATH" >> "$GITHUB_ENV"
 
       - name: Build and upload plugin bundle
         env:
@@ -116,3 +125,65 @@ jobs:
             "dist/software-builder-plugin-${VERSION}.tar.gz" \
             "dist/software-builder-plugin-${VERSION}.tar.gz.sha256" \
             --clobber
+
+      - name: Generate SBOM for sb wheel
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          file: ${{ env.WHEEL_PATH }}
+          format: cyclonedx-json
+          output-file: dist/sb-wheel/software-builder-cli.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign and upload release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.tag.outputs.name }}
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          ARTIFACTS=(
+            "dist/software-builder-${VERSION}.tar.gz"
+            "${WHEEL_PATH}"
+            "dist/software-builder-plugin-${VERSION}.tar.gz"
+            "dist/sb-wheel/software-builder-cli.cdx.json"
+          )
+          BUNDLES=()
+          for artifact in "${ARTIFACTS[@]}"; do
+            cosign sign-blob --yes --bundle "${artifact}.cosign.bundle" "$artifact"
+            BUNDLES+=("${artifact}.cosign.bundle")
+          done
+          gh release upload "$RELEASE_TAG" \
+            "dist/sb-wheel/software-builder-cli.cdx.json" \
+            "${BUNDLES[@]}" \
+            --clobber
+
+      - name: Generate provenance subjects
+        id: hash
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.name }}
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          HASHES=$(sha256sum \
+            "dist/software-builder-${VERSION}.tar.gz" \
+            "${WHEEL_PATH}" \
+            "dist/software-builder-plugin-${VERSION}.tar.gz" \
+            "dist/sb-wheel/software-builder-cli.cdx.json" \
+            | base64 -w0)
+          echo "hashes=$HASHES" >> "$GITHUB_OUTPUT"
+
+  provenance:
+    needs: release
+    permissions:
+      actions: read # generator reads this workflow run's metadata to build provenance
+      id-token: write # generator signs the provenance keylessly via OIDC
+      contents: write # generator's own asset upload (see upload-assets/upload-tag-name below)
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0 # zizmor: ignore[unpinned-uses] generator requires a tag ref; see check_pinned_actions.py's exemption for why
+    with:
+      base64-subjects: ${{ needs.release.outputs.hashes }}
+      upload-assets: true
+      upload-tag-name: ${{ needs.release.outputs.tag }}

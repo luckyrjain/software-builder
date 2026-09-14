@@ -23,6 +23,7 @@ from scripts.yaml_safety import load_unique_yaml_file  # noqa: E402
 
 _SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _ACTION_REF_RE = re.compile(r"^([^@]+)@([^\s@]+)$")
+_VERSION_TAG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 
 
 def find_unpinned_actions(workflow_path: Path) -> list[str]:
@@ -53,6 +54,24 @@ def _check_uses(workflow_path: Path, uses: str) -> list[str]:
     # GitHub Action tag references — out of scope for this check.
     if uses.startswith("./") or uses.startswith("docker://"):
         return []
+
+    # The SLSA generator's own reusable workflows require a `@vX.Y.Z` tag reference: their
+    # internal builder-fetch logic parses the ref and only accepts `refs/tags/vX.Y.Z`, so a SHA
+    # pin here breaks the job outright rather than adding safety. This isn't a gap in this
+    # repo's supply-chain story either — the generator independently verifies its own builder
+    # binary against that binary's own release provenance at run time, and its internal jobs
+    # already run under their own narrow, separately-scoped permissions. Exempt only this exact
+    # repo+path prefix, not slsa-framework actions in general — and only when the ref actually
+    # looks like a real version tag, so e.g. an accidental `@main` on this same path still fails
+    # loudly instead of silently bypassing the pinning check.
+    if uses.startswith("slsa-framework/slsa-github-generator/.github/workflows/"):
+        ref = uses.rsplit("@", 1)[-1] if "@" in uses else ""
+        if _VERSION_TAG_RE.match(ref):
+            return []
+        return [
+            f"{workflow_path}: {uses!r} must be pinned to a real vX.Y.Z tag (e.g. @v2.1.0), "
+            f"not {ref!r}",
+        ]
 
     match = _ACTION_REF_RE.match(uses)
     if not match:
