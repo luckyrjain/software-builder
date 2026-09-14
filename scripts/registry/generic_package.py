@@ -50,6 +50,8 @@ available skills and their canonical `SKILL.md` entry points.
 
 This is the generic-agent bundle. Host-specific adapters remain outside this archive; follow the shared
 host contract in `docs/skill-framework/shared/host-adapter-contract.md` for capability semantics.
+If `.claude-plugin/` and `.codex-plugin/` are present at this archive's root, it was built by
+`package-plugin` and can be added directly as a Claude Code / Codex plugin marketplace source.
 """
 PORTABLE_ADR_INDEX = """# Architecture Decision Records
 
@@ -338,12 +340,13 @@ def _package_files(root: Path) -> list[Path]:
     return sorted(candidates, key=lambda path: path.relative_to(root).as_posix())
 
 
-def build_generic_package_bytes(root: Path) -> bytes:
-    root = root.resolve()
+def _build_package_bytes(root: Path, files: list[Path]) -> bytes:
+    """Write `files` (already resolved, root-relative) into a deterministic tar.gz -- shared by
+    the generic bundle and the plugin bundle so both go through one archive-writing code path."""
     buffer = io.BytesIO()
     with gzip.GzipFile(filename="", mode="wb", fileobj=buffer, mtime=0) as gz:
         with tarfile.open(fileobj=gz, mode="w", format=tarfile.USTAR_FORMAT) as archive:
-            for path in _package_files(root):
+            for path in files:
                 rel = path.relative_to(root).as_posix()
                 arcname = f"{PACKAGE_ROOT}/{rel}"
                 data = _packaged_bytes(root, path)
@@ -359,12 +362,51 @@ def build_generic_package_bytes(root: Path) -> bytes:
     return buffer.getvalue()
 
 
+def build_generic_package_bytes(root: Path) -> bytes:
+    root = root.resolve()
+    return _build_package_bytes(root, _package_files(root))
+
+
 def build_generic_package(root: Path, output: Path) -> None:
     root = root.resolve()
     output = output.resolve()
     _validate_output_path(root, output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(build_generic_package_bytes(root))
+
+
+def _plugin_package_files(root: Path) -> list[Path]:
+    """The generic bundle's file set, plus every git-tracked file under .claude-plugin/ and
+    .codex-plugin/ -- both hosts' plugin manifests, needed for the archive to work as a plugin
+    marketplace source, not just a generic-host skill bundle."""
+    root = root.resolve()
+    candidates = set(_package_files(root))
+    tracked = _tracked_files(root)
+    for dirname in (".claude-plugin", ".codex-plugin"):
+        plugin_dir = (root / dirname).resolve()
+        if not plugin_dir.is_dir():
+            raise ValueError(f"plugin package requires {dirname}")
+        for path in tracked:
+            try:
+                path.relative_to(plugin_dir)
+            except ValueError:
+                continue
+            if _is_safe_file(root, path):
+                candidates.add(path.resolve())
+    return sorted(candidates, key=lambda path: path.relative_to(root).as_posix())
+
+
+def build_plugin_package_bytes(root: Path) -> bytes:
+    root = root.resolve()
+    return _build_package_bytes(root, _plugin_package_files(root))
+
+
+def build_plugin_package(root: Path, output: Path) -> None:
+    root = root.resolve()
+    output = output.resolve()
+    _validate_output_path(root, output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(build_plugin_package_bytes(root))
 
 
 def main(argv: list[str] | None = None) -> int:

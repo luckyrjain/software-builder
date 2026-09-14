@@ -22,7 +22,7 @@ from scripts.registry.compatibility_resolver import UnknownHostError, resolve, r
 from scripts.registry.composition_runtime import handoff_allowed, validate_composition_runtime
 from scripts.registry.crosscheck import find_stale_generated_adapters, validate_registry
 from scripts.registry.generators import collect_outputs
-from scripts.registry.generic_package import build_generic_package
+from scripts.registry.generic_package import build_generic_package, build_plugin_package
 from scripts.registry.host_portability import validate_host_portability
 from scripts.registry.host_adapter import (
     validate_host_adapter_identities,
@@ -307,6 +307,12 @@ def cmd_package_generic(root: Path, output: Path) -> int:
     return 0
 
 
+def cmd_package_plugin(root: Path, output: Path) -> int:
+    build_plugin_package(root, output)
+    print(f"ok: wrote deterministic plugin package to {output}")
+    return 0
+
+
 def cmd_check_handoff(root: Path, target_skill: str, visited_skills: list[str], depth: int) -> int:
     allowed, reason = handoff_allowed(
         target_skill,
@@ -476,6 +482,17 @@ def main(argv: list[str] | None = None) -> int:
         help="archive output path",
     )
 
+    plugin_parser = subparsers.add_parser(
+        "package-plugin",
+        help="build the deterministic plugin bundle (generic bundle plus .claude-plugin/.codex-plugin)",
+    )
+    plugin_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("dist/software-builder-plugin.tar.gz"),
+        help="archive output path",
+    )
+
     backfill_parser = subparsers.add_parser(
         "backfill-capabilities",
         help="validate that every registered skill declares a capabilities block",
@@ -529,6 +546,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "package-generic":
         output = args.output if args.output.is_absolute() else ROOT / args.output
         return _run_command(lambda: cmd_package_generic(ROOT, output.resolve()))
+    if args.command == "package-plugin":
+        output = args.output if args.output.is_absolute() else ROOT / args.output
+        return _run_command(lambda: cmd_package_plugin(ROOT, output.resolve()))
     if args.command == "backfill-capabilities":
         return _run_command(lambda: cmd_check_capabilities(skills_path=ROOT / "skills.yaml"))
     if args.command == "check-handoff":

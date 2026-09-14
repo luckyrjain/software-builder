@@ -103,3 +103,16 @@ jobs:
           WHEEL_PATH="$(ls dist/sb-wheel/software_builder_cli-*.whl)"
           sha256sum "$WHEEL_PATH" > "${WHEEL_PATH}.sha256"
           gh release upload "$RELEASE_TAG" "$WHEEL_PATH" "${WHEEL_PATH}.sha256" --clobber
+
+      - name: Build and upload plugin bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.tag.outputs.name }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          python3 -m scripts.registry package-plugin --output "dist/software-builder-plugin-${VERSION}.tar.gz"
+          ( cd dist && sha256sum "software-builder-plugin-${VERSION}.tar.gz" > "software-builder-plugin-${VERSION}.tar.gz.sha256" )
+          gh release upload "$RELEASE_TAG" \
+            "dist/software-builder-plugin-${VERSION}.tar.gz" \
+            "dist/software-builder-plugin-${VERSION}.tar.gz.sha256" \
+            --clobber
