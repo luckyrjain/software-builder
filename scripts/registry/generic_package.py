@@ -50,6 +50,8 @@ available skills and their canonical `SKILL.md` entry points.
 
 This is the generic-agent bundle. Host-specific adapters remain outside this archive; follow the shared
 host contract in `docs/skill-framework/shared/host-adapter-contract.md` for capability semantics.
+If `.claude-plugin/` and `.codex-plugin/` are present at this archive's root, it was built by
+`package-plugin` and can be added directly as a Claude Code / Codex plugin marketplace source.
 """
 PORTABLE_ADR_INDEX = """# Architecture Decision Records
 
@@ -365,6 +367,14 @@ def build_generic_package_bytes(root: Path) -> bytes:
     return _build_package_bytes(root, _package_files(root))
 
 
+def build_generic_package(root: Path, output: Path) -> None:
+    root = root.resolve()
+    output = output.resolve()
+    _validate_output_path(root, output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(build_generic_package_bytes(root))
+
+
 def _plugin_package_files(root: Path) -> list[Path]:
     """The generic bundle's file set, plus every git-tracked file under .claude-plugin/ and
     .codex-plugin/ -- both hosts' plugin manifests, needed for the archive to work as a plugin
@@ -389,14 +399,6 @@ def _plugin_package_files(root: Path) -> list[Path]:
 def build_plugin_package_bytes(root: Path) -> bytes:
     root = root.resolve()
     return _build_package_bytes(root, _plugin_package_files(root))
-
-
-def build_generic_package(root: Path, output: Path) -> None:
-    root = root.resolve()
-    output = output.resolve()
-    _validate_output_path(root, output)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_bytes(build_generic_package_bytes(root))
 
 
 def build_plugin_package(root: Path, output: Path) -> None:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail when a native-plugin manifest's version has drifted from the repo's distribution VERSION.
 
-`.codex-plugin/plugin.json` (and any future `.claude-plugin/plugin.json`) carries its own
+`.codex-plugin/plugin.json` and `.claude-plugin/plugin.json` each carry their own
 `"version"` field, independent of the root `VERSION` file `scripts/release_info.py` treats as
 canonical. Nothing enforced the two stay equal, so `.codex-plugin/plugin.json` drifted to
 `0.1.0` while `VERSION` moved on to `1.4.0` — this script closes that gap the same way
@@ -28,9 +28,9 @@ if str(ROOT) not in sys.path:
 from scripts.release_info import read_distribution_version  # noqa: E402
 
 # Every native-plugin manifest whose "version" field must track VERSION. Add a path here
-# (not a second, hand-copied check) when a future plugin bundle (e.g. .claude-plugin) gains
-# its own versioned manifest.
-PLUGIN_MANIFESTS: tuple[str, ...] = (".codex-plugin/plugin.json",)
+# (not a second, hand-copied check) when a future plugin bundle gains its own versioned
+# manifest.
+PLUGIN_MANIFESTS: tuple[str, ...] = (".codex-plugin/plugin.json", ".claude-plugin/plugin.json")
 
 # TOML manifests whose [project].version must track VERSION -- same rationale as
 # PLUGIN_MANIFESTS, a different file format so it gets its own tuple and check function.

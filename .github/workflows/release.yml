@@ -111,7 +111,7 @@ jobs:
         run: |
           VERSION="${RELEASE_TAG#v}"
           python3 -m scripts.registry package-plugin --output "dist/software-builder-plugin-${VERSION}.tar.gz"
-          sha256sum "dist/software-builder-plugin-${VERSION}.tar.gz" > "dist/software-builder-plugin-${VERSION}.tar.gz.sha256"
+          ( cd dist && sha256sum "software-builder-plugin-${VERSION}.tar.gz" > "software-builder-plugin-${VERSION}.tar.gz.sha256" )
           gh release upload "$RELEASE_TAG" \
             "dist/software-builder-plugin-${VERSION}.tar.gz" \
             "dist/software-builder-plugin-${VERSION}.tar.gz.sha256" \
