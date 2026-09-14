@@ -110,6 +110,32 @@ python3 scripts/verify_release_bundle.py dist/software-builder-1.4.0.tar.gz
 after packaging and before uploading release assets, so a bundle that fails either check is never
 published.
 
+## Verifying signatures and provenance
+
+Every release artifact (the tarball, the `sb` wheel, the plugin bundle, and the wheel's SBOM) is
+signed keylessly via [Sigstore](https://www.sigstore.dev/) — no private key to trust, just GitHub
+Actions' own OIDC identity and the public Rekor transparency log:
+
+```bash
+cosign verify-blob --bundle software-builder-1.4.0.tar.gz.cosign.bundle \
+  --certificate-identity-regexp 'https://github.com/luckyrjain/software-builder/\.github/workflows/release\.yml@.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  software-builder-1.4.0.tar.gz
+```
+
+The release also carries [SLSA Build Level 3](https://slsa.dev/) provenance, verifiable with
+[`slsa-verifier`](https://github.com/slsa-framework/slsa-verifier):
+
+```bash
+slsa-verifier verify-artifact software-builder-1.4.0.tar.gz \
+  --provenance-path multiple.intoto.jsonl \
+  --source-uri github.com/luckyrjain/software-builder \
+  --source-tag v1.4.0
+```
+
+The `sb` wheel's dependency graph is published as a CycloneDX SBOM
+(`software-builder-cli.cdx.json`), signed the same way as every other release asset.
+
 ## Verifying an install
 
 ```bash
