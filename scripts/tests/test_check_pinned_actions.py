@@ -118,6 +118,22 @@ def test_slsa_generator_tag_ref_is_exempt(tmp_path: Path) -> None:
     assert find_unpinned_actions(workflow) == []
 
 
+def test_slsa_generator_non_version_ref_still_flagged(tmp_path: Path) -> None:
+    # Regression: the exemption must require a real `vX.Y.Z` tag, not just the path prefix —
+    # an accidental `@main` on this same generator path should still be flagged as an error
+    # rather than silently bypassing the pinning check.
+    workflow = tmp_path / "slsa-main.yml"
+    workflow.write_text(
+        "jobs:\n"
+        "  provenance:\n"
+        "    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@main\n",
+        encoding="utf-8",
+    )
+    errors = find_unpinned_actions(workflow)
+    assert len(errors) == 1
+    assert "vX.Y.Z" in errors[0]
+
+
 def test_unrelated_slsa_framework_action_still_flagged(tmp_path: Path) -> None:
     # Regression: the exemption must match the exact repo+path prefix, not any
     # slsa-framework/* reference — an unrelated slsa-framework action with a mutable tag

@@ -182,7 +182,7 @@ jobs:
       actions: read # generator reads this workflow run's metadata to build provenance
       id-token: write # generator signs the provenance keylessly via OIDC
       contents: write # generator's own asset upload (see upload-assets/upload-tag-name below)
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0 # zizmor: ignore[unpinned-uses] generator requires a tag ref; see check_pinned_actions.py's exemption for why
     with:
       base64-subjects: ${{ needs.release.outputs.hashes }}
       upload-assets: true
