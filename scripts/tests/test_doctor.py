@@ -645,7 +645,7 @@ def test_agent_default_install_root_scans_the_hosts_own_user_scope_targets(
     # AVAILABLE (agent-hosts.yaml); "unit-test-creator" only needs host.test_runner.execute
     # beyond that, missing here, so it resolves to DEGRADED -- not BLOCKED and not
     # UNVERIFIED_HOST/VERSION_MISMATCH -- which keeps exit_code at 0 regardless of install status,
-    # isolating this assertion to what _default_install_roots_for_host contributes: resolving
+    # isolating this assertion to what default_install_roots_for_host contributes: resolving
     # "claude"'s own LOCAL surface -> claude-user target (~/.claude/skills, scope user) against a
     # faked home directory.
     fake_home = tmp_path / "home"

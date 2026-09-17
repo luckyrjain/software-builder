@@ -51,7 +51,7 @@ def _installed_manifest(skill_dest: Path) -> dict[str, object] | None:
         return None
 
 
-def _default_install_roots_for_host(host: HostSpec, *, home: Path) -> list[Path]:
+def default_install_roots_for_host(host: HostSpec, *, home: Path) -> list[Path]:
     """Every install destination this host's surfaces declare at user scope, resolved against
     `home`, in discovery order with duplicates removed.
 
@@ -317,7 +317,7 @@ def main(argv: list[str] | None = None) -> int:
     install_roots = list(args.install_root)
     if not install_roots:
         if host_id is not None:
-            install_roots = _default_install_roots_for_host(host, home=Path.home())
+            install_roots = default_install_roots_for_host(host, home=Path.home())
         else:
             install_roots = [Path.home() / ".cursor" / "skills"]
 

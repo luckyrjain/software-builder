@@ -13,7 +13,7 @@ from sb._paths import registry_snapshot_root, vendored_scripts_root
 
 sys.path.insert(0, str(vendored_scripts_root()))
 
-from scripts.doctor import cmd_doctor  # noqa: E402
+from scripts.doctor import cmd_doctor, default_install_roots_for_host  # noqa: E402
 from scripts.registry.cli import cmd_compatibility, cmd_explain, cmd_list  # noqa: E402
 from scripts.registry.compatibility_resolver import (  # noqa: E402
     UnknownHostError,
@@ -23,10 +23,6 @@ from scripts.registry.compatibility_resolver import (  # noqa: E402
 from scripts.registry.host_registry import (  # noqa: E402
     HostRegistryParseError,
     parse_host_registry,
-)
-from scripts.registry.host_registry import (  # noqa: E402
-    HostSpec,
-    resolve_target_path,
 )
 from scripts.install_engine import install_skill, uninstall_skill  # noqa: E402
 from scripts.install_support import cmd_verify  # noqa: E402
@@ -39,26 +35,6 @@ def _package_version() -> str:
         return _installed_version("software-builder-cli")
     except PackageNotFoundError:
         return "unknown (not installed)"
-
-
-def _default_install_roots_for_host(host: HostSpec, *, home: Path) -> list[Path]:
-    """Same logic as scripts/doctor.py's own helper of the same name -- duplicated here
-    rather than imported, since sb's argparse layer is a thin shim over the vendored
-    library functions and this one piece of arg-resolution logic (turning --agent into a
-    default --install-root list) lives in doctor.py's own main(), not in cmd_doctor itself,
-    so there is no library function to call. Keep in sync with scripts/doctor.py's version
-    if it changes."""
-    roots: list[Path] = []
-    seen: set[Path] = set()
-    for surface in host.surfaces:
-        for binding in surface.discovery:
-            if binding.target.scope != "user":
-                continue
-            resolved = resolve_target_path(binding.target, home=home, target_dir=None)
-            if resolved not in seen:
-                seen.add(resolved)
-                roots.append(resolved)
-    return roots
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
@@ -101,7 +77,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     install_roots = list(args.install_root)
     if not install_roots:
         if host_id is not None:
-            install_roots = _default_install_roots_for_host(host, home=Path.home())
+            install_roots = default_install_roots_for_host(host, home=Path.home())
         else:
             install_roots = [Path.home() / ".cursor" / "skills"]
 
