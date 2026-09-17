@@ -3,6 +3,8 @@ isolated target directory (never the developer's actual ~/.cursor or ~/.claude).
 
 from __future__ import annotations
 
+import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -10,13 +12,14 @@ from pathlib import Path
 CLI_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _run_sb(*args: str) -> subprocess.CompletedProcess[str]:
+def _run_sb(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "sb", *args],
         cwd=CLI_ROOT,
         text=True,
         capture_output=True,
         check=False,
+        env=env,
     )
 
 
@@ -58,6 +61,58 @@ def test_install_rejects_unknown_selector(tmp_path: Path) -> None:
 
     assert result.returncode == 2
     assert "not-a-real-selector" in result.stderr
+
+
+def test_install_warns_when_shadowed_by_a_higher_precedence_divergent_copy(tmp_path: Path) -> None:
+    # claude-project (precedence 10) and claude-user (precedence 20) both resolve under one
+    # target_dir/home pair, so writing the same skill to each lets the second write's shadow
+    # check see the first. The manifest hash is corrupted afterward to simulate a stale,
+    # divergent copy already sitting at the higher-precedence root -- package_skill's own output
+    # doesn't happen to differ by host label for this skill, so an untouched second install would
+    # land on DUPLICATE_IDENTICAL (silent) instead of exercising the SHADOWED warning path.
+    target_dir = tmp_path / "target-repo"
+    target_dir.mkdir()
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    env = {**os.environ, "HOME": str(fake_home)}
+
+    project_result = _run_sb(
+        "install", "pr-review", "--host", "claude-project", "--target-dir", str(target_dir), env=env
+    )
+    assert project_result.returncode == 0, project_result.stderr
+
+    manifest_path = target_dir / ".claude" / "skills" / "pr-review" / ".software-builder-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    a_file = next(iter(manifest["files"]))
+    manifest["files"][a_file] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    user_result = _run_sb(
+        "install", "pr-review", "--host", "claude-user", "--target-dir", str(target_dir), env=env
+    )
+
+    assert user_result.returncode == 0, user_result.stderr
+    assert (fake_home / ".claude" / "skills" / "pr-review" / "SKILL.md").is_file()
+    expected_shadow_path = target_dir / ".claude" / "skills" / "pr-review"
+    assert (
+        "warning: this install may be shadowed by a higher-precedence, divergent copy at "
+        f"{expected_shadow_path} -- claude will likely load that one instead" in user_result.stderr
+    )
+
+
+def test_install_does_not_warn_when_no_higher_precedence_copy_exists(tmp_path: Path) -> None:
+    target_dir = tmp_path / "target-repo"
+    target_dir.mkdir()
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    env = {**os.environ, "HOME": str(fake_home)}
+
+    result = _run_sb(
+        "install", "pr-review", "--host", "claude-user", "--target-dir", str(target_dir), env=env
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "shadow" not in result.stderr.lower()
 
 
 def test_multi_skill_install_continues_past_one_failure_and_reports_a_summary(tmp_path: Path) -> None:
