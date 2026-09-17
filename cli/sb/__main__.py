@@ -21,12 +21,22 @@ from scripts.registry.compatibility_resolver import (  # noqa: E402
     resolve_host,
 )
 from scripts.registry.host_registry import (  # noqa: E402
+    HostRegistry,
     HostRegistryParseError,
     parse_host_registry,
 )
 from scripts.install_engine import install_skill, uninstall_skill  # noqa: E402
 from scripts.install_support import cmd_verify  # noqa: E402
-from scripts.registry.install_resolver import install_selectors, resolve_install_destinations  # noqa: E402
+from scripts.registry.install_resolver import (  # noqa: E402
+    host_and_target_for_label,
+    install_selectors,
+    resolve_install_destinations,
+)
+from scripts.registry.shadow_detector import (  # noqa: E402
+    SHADOW_SHADOWED,
+    SHADOW_UNKNOWN_PRECEDENCE,
+    detect_shadow,
+)
 from sb._update import run_update  # noqa: E402
 
 
@@ -91,14 +101,55 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     )
 
 
-def _resolve_destinations(agent: str, target_dir: Path | None) -> list[tuple[Path, str]]:
+def _resolve_destinations(agent: str, target_dir: Path | None) -> tuple[HostRegistry, list[tuple[Path, str]]]:
     host_registry = parse_host_registry(registry_snapshot_root() / "agent-hosts.yaml")
-    return resolve_install_destinations(host_registry, agent, home=Path.home(), target_dir=target_dir)
+    destinations = resolve_install_destinations(host_registry, agent, home=Path.home(), target_dir=target_dir)
+    return host_registry, destinations
+
+
+def _warn_if_shadowed(
+    host_registry: HostRegistry, host_label: str, skill_dest: Path, *, target_dir: Path | None
+) -> None:
+    """Mirror install.sh's post-install shadow check (Candidate 8): a divergent copy at a
+    higher-precedence discovery root for this host means the host will actually load THAT copy,
+    not the one just written here, so the completion message must say so. This is a report, not a
+    refusal -- the install this decorates already succeeded and stands regardless of what this
+    finds.
+
+    Broad except, matching install.sh's own guard: this runs after the install already succeeded,
+    so a failure here (e.g. an unexpected exception inside detect_shadow) must not read as the
+    install itself having failed -- it's downgraded to an unknown-shadow-status warning instead.
+    """
+    host_and_target = host_and_target_for_label(host_registry, host_label)
+    if host_and_target is None:
+        return
+    host_id, target_id = host_and_target
+    try:
+        result = detect_shadow(
+            host_registry, host_id, target_id, skill_dest, home=Path.home(), target_dir=target_dir
+        )
+    except Exception:
+        print(f"warning: could not determine shadow status for {skill_dest}", file=sys.stderr)
+        return
+    if result.status == SHADOW_SHADOWED:
+        print(
+            f"warning: this install may be shadowed by a higher-precedence, divergent copy at "
+            f"{result.shadowing_path} -- {host_label.split('-')[0]} will likely load that one "
+            "instead",
+            file=sys.stderr,
+        )
+    elif result.status == SHADOW_UNKNOWN_PRECEDENCE:
+        print(
+            f"warning: a higher-precedence root at {result.shadowing_path} exists but its "
+            "install manifest could not be read, so it's unknown whether this install is "
+            "shadowed",
+            file=sys.stderr,
+        )
 
 
 def _cmd_install(args: argparse.Namespace) -> int:
     try:
-        destinations = _resolve_destinations(args.host, args.target_dir)
+        host_registry, destinations = _resolve_destinations(args.host, args.target_dir)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -118,6 +169,7 @@ def _cmd_install(args: argparse.Namespace) -> int:
                 failed += 1
             elif outcome.status == "installed":
                 installed += 1
+                _warn_if_shadowed(host_registry, host_label, outcome.dest, target_dir=args.target_dir)
             elif outcome.status == "dry_run":
                 dry_run += 1
     if len(args.skill_ids) * len(destinations) > 1:
@@ -130,7 +182,7 @@ def _cmd_install(args: argparse.Namespace) -> int:
 
 def _cmd_uninstall(args: argparse.Namespace) -> int:
     try:
-        destinations = _resolve_destinations(args.host, args.target_dir)
+        _host_registry, destinations = _resolve_destinations(args.host, args.target_dir)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -194,8 +246,10 @@ def main(argv: list[str] | None = None) -> int:
         "install",
         help="install one or more skills",
         description=(
-            "Install one or more skills. Does not check for shadowing installs at other "
-            "precedence levels or full registry-wide selector coverage, unlike install.sh."
+            "Install one or more skills. Warns, like install.sh, when a higher-precedence "
+            "discovery root for this host already carries a divergent copy. Does not run "
+            "agent-hosts.yaml's registry-wide selector-coverage validation -- a repo-health "
+            "lint, not something install.sh itself runs per install either."
         ),
     )
     install_parser.add_argument("skill_ids", nargs="+", help="registered skill id(s)")
