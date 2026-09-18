@@ -43,6 +43,20 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### A second SIGTERM during cleanup no longer abandons it (2026-09-18)
+
+- `_cleanup_failed_install()`'s rollback and `held_lock()`'s own lock-directory removal ran
+  after the `with _sigterm_as_system_exit()` block that protects the primary work had already
+  exited, so a second, closely-timed SIGTERM terminated the process mid-cleanup -- and unlike
+  a stale lock, an orphaned `.{skill}.staging.*`/`.{skill}.backup.*` directory is never swept
+  later. Both now run under a new `_defer_sigterm()`: the signal is recorded, the cleanup runs
+  to completion, and only then does the process exit 130.
+- Deliberately deferred rather than converted to `SystemExit` like the primary work's signal:
+  a first attempt converted it, which made the exit code clean but still interrupted the
+  rollback partway. The new tests assert the cleanup actually *completed* (directory gone), not
+  just the exit code -- and were confirmed to fail against that convert-style version.
+- Closes the last open follow-up in [ADR 0007](docs/adr/0007-shared-install-engine.md).
+
 ### `held_lock()`'s lock acquisition is now genuinely atomic (2026-09-18)
 
 - `scripts/install_engine.py`'s `held_lock()` used to claim a lock via a bare `os.mkdir()`

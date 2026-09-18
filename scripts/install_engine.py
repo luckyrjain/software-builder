@@ -169,6 +169,17 @@ def _reclaim_stale_lock(lock_dir: Path) -> None:
     shutil.rmtree(stale_dir, ignore_errors=True)
 
 
+def _terminate_signal() -> int | None:
+    """The graceful-terminate signal a supervisor can actually deliver and Python can actually
+    catch: SIGTERM on POSIX. On Windows, `os.kill(pid, signal.SIGTERM)` bypasses Python's
+    signal module entirely (CPython calls TerminateProcess() there -- an unconditional kill,
+    same as SIGKILL) -- SIGBREAK (CTRL_BREAK_EVENT) is the one a process-group supervisor can
+    actually deliver, so that's used there instead. None if neither is available."""
+    if sys.platform == "win32":
+        return getattr(signal, "SIGBREAK", None)
+    return signal.SIGTERM
+
+
 @contextmanager
 def _sigterm_as_system_exit() -> Iterator[None]:
     """Converts a graceful-terminate signal into a catchable SystemExit for the duration of
@@ -178,19 +189,13 @@ def _sigterm_as_system_exit() -> Iterator[None]:
     KeyboardInterrupt -- so a supervisor kill or CI timeout would otherwise skip
     install_skill()'s own (KeyboardInterrupt, SystemExit) cleanup handler entirely.
 
-    On POSIX this is SIGTERM. On Windows, `os.kill(pid, signal.SIGTERM)` bypasses Python's
-    signal module entirely (CPython calls TerminateProcess() there -- an unconditional kill,
-    same as SIGKILL) -- SIGBREAK (CTRL_BREAK_EVENT) is the signal a process-group supervisor
-    can actually deliver and Python can actually catch, so that's what's registered there
-    instead. Falls through to a no-op if neither is available.
+    For the primary mutating work, where interrupting it partway *is* the point. For cleanup
+    that must instead run to completion, see `_defer_sigterm()`.
     """
-    if sys.platform == "win32":
-        sig = getattr(signal, "SIGBREAK", None)
-        if sig is None:
-            yield
-            return
-    else:
-        sig = signal.SIGTERM
+    sig = _terminate_signal()
+    if sig is None:
+        yield
+        return
     previous_handler = signal.signal(sig, lambda signum, frame: sys.exit(130))
     try:
         yield
@@ -201,6 +206,41 @@ def _sigterm_as_system_exit() -> Iterator[None]:
         # TypeError, which would mask whatever exception is already propagating through here.
         if previous_handler is not None:
             signal.signal(sig, previous_handler)
+
+
+@contextmanager
+def _defer_sigterm() -> Iterator[None]:
+    """For cleanup that must run to completion: a graceful-terminate signal arriving during
+    the block is recorded, not acted on -- the block finishes -- and only then re-raised as
+    SystemExit(130), the same clean exit `_sigterm_as_system_exit()` produces.
+
+    Distinct from `_sigterm_as_system_exit()` on purpose. Converting a second signal into
+    SystemExit *inside* a rollback would interrupt the rollback itself partway, leaving
+    exactly the un-swept `.{skill}.staging.*`/`.{skill}.backup.*` directory the rollback
+    exists to prevent (nothing later sweeps one). Deferring instead means the cleanup still
+    finishes and the process still exits 130 afterward.
+
+    If the block itself raises, that exception propagates as usual and a deferred signal is
+    not re-raised over it -- the caller is already unwinding, which ends in the same exit.
+    """
+    sig = _terminate_signal()
+    if sig is None:
+        yield
+        return
+    received = False
+
+    def _record(signum: int, frame: object) -> None:
+        nonlocal received
+        received = True
+
+    previous_handler = signal.signal(sig, _record)
+    try:
+        yield
+    finally:
+        if previous_handler is not None:
+            signal.signal(sig, previous_handler)
+    if received:
+        sys.exit(130)
 
 
 @contextmanager
@@ -281,7 +321,14 @@ def held_lock(
     try:
         yield
     finally:
-        shutil.rmtree(lock_dir, ignore_errors=True)
+        # This runs after the caller's guarded body has already returned or raised, so it's
+        # outside any `with _sigterm_as_system_exit()` the caller itself entered -- a
+        # second, closely-timed SIGTERM landing here would otherwise terminate the process
+        # mid-release. Deferred rather than converted: the release finishes, then exits 130.
+        # (An interrupted release would be self-healing anyway -- a stale/partial lock is
+        # reclaimed by the next waiter -- but there's no reason to leave one behind.)
+        with _defer_sigterm():
+            shutil.rmtree(lock_dir, ignore_errors=True)
 
 
 _BLOCKING_OWNERSHIP_STATES = frozenset(
@@ -315,18 +362,34 @@ class InstallOutcome:
 def _cleanup_failed_install(stage_dir: Path | None, backup_dir: Path | None, skill_dest: Path) -> None:
     """Mirrors install.sh's cleanup_failed_install: discard the failed staging attempt, and
     if a previous install was moved aside into backup_dir and nothing currently occupies
-    skill_dest, restore it."""
-    if stage_dir is not None and stage_dir.exists():
-        shutil.rmtree(stage_dir, ignore_errors=True)
-    if backup_dir is not None and backup_dir.exists():
-        backed_up_skill = backup_dir / "skill"
-        if not skill_dest.exists() and backed_up_skill.exists():
-            os.replace(backed_up_skill, skill_dest)
-            # install.sh golden-tests this exact line (test_install_legacy_golden.py /
-            # test_install_rollback.py): a rollback restore is worth surfacing to the caller
-            # even though this function otherwise just returns results.
-            print(f"warning: restored previous install at {skill_dest}", file=sys.stderr)
-        shutil.rmtree(backup_dir, ignore_errors=True)
+    skill_dest, restore it.
+
+    SIGTERM-deferred, so a signal arriving mid-rollback can't abandon it partway: two of this
+    function's three call sites (the `except` handlers in install_skill()) run after the
+    `with _sigterm_as_system_exit()` block that wrapped the primary staged work has already
+    exited -- the original failure, whether an ordinary exception or a caught SIGTERM, has
+    already propagated past it -- so a second, closely-timed SIGTERM here would otherwise
+    terminate the process mid-rollback and leave a real, un-swept orphaned
+    `.{skill}.staging.*`/`.{skill}.backup.*` directory behind (unlike held_lock()'s own
+    cleanup, this one is not self-healing). Deferring, not converting to SystemExit, is what
+    actually prevents that: a converted signal would just interrupt the rollback itself. The
+    third call site (the dedicated backup-failure early return) is still *inside* that outer
+    block, so this nests -- safe: each entry saves whatever handler is current and its exit
+    restores exactly that, LIFO. A signal deferred here surfaces as SystemExit(130) when this
+    function returns, into the outer block's own handling.
+    """
+    with _defer_sigterm():
+        if stage_dir is not None and stage_dir.exists():
+            shutil.rmtree(stage_dir, ignore_errors=True)
+        if backup_dir is not None and backup_dir.exists():
+            backed_up_skill = backup_dir / "skill"
+            if not skill_dest.exists() and backed_up_skill.exists():
+                os.replace(backed_up_skill, skill_dest)
+                # install.sh golden-tests this exact line (test_install_legacy_golden.py /
+                # test_install_rollback.py): a rollback restore is worth surfacing to the
+                # caller even though this function otherwise just returns results.
+                print(f"warning: restored previous install at {skill_dest}", file=sys.stderr)
+            shutil.rmtree(backup_dir, ignore_errors=True)
 
 
 def install_skill(

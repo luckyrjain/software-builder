@@ -94,8 +94,8 @@ it was scope discipline for the original porting task, not a standing constraint
   between its creation and the rename that either publishes or discards it -- nothing sweeps
   a stray one later, the same accepted gap `install_skill()`'s
   `.{skill}.staging.*`/`.{skill}.backup.*` directories already have under an equivalent
-  window (see the SIGTERM follow-up below, which covers the narrower, closely-related case of
-  a *second* signal during cleanup). A second, empirically-verified interaction was found and
+  window (the SIGTERM item below resolved the narrower, closely-related case of a *second*
+  signal during cleanup, but not a hard kill). A second, empirically-verified interaction was found and
   judged benign, not fixed: `os.rename()` onto an *empty* existing directory succeeds (unlike
   a bare `os.mkdir()`, which fails unconditionally against anything at that path), so a new
   acquirer's rename can land in the brief window of the *previous* holder's own release
@@ -110,18 +110,22 @@ it was scope discipline for the original porting task, not a standing constraint
   the exception's own `errno`) could re-raise an ordinary, already-resolved contention
   failure as a hard error if the contender finished releasing in the gap — closed by
   classifying on `errno` (`ENOTEMPTY`/`EEXIST`) instead, which has no such gap.
-- **Follow-up:** `_sigterm_as_system_exit()` only protects the primary staged/mutating work
-  (`install_skill()`'s stage/backup/replace, `uninstall_skill()`'s `rmtree`) — the cleanup
-  code that runs *after* a SIGTERM is caught (`_cleanup_failed_install()`'s rollback,
-  `held_lock()`'s own `finally: shutil.rmtree(lock_dir, ...)`) runs with the handler already
-  restored to its original disposition, since the `with` block that registered it has already
-  exited by the time that cleanup code runs. A second SIGTERM landing during that narrow
-  window terminates the process immediately, with no further cleanup. `held_lock()`'s own
-  cleanup is self-healing (a stale/partial lock directory is reclaimed by the next waiter
-  regardless of why it was abandoned), but `_cleanup_failed_install()`'s rollback is not — no
-  code anywhere sweeps an orphaned `.{skill}.staging.*`/`.{skill}.backup.*` directory left
-  behind by a kill mid-rollback. Narrow (requires two closely-timed signals) and not
-  introduced by this PR (the equivalent gap existed for `install.sh`'s own bash trap, scoped
-  to a single INT/TERM handler with the same "already unwound" limitation), so not fixed
-  here rather than layer more re-entrant signal-handling complexity on top of what's already
-  fallback-on-fallback logic (see the follow-up above).
+- **Resolved (2026-09-18):** a second SIGTERM during cleanup no longer abandons it.
+  `_sigterm_as_system_exit()` only protects the primary staged/mutating work, and the cleanup
+  that runs *after* a signal is caught (`_cleanup_failed_install()`'s rollback, `held_lock()`'s
+  own `finally: shutil.rmtree(lock_dir, ...)`) runs after the `with` block that registered it
+  has already exited -- so a second, closely-timed signal used to terminate the process
+  mid-cleanup. `held_lock()`'s own release is self-healing (a stale/partial lock is reclaimed
+  by the next waiter), but `_cleanup_failed_install()`'s rollback is not: nothing sweeps an
+  orphaned `.{skill}.staging.*`/`.{skill}.backup.*` directory left by a kill mid-rollback.
+  Both now run under a new `_defer_sigterm()`: a signal arriving during the block is recorded,
+  the cleanup runs to completion, and only then does the process exit 130. Deliberately
+  *deferred*, not converted to `SystemExit` the way the primary work's signal is -- a first
+  attempt did convert it, which made the exit code clean but still interrupted the rollback
+  itself partway, leaving exactly the orphan it exists to prevent. The tests assert the
+  cleanup actually *completed* (directory gone), not just the exit code, and were checked
+  against that weaker convert-style version to confirm they'd have failed on it. Residual:
+  a signal that can't be caught at all (SIGKILL, power loss) still can, and a hard kill
+  between `_acquire_lock_dir()`'s temp-directory creation and its rename can still orphan
+  that temp directory -- nothing short of an external sweeper addresses those, and they're
+  the same accepted gap `install_skill()`'s staging/backup directories always had.

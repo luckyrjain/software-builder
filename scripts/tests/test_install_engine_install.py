@@ -316,3 +316,45 @@ def test_malformed_skills_yaml_yields_a_failed_outcome_not_a_traceback(tmp_path:
 
     assert outcome.status == "failed"
     assert outcome.message
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="os.kill(pid, SIGTERM) bypasses Python's signal module on Windows")
+def test_sigterm_during_cleanup_failed_install_is_deferred_until_rollback_completes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_cleanup_failed_install() runs from install_skill()'s `except` handlers, after the
+    `with _sigterm_as_system_exit()` block that wrapped the primary staged work has already
+    exited -- so without its own protection, a second SIGTERM landing mid-rollback would
+    terminate the process immediately, leaving an un-swept orphaned `.{skill}.staging.*`/
+    `.{skill}.backup.*` directory (unlike held_lock()'s own cleanup, this one isn't
+    self-healing -- nothing later sweeps it). Deferred, not converted to SystemExit: converting
+    would just interrupt the rollback itself partway, leaving the very orphan it exists to
+    prevent. So the rollback must actually finish (staging directory gone), and only then does
+    the process exit 130."""
+    stage_dir = tmp_path / ".demo-skill.staging.abc123"
+    stage_dir.mkdir()
+    skill_dest = tmp_path / "demo-skill"
+    original_handler = signal.getsignal(signal.SIGTERM)
+
+    real_rmtree = install_engine.shutil.rmtree
+    fired = False
+
+    def _send_sigterm_once(path: object, *args: object, **kwargs: object) -> None:
+        # shutil.rmtree is patched process-wide; only fire once, for the staging directory.
+        nonlocal fired
+        if not fired and Path(path) == stage_dir:
+            fired = True
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(1)
+        real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(install_engine.shutil, "rmtree", _send_sigterm_once)
+
+    try:
+        with pytest.raises(SystemExit) as exc_info:
+            install_engine._cleanup_failed_install(stage_dir, None, skill_dest)
+        assert exc_info.value.code == 130
+        assert not stage_dir.exists()  # the rollback ran to completion despite the signal
+        assert signal.getsignal(signal.SIGTERM) == original_handler
+    finally:
+        signal.signal(signal.SIGTERM, original_handler)
