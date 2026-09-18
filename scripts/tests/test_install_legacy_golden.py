@@ -405,6 +405,33 @@ def test_legacy_install_warns_when_shadowed_by_a_divergent_higher_precedence_roo
     )
 
 
+def test_legacy_install_warns_unknown_precedence_when_higher_root_manifest_is_unreadable(
+    tmp_path: Path,
+) -> None:
+    """The other half of Candidate 8's warning pair (UNKNOWN_PRECEDENCE, not SHADOWED) --
+    previously only unit-tested at the detect_shadow() level (test_shadow_detector.py), never
+    through render_shadow_warning() or install.sh's relay of it end to end."""
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+
+    project_result = run_installer(
+        "--agent", "claude-project", "--target-dir", str(project), "pr-review", home=home
+    )
+    assert project_result.returncode == 0, project_result.stderr
+    project_manifest_path = project / ".claude" / "skills" / "pr-review" / MANIFEST_NAME
+    project_manifest_path.write_text("{not valid json", encoding="utf-8")
+
+    user_result = run_installer(
+        "--agent", "claude-user", "--target-dir", str(project), "pr-review", home=home
+    )
+    assert user_result.returncode == 0, user_result.stderr
+    assert (
+        f"warning: a higher-precedence root at {project / '.claude' / 'skills' / 'pr-review'} "
+        "exists but its install manifest could not be read, so it's unknown whether this "
+        "install is shadowed" in user_result.stderr
+    )
+
+
 def test_legacy_install_no_shadow_warning_when_higher_precedence_root_matches(
     tmp_path: Path,
 ) -> None:

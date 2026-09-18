@@ -101,3 +101,26 @@ def detect_shadow(
             return ShadowResult(SHADOW_DUPLICATE_IDENTICAL, shadow_path)
         return ShadowResult(SHADOW_SHADOWED, shadow_path)
     return ShadowResult(SHADOW_NONE)
+
+
+def render_shadow_warning(result: ShadowResult, host_label: str) -> str | None:
+    """The exact warning text a caller shows for one detect_shadow() result -- the one place
+    this wording lives, so install.sh (via install_support.py's check-shadow, which now
+    prints this rendered text instead of raw status+path for bash to reformat) and `sb
+    install`'s _warn_if_shadowed show identical words for the same result instead of two
+    independently-formatted copies of the same two sentences. Returns None for
+    NONE/DUPLICATE_IDENTICAL, which warn about nothing.
+    """
+    if result.status == SHADOW_SHADOWED:
+        return (
+            f"warning: this install may be shadowed by a higher-precedence, divergent copy at "
+            f"{result.shadowing_path} -- {host_label.split('-')[0]} will likely load that one "
+            "instead"
+        )
+    if result.status == SHADOW_UNKNOWN_PRECEDENCE:
+        return (
+            f"warning: a higher-precedence root at {result.shadowing_path} exists but its "
+            "install manifest could not be read, so it's unknown whether this install is "
+            "shadowed"
+        )
+    return None
