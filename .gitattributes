@@ -1,0 +1,9 @@
+# Wholly machine-derived legacy projection files (see docs/adr/0005-registry-authoring-model.md).
+# Marked generated so GitHub's diff view collapses these mechanical, multi-region hunks by
+# default instead of rendering them like hand-authored changes.
+# NOTE: skills.yaml is intentionally NOT marked here — it mixes generated sections
+# (skills:, contracts.platform.skill_types/skill_permissions, contracts.composition_runtime.skill_types,
+# contracts.composition.skills.<id>) with hand-authored ones (schema_version, manifest_kind, profiles:,
+# the rest of contracts:). Marking the whole file generated would hide genuine hand-edits from review.
+scripts/registry/composition_runtime.yaml linguist-generated=true
+scripts/registry/composition_contracts.yaml linguist-generated=true
