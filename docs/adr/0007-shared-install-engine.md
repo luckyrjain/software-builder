@@ -70,8 +70,11 @@ it was scope discipline for the original porting task, not a standing constraint
   removing a skill (a deliberate divergence `install_engine.py` already carried for `sb
   uninstall`, documented as "arguably safer, not a gap" — ownership classification alone
   still bounds what gets touched). `install.sh` previously did perform that check.
-- **Follow-up:** unify the shadow-warning message *formatting* the same way (tracked
-  separately, not blocking on this ADR).
+- **Resolved (2026-09-18):** the shadow-warning message *formatting* is unified too now --
+  `shadow_detector.render_shadow_warning()` is the one place that wording lives;
+  `install_support.py`'s `check-shadow` prints the rendered line for `install.sh` to relay
+  verbatim (a dumb newline-presence check, not a second copy of which statuses warn), and `sb
+  install`'s `_warn_if_shadowed` calls it directly.
 - **Follow-up:** make lock creation genuinely atomic (e.g. a single `O_CREAT | O_EXCL` file
   write instead of `mkdir` + two `write_text()` calls) instead of relying on staleness
   fallbacks to make a non-atomic window safe. Not done here because the current on-disk lock
