@@ -131,22 +131,36 @@ def _reclaim_stale_lock(lock_dir: Path) -> None:
 
 @contextmanager
 def _sigterm_as_system_exit() -> Iterator[None]:
-    """Converts SIGTERM into a catchable SystemExit for the duration of the block, mirroring
-    install.sh's own `trap on_install_interrupt INT TERM`. Python's default SIGTERM
-    disposition terminates the process immediately, bypassing try/finally -- unlike SIGINT,
-    which Python already converts to a catchable KeyboardInterrupt -- so a supervisor kill or
-    CI timeout sent as SIGTERM would otherwise skip install_skill()'s own
-    (KeyboardInterrupt, SystemExit) cleanup handler entirely. Not registered on Windows, which
-    has no equivalent POSIX signal semantics.
+    """Converts a graceful-terminate signal into a catchable SystemExit for the duration of
+    the block, mirroring install.sh's own `trap on_install_interrupt INT TERM`. Python's
+    default disposition for that signal terminates the process immediately, bypassing
+    try/finally -- unlike SIGINT, which Python already converts to a catchable
+    KeyboardInterrupt -- so a supervisor kill or CI timeout would otherwise skip
+    install_skill()'s own (KeyboardInterrupt, SystemExit) cleanup handler entirely.
+
+    On POSIX this is SIGTERM. On Windows, `os.kill(pid, signal.SIGTERM)` bypasses Python's
+    signal module entirely (CPython calls TerminateProcess() there -- an unconditional kill,
+    same as SIGKILL) -- SIGBREAK (CTRL_BREAK_EVENT) is the signal a process-group supervisor
+    can actually deliver and Python can actually catch, so that's what's registered there
+    instead. Falls through to a no-op if neither is available.
     """
     if sys.platform == "win32":
-        yield
-        return
-    previous_handler = signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(130))
+        sig = getattr(signal, "SIGBREAK", None)
+        if sig is None:
+            yield
+            return
+    else:
+        sig = signal.SIGTERM
+    previous_handler = signal.signal(sig, lambda signum, frame: sys.exit(130))
     try:
         yield
     finally:
-        signal.signal(signal.SIGTERM, previous_handler)
+        # signal.signal() returns None when the previous handler was installed outside
+        # Python's signal module (e.g. by native/embedding-host code) -- there's no handler
+        # value to hand back to signal.signal() in that case, and passing None raises
+        # TypeError, which would mask whatever exception is already propagating through here.
+        if previous_handler is not None:
+            signal.signal(sig, previous_handler)
 
 
 @contextmanager
@@ -430,7 +444,15 @@ def uninstall_skill(
                 return UninstallOutcome(skill_id, skill_dest, "dry_run", f"would remove {skill_dest}")
 
             try:
-                shutil.rmtree(skill_dest)
+                # There's nothing to roll back to here (see the docstring), so this doesn't
+                # change what a SIGTERM mid-rmtree leaves on disk -- but it does give the
+                # process a clean, well-defined exit 130 for it (matching install_skill()'s
+                # convention) instead of whatever raw signal-death code the OS would otherwise
+                # produce, which install.sh's `((status == 130))` check wouldn't recognize.
+                with _sigterm_as_system_exit():
+                    shutil.rmtree(skill_dest)
+            except (KeyboardInterrupt, SystemExit):
+                raise
             except Exception as exc:
                 message = str(exc) if str(exc) else f"{type(exc).__name__} during uninstall"
                 return UninstallOutcome(skill_id, skill_dest, "failed", message)
@@ -521,6 +543,14 @@ def _cli_uninstall(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Outcome messages contain non-ASCII characters (the U+2192 arrow, matching install.sh's
+    # own historical bash `echo` text byte-for-byte -- bash's echo writes raw bytes regardless
+    # of locale, but Python's print() is locale-aware and raises UnicodeEncodeError under a
+    # restrictive locale like LC_ALL=C. Force UTF-8 output so a successful install can't crash
+    # on its own success message and get misreported as failed.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(
         prog="install_engine.py",
         description="Install/uninstall one skill into one destination -- the state machine "
@@ -543,7 +573,19 @@ def main(argv: list[str] | None = None) -> int:
     uninstall_parser.set_defaults(func=_cli_uninstall)
 
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except Exception as exc:
+        # A catch-all clean-failure net: install_skill()/uninstall_skill() already convert
+        # their own realistic failures into a clean InstallOutcome/UninstallOutcome, but a
+        # few things run before either is even called (_lock_timing_from_env() reading a
+        # malformed, non-empty LOCK_WAIT_TIMEOUT_SECONDS/LOCK_STALE_SECONDS, for example) --
+        # this must not surface as a raw traceback. Returns 1, not a new exit code, so
+        # install.sh's existing {0, 1, 130} handling doesn't need to learn a fourth case.
+        # Doesn't catch KeyboardInterrupt/SystemExit (both are BaseException, not Exception);
+        # args.func's own handlers already cover those.
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

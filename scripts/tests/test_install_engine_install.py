@@ -5,6 +5,8 @@ scripts/tests/test_install_concurrency.py already lock in for install.sh."""
 from __future__ import annotations
 
 import json
+import os
+import signal
 import subprocess
 import sys
 import time
@@ -188,6 +190,46 @@ def test_keyboard_interrupt_during_staging_propagates_after_cleanup(
     assert not list(dest_root.glob(".demo-skill.lock*"))
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="os.kill(pid, SIGTERM) bypasses Python's signal module on Windows")
+def test_sigterm_during_staging_runs_cleanup_and_exits_130(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A real SIGTERM (not KeyboardInterrupt) delivered mid-staging must run the same cleanup
+    as the KeyboardInterrupt test above -- install.sh's deleted bash trap used to handle both
+    INT and TERM identically, and _sigterm_as_system_exit() is what restores that parity.
+    Delivers a genuine OS signal via os.kill (not a direct `raise`), so this actually exercises
+    signal registration/delivery/restoration, not just the exception-handling shape."""
+    repo = _minimal_repo(tmp_path)
+    dest_root = tmp_path / "dest"
+    original_handler = signal.getsignal(signal.SIGTERM)
+
+    seen_stage_dirs: list[Path] = []
+
+    def _send_sigterm(stage_dir: Path, **_kwargs: object) -> list[str]:
+        seen_stage_dirs.append(stage_dir)
+        os.kill(os.getpid(), signal.SIGTERM)
+        # Give the signal a chance to be delivered (checked between bytecode instructions)
+        # before this fake validate_tree would otherwise return normally.
+        time.sleep(1)
+        return []  # pragma: no cover -- unreachable if the signal was delivered as expected
+
+    monkeypatch.setattr(install_engine, "validate_tree", _send_sigterm)
+
+    try:
+        with pytest.raises(SystemExit) as exc_info:
+            install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor")
+
+        assert exc_info.value.code == 130
+        assert seen_stage_dirs, "validate_tree was never reached"
+        assert not seen_stage_dirs[0].exists()
+        assert not (dest_root / "demo-skill").exists()
+        assert not list(dest_root.glob(".demo-skill.lock*"))
+        # the handler installed for the duration of the staged section must be restored
+        assert signal.getsignal(signal.SIGTERM) == original_handler
+    finally:
+        signal.signal(signal.SIGTERM, original_handler)
+
+
 def test_live_held_lock_yields_a_failed_outcome_instead_of_raising(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -241,3 +283,36 @@ def test_symlinked_destination_is_refused(tmp_path: Path) -> None:
 
     assert outcome.status == "failed"
     assert "symlink" in outcome.message.lower()
+
+
+def test_dry_run_fails_when_skill_source_is_missing(tmp_path: Path) -> None:
+    """install_skill()'s dry-run path only checks registry membership and destination
+    ownership before this fix -- it never called package_skill(), so a stale/deleted
+    skills.yaml `path:` entry would report "would install" success for a skill that could
+    never actually install. The dry-run check must catch the same thing a real install would
+    fail on."""
+    repo = _minimal_repo(tmp_path)
+    (repo / "demo-skill" / "SKILL.md").unlink()
+    dest_root = tmp_path / "dest"
+
+    outcome = install_skill(
+        "demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor", dry_run=True
+    )
+
+    assert outcome.status == "failed"
+    assert "skill not found" in outcome.message
+    assert not (dest_root / "demo-skill").exists()
+
+
+def test_malformed_skills_yaml_yields_a_failed_outcome_not_a_traceback(tmp_path: Path) -> None:
+    """registry_skill_ids()/classify_install_destination() used to sit outside any try/except
+    at the top of install_skill() -- a malformed skills.yaml raised straight through install_skill()
+    as an uncaught yaml.YAMLError instead of a clean InstallOutcome(status="failed", ...)."""
+    repo = _minimal_repo(tmp_path)
+    (repo / "skills.yaml").write_text("skills:\n  demo-skill: [unterminated\n", encoding="utf-8")
+    dest_root = tmp_path / "dest"
+
+    outcome = install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor")
+
+    assert outcome.status == "failed"
+    assert outcome.message

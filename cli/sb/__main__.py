@@ -216,6 +216,13 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # install_skill()/uninstall_skill() outcome messages contain a non-ASCII arrow (U+2192,
+    # matching install.sh's own historical text byte-for-byte); Python's print() is
+    # locale-aware and can raise UnicodeEncodeError under a restrictive locale (LC_ALL=C),
+    # crashing after a successful install and getting it reported as failed.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(prog="sb")
     parser.add_argument(
         "--version", action="version", version=f"sb {_package_version()}"
