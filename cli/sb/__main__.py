@@ -8,6 +8,7 @@ import sys
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _installed_version
 from pathlib import Path
+from typing import Any, Callable
 
 from sb._paths import registry_snapshot_root, vendored_scripts_root
 
@@ -95,6 +96,50 @@ def _warn_if_shadowed(
         )
 
 
+def _run_batch(
+    skill_ids: list[str],
+    destinations: list[tuple[Path, str]],
+    operation: Callable[[str, Path, str], Any],
+    *,
+    dry_run: bool,
+    verb: str,
+    past_tense: str,
+    success_status: str,
+    extra_ok_statuses: frozenset[str] = frozenset(),
+    on_success: Callable[[str, Any], None] | None = None,
+) -> int:
+    """Runs `operation` over every (skill_id, destination) pair, tallies outcomes by status,
+    and prints a summary when there's more than one pair -- the resolve/loop/tally/summarize
+    shape `_cmd_install`/`_cmd_uninstall` used to each reimplement independently, differing
+    only in the engine call, the success-status label, and install's extra shadow-warning
+    hook (now `on_success`).
+    """
+    succeeded = failed = dry_run_count = 0
+    for skill_id in skill_ids:
+        for dest_root, host_label in destinations:
+            outcome = operation(skill_id, dest_root, host_label)
+            print(outcome.message)
+            if outcome.status == "failed":
+                failed += 1
+            elif outcome.status == success_status:
+                succeeded += 1
+                if on_success is not None:
+                    on_success(host_label, outcome)
+            elif outcome.status == "dry_run":
+                dry_run_count += 1
+            elif outcome.status not in extra_ok_statuses:
+                # Fail loud, not silently-undercount: install_engine.py's own CLI presentation
+                # (_PRESENTATION) enumerates the same status values independently -- a status
+                # added there without a matching branch here must not pass silently.
+                raise AssertionError(f"unhandled {verb} outcome status: {outcome.status!r}")
+    if len(skill_ids) * len(destinations) > 1:
+        if dry_run:
+            print(f"would {verb}: {dry_run_count}, failed: {failed}", file=sys.stderr)
+        else:
+            print(f"{past_tense}: {succeeded}, failed: {failed}", file=sys.stderr)
+    return 1 if failed else 0
+
+
 def _cmd_install(args: argparse.Namespace) -> int:
     try:
         host_registry, destinations = _resolve_destinations(args.host, args.target_dir)
@@ -102,35 +147,28 @@ def _cmd_install(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    installed = failed = dry_run = 0
-    for skill_id in args.skill_ids:
-        for dest_root, host_label in destinations:
-            outcome = install_skill(
-                skill_id,
-                repo_root=registry_snapshot_root(),
-                dest_root=dest_root,
-                host_label=host_label,
-                dry_run=args.dry_run,
-            )
-            print(outcome.message)
-            if outcome.status == "failed":
-                failed += 1
-            elif outcome.status == "installed":
-                installed += 1
-                _warn_if_shadowed(host_registry, host_label, outcome.dest, target_dir=args.target_dir)
-            elif outcome.status == "dry_run":
-                dry_run += 1
-            else:
-                # Fail loud, not silently-undercount: install_engine.py's own CLI presentation
-                # (_PRESENTATION) enumerates the same InstallOutcome.status values independently
-                # -- a status added there without a matching branch here must not pass silently.
-                raise AssertionError(f"unhandled install outcome status: {outcome.status!r}")
-    if len(args.skill_ids) * len(destinations) > 1:
-        if args.dry_run:
-            print(f"would install: {dry_run}, failed: {failed}", file=sys.stderr)
-        else:
-            print(f"installed: {installed}, failed: {failed}", file=sys.stderr)
-    return 1 if failed else 0
+    def _install_one(skill_id: str, dest_root: Path, host_label: str) -> Any:
+        return install_skill(
+            skill_id,
+            repo_root=registry_snapshot_root(),
+            dest_root=dest_root,
+            host_label=host_label,
+            dry_run=args.dry_run,
+        )
+
+    def _on_installed(host_label: str, outcome: Any) -> None:
+        _warn_if_shadowed(host_registry, host_label, outcome.dest, target_dir=args.target_dir)
+
+    return _run_batch(
+        args.skill_ids,
+        destinations,
+        _install_one,
+        dry_run=args.dry_run,
+        verb="install",
+        past_tense="installed",
+        success_status="installed",
+        on_success=_on_installed,
+    )
 
 
 def _cmd_uninstall(args: argparse.Namespace) -> int:
@@ -140,27 +178,19 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    uninstalled = failed = dry_run = 0
-    for skill_id in args.skill_ids:
-        for dest_root, _host_label in destinations:
-            outcome = uninstall_skill(skill_id, dest_root=dest_root, dry_run=args.dry_run)
-            print(outcome.message)
-            if outcome.status == "failed":
-                failed += 1
-            elif outcome.status == "uninstalled":
-                uninstalled += 1
-            elif outcome.status == "dry_run":
-                dry_run += 1
-            elif outcome.status != "absent":
-                # Fail loud, not silently-undercount -- see the matching branch in _cmd_install.
-                # "absent" is a valid, intentionally-untallied status (a no-op uninstall).
-                raise AssertionError(f"unhandled uninstall outcome status: {outcome.status!r}")
-    if len(args.skill_ids) * len(destinations) > 1:
-        if args.dry_run:
-            print(f"would uninstall: {dry_run}, failed: {failed}", file=sys.stderr)
-        else:
-            print(f"uninstalled: {uninstalled}, failed: {failed}", file=sys.stderr)
-    return 1 if failed else 0
+    def _uninstall_one(skill_id: str, dest_root: Path, _host_label: str) -> Any:
+        return uninstall_skill(skill_id, dest_root=dest_root, dry_run=args.dry_run)
+
+    return _run_batch(
+        args.skill_ids,
+        destinations,
+        _uninstall_one,
+        dry_run=args.dry_run,
+        verb="uninstall",
+        past_tense="uninstalled",
+        success_status="uninstalled",
+        extra_ok_statuses=frozenset({"absent"}),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
