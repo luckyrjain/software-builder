@@ -78,3 +78,18 @@ it was scope discipline for the original porting task, not a standing constraint
   format (`.{skill}.lock/pid`, `.{skill}.lock/acquired_at` as separate files) is directly
   inspected by `scripts/tests/test_install_concurrency.py` and
   `test_install_engine_locking.py`; a format change needs its own pass.
+- **Follow-up:** `_sigterm_as_system_exit()` only protects the primary staged/mutating work
+  (`install_skill()`'s stage/backup/replace, `uninstall_skill()`'s `rmtree`) — the cleanup
+  code that runs *after* a SIGTERM is caught (`_cleanup_failed_install()`'s rollback,
+  `held_lock()`'s own `finally: shutil.rmtree(lock_dir, ...)`) runs with the handler already
+  restored to its original disposition, since the `with` block that registered it has already
+  exited by the time that cleanup code runs. A second SIGTERM landing during that narrow
+  window terminates the process immediately, with no further cleanup. `held_lock()`'s own
+  cleanup is self-healing (a stale/partial lock directory is reclaimed by the next waiter
+  regardless of why it was abandoned), but `_cleanup_failed_install()`'s rollback is not — no
+  code anywhere sweeps an orphaned `.{skill}.staging.*`/`.{skill}.backup.*` directory left
+  behind by a kill mid-rollback. Narrow (requires two closely-timed signals) and not
+  introduced by this PR (the equivalent gap existed for `install.sh`'s own bash trap, scoped
+  to a single INT/TERM handler with the same "already unwound" limitation), so not fixed
+  here rather than layer more re-entrant signal-handling complexity on top of what's already
+  fallback-on-fallback logic (see the follow-up above).

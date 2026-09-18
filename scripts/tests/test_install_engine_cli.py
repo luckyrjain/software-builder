@@ -45,6 +45,16 @@ def test_env_float_parses_a_real_value(monkeypatch: pytest.MonkeyPatch) -> None:
     assert _env_float("LOCK_WAIT_TIMEOUT_SECONDS", 30.0) == 7.5
 
 
+def test_env_float_raises_on_a_non_empty_non_numeric_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unlike the empty-string case, a genuinely garbled value (not unset, not empty) is not
+    silently defaulted -- bash's own `((age > LOCK_STALE_SECONDS))` would fail on it too, just
+    with a different error shape. This is only indirectly covered by the main()-level
+    catch-all test below; this asserts _env_float's own behavior directly."""
+    monkeypatch.setenv("LOCK_WAIT_TIMEOUT_SECONDS", "not-a-number")
+    with pytest.raises(ValueError):
+        _env_float("LOCK_WAIT_TIMEOUT_SECONDS", 30.0)
+
+
 def test_lock_timing_from_env_uses_defaults_when_both_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LOCK_WAIT_TIMEOUT_SECONDS", raising=False)
     monkeypatch.delenv("LOCK_STALE_SECONDS", raising=False)
@@ -131,3 +141,25 @@ def test_sigterm_as_system_exit_restores_the_previous_handler_even_on_exception(
         assert signal.getsignal(signal.SIGTERM) == original_handler
     finally:
         signal.signal(signal.SIGTERM, original_handler)
+
+
+def test_sigterm_as_system_exit_skips_restore_when_previous_handler_was_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """signal.signal() returns None when the previous handler was installed outside Python's
+    signal module (e.g. native/embedding-host code) -- passing that back to signal.signal()
+    raises TypeError, which would mask whatever exception is already propagating through the
+    `finally`. Simulate that case by faking the registration call to report no previous
+    handler, and confirm no second (restoring) call is attempted."""
+    calls: list[object] = []
+
+    def fake_signal(sig: int, handler: object) -> None:
+        calls.append(handler)
+        return None  # simulate: no Python-tracked previous handler to report back
+
+    monkeypatch.setattr(install_engine.signal, "signal", fake_signal)
+
+    with install_engine._sigterm_as_system_exit():
+        pass
+
+    assert len(calls) == 1  # only the registration call; the restore was correctly skipped

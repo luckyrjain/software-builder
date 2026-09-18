@@ -68,9 +68,11 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 - `cli/sb/__main__.py`'s install/uninstall status tallies now raise loudly on an
   unrecognized outcome status instead of silently undercounting.
 - Added regression tests for all of the above (previously verified only by manual
-  reproduction) — real `SIGTERM` delivery to a subprocess, dry-run against a broken skill
-  source, malformed `skills.yaml`, empty/garbled lock-timing env vars, and the
-  mid-setup-lock-directory staleness window.
+  reproduction) — real OS-level `SIGTERM` delivery via `os.kill()` (not a mocked/direct-raise
+  substitute), dry-run against a broken skill source, malformed `skills.yaml`, empty/garbled
+  lock-timing env vars, the mid-setup-lock-directory staleness window, and the specific
+  double-failure case (`acquired_at` and the mtime fallback both unreadable) the restored
+  staleness-safety-direction fix actually depends on.
 
 ### `install.sh` delegates locking/rollback to `scripts/install_engine.py` (2026-09-18)
 
