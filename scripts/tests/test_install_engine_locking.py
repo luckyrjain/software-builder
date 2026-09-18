@@ -213,7 +213,7 @@ def test_lock_dir_with_no_pid_file_is_reclaimed_once_its_own_mtime_is_stale(tmp_
     sys.platform == "win32", reason="os.kill(pid, SIGTERM) bypasses Python's signal module on Windows"
 )
 def test_sigterm_during_held_lock_release_is_deferred_until_release_completes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, signal_sentinels: object
 ) -> None:
     """held_lock()'s own `finally: shutil.rmtree(lock_dir, ...)` runs after the caller's
     guarded body has already returned or raised -- outside any `with

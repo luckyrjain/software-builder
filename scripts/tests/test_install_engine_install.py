@@ -320,7 +320,7 @@ def test_malformed_skills_yaml_yields_a_failed_outcome_not_a_traceback(tmp_path:
 
 @pytest.mark.skipif(sys.platform == "win32", reason="os.kill(pid, SIGTERM) bypasses Python's signal module on Windows")
 def test_sigterm_during_cleanup_failed_install_is_deferred_until_rollback_completes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, signal_sentinels: object
 ) -> None:
     """_cleanup_failed_install() runs from install_skill()'s `except` handlers, after the
     `with _sigterm_as_system_exit()` block that wrapped the primary staged work has already
@@ -358,3 +358,113 @@ def test_sigterm_during_cleanup_failed_install_is_deferred_until_rollback_comple
         assert signal.getsignal(signal.SIGTERM) == original_handler
     finally:
         signal.signal(signal.SIGTERM, original_handler)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="os.kill(pid, SIGTERM) bypasses Python's signal module on Windows")
+def test_sigterm_mid_rollback_still_restores_the_backed_up_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, signal_sentinels: object
+) -> None:
+    """The restore branch -- moving the previous install back out of the backup directory -- is
+    what actually protects a user's existing install. A signal landing at the start of the
+    rollback (on the staging-directory removal that runs first) must not skip it: the previous
+    install has to come back, and only then does the process exit 130."""
+    stage_dir = tmp_path / ".demo-skill.staging.abc123"
+    stage_dir.mkdir()
+    backup_dir = tmp_path / ".demo-skill.backup.abc123"
+    (backup_dir / "skill").mkdir(parents=True)
+    (backup_dir / "skill" / "SKILL.md").write_text("previous", encoding="utf-8")
+    skill_dest = tmp_path / "demo-skill"  # absent: it was moved aside into the backup
+
+    real_rmtree = install_engine.shutil.rmtree
+    fired = False
+
+    def _send_sigterm_once(path: object, *args: object, **kwargs: object) -> None:
+        nonlocal fired
+        if not fired and Path(path) == stage_dir:
+            fired = True
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.2)
+        real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(install_engine.shutil, "rmtree", _send_sigterm_once)
+
+    with pytest.raises(SystemExit) as exc_info:
+        install_engine._cleanup_failed_install(stage_dir, backup_dir, skill_dest)
+
+    assert exc_info.value.code == 130
+    assert not stage_dir.exists()
+    assert (skill_dest / "SKILL.md").read_text(encoding="utf-8") == "previous"
+    assert not backup_dir.exists()
+
+
+def test_an_interrupt_is_not_swallowed_when_its_own_cleanup_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A rollback that itself raises OSError used to escape the interrupt handler, land in the
+    outer `except (LockTimeoutError, OSError)`, and come back as an ordinary "failed"
+    InstallOutcome -- so `sb install a b c` carried on to the next skill after being told to
+    stop. The interrupt must still propagate; the cleanup failure is reported, not fatal."""
+    repo = _minimal_repo(tmp_path)
+    dest_root = tmp_path / "dest"
+
+    def _interrupt(stage_dir: Path, **_kwargs: object) -> list[str]:
+        raise KeyboardInterrupt
+
+    def _failing_cleanup(*_args: object, **_kwargs: object) -> None:
+        raise OSError(5, "simulated I/O error during rollback")
+
+    monkeypatch.setattr(install_engine, "validate_tree", _interrupt)
+    monkeypatch.setattr(install_engine, "_cleanup_failed_install", _failing_cleanup)
+
+    with pytest.raises(KeyboardInterrupt):
+        install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor")
+
+    assert "cleanup after interrupt failed" in capsys.readouterr().err
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="os.kill(pid, SIGTERM) bypasses Python's signal module on Windows")
+def test_sigterm_during_the_backup_failure_cleanup_leaves_the_existing_install_intact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, signal_sentinels: object
+) -> None:
+    """The dedicated backup-failure call site: `_cleanup_failed_install()` runs from *inside*
+    the outer `with _sigterm_as_system_exit()` block (so its deferral nests), and the
+    SystemExit it raises is then caught by that block's own handler, which runs the rollback a
+    second time. That second run must be a harmless no-op on the already-cleaned directories --
+    and the install that was there beforehand must be exactly as it was."""
+    repo = _minimal_repo(tmp_path)
+    dest_root = tmp_path / "dest"
+    existing = dest_root / "demo-skill"
+    existing.mkdir(parents=True)
+    (existing / "SKILL.md").write_text("# Previous good install\n", encoding="utf-8")
+    (existing / ".software-builder-manifest.json").write_text(
+        json.dumps({"manifest_version": 1, "skill": "demo-skill", "files": {}}), encoding="utf-8"
+    )
+
+    real_replace = os.replace
+    real_rmtree = install_engine.shutil.rmtree
+    fired = False
+
+    def _failing_backup_replace(src: object, dst: object) -> None:
+        if Path(src) == existing:  # the move-aside-into-backup step
+            raise OSError(5, "simulated backup failure")
+        return real_replace(src, dst)
+
+    def _send_sigterm_once(path: object, *args: object, **kwargs: object) -> None:
+        nonlocal fired
+        if not fired and ".demo-skill.staging." in str(path):
+            fired = True
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.2)
+        real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(install_engine.os, "replace", _failing_backup_replace)
+    monkeypatch.setattr(install_engine.shutil, "rmtree", _send_sigterm_once)
+
+    with pytest.raises(SystemExit) as exc_info:
+        install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor")
+
+    assert exc_info.value.code == 130
+    assert (existing / "SKILL.md").read_text(encoding="utf-8") == "# Previous good install\n"
+    assert not list(dest_root.glob(".demo-skill.staging.*"))
+    assert not list(dest_root.glob(".demo-skill.backup.*"))
+    assert not list(dest_root.glob(".demo-skill.lock*"))

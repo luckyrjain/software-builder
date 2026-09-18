@@ -43,18 +43,30 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
-### A second SIGTERM during cleanup no longer abandons it (2026-09-18)
+### Interrupts during cleanup no longer abandon it; signals to `install.sh` reach the engine (2026-09-18)
 
-- `_cleanup_failed_install()`'s rollback and `held_lock()`'s own lock-directory removal ran
-  after the `with _sigterm_as_system_exit()` block that protects the primary work had already
-  exited, so a second, closely-timed SIGTERM terminated the process mid-cleanup -- and unlike
-  a stale lock, an orphaned `.{skill}.staging.*`/`.{skill}.backup.*` directory is never swept
-  later. Both now run under a new `_defer_sigterm()`: the signal is recorded, the cleanup runs
-  to completion, and only then does the process exit 130.
-- Deliberately deferred rather than converted to `SystemExit` like the primary work's signal:
-  a first attempt converted it, which made the exit code clean but still interrupted the
-  rollback partway. The new tests assert the cleanup actually *completed* (directory gone), not
-  just the exit code -- and were confirmed to fail against that convert-style version.
+- `_cleanup_failed_install()`'s rollback and `held_lock()`'s own lock-directory removal ran after
+  the `with _sigterm_as_system_exit()` block protecting the primary work had exited, so a second,
+  closely-timed signal terminated the process mid-cleanup -- and unlike a stale lock, an orphaned
+  `.{skill}.staging.*`/`.{skill}.backup.*` directory is never swept later (a cut-short rollback can
+  also leave the user's previous install stranded in the backup). Both now run under a new
+  `_defer_interrupts()`: the signal is recorded, the cleanup runs to completion, then the process
+  exits 130. Deferred rather than converted to `SystemExit` -- a first attempt converted it, which
+  made the exit code clean but still interrupted the rollback partway.
+- SIGINT (Ctrl-C) is deferred too, not just SIGTERM. A recorded signal is never dropped: it is
+  raised after the block even if the rollback itself raised, so a failed rollback can't let
+  `sb install a b c` carry on after being told to stop; `install_skill()`'s interrupt handler now
+  treats cleanup as best-effort (warning on failure) for the same reason.
+- Both signal context managers are no-ops off the main thread instead of raising `ValueError`
+  (a direct `held_lock()` user on a worker thread crashed and stranded the lock).
+- `kill <install.sh pid>` -- the usual way a supervisor stops it -- never reached the engine: bash
+  died at once and the engine was orphaned, finished the install anyway, and left the lock and
+  staging directory behind if later killed hard. `install.sh` now runs the engine as a child it
+  traps TERM/INT for and forwards them to (`run_engine()`), waiting for the engine's own exit status.
+- Tests assert the cleanup actually *completed* (not just exit 130), use a sentinel signal handler so
+  a regression fails one test instead of SIGTERM-killing the pytest process, and each new one was
+  confirmed to fail against the specific fix it guards -- including a real end-to-end test that
+  signals `install.sh`'s PID alone and fails against the old script.
 - Closes the last open follow-up in [ADR 0007](docs/adr/0007-shared-install-engine.md).
 
 ### `held_lock()`'s lock acquisition is now genuinely atomic (2026-09-18)

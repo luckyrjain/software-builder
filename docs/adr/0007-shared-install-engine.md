@@ -110,22 +110,44 @@ it was scope discipline for the original porting task, not a standing constraint
   the exception's own `errno`) could re-raise an ordinary, already-resolved contention
   failure as a hard error if the contender finished releasing in the gap — closed by
   classifying on `errno` (`ENOTEMPTY`/`EEXIST`) instead, which has no such gap.
-- **Resolved (2026-09-18):** a second SIGTERM during cleanup no longer abandons it.
-  `_sigterm_as_system_exit()` only protects the primary staged/mutating work, and the cleanup
-  that runs *after* a signal is caught (`_cleanup_failed_install()`'s rollback, `held_lock()`'s
-  own `finally: shutil.rmtree(lock_dir, ...)`) runs after the `with` block that registered it
-  has already exited -- so a second, closely-timed signal used to terminate the process
-  mid-cleanup. `held_lock()`'s own release is self-healing (a stale/partial lock is reclaimed
-  by the next waiter), but `_cleanup_failed_install()`'s rollback is not: nothing sweeps an
-  orphaned `.{skill}.staging.*`/`.{skill}.backup.*` directory left by a kill mid-rollback.
-  Both now run under a new `_defer_sigterm()`: a signal arriving during the block is recorded,
-  the cleanup runs to completion, and only then does the process exit 130. Deliberately
-  *deferred*, not converted to `SystemExit` the way the primary work's signal is -- a first
-  attempt did convert it, which made the exit code clean but still interrupted the rollback
-  itself partway, leaving exactly the orphan it exists to prevent. The tests assert the
-  cleanup actually *completed* (directory gone), not just the exit code, and were checked
-  against that weaker convert-style version to confirm they'd have failed on it. Residual:
-  a signal that can't be caught at all (SIGKILL, power loss) still can, and a hard kill
-  between `_acquire_lock_dir()`'s temp-directory creation and its rename can still orphan
-  that temp directory -- nothing short of an external sweeper addresses those, and they're
-  the same accepted gap `install_skill()`'s staging/backup directories always had.
+- **Resolved (2026-09-18):** an interrupt during cleanup no longer abandons it, and a signal
+  aimed at `install.sh` itself now reaches the engine. `_sigterm_as_system_exit()` only
+  protects the primary staged/mutating work; the cleanup that runs *after* a signal is caught
+  (`_cleanup_failed_install()`'s rollback, `held_lock()`'s own `finally: shutil.rmtree(...)`)
+  runs after the `with` block that registered it has exited, so a second, closely-timed signal
+  used to terminate the process mid-cleanup. `held_lock()`'s release is self-healing (the next
+  waiter reclaims a stale/partial lock), but the rollback is not: nothing sweeps an orphaned
+  `.{skill}.staging.*`/`.{skill}.backup.*` directory, and a rollback cut short can leave the
+  user's previous install sitting in the backup with nothing at the destination. Both now run
+  under `_defer_interrupts()`: SIGINT or the terminate signal arriving during the block is
+  recorded, the cleanup runs to completion, and only then does the process exit 130.
+  - *Deferred, not converted to `SystemExit`.* A first attempt converted it: cleaner exit code,
+    but the rollback was still interrupted partway. Its tests only asserted the exit code, so
+    they passed anyway; the tests now assert the cleanup actually *completed* and were checked
+    against that weaker version.
+  - *SIGINT is deferred too.* An interactive Ctrl-C mid-rollback is at least as likely as a
+    supervisor's SIGTERM, and Python's default would raise `KeyboardInterrupt` straight through
+    it (reproduced: exit 130, staging left behind, previous install displaced into the backup).
+  - *A recorded signal is never lost.* It is raised after the block whether the block returned
+    or raised (superseding, and chained to, the in-flight exception). An earlier version dropped
+    it when the rollback itself failed, so `sb install a b c` carried on after being told to
+    stop. The interrupt handler in `install_skill()` likewise treats cleanup as best-effort
+    (warns on failure) so a failed rollback can't convert the interrupt into a "failed" outcome.
+  - *Main thread only.* `signal.signal()` raises `ValueError` elsewhere, so both context
+    managers are no-ops off the main thread; a direct `held_lock()` user on a worker thread got
+    a crash and a stranded lock without that.
+  - *Through `install.sh`.* `kill <install.sh pid>` -- the usual way a supervisor stops it --
+    never reached the engine: bash died at once and the engine was orphaned to init, finished
+    the install anyway, and left the lock/staging behind if later killed hard. `install.sh` now
+    runs the engine via `run_engine()`: a background child with TERM/INT trapped and forwarded,
+    waiting for the engine's *own* exit status. Ctrl-C arrives as that forwarded TERM (an async
+    child of a non-interactive shell has SIGINT ignored). Verified end to end by signalling the
+    bash PID alone, and against the old script to confirm the test fails on it.
+  - *Residual.* Signals that cannot be caught (SIGKILL, power loss), including SIGKILL of the
+    `install.sh` process itself (which orphans the engine, as before), are unaddressed -- nothing
+    short of an external sweeper handles them. A hard kill between `_acquire_lock_dir()`'s
+    temp-directory creation and its rename can still orphan that temp directory, the same
+    accepted gap `install_skill()`'s staging/backup directories always had. A deferred signal
+    arriving during a *successful* install's lock release exits 130 with the skill installed
+    and the "Installed" line unprinted -- the process was told to stop and did, but the exit
+    code doesn't distinguish that from an interrupted install.
