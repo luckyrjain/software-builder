@@ -75,12 +75,27 @@ it was scope discipline for the original porting task, not a standing constraint
   `install_support.py`'s `check-shadow` prints the rendered line for `install.sh` to relay
   verbatim (a dumb newline-presence check, not a second copy of which statuses warn), and `sb
   install`'s `_warn_if_shadowed` calls it directly.
-- **Follow-up:** make lock creation genuinely atomic (e.g. a single `O_CREAT | O_EXCL` file
-  write instead of `mkdir` + two `write_text()` calls) instead of relying on staleness
-  fallbacks to make a non-atomic window safe. Not done here because the current on-disk lock
-  format (`.{skill}.lock/pid`, `.{skill}.lock/acquired_at` as separate files) is directly
-  inspected by `scripts/tests/test_install_concurrency.py` and
-  `test_install_engine_locking.py`; a format change needs its own pass.
+- **Resolved (2026-09-18):** lock creation is genuinely atomic now, without a format change.
+  `_acquire_lock_dir()` builds a temp directory (same filesystem as `dest_root`, fully
+  populated with `pid`/`acquired_at`) and `os.rename()`s it into place as `lock_dir` in one
+  step -- a waiter's rename attempt fails exactly when a bare `os.mkdir(lock_dir)` used to
+  fail, but now `lock_dir` is never visible at its canonical path before it's fully
+  populated, closing the window the three prior staleness-fallback layers existed to
+  tolerate. The on-disk format (`.{skill}.lock/pid`, `.{skill}.lock/acquired_at` as separate
+  files) is unchanged, so `scripts/tests/test_install_concurrency.py` and
+  `test_install_engine_locking.py` needed no format migration -- only two tests whose premise
+  was specifically the now-closed mid-setup window (one rewritten to cover the new "an empty
+  leftover lock dir is claimed directly, not waited on" behavior; the staleness-fallback
+  tests still exercise real gaps, now via a non-empty-but-identity-less directory rather than
+  a bare one, since a directory rename's failure semantics differ from a plain `mkdir`'s: an
+  empty destination is silently replaced, matching "already vacated," so those tests were
+  adjusted to stay non-empty). One residual, accepted risk: `_acquire_lock_dir()`'s own temp
+  directory (`.{skill}.lock.tmp.*`) can be orphaned under a hard kill (SIGKILL, power loss)
+  between its creation and the rename that either publishes or discards it -- nothing sweeps
+  a stray one later, the same accepted gap `install_skill()`'s
+  `.{skill}.staging.*`/`.{skill}.backup.*` directories already have under an equivalent
+  window (see the SIGTERM follow-up below, which covers the narrower, closely-related case of
+  a *second* signal during cleanup).
 - **Follow-up:** `_sigterm_as_system_exit()` only protects the primary staged/mutating work
   (`install_skill()`'s stage/backup/replace, `uninstall_skill()`'s `rmtree`) — the cleanup
   code that runs *after* a SIGTERM is caught (`_cleanup_failed_install()`'s rollback,

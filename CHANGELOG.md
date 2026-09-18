@@ -43,6 +43,22 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### `held_lock()`'s lock acquisition is now genuinely atomic (2026-09-18)
+
+- `scripts/install_engine.py`'s `held_lock()` used to claim a lock via a bare `os.mkdir()`
+  followed by two separate `write_text()` calls -- a window where a waiter could observe an
+  existing-but-identity-less lock directory, which had already needed three successive rounds
+  of staleness-fallback fixes to tolerate safely. New `_acquire_lock_dir()` builds a
+  fully-populated temp directory first and `os.rename()`s it into place in one atomic step,
+  so `lock_dir` is never visible before it's complete. The on-disk format
+  (`.{skill}.lock/pid`, `.{skill}.lock/acquired_at`) is unchanged, so this needed no test
+  migration beyond the two tests whose premise was specifically the now-closed window. See
+  [ADR 0007](docs/adr/0007-shared-install-engine.md)'s Consequences section for the one
+  residual, accepted risk (an orphaned temp directory under a hard kill, matching an existing
+  accepted gap elsewhere in the same module) and how the affected tests were adjusted.
+- Verified: 4722 `scripts/tests` + 39 `cli/tests` unchanged, the real 4-process concurrent
+  install test (`test_install_concurrency.py`) re-run 5x clean, ruff clean.
+
 ### Code-review fixes on the shared install engine (2026-09-18)
 
 - SIGTERM during `install`/`uninstall` now runs the same cleanup as SIGINT: a new
