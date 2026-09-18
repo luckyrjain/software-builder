@@ -19,6 +19,7 @@ instead of keeping its own bash port of the state machine.
 from __future__ import annotations
 
 import argparse
+import errno
 import os
 import shutil
 import signal
@@ -114,6 +115,9 @@ def _read_lock_age(lock_dir: Path) -> float | None:
     return time.time() - acquired_at
 
 
+_RENAME_DESTINATION_TAKEN = frozenset({errno.ENOTEMPTY, errno.EEXIST})
+
+
 def _acquire_lock_dir(dest_root: Path, lock_dir: Path) -> bool:
     """Atomically create `lock_dir` already fully populated with `pid`/`acquired_at`: build a
     temp directory on the same filesystem as `dest_root` (so the rename below is a same-fs
@@ -126,20 +130,25 @@ def _acquire_lock_dir(dest_root: Path, lock_dir: Path) -> bool:
     tolerate safely (see its docstring history).
 
     Returns True if this call won (`lock_dir` now exists, fully populated, owned by this
-    process); False if `lock_dir` already exists (whoever's there might be live or stale --
-    the caller's own staleness logic decides). A genuine failure building the temp directory
-    itself (permission denied, disk full) is not mistaken for "someone else has it": if
-    `lock_dir` still doesn't exist after the failure, it's re-raised, matching `os.mkdir`'s
-    old contract where any non-FileExistsError OSError propagated uncaught.
+    process); False if `lock_dir` was already occupied when the rename ran (whoever's there
+    might be live or stale -- the caller's own staleness logic decides). Any other failure
+    (permission denied, disk full, building the temp directory itself) is re-raised, matching
+    `os.mkdir`'s old contract where any non-FileExistsError OSError propagated uncaught.
+
+    Classified by `exc.errno`, not by re-checking `lock_dir.exists()` afterward: that check
+    would be racy -- the contending holder can finish releasing (its own `held_lock()`
+    `finally: shutil.rmtree(lock_dir, ...)`) in the gap between this rename failing and that
+    check running, making an ordinary, already-resolved contention failure look like a real,
+    unrelated error (and, in principle, the reverse).
     """
     temp_dir = Path(tempfile.mkdtemp(dir=dest_root, prefix=f"{lock_dir.name}.tmp."))
     try:
         (temp_dir / "pid").write_text(str(os.getpid()), encoding="utf-8")
         (temp_dir / "acquired_at").write_text(str(time.time()), encoding="utf-8")
         os.rename(temp_dir, lock_dir)
-    except OSError:
+    except OSError as exc:
         shutil.rmtree(temp_dir, ignore_errors=True)
-        if not lock_dir.exists():
+        if exc.errno not in _RENAME_DESTINATION_TAKEN:
             raise
         return False
     return True

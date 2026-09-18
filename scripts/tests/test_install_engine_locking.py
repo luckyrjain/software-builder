@@ -4,7 +4,9 @@ scenarios scripts/tests/test_install_concurrency.py already locks in for the bas
 
 from __future__ import annotations
 
+import errno
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -13,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from scripts import install_engine
-from scripts.install_engine import LockTimeoutError, held_lock
+from scripts.install_engine import LockTimeoutError, _acquire_lock_dir, held_lock
 
 
 def test_stale_lock_from_a_dead_pid_is_reclaimed_immediately(tmp_path: Path) -> None:
@@ -119,6 +121,39 @@ def test_empty_leftover_lock_dir_is_claimed_immediately_via_atomic_rename(
         elapsed = time.monotonic() - start
     assert elapsed < 2.0  # claimed immediately, not waited on
     assert reclaim_calls == []  # no reclaim needed -- the rename absorbed it directly
+
+
+def test_acquire_lock_dir_treats_a_resolved_rename_conflict_as_contention_not_a_crash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A real TOCTOU an earlier version of _acquire_lock_dir had: it classified a rename
+    failure by re-checking lock_dir.exists() afterward, rather than by the exception's own
+    errno. That's racy -- the contending holder can finish releasing (its own held_lock()
+    `finally: shutil.rmtree(lock_dir, ...)`) in the gap between the rename failing and that
+    re-check running, making an ordinary, already-resolved contention failure look like a
+    real, unrelated error and get re-raised instead of just meaning "try again." Simulates
+    that exact interleaving: the mocked os.rename raises ENOTEMPTY (a genuine "occupied"
+    failure) but the occupant is already gone by the time _acquire_lock_dir's own classification
+    logic runs."""
+    lock_dir = tmp_path / ".demo-skill.lock"
+    lock_dir.mkdir()
+    (lock_dir / "pid").write_text("1", encoding="utf-8")
+
+    def flaky_rename(src: object, dst: object) -> None:
+        dst = Path(dst)
+        if dst == lock_dir:
+            # By the time this OSError is raised, lock_dir has already been vacated by
+            # whoever was contending for it -- exactly the race an exists()-based check
+            # would misread.
+            shutil.rmtree(lock_dir, ignore_errors=True)
+            raise OSError(errno.ENOTEMPTY, "Directory not empty")
+
+    monkeypatch.setattr(install_engine.os, "rename", flaky_rename)
+
+    assert _acquire_lock_dir(tmp_path, lock_dir) is False
+    assert not lock_dir.exists()
+    # the call's own temp directory must still be cleaned up on this path
+    assert list(tmp_path.glob(".demo-skill.lock.tmp.*")) == []
 
 
 def test_live_pid_with_unreadable_age_and_unreadable_mtime_fallback_is_still_reclaimed(

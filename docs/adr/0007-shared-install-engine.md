@@ -95,7 +95,21 @@ it was scope discipline for the original porting task, not a standing constraint
   a stray one later, the same accepted gap `install_skill()`'s
   `.{skill}.staging.*`/`.{skill}.backup.*` directories already have under an equivalent
   window (see the SIGTERM follow-up below, which covers the narrower, closely-related case of
-  a *second* signal during cleanup).
+  a *second* signal during cleanup). A second, empirically-verified interaction was found and
+  judged benign, not fixed: `os.rename()` onto an *empty* existing directory succeeds (unlike
+  a bare `os.mkdir()`, which fails unconditionally against anything at that path), so a new
+  acquirer's rename can land in the brief window of the *previous* holder's own release
+  (`held_lock()`'s `finally: shutil.rmtree(lock_dir, ...)`, after it has unlinked `pid`/
+  `acquired_at` but before it removes the now-empty directory itself) — reproduced via a
+  forced interleaving. The new acquirer wins cleanly; the departing holder's own `rmdir` then
+  fails (already swallowed by `ignore_errors=True`) since the path is occupied again. No
+  double-critical-section results, because this window only opens after the departing
+  holder's guarded `with` body has already returned — its protected work is done by then, not
+  still in flight. A real, separate bug this same review found *was* fixed: a TOCTOU where
+  classifying a rename failure by re-checking `lock_dir.exists()` afterward (rather than by
+  the exception's own `errno`) could re-raise an ordinary, already-resolved contention
+  failure as a hard error if the contender finished releasing in the gap — closed by
+  classifying on `errno` (`ENOTEMPTY`/`EEXIST`) instead, which has no such gap.
 - **Follow-up:** `_sigterm_as_system_exit()` only protects the primary staged/mutating work
   (`install_skill()`'s stage/backup/replace, `uninstall_skill()`'s `rmtree`) — the cleanup
   code that runs *after* a SIGTERM is caught (`_cleanup_failed_install()`'s rollback,
