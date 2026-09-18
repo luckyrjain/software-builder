@@ -104,11 +104,10 @@ def test_legacy_real_install_writes_manifest_with_expected_shape(tmp_path: Path)
     assert result.returncode == 0, result.stderr
     dest = home / ".cursor" / "skills" / "pr-review"
     stdout_lines = result.stdout.splitlines()
-    # validate_references.py's own "ok: <staging-dir>" line carries a random mktemp suffix,
-    # so it can't be matched literally -- only its prefix and the two deterministic lines are golden.
-    assert len(stdout_lines) == 3
-    assert stdout_lines[0].startswith("ok: ")
-    assert stdout_lines[1:] == [
+    # install_engine.py calls package_skill()/validate_tree() in-process, not as subprocesses
+    # -- unlike the pre-consolidation install.sh, there is no "ok: <staging-dir>" line from a
+    # separate validate_references.py CLI invocation leaking an internal staging path.
+    assert stdout_lines == [
         f"Installed pr-review → {dest}",
         "Restart Cursor to load the skill(s).",
     ]

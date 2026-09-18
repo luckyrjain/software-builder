@@ -43,6 +43,22 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### `install.sh` delegates locking/rollback to `scripts/install_engine.py` (2026-09-18)
+
+- `install.sh`'s `install_skill`/`uninstall_skill` no longer carry their own bash lock and
+  stage/backup/replace/cleanup state machine; they now call into `scripts/install_engine.py`
+  (one subprocess call per skill × destination) via a new CLI, the same module `sb
+  install`/`sb uninstall` already called in-process. See
+  [ADR 0007](docs/adr/0007-shared-install-engine.md).
+- Fixed a real, previously-latent bug this consolidation surfaced under concurrency:
+  `held_lock()` treated a lock directory whose `pid` file hadn't been written yet as
+  immediately stale (unlike `install.sh`'s own bash `acquire_lock`, which waits instead) —
+  intermittent under real concurrent installs of the same skill.
+- Unified ownership-block/dry-run/success message wording onto `install.sh`'s
+  golden-tested text; `sb install`/`sb uninstall`'s own output changed to match it.
+- `install.sh`'s install path drops an internal `validate_references.py` staging-path
+  banner line (`"ok: <staging-dir>"`) that only ever leaked an implementation detail.
+
 ### Fix root README skill-table gaps and navigation (2026-09-12)
 
 - Added the 10 skills registered in `skills.yaml` but missing from the top-level `README.md` skills

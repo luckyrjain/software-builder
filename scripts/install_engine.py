@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
-"""Python port of scripts/install.sh's locking and stage/backup/replace/cleanup logic, for
-the standalone `sb install`/`sb uninstall`/`sb verify` commands (cli/sb/__main__.py) -- used
-against an installed skill with no software-builder checkout present.
+"""The install/uninstall engine: locking and the stage/backup/replace/cleanup state machine
+for writing one skill into one destination.
 
-scripts/install.sh is NOT modified by this module or anything that imports it: this is a
-wholly separate, parallel implementation for `sb`, not a shared engine install.sh is
-refactored onto. Every piece of logic install.sh already delegates to Python
+This is the single implementation of that state machine -- both `scripts/install.sh` (via
+this module's CLI, `python3 -m scripts.install_engine install|uninstall ...`, one subprocess
+call per skill x destination) and the standalone `sb install`/`sb uninstall` commands
+(cli/sb/__main__.py, calling install_skill()/uninstall_skill() in-process) call into it.
+Neither caller re-implements locking, staging, backup, or rollback locally. Every piece of
+logic install.sh already delegated to Python before this module existed
 (package_skill.package_skill, reference_utils.classify_install_destination,
 validate_references.validate_tree, install_support.registry_skill_ids) is reused directly
-here, unforked -- only the locking and the stage/backup/replace/cleanup state machine
-(currently pure bash in install.sh) are new.
+here, unforked.
+
+ADR: see docs/adr/0007-shared-install-engine.md for why install.sh shells out to this module
+instead of keeping its own bash port of the state machine.
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import shutil
 import sys
@@ -136,19 +141,22 @@ def held_lock(
     with FileExistsError against anything already at that path -- same reason install.sh
     uses `mkdir` for its lock rather than a lockfile.
 
-    A lock is reclaimed (taken over) when either: its recorded PID is no longer alive, or
-    its recorded age exceeds `stale_after` regardless of PID liveness (covers a PID that
-    died and was later reused by an unrelated live process, e.g. after a reboot). A lock
-    that is neither dead-PID-stale nor age-stale is genuinely live; after `wait_timeout`
-    seconds of polling, this raises LockTimeoutError instead of waiting forever.
+    A lock is reclaimed (taken over) when its recorded PID both exists and is no longer
+    alive, or its recorded age exceeds `stale_after` regardless of PID liveness (covers a
+    PID that died and was later reused by an unrelated live process, e.g. after a reboot).
+    A lock that is neither dead-PID-stale nor age-stale is genuinely live; after
+    `wait_timeout` seconds of polling, this raises LockTimeoutError instead of waiting
+    forever.
 
-    There is a narrow, intentional inherited race: a lock directory exists for a brief
-    window before its `pid`/`acquired_at` files are written (two separate filesystem
-    operations, not one atomic one) -- the exact same window install.sh's own bash
-    implementation has (`mkdir` then two separate `echo`/`date` writes). A waiter observing
-    that window sees a missing pid file and treats it as stale. This is accepted, not fixed,
-    here: the goal is a faithful port of install.sh's actual behavior, not an improvement on
-    it beyond that scope.
+    A lock directory exists for a brief window before its `pid`/`acquired_at` files are
+    written (two separate filesystem operations, not one atomic one) -- matching
+    install.sh's own bash implementation (`mkdir` then two separate `echo`/`date` writes). A
+    waiter observing that window (missing/unreadable pid) does NOT treat it as stale -- it
+    falls through to the age check exactly like bash's own `[[ -f "${lock_dir}/pid" ]]`
+    guard does, so a lock that's still mid-setup is waited on, not reclaimed out from under
+    its own holder. Only a genuinely old directory (age > stale_after, via the pid file's
+    timestamp when present, falling back to the lock directory's own mtime when the pid
+    file itself hasn't been written yet) is treated as abandoned.
     """
     lock_dir = _lock_dir_for(dest_root, skill)
     waited = 0.0
@@ -157,10 +165,15 @@ def held_lock(
             os.mkdir(lock_dir)
         except FileExistsError:
             lock_pid = _read_lock_pid(lock_dir)
-            is_stale = lock_pid is None or not is_pid_alive(lock_pid)
+            is_stale = lock_pid is not None and not is_pid_alive(lock_pid)
             if not is_stale:
                 age = _read_lock_age(lock_dir)
-                is_stale = age is None or age > stale_after
+                if age is None:
+                    try:
+                        age = time.time() - lock_dir.stat().st_mtime
+                    except OSError:
+                        age = None
+                is_stale = age is not None and age > stale_after
             if is_stale:
                 _reclaim_stale_lock(lock_dir)
                 continue
@@ -185,10 +198,20 @@ def held_lock(
 _BLOCKING_OWNERSHIP_STATES = frozenset(
     {OWNERSHIP_SYMLINK, OWNERSHIP_UNOWNED, OWNERSHIP_CORRUPT_OWNERSHIP}
 )
-_OWNERSHIP_BLOCK_MESSAGES = {
-    OWNERSHIP_SYMLINK: "refusing to install over a symlink at {dest}",
-    OWNERSHIP_UNOWNED: "refusing to install over an unowned directory at {dest} (not installed by software-builder)",
-    OWNERSHIP_CORRUPT_OWNERSHIP: "refusing to install over {dest}: install manifest is missing, unreadable, or names a different skill",
+# Wording matches scripts/install.sh's own historical messages exactly (locked in by
+# scripts/tests/test_install_legacy_golden.py and test_install_rollback.py, which run
+# install.sh as a subprocess and assert this literal text) -- install and uninstall use
+# different verbs ("replace" vs "remove"), so two dicts rather than one derived by string
+# substitution, which is how these two message sets drifted apart before this module existed.
+_INSTALL_BLOCK_MESSAGES = {
+    OWNERSHIP_SYMLINK: "refusing to replace symlink at {dest}",
+    OWNERSHIP_UNOWNED: "refusing to replace unowned directory at {dest} (not installed by software-builder)",
+    OWNERSHIP_CORRUPT_OWNERSHIP: "refusing to replace {dest}: install manifest is missing, unreadable, or names a different skill",
+}
+_UNINSTALL_BLOCK_MESSAGES = {
+    OWNERSHIP_SYMLINK: "refusing to remove symlink at {dest}",
+    OWNERSHIP_UNOWNED: "refusing to remove unowned directory at {dest} (not installed by software-builder)",
+    OWNERSHIP_CORRUPT_OWNERSHIP: "refusing to remove {dest}: install manifest is missing, unreadable, or names a different skill",
 }
 
 
@@ -210,6 +233,10 @@ def _cleanup_failed_install(stage_dir: Path | None, backup_dir: Path | None, ski
         backed_up_skill = backup_dir / "skill"
         if not skill_dest.exists() and backed_up_skill.exists():
             os.replace(backed_up_skill, skill_dest)
+            # install.sh golden-tests this exact line (test_install_legacy_golden.py /
+            # test_install_rollback.py): a rollback restore is worth surfacing to the caller
+            # even though this function otherwise just returns results.
+            print(f"warning: restored previous install at {skill_dest}", file=sys.stderr)
         shutil.rmtree(backup_dir, ignore_errors=True)
 
 
@@ -220,6 +247,8 @@ def install_skill(
     dest_root: Path,
     host_label: str,
     dry_run: bool = False,
+    wait_timeout: float = DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS,
+    stale_after: float = DEFAULT_LOCK_STALE_SECONDS,
 ) -> InstallOutcome:
     """Install one skill from repo_root into dest_root/skill_id, following install.sh's own
     install_skill() sequence: validate -> early ownership check -> (dry-run short-circuit) ->
@@ -240,15 +269,17 @@ def install_skill(
     skill_dest = dest_root / skill_id
     classification = classify_install_destination(skill_dest, skill_id=skill_id)
     if classification in _BLOCKING_OWNERSHIP_STATES:
-        message = _OWNERSHIP_BLOCK_MESSAGES[classification].format(dest=skill_dest)
+        message = _INSTALL_BLOCK_MESSAGES[classification].format(dest=skill_dest)
         return InstallOutcome(skill_id, skill_dest, "failed", message)
 
     if dry_run:
-        return InstallOutcome(skill_id, skill_dest, "dry_run", f"would install {skill_id} to {skill_dest}")
+        return InstallOutcome(
+            skill_id, skill_dest, "dry_run", f"would install {skill_id} → {skill_dest} (host={host_label})"
+        )
 
     try:
         dest_root.mkdir(parents=True, exist_ok=True)
-        with held_lock(dest_root, skill_id):
+        with held_lock(dest_root, skill_id, wait_timeout=wait_timeout, stale_after=stale_after):
             stage_dir: Path | None = None
             backup_dir: Path | None = None
             try:
@@ -261,12 +292,25 @@ def install_skill(
 
                 reclassification = classify_install_destination(skill_dest, skill_id=skill_id)
                 if reclassification in _BLOCKING_OWNERSHIP_STATES:
-                    message = _OWNERSHIP_BLOCK_MESSAGES[reclassification].format(dest=skill_dest)
+                    message = _INSTALL_BLOCK_MESSAGES[reclassification].format(dest=skill_dest)
                     raise ValueError(message)
 
                 if reclassification == OWNERSHIP_SOFTWARE_BUILDER_OWNED:
+                    # install.sh golden-tests this exact line -- see _cleanup_failed_install's
+                    # matching "restored previous install" print for the rollback half of the pair.
+                    print(f"warning: replacing existing install at {skill_dest}", file=sys.stderr)
                     backup_dir = Path(tempfile.mkdtemp(dir=dest_root, prefix=f".{skill_id}.backup."))
-                    os.replace(skill_dest, backup_dir / "skill")
+                    try:
+                        os.replace(skill_dest, backup_dir / "skill")
+                    except OSError:
+                        # Nothing was actually backed up, so _cleanup_failed_install's restore
+                        # branch is a no-op here; this matches install.sh's own dedicated
+                        # backup-failure message rather than falling through to the generic
+                        # exception handler below, which would report the raw OSError text.
+                        _cleanup_failed_install(stage_dir, backup_dir, skill_dest)
+                        return InstallOutcome(
+                            skill_id, skill_dest, "failed", f"failed to back up existing install at {skill_dest}"
+                        )
 
                 os.replace(stage_dir, skill_dest)
                 stage_dir = None  # now living at skill_dest; nothing left to clean up on success
@@ -289,7 +333,7 @@ def install_skill(
 
             if backup_dir is not None:
                 shutil.rmtree(backup_dir, ignore_errors=True)
-            return InstallOutcome(skill_id, skill_dest, "installed", f"installed {skill_id} to {skill_dest}")
+            return InstallOutcome(skill_id, skill_dest, "installed", f"Installed {skill_id} → {skill_dest}")
     except (LockTimeoutError, OSError) as exc:
         # A concurrent/stuck lock (LockTimeoutError) or a failure acquiring it in the first
         # place (OSError from dest_root.mkdir, e.g. permission denied) must become a failed
@@ -310,7 +354,14 @@ class UninstallOutcome:
     message: str
 
 
-def uninstall_skill(skill_id: str, *, dest_root: Path, dry_run: bool = False) -> UninstallOutcome:
+def uninstall_skill(
+    skill_id: str,
+    *,
+    dest_root: Path,
+    dry_run: bool = False,
+    wait_timeout: float = DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS,
+    stale_after: float = DEFAULT_LOCK_STALE_SECONDS,
+) -> UninstallOutcome:
     """Remove one installed skill from dest_root/skill_id, following install.sh's own
     uninstall_skill() sequence: lock -> classify ownership -> ABSENT is a warning, not a
     failure -> SYMLINK/UNOWNED/CORRUPT_OWNERSHIP block with a specific message -> a
@@ -330,20 +381,16 @@ def uninstall_skill(skill_id: str, *, dest_root: Path, dry_run: bool = False) ->
     skill_dest = dest_root / skill_id
     try:
         dest_root.mkdir(parents=True, exist_ok=True)
-        with held_lock(dest_root, skill_id):
+        with held_lock(dest_root, skill_id, wait_timeout=wait_timeout, stale_after=stale_after):
             classification = classify_install_destination(skill_dest, skill_id=skill_id)
             if classification == OWNERSHIP_ABSENT:
                 return UninstallOutcome(skill_id, skill_dest, "absent", f"not installed: {skill_dest}")
             if classification in _BLOCKING_OWNERSHIP_STATES:
-                message = _OWNERSHIP_BLOCK_MESSAGES[classification].replace(
-                    "install over", "remove"
-                ).format(dest=skill_dest)
+                message = _UNINSTALL_BLOCK_MESSAGES[classification].format(dest=skill_dest)
                 return UninstallOutcome(skill_id, skill_dest, "failed", message)
 
             if dry_run:
-                return UninstallOutcome(
-                    skill_id, skill_dest, "dry_run", f"would uninstall {skill_id} from {skill_dest}"
-                )
+                return UninstallOutcome(skill_id, skill_dest, "dry_run", f"would remove {skill_dest}")
 
             try:
                 shutil.rmtree(skill_dest)
@@ -351,7 +398,7 @@ def uninstall_skill(skill_id: str, *, dest_root: Path, dry_run: bool = False) ->
                 message = str(exc) if str(exc) else f"{type(exc).__name__} during uninstall"
                 return UninstallOutcome(skill_id, skill_dest, "failed", message)
             return UninstallOutcome(
-                skill_id, skill_dest, "uninstalled", f"uninstalled {skill_id} from {skill_dest}"
+                skill_id, skill_dest, "uninstalled", f"Uninstalled {skill_id} from {skill_dest}"
             )
     except (LockTimeoutError, OSError) as exc:
         # See install_skill()'s matching handler: a concurrent/stuck lock or a failure
@@ -359,3 +406,99 @@ def uninstall_skill(skill_id: str, *, dest_root: Path, dry_run: bool = False) ->
         # outcome, not an unhandled traceback, so a multi-skill `sb uninstall` run can
         # continue to the next skill instead of crashing mid-run.
         return UninstallOutcome(skill_id, skill_dest, "failed", str(exc))
+
+
+# Status -> (line prefix, stream) for the CLI presentation below. install_skill()/
+# uninstall_skill() return unprefixed content on `.message` (that's the contract
+# cli/sb/__main__.py already calls and tests against directly); the prefix and stdout-vs-
+# stderr split are presentation, decided once here rather than duplicated by each caller.
+_PRESENTATION = {
+    "installed": ("", sys.stdout),
+    "uninstalled": ("", sys.stdout),
+    "dry_run": ("dry-run: ", sys.stdout),
+    "absent": ("warning: ", sys.stderr),
+    "failed": ("error: ", sys.stderr),
+}
+
+
+def _print_outcome(outcome: InstallOutcome | UninstallOutcome) -> None:
+    prefix, stream = _PRESENTATION[outcome.status]
+    print(f"{prefix}{outcome.message}", file=stream)
+
+
+def _lock_timing_from_env() -> tuple[float, float]:
+    # Same two env vars install.sh's own acquire_lock previously read, kept for test parity:
+    # scripts/tests/test_install_concurrency.py sets these to exercise timeout/staleness
+    # behavior without waiting out real-world-sized delays.
+    wait_timeout = float(os.environ.get("LOCK_WAIT_TIMEOUT_SECONDS", DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS))
+    stale_after = float(os.environ.get("LOCK_STALE_SECONDS", DEFAULT_LOCK_STALE_SECONDS))
+    return wait_timeout, stale_after
+
+
+def _cli_install(args: argparse.Namespace) -> int:
+    wait_timeout, stale_after = _lock_timing_from_env()
+    try:
+        outcome = install_skill(
+            args.skill_id,
+            repo_root=args.repo_root,
+            dest_root=args.dest_root,
+            host_label=args.host_label,
+            dry_run=args.dry_run,
+            wait_timeout=wait_timeout,
+            stale_after=stale_after,
+        )
+    except KeyboardInterrupt:
+        # install_skill() already ran its own cleanup before re-raising (see the
+        # (KeyboardInterrupt, SystemExit) handler inside it); 130 matches install.sh's own
+        # on_install_interrupt trap, and the caller (install.sh's run_python wrapper, or a
+        # future multi-skill batch here) must treat this as a whole-run abort, not a
+        # per-skill failure it continues past.
+        return 130
+    _print_outcome(outcome)
+    return 1 if outcome.status == "failed" else 0
+
+
+def _cli_uninstall(args: argparse.Namespace) -> int:
+    wait_timeout, stale_after = _lock_timing_from_env()
+    try:
+        outcome = uninstall_skill(
+            args.skill_id,
+            dest_root=args.dest_root,
+            dry_run=args.dry_run,
+            wait_timeout=wait_timeout,
+            stale_after=stale_after,
+        )
+    except KeyboardInterrupt:
+        return 130
+    _print_outcome(outcome)
+    return 1 if outcome.status == "failed" else 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="install_engine.py",
+        description="Install/uninstall one skill into one destination -- the state machine "
+        "scripts/install.sh shells out to and sb install/uninstall call in-process.",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    install_parser = subparsers.add_parser("install")
+    install_parser.add_argument("skill_id")
+    install_parser.add_argument("dest_root", type=Path)
+    install_parser.add_argument("host_label")
+    install_parser.add_argument("--repo-root", type=Path, required=True)
+    install_parser.add_argument("--dry-run", action="store_true")
+    install_parser.set_defaults(func=_cli_install)
+
+    uninstall_parser = subparsers.add_parser("uninstall")
+    uninstall_parser.add_argument("skill_id")
+    uninstall_parser.add_argument("dest_root", type=Path)
+    uninstall_parser.add_argument("--dry-run", action="store_true")
+    uninstall_parser.set_defaults(func=_cli_uninstall)
+
+    args = parser.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

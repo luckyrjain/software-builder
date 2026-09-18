@@ -7,80 +7,12 @@ run_python() {
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${REPO_ROOT}" python3 "$@"
 }
 
-# Advisory locking: install_skill/uninstall_skill
-# hold a per-(skill, dest_root) lock for their whole mutating section, so two concurrent install.sh
-# invocations targeting the same destination can't race the classify-then-mv sequence or the final
-# staged-directory replace. A single global EXIT trap is the release-of-last-resort for a crash or
-# an interrupt; each function additionally releases explicitly on every one of its own return paths
-# so a later skill/destination in the same run isn't held up by an earlier one's lock.
-CURRENT_LOCK_DIR=""
-
-release_current_lock() {
-  if [[ -n "${CURRENT_LOCK_DIR}" ]]; then
-    rm -rf "${CURRENT_LOCK_DIR}"
-    CURRENT_LOCK_DIR=""
-  fi
-}
-trap release_current_lock EXIT
-
-# Overridable via environment so tests can exercise timeout/staleness behavior without actually
-# waiting out real-world-sized delays.
-LOCK_WAIT_TIMEOUT_SECONDS="${LOCK_WAIT_TIMEOUT_SECONDS:-30}"
-LOCK_STALE_SECONDS="${LOCK_STALE_SECONDS:-300}"
-
-# The lock is a directory, not a file or a symlink: mkdir is atomic and, unlike a symlink, can't be
-# pre-planted to redirect a later write into it -- it just fails EEXIST if anything (including a
-# symlink) already occupies the path. Staleness is decided first by PID liveness (kill -0), falling
-# back to a wall-clock age threshold for a lock left by a process this host can't check (e.g. after
-# a reboot changed PID numbering).
-# Reclaiming a stale lock is a check-then-act sequence across two waiters, so it must not be
-# "rm -rf then mkdir": both waiters can read the same dead PID, and the loser's rm -rf can delete
-# the *winner's* freshly created live lock, after which both proceed into the section the lock
-# exists to serialize. Renaming first makes the reclaim atomic -- exactly one waiter can win the
-# mv, and only the winner deletes anything.
-reclaim_stale_lock() {
-  local lock_dir="$1"
-  local stale_dir="${lock_dir}.stale.$$"
-  if mv "${lock_dir}" "${stale_dir}" 2>/dev/null; then
-    rm -rf "${stale_dir}"
-  fi
-}
-
-acquire_lock() {
-  local skill="$1" dest_root="$2"
-  local lock_dir="${dest_root}/.${skill}.lock"
-  local waited=0
-  while true; do
-    if mkdir "${lock_dir}" 2>/dev/null; then
-      echo "$$" >"${lock_dir}/pid"
-      date +%s >"${lock_dir}/acquired_at"
-      CURRENT_LOCK_DIR="${lock_dir}"
-      return 0
-    fi
-    local lock_pid=""
-    if [[ -f "${lock_dir}/pid" ]]; then
-      lock_pid="$(cat "${lock_dir}/pid" 2>/dev/null || echo "")"
-      if [[ -n "${lock_pid}" ]] && ! kill -0 "${lock_pid}" 2>/dev/null; then
-        reclaim_stale_lock "${lock_dir}"
-        continue
-      fi
-    fi
-    local age=0
-    if [[ -f "${lock_dir}/acquired_at" ]]; then
-      age=$(($(date +%s) - $(cat "${lock_dir}/acquired_at" 2>/dev/null || echo 0)))
-    fi
-    if ((age > LOCK_STALE_SECONDS)); then
-      reclaim_stale_lock "${lock_dir}"
-      continue
-    fi
-    if ((waited >= LOCK_WAIT_TIMEOUT_SECONDS)); then
-      echo "error: timed out waiting for lock on ${skill} at ${lock_dir} (held by pid ${lock_pid:-unknown})" >&2
-      return 1
-    fi
-    sleep 1
-    waited=$((waited + 1))
-  done
-}
+# install_skill/uninstall_skill below delegate their whole mutating section -- locking,
+# staging, backup, atomic replace, rollback-on-failure -- to scripts/install_engine.py's CLI,
+# the single implementation of that state machine also used in-process by `sb install`/
+# `sb uninstall` (cli/sb/__main__.py). install.sh no longer holds its own lock or performs its
+# own staging; LOCK_WAIT_TIMEOUT_SECONDS/LOCK_STALE_SECONDS, if set in the environment, are
+# read directly by install_engine.py, not by this script. See docs/adr/0007-shared-install-engine.md.
 
 AGENT="all"
 TARGET_DIR=""
@@ -198,16 +130,6 @@ registry_check_skill() {
   run_python "${REPO_ROOT}/scripts/install_support.py" check "${skill}" --repo-root "${REPO_ROOT}"
 }
 
-# Prints the skill's *source* directory as resolved from skills.yaml's `path:` field
-# (bash can't parse YAML itself) -- not necessarily "${REPO_ROOT}/${skill}", once a
-# skill's path diverges from its registry id. The install *destination* stays a flat
-# "${dest_root}/${skill}" regardless (see skill_dest below); only the source read path
-# is registry-driven.
-skill_source_dir() {
-  local skill="$1"
-  run_python "${REPO_ROOT}/scripts/install_support.py" skill-dir "${skill}" --repo-root "${REPO_ROOT}"
-}
-
 # Pure-Bash, no-subprocess format check, callable before anything that shells out to Python
 # (registry_check_skill, resolve_targets) so a malformed skill name is rejected as cheaply and
 # early as possible -- not just as defense in depth inside install_skill/uninstall_skill below,
@@ -221,73 +143,31 @@ validate_skill_name_format() {
   return 0
 }
 
-# Ownership classification (Candidate 6): only a directory this repository itself installed --
-# proven by a valid .software-builder-manifest.json naming the same skill -- is safe to replace or
-# remove. ABSENT/SOFTWARE_BUILDER_OWNED/UNOWNED/CORRUPT_OWNERSHIP/SYMLINK; see
-# scripts/reference_utils.py's classify_install_destination for the full state definitions.
-classify_destination() {
-  run_python "${REPO_ROOT}/scripts/install_support.py" classify-destination "$1" "$2"
-}
-
+# Deliberate divergence from a pre-consolidation install.sh: uninstall no longer re-checks
+# registry membership the way install does, so a since-deregistered skill can still be
+# uninstalled -- ownership classification alone (inside install_engine.py) still bounds what
+# gets touched. Documented on install_engine.uninstall_skill()'s own docstring; this was
+# already sb install's behavior before this function started delegating to it.
 uninstall_skill() {
   local skill="$1"
   local dest_root="$2"
-  local skill_dest="${dest_root}/${skill}"
 
   validate_skill_name_format "${skill}" || return 1
 
-  mkdir -p "${dest_root}" || return 1
-  if ! acquire_lock "${skill}" "${dest_root}"; then
-    return 1
-  fi
+  local dry_run_flag=()
+  [[ "${DRY_RUN}" == true ]] && dry_run_flag=(--dry-run)
 
-  # Explicit `|| ...` rather than relying on `set -e`: the callers below invoke this function
-  # from an `if`, which disables errexit for everything it calls.
-  if ! registry_check_skill "${skill}"; then
-    release_current_lock
-    return 1
+  local status
+  if run_python "${REPO_ROOT}/scripts/install_engine.py" uninstall \
+    "${skill}" "${dest_root}" ${dry_run_flag[@]+"${dry_run_flag[@]}"}; then
+    status=0
+  else
+    status=$?
   fi
-
-  local ownership
-  if ! ownership="$(classify_destination "${skill_dest}" "${skill}")"; then
-    release_current_lock
-    return 1
+  if ((status == 130)); then
+    exit 130
   fi
-  case "${ownership}" in
-  ABSENT)
-    echo "warning: not installed: ${skill_dest}" >&2
-    release_current_lock
-    return 0
-    ;;
-  SYMLINK)
-    echo "error: refusing to remove symlink at ${skill_dest}" >&2
-    release_current_lock
-    return 1
-    ;;
-  UNOWNED)
-    echo "error: refusing to remove unowned directory at ${skill_dest} (not installed by software-builder)" >&2
-    release_current_lock
-    return 1
-    ;;
-  CORRUPT_OWNERSHIP)
-    echo "error: refusing to remove ${skill_dest}: install manifest is missing, unreadable, or names a different skill" >&2
-    release_current_lock
-    return 1
-    ;;
-  esac
-
-  if [[ "${DRY_RUN}" == true ]]; then
-    echo "dry-run: would remove ${skill_dest}"
-    release_current_lock
-    return 0
-  fi
-
-  if ! rm -rf "${skill_dest}"; then
-    release_current_lock
-    return 1
-  fi
-  echo "Uninstalled ${skill} from ${skill_dest}"
-  release_current_lock
+  ((status == 0))
 }
 
 install_skill() {
@@ -299,172 +179,54 @@ install_skill() {
 
   # Explicit `|| return 1` rather than relying on `set -e`: the install loop invokes this
   # function from an `if` so one failure no longer aborts the run, and errexit is disabled for
-  # everything an `if` condition calls.
+  # everything an `if` condition calls. Also runs _check_selector_coverage as a side effect
+  # (see install_support.py's cmd_check) -- an unrelated whole-registry check, but this is
+  # still the cheapest place to catch a drift there before spending time on install_engine.py.
   registry_check_skill "${skill}" || return 1
 
-  local skill_src
-  skill_src="$(skill_source_dir "${skill}")" || return 1
   local skill_dest="${dest_root}/${skill}"
+  local dry_run_flag=()
+  [[ "${DRY_RUN}" == true ]] && dry_run_flag=(--dry-run)
 
-  if [[ ! -f "${skill_src}/SKILL.md" ]]; then
-    echo "error: skill not found at ${skill_src}/SKILL.md" >&2
-    return 1
+  # Locking, staging, backup, atomic replace and rollback-on-failure all live in
+  # install_engine.py now -- the same state machine `sb install` calls in-process. A bare
+  # (unguarded) call would trip `set -e` on a normal failed-install exit; wrapping it as an
+  # `if` condition is what disables errexit for it, the same trick this script already uses
+  # everywhere else it needs a command's exit status instead of an abort.
+  local status
+  if run_python "${REPO_ROOT}/scripts/install_engine.py" install \
+    "${skill}" "${dest_root}" "${host_label}" --repo-root "${REPO_ROOT}" ${dry_run_flag[@]+"${dry_run_flag[@]}"}; then
+    status=0
+  else
+    status=$?
   fi
-
-  # Early ownership check: fail fast before staging work (package_skill.py,
-  # validate_references.py) starts, and gives --dry-run an accurate preview. Re-checked fresh
-  # immediately before the actual replace below, since staging takes real time and this is a
-  # check-then-act sequence -- mirrors this function's pre-existing early/late symlink
-  # double-check pattern.
-  local ownership
-  ownership="$(classify_destination "${skill_dest}" "${skill}")" || return 1
-  case "${ownership}" in
-  SYMLINK)
-    echo "error: refusing to replace symlink at ${skill_dest}" >&2
-    return 1
-    ;;
-  UNOWNED)
-    echo "error: refusing to replace unowned directory at ${skill_dest} (not installed by software-builder)" >&2
-    return 1
-    ;;
-  CORRUPT_OWNERSHIP)
-    echo "error: refusing to replace ${skill_dest}: install manifest is missing, unreadable, or names a different skill" >&2
-    return 1
-    ;;
-  esac
-
-  if [[ "${DRY_RUN}" == true ]]; then
-    echo "dry-run: would install ${skill} → ${skill_dest} (host=${host_label})"
-    return 0
-  fi
-
-  mkdir -p "${dest_root}" || return 1
-  if ! acquire_lock "${skill}" "${dest_root}"; then
-    return 1
-  fi
-
-  local backup_dir=""
-  local stage_dir
-  local install_succeeded=false
-  if ! stage_dir="$(mktemp -d "${dest_root}/.${skill}.staging.XXXXXX")"; then
-    release_current_lock
-    return 1
-  fi
-
-  cleanup_failed_install() {
-    rm -rf "${stage_dir}"
-    if [[ -n "${backup_dir}" && -d "${backup_dir}/skill" && ! -e "${skill_dest}" ]]; then
-      mv "${backup_dir}/skill" "${skill_dest}"
-      echo "warning: restored previous install at ${skill_dest}" >&2
-    fi
-    rm -rf "${backup_dir}"
-  }
-
-  clear_install_trap() {
-    trap - INT TERM
-  }
-
-  on_install_interrupt() {
-    if [[ "${install_succeeded}" != true ]]; then
-      cleanup_failed_install
-    fi
-    clear_install_trap
+  if ((status == 130)); then
     exit 130
-  }
-
-  trap on_install_interrupt INT TERM
-
-  if ! run_python "${REPO_ROOT}/scripts/package_skill.py" \
-    --skill "${skill}" \
-    --dest "${stage_dir}" \
-    --repo-root "${REPO_ROOT}" \
-    --host "${host_label}"; then
-    cleanup_failed_install
-    clear_install_trap
-    release_current_lock
+  fi
+  if ((status != 0)); then
     return 1
   fi
 
-  if ! run_python "${REPO_ROOT}/scripts/validate_references.py" \
-    --installed-package "${stage_dir}"; then
-    cleanup_failed_install
-    clear_install_trap
-    release_current_lock
-    return 1
-  fi
-
-  if ! ownership="$(classify_destination "${skill_dest}" "${skill}")"; then
-    cleanup_failed_install
-    clear_install_trap
-    release_current_lock
-    return 1
-  fi
-  case "${ownership}" in
-  SYMLINK)
-    rm -rf "${stage_dir}"
-    clear_install_trap
-    release_current_lock
-    echo "error: refusing to replace symlink at ${skill_dest}" >&2
-    return 1
-    ;;
-  UNOWNED)
-    rm -rf "${stage_dir}"
-    clear_install_trap
-    release_current_lock
-    echo "error: refusing to replace unowned directory at ${skill_dest} (not installed by software-builder)" >&2
-    return 1
-    ;;
-  CORRUPT_OWNERSHIP)
-    rm -rf "${stage_dir}"
-    clear_install_trap
-    release_current_lock
-    echo "error: refusing to replace ${skill_dest}: install manifest is missing, unreadable, or names a different skill" >&2
-    return 1
-    ;;
-  SOFTWARE_BUILDER_OWNED)
-    echo "warning: replacing existing install at ${skill_dest}" >&2
-    # Same filesystem as dest_root/stage_dir (not the system tmp dir) so the mv below is an
-    # atomic rename, matching stage_dir's own discipline -- a cross-filesystem mv falls back to
-    # copy-then-delete, which a hard kill mid-copy can catch with neither the old nor the new
-    # install intact and the real content stranded, unrecorded, in an untracked /tmp directory.
-    backup_dir="$(mktemp -d "${dest_root}/.${skill}.backup.XXXXXX")"
-    if ! mv "${skill_dest}" "${backup_dir}/skill"; then
-      rm -rf "${stage_dir}" "${backup_dir}"
-      clear_install_trap
-      release_current_lock
-      echo "error: failed to back up existing install at ${skill_dest}" >&2
-      return 1
-    fi
-    ;;
-  esac
-
-  if ! mv "${stage_dir}" "${skill_dest}"; then
-    cleanup_failed_install
-    clear_install_trap
-    release_current_lock
-    return 1
-  fi
-
-  install_succeeded=true
-  clear_install_trap
-  rm -rf "${backup_dir}"
-  release_current_lock
+  [[ "${DRY_RUN}" == true ]] && return 0
 
   # Shadow check (Candidate 8): a divergent copy at a higher-precedence discovery root for this
   # host means the host will actually load THAT copy, not the one just written here -- the
   # completion message must say so instead of unconditionally claiming success. This is a report,
   # not a refusal: the write above already succeeded and stands regardless of what this finds.
+  # Still calls install_support.py directly rather than folding into install_engine.py: the
+  # shadow *detection* is already the one shared scripts/registry/shadow_detector.py
+  # implementation both this and `sb install`'s _warn_if_shadowed call into -- only the two
+  # callers' warning-message formatting differs, a separate, narrower finding.
   local shadow_args=("check-shadow" "${host_label}" "${skill_dest}" "--home" "${HOME}")
   if [[ -n "${TARGET_DIR}" ]]; then
     shadow_args+=("--target-dir" "${TARGET_DIR}")
   fi
   # Guarded, not a bare assignment: this runs after the install already succeeded, so a failure
   # here (e.g. an unexpected exception inside detect_shadow) must not abort the script under
-  # set -e and discard the "Installed" confirmation for a write that already landed -- it's
+  # set -e and discard the "Installed" confirmation install_engine.py already printed -- it's
   # downgraded to an unknown-shadow-status warning instead.
   local shadow_output
   if ! shadow_output="$(run_python "${REPO_ROOT}/scripts/install_support.py" "${shadow_args[@]}")"; then
-    echo "Installed ${skill} → ${skill_dest}"
     echo "warning: could not determine shadow status for ${skill_dest}" >&2
     return 0
   fi
@@ -472,16 +234,11 @@ install_skill() {
   case "${shadow_status}" in
   SHADOWED)
     local shadow_path="${shadow_output#*$'\n'}"
-    echo "Installed ${skill} → ${skill_dest}"
     echo "warning: this install may be shadowed by a higher-precedence, divergent copy at ${shadow_path} -- ${host_label%%-*} will likely load that one instead" >&2
     ;;
   UNKNOWN_PRECEDENCE)
     local shadow_path="${shadow_output#*$'\n'}"
-    echo "Installed ${skill} → ${skill_dest}"
     echo "warning: a higher-precedence root at ${shadow_path} exists but its install manifest could not be read, so it's unknown whether this install is shadowed" >&2
-    ;;
-  *)
-    echo "Installed ${skill} → ${skill_dest}"
     ;;
   esac
 }
