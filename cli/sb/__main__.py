@@ -13,18 +13,9 @@ from sb._paths import registry_snapshot_root, vendored_scripts_root
 
 sys.path.insert(0, str(vendored_scripts_root()))
 
-from scripts.doctor import cmd_doctor, default_install_roots_for_host  # noqa: E402
+from scripts.doctor import cmd_doctor_resolved  # noqa: E402
 from scripts.registry.cli import cmd_compatibility, cmd_explain, cmd_list  # noqa: E402
-from scripts.registry.compatibility_resolver import (  # noqa: E402
-    UnknownHostError,
-    available_capabilities,
-    resolve_host,
-)
-from scripts.registry.host_registry import (  # noqa: E402
-    HostRegistry,
-    HostRegistryParseError,
-    parse_host_registry,
-)
+from scripts.registry.host_registry import HostRegistry, parse_host_registry  # noqa: E402
 from scripts.install_engine import install_skill, uninstall_skill  # noqa: E402
 from scripts.install_support import cmd_verify  # noqa: E402
 from scripts.registry.install_resolver import (  # noqa: E402
@@ -48,56 +39,13 @@ def _package_version() -> str:
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
-    if args.agent is not None and args.available is not None:
-        print("error: --agent and --available are mutually exclusive", file=sys.stderr)
-        return 2
-
-    root = registry_snapshot_root()
-    host_id: str | None = None
-    host_verification: str | None = None
-    available: set[str] | None = None
-
-    if args.agent is not None:
-        try:
-            host_registry = parse_host_registry(root / "agent-hosts.yaml")
-        except HostRegistryParseError as exc:
-            for error in exc.errors:
-                print(f"error: {error}", file=sys.stderr)
-            return 2
-        try:
-            host = resolve_host(host_registry, args.agent)
-        except UnknownHostError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-        host_id = args.agent
-        host_verification = host.verification
-        if args.surface is not None:
-            declared_surfaces = {surface.kind for surface in host.surfaces}
-            if args.surface not in declared_surfaces:
-                print(
-                    f"error: unknown surface {args.surface!r} for host {args.agent!r} "
-                    f"(declared surfaces: {sorted(declared_surfaces)})",
-                    file=sys.stderr,
-                )
-                return 2
-        available = set(available_capabilities(host, args.surface))
-    elif args.available is not None:
-        available = {item.strip() for item in args.available.split(",") if item.strip()}
-
-    install_roots = list(args.install_root)
-    if not install_roots:
-        if host_id is not None:
-            install_roots = default_install_roots_for_host(host, home=Path.home())
-        else:
-            install_roots = [Path.home() / ".cursor" / "skills"]
-
-    return cmd_doctor(
-        root,
-        skill_filter=args.skill,
-        available=available,
-        install_roots=install_roots,
-        host_id=host_id,
-        host_verification=host_verification,
+    return cmd_doctor_resolved(
+        registry_snapshot_root(),
+        skill=args.skill,
+        available=args.available,
+        agent=args.agent,
+        surface=args.surface,
+        install_root=args.install_root,
     )
 
 

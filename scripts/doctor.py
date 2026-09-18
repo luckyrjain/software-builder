@@ -250,6 +250,75 @@ def cmd_doctor(
     return exit_code
 
 
+def cmd_doctor_resolved(
+    root: Path,
+    *,
+    skill: str | None,
+    available: str | None,
+    agent: str | None,
+    surface: str | None,
+    install_root: list[Path],
+) -> int:
+    """Resolves --agent/--available/--surface/--install-root into cmd_doctor()'s arguments,
+    then runs it. The one place this resolution policy lives -- doctor.py's own CLI and
+    `sb doctor` (cli/sb/__main__.py) used to reimplement it line-for-line, a duplication that
+    had already let one fix (default_install_roots_for_host, #265) land in only one copy."""
+    if agent is not None and available is not None:
+        print("error: --agent and --available are mutually exclusive", file=sys.stderr)
+        return 2
+
+    host_id: str | None = None
+    host_verification: str | None = None
+    available_set: set[str] | None = None
+    host: HostSpec | None = None
+    if agent is not None:
+        try:
+            host_registry = parse_host_registry(root / "agent-hosts.yaml")
+        except HostRegistryParseError as exc:
+            for error in exc.errors:
+                print(f"error: {error}", file=sys.stderr)
+            return 2
+        try:
+            host = resolve_host(host_registry, agent)
+        except UnknownHostError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        host_id = agent
+        host_verification = host.verification
+        if surface is not None:
+            declared_surfaces = {s.kind for s in host.surfaces}
+            if surface not in declared_surfaces:
+                print(
+                    f"error: unknown surface {surface!r} for host {agent!r} "
+                    f"(declared surfaces: {sorted(declared_surfaces)})",
+                    file=sys.stderr,
+                )
+                return 2
+        available_set = set(available_capabilities(host, surface))
+    elif available is not None:
+        available_set = {item.strip() for item in available.split(",") if item.strip()}
+
+    install_roots = list(install_root)
+    if not install_roots:
+        if host_id is not None:
+            install_roots = default_install_roots_for_host(host, home=Path.home())
+        else:
+            install_roots = [Path.home() / ".cursor" / "skills"]
+
+    try:
+        return cmd_doctor(
+            root,
+            skill_filter=skill,
+            available=available_set,
+            install_roots=install_roots,
+            host_id=host_id,
+            host_verification=host_verification,
+        )
+    except YAML_SAFETY_ERRORS as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="doctor")
     parser.add_argument("--repo-root", type=Path, default=ROOT)
@@ -280,59 +349,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if args.agent is not None and args.available is not None:
-        print("error: --agent and --available are mutually exclusive", file=sys.stderr)
-        return 2
-
-    host_id: str | None = None
-    host_verification: str | None = None
-    available: set[str] | None = None
-    if args.agent is not None:
-        try:
-            host_registry = parse_host_registry(args.repo_root / "agent-hosts.yaml")
-        except HostRegistryParseError as exc:
-            for error in exc.errors:
-                print(f"error: {error}", file=sys.stderr)
-            return 2
-        try:
-            host = resolve_host(host_registry, args.agent)
-        except UnknownHostError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-        host_id = args.agent
-        host_verification = host.verification
-        if args.surface is not None:
-            declared_surfaces = {surface.kind for surface in host.surfaces}
-            if args.surface not in declared_surfaces:
-                print(
-                    f"error: unknown surface {args.surface!r} for host {args.agent!r} "
-                    f"(declared surfaces: {sorted(declared_surfaces)})",
-                    file=sys.stderr,
-                )
-                return 2
-        available = set(available_capabilities(host, args.surface))
-    elif args.available is not None:
-        available = {item.strip() for item in args.available.split(",") if item.strip()}
-
-    install_roots = list(args.install_root)
-    if not install_roots:
-        if host_id is not None:
-            install_roots = default_install_roots_for_host(host, home=Path.home())
-        else:
-            install_roots = [Path.home() / ".cursor" / "skills"]
-
-    try:
-        return cmd_doctor(
-            args.repo_root,
-            skill_filter=args.skill,
-            available=available,
-            install_roots=install_roots,
-            host_id=host_id,
-            host_verification=host_verification,
-        )
-    except YAML_SAFETY_ERRORS as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
+    return cmd_doctor_resolved(
+        args.repo_root,
+        skill=args.skill,
+        available=args.available,
+        agent=args.agent,
+        surface=args.surface,
+        install_root=args.install_root,
+    )
 
 
 if __name__ == "__main__":
