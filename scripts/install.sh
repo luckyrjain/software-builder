@@ -215,8 +215,10 @@ install_skill() {
   # not a refusal: the write above already succeeded and stands regardless of what this finds.
   # Still calls install_support.py directly rather than folding into install_engine.py: the
   # shadow *detection* is already the one shared scripts/registry/shadow_detector.py
-  # implementation both this and `sb install`'s _warn_if_shadowed call into -- only the two
-  # callers' warning-message formatting differs, a separate, narrower finding.
+  # implementation both this and `sb install`'s _warn_if_shadowed call into. The warning
+  # *wording* is shared too now (shadow_detector.render_shadow_warning) -- install_support.py's
+  # check-shadow prints the fully rendered line for SHADOWED/UNKNOWN_PRECEDENCE, so this just
+  # relays it verbatim instead of reformatting it itself.
   local shadow_args=("check-shadow" "${host_label}" "${skill_dest}" "--home" "${HOME}")
   if [[ -n "${TARGET_DIR}" ]]; then
     shadow_args+=("--target-dir" "${TARGET_DIR}")
@@ -232,13 +234,8 @@ install_skill() {
   fi
   local shadow_status="${shadow_output%%$'\n'*}"
   case "${shadow_status}" in
-  SHADOWED)
-    local shadow_path="${shadow_output#*$'\n'}"
-    echo "warning: this install may be shadowed by a higher-precedence, divergent copy at ${shadow_path} -- ${host_label%%-*} will likely load that one instead" >&2
-    ;;
-  UNKNOWN_PRECEDENCE)
-    local shadow_path="${shadow_output#*$'\n'}"
-    echo "warning: a higher-precedence root at ${shadow_path} exists but its install manifest could not be read, so it's unknown whether this install is shadowed" >&2
+  SHADOWED | UNKNOWN_PRECEDENCE)
+    echo "${shadow_output#*$'\n'}" >&2
     ;;
   esac
 }

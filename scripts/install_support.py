@@ -23,7 +23,7 @@ from scripts.registry.install_resolver import (
     resolve_install_destinations,
 )
 from scripts.registry.paths import skill_dir
-from scripts.registry.shadow_detector import SHADOW_NONE, detect_shadow
+from scripts.registry.shadow_detector import SHADOW_NONE, detect_shadow, render_shadow_warning
 from scripts.registry.schema import parse_registry
 from scripts.yaml_safety import YAML_SAFETY_ERRORS
 
@@ -210,9 +210,12 @@ def cmd_resolve_targets(root: Path, agent: str, *, home: Path, target_dir: Path 
 def cmd_check_shadow(
     root: Path, host_label: str, written_dest: Path, *, home: Path, target_dir: Path | None
 ) -> int:
-    """Print NONE/SHADOWED/DUPLICATE_IDENTICAL/UNKNOWN_PRECEDENCE (and, on the second line, the
-    shadowing path if not NONE) for install.sh to build an accurate completion message from
-    instead of unconditionally claiming the new install is what the host will run (Candidate 8).
+    """Print NONE/SHADOWED/DUPLICATE_IDENTICAL/UNKNOWN_PRECEDENCE, and -- for SHADOWED/
+    UNKNOWN_PRECEDENCE -- the fully rendered warning line on the second line, so install.sh
+    can just relay it verbatim instead of reformatting it itself. render_shadow_warning() is
+    the one place that wording lives; `sb install`'s _warn_if_shadowed calls it directly, and
+    this is how install.sh (a separate process, with no Python object to call it on) gets the
+    same words for the same result (Candidate 8's original completion-message requirement).
     """
     target_dir, target_dir_error = _resolve_target_dir(target_dir)
     if target_dir_error is not None:
@@ -236,8 +239,9 @@ def cmd_check_shadow(
         host_registry, host_id, target_id, written_dest, home=home, target_dir=target_dir
     )
     print(result.status)
-    if result.shadowing_path is not None:
-        print(result.shadowing_path)
+    message = render_shadow_warning(result, host_label)
+    if message is not None:
+        print(message)
     return 0
 
 

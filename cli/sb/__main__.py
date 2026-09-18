@@ -24,11 +24,7 @@ from scripts.registry.install_resolver import (  # noqa: E402
     install_selectors,
     resolve_install_destinations,
 )
-from scripts.registry.shadow_detector import (  # noqa: E402
-    SHADOW_SHADOWED,
-    SHADOW_UNKNOWN_PRECEDENCE,
-    detect_shadow,
-)
+from scripts.registry.shadow_detector import detect_shadow, render_shadow_warning  # noqa: E402
 from sb._update import run_update  # noqa: E402
 
 
@@ -80,20 +76,9 @@ def _warn_if_shadowed(
     except Exception:
         print(f"warning: could not determine shadow status for {skill_dest}", file=sys.stderr)
         return
-    if result.status == SHADOW_SHADOWED:
-        print(
-            f"warning: this install may be shadowed by a higher-precedence, divergent copy at "
-            f"{result.shadowing_path} -- {host_label.split('-')[0]} will likely load that one "
-            "instead",
-            file=sys.stderr,
-        )
-    elif result.status == SHADOW_UNKNOWN_PRECEDENCE:
-        print(
-            f"warning: a higher-precedence root at {result.shadowing_path} exists but its "
-            "install manifest could not be read, so it's unknown whether this install is "
-            "shadowed",
-            file=sys.stderr,
-        )
+    message = render_shadow_warning(result, host_label)
+    if message is not None:
+        print(message, file=sys.stderr)
 
 
 def _run_batch(
