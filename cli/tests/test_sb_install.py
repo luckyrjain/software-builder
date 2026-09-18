@@ -100,6 +100,38 @@ def test_install_warns_when_shadowed_by_a_higher_precedence_divergent_copy(tmp_p
     )
 
 
+def test_install_warns_unknown_precedence_when_higher_root_manifest_is_unreadable(
+    tmp_path: Path,
+) -> None:
+    """The other half of Candidate 8's warning pair (UNKNOWN_PRECEDENCE, not SHADOWED) on the
+    `sb install` call site -- previously only unit-tested at the detect_shadow() level."""
+    target_dir = tmp_path / "target-repo"
+    target_dir.mkdir()
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    env = {**os.environ, "HOME": str(fake_home)}
+
+    project_result = _run_sb(
+        "install", "pr-review", "--host", "claude-project", "--target-dir", str(target_dir), env=env
+    )
+    assert project_result.returncode == 0, project_result.stderr
+
+    manifest_path = target_dir / ".claude" / "skills" / "pr-review" / ".software-builder-manifest.json"
+    manifest_path.write_text("{not valid json", encoding="utf-8")
+
+    user_result = _run_sb(
+        "install", "pr-review", "--host", "claude-user", "--target-dir", str(target_dir), env=env
+    )
+
+    assert user_result.returncode == 0, user_result.stderr
+    expected_shadow_path = target_dir / ".claude" / "skills" / "pr-review"
+    assert (
+        f"warning: a higher-precedence root at {expected_shadow_path} exists but its install "
+        "manifest could not be read, so it's unknown whether this install is shadowed"
+        in user_result.stderr
+    )
+
+
 def test_install_does_not_warn_when_no_higher_precedence_copy_exists(tmp_path: Path) -> None:
     target_dir = tmp_path / "target-repo"
     target_dir.mkdir()

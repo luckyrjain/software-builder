@@ -232,12 +232,12 @@ install_skill() {
     echo "warning: could not determine shadow status for ${skill_dest}" >&2
     return 0
   fi
-  local shadow_status="${shadow_output%%$'\n'*}"
-  case "${shadow_status}" in
-  SHADOWED | UNKNOWN_PRECEDENCE)
+  # A dumb relay, not a second status check: cmd_check_shadow only ever prints a second line
+  # when render_shadow_warning() actually produced one (SHADOWED/UNKNOWN_PRECEDENCE) -- bash
+  # doesn't need its own copy of which statuses warn, just "is there a second line."
+  if [[ "${shadow_output}" == *$'\n'* ]]; then
     echo "${shadow_output#*$'\n'}" >&2
-    ;;
-  esac
+  fi
 }
 
 # A run spans every (skill × destination) pair, and one failing pair used to abort the whole run
