@@ -262,7 +262,7 @@ The operational category governing guardrail strictness for a skill — read-onl
 _Avoid_: Severity, priority (those rank findings or work items, not skill posture)
 
 **Write authority**:
-The maximum external write surface a skill may exercise — comment on an MR, commit to a target repo, unattended post. Only the skill that owns a write scope may perform that write; wrappers may gate but not escalate writes beyond the wrapped skill's authority.
+The maximum external write surface a skill may exercise — comment on an MR, commit to a target repo, unattended post. Only the skill that owns a write scope may perform that write; wrappers may gate but not escalate writes beyond the wrapped skill's authority. Production code is written only by `repository-write` **executor** skills through the isolated Builder/Reviewer loop; report skills never write it, and test creators write only test code (see [ADR 0008](docs/adr/0008-production-code-write-authority.md)).
 
 _Avoid_: Permission, scope (scope also means task boundary in loop-task-implementer)
 

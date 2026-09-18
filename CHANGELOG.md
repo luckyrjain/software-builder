@@ -43,6 +43,12 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### ADR 0008: production code is written only by `repository-write` executor skills (2026-09-18)
+
+- New [ADR 0008](docs/adr/0008-production-code-write-authority.md) records the write-authority policy
+  that `write_authority` in `skills.yaml` implied but nothing stated, and `CONTEXT.md`'s **Write
+  authority** entry now links it. New executors must be wrappers around `loop-task-implementer`.
+
 ### Interrupts during cleanup no longer abandon it; signals to `install.sh` reach the engine (2026-09-18)
 
 - `_cleanup_failed_install()`'s rollback and `held_lock()`'s own lock-directory removal ran after
