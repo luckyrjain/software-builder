@@ -4,7 +4,9 @@ scenarios scripts/tests/test_install_concurrency.py already locks in for the bas
 
 from __future__ import annotations
 
+import errno
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -13,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from scripts import install_engine
-from scripts.install_engine import LockTimeoutError, held_lock
+from scripts.install_engine import LockTimeoutError, _acquire_lock_dir, held_lock
 
 
 def test_stale_lock_from_a_dead_pid_is_reclaimed_immediately(tmp_path: Path) -> None:
@@ -60,17 +62,23 @@ def test_live_held_lock_times_out_with_a_clear_error(tmp_path: Path) -> None:
 def test_stale_lock_reclaim_renames_before_removing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Mirrors test_install_concurrency.py's own approach: confirm the rename-before-remove
     discipline is actually implemented (not just that reclaim eventually succeeds), by
-    intercepting os.rename and asserting it's called before the lock_dir disappears."""
+    intercepting os.rename and asserting it's called before the lock_dir disappears. Other
+    os.rename calls happen too now (this module's own atomic-acquisition temp-dir renames,
+    both the failed first attempt against this non-empty lock_dir and the successful retry
+    after reclaim) -- filtered out by source path, since only _reclaim_stale_lock ever renames
+    lock_dir itself (acquisition always renames FROM a temp dir, never from lock_dir)."""
     lock_dir = tmp_path / ".demo-skill.lock"
     lock_dir.mkdir()
     (lock_dir / "pid").write_text("999999999", encoding="utf-8")
     (lock_dir / "acquired_at").write_text(str(time.time()), encoding="utf-8")
 
-    rename_calls: list[tuple[Path, Path]] = []
+    reclaim_rename_calls: list[tuple[Path, Path]] = []
     real_rename = os.rename
 
     def spy_rename(src, dst):
-        rename_calls.append((Path(src), Path(dst)))
+        src, dst = Path(src), Path(dst)
+        if src == lock_dir:
+            reclaim_rename_calls.append((src, dst))
         return real_rename(src, dst)
 
     monkeypatch.setattr("scripts.install_engine.os.rename", spy_rename)
@@ -78,22 +86,26 @@ def test_stale_lock_reclaim_renames_before_removing(tmp_path: Path, monkeypatch:
     with held_lock(tmp_path, "demo-skill", wait_timeout=20.0):
         pass
 
-    assert len(rename_calls) == 1
-    assert rename_calls[0][0] == lock_dir
+    assert len(reclaim_rename_calls) == 1
+    assert reclaim_rename_calls[0][0] == lock_dir
     assert not lock_dir.exists()
-    assert not rename_calls[0][1].exists()  # the stale-renamed copy was removed too
+    assert not reclaim_rename_calls[0][1].exists()  # the stale-renamed copy was removed too
 
 
-def test_lock_dir_with_no_pid_file_yet_is_waited_on_not_reclaimed(
+def test_empty_leftover_lock_dir_is_claimed_immediately_via_atomic_rename(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A lock directory that exists but hasn't had its pid/acquired_at files written yet (the
-    brief window between os.mkdir and the two write_text calls) must be waited on, not treated
-    as abandoned -- mirrors install.sh's own bash acquire_lock, whose `[[ -f "${lock_dir}/pid" ]]`
-    guard likewise skips the dead-PID reclaim check on a missing pid file rather than treating
-    it as automatically stale."""
+    """A bare, empty lock directory -- e.g. left behind by a holder's own release whose
+    shutil.rmtree removed every file inside but was interrupted before removing the directory
+    itself -- is silently absorbed by the next acquisition's atomic rename (POSIX rename()
+    succeeds replacing an empty directory) rather than being waited on or explicitly
+    reclaimed. This is the new behavior since acquisition became atomic (see held_lock()'s
+    docstring): a legitimate in-progress acquisition never leaves lock_dir visible-but-empty
+    anymore, so an empty lock_dir can only mean "already vacated" -- claiming it directly is
+    correct, not a bug, and replaces the old "mid-setup window, must wait" scenario this test
+    used to cover, which no longer occurs under legitimate operation."""
     lock_dir = tmp_path / ".demo-skill.lock"
-    lock_dir.mkdir()  # no pid/acquired_at written -- the mid-setup window
+    lock_dir.mkdir()  # empty: simulates an interrupted release, not mid-acquisition anymore
 
     reclaim_calls: list[Path] = []
     real_reclaim = install_engine._reclaim_stale_lock
@@ -104,11 +116,50 @@ def test_lock_dir_with_no_pid_file_yet_is_waited_on_not_reclaimed(
 
     monkeypatch.setattr(install_engine, "_reclaim_stale_lock", spy_reclaim)
 
-    with pytest.raises(LockTimeoutError):
-        with held_lock(tmp_path, "demo-skill", wait_timeout=1.5):
-            pass
+    start = time.monotonic()
+    with held_lock(tmp_path, "demo-skill", wait_timeout=20.0):
+        elapsed = time.monotonic() - start
+    assert elapsed < 2.0  # claimed immediately, not waited on
+    assert reclaim_calls == []  # no reclaim needed -- the rename absorbed it directly
 
-    assert reclaim_calls == []
+
+def test_acquire_lock_dir_treats_a_resolved_rename_conflict_as_contention_not_a_crash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A real TOCTOU an earlier version of _acquire_lock_dir had: it classified a rename
+    failure by re-checking lock_dir.exists() afterward, rather than by the exception's own
+    errno. That's racy -- the contending holder can finish releasing (its own held_lock()
+    `finally: shutil.rmtree(lock_dir, ...)`) in the gap between the rename failing and that
+    re-check running, making an ordinary, already-resolved contention failure look like a
+    real, unrelated error and get re-raised instead of just meaning "try again." Simulates
+    that exact interleaving: the mocked os.rename raises ENOTEMPTY (a genuine "occupied"
+    failure) but the occupant is already gone by the time _acquire_lock_dir's own classification
+    logic runs."""
+    lock_dir = tmp_path / ".demo-skill.lock"
+    lock_dir.mkdir()
+    (lock_dir / "pid").write_text("1", encoding="utf-8")
+
+    real_rename = os.rename
+
+    def flaky_rename(src: object, dst: object) -> None:
+        dst = Path(dst)
+        if dst == lock_dir:
+            # By the time this OSError is raised, lock_dir has already been vacated by
+            # whoever was contending for it -- exactly the race an exists()-based check
+            # would misread.
+            shutil.rmtree(lock_dir, ignore_errors=True)
+            raise OSError(errno.ENOTEMPTY, "Directory not empty")
+        # This monkeypatches the real os.rename globally (install_engine.os is os), not a
+        # local reference -- any unrelated rename during this test must still go through,
+        # or it'd silently no-op instead of raising a visible failure.
+        return real_rename(src, dst)
+
+    monkeypatch.setattr(install_engine.os, "rename", flaky_rename)
+
+    assert _acquire_lock_dir(tmp_path, lock_dir) is False
+    assert not lock_dir.exists()
+    # the call's own temp directory must still be cleaned up on this path
+    assert list(tmp_path.glob(".demo-skill.lock.tmp.*")) == []
 
 
 def test_live_pid_with_unreadable_age_and_unreadable_mtime_fallback_is_still_reclaimed(
@@ -141,11 +192,15 @@ def test_live_pid_with_unreadable_age_and_unreadable_mtime_fallback_is_still_rec
 
 
 def test_lock_dir_with_no_pid_file_is_reclaimed_once_its_own_mtime_is_stale(tmp_path: Path) -> None:
-    """The mid-setup window above must not block forever, though: once the lock directory's
-    own mtime (the fallback used when acquired_at is unreadable) shows it's older than
-    stale_after, a bare, never-populated lock dir is still eventually reclaimable."""
+    """A lock directory with neither a pid nor an acquired_at file falls through to the
+    directory's own mtime as an age fallback; once that's older than stale_after, it's still
+    reclaimable rather than blocking forever. Deliberately non-empty (an unrelated file, not
+    pid/acquired_at) so the atomic-acquisition rename can't just silently absorb it as an
+    empty leftover (see the dedicated empty-dir test above) -- this forces the real
+    staleness-decision path to run, the thing this test is actually about."""
     lock_dir = tmp_path / ".demo-skill.lock"
     lock_dir.mkdir()
+    (lock_dir / "unrelated-file").write_text("neither pid nor acquired_at", encoding="utf-8")
     old = time.time() - 1000
     os.utime(lock_dir, (old, old))
 
