@@ -115,7 +115,8 @@ Stop and escalate when any applies:
 - Unrecognized third-party branch changes
 - CI cannot be diagnosed within the configured budget
 - A dispatched Builder or Reviewer session exceeds its response-wait budget
-- Time or token budget is exhausted
+- Time or token budget is exhausted (defaults: 180 minutes, 2,000,000 estimated tokens per task; an unset
+  budget is never unbounded — see `workflow/orchestrator.md` §3)
 
 Clean reviews do not consume the dirty-review budget.
 

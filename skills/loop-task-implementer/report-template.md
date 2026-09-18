@@ -88,7 +88,7 @@ fix_attempts:
 rebuttal_log:
 authoritative_checks:
 lifecycle_validation_errors:
-budget_consumed:
+budget_consumed:  # elapsed_minutes, estimated_tokens, unlimited_budgets (any budget the caller set to `unlimited`)
 escalation_reason:
 required_human_decision:
 required_access:

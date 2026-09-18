@@ -44,6 +44,7 @@ then dependency order announced, before the first loop-task-implementer invocati
 |-----------|----------------------|
 | 3 consecutive `ESCALATED` outcomes | Run stops pulling further tickets (`CONSECUTIVE_ESCALATION_BREAKER`); summary still produced |
 | A pulled ticket already has an open PR from a prior run | Skipped at the pull step, not re-attempted, recorded in the summary's Skipped section |
+| Caller supplied no `deadline` and no `session_token_budget` | Session state resolves to start + 8 hours and `max_tasks_per_run` × 2,000,000 estimated tokens — never unbounded; the summary's Budgets line shows both |
 | `deadline` reached mid-run | No new ticket started after it; the in-flight one finishes; summary produced with `DEADLINE_REACHED` |
 | **Night 2: a dependent ticket's prerequisite reached `HUMAN_ACTION_REQUIRED` on night 1 and no longer matches `tracker_query`** | The dependent is attempted on night 2 (existing-PR evidence satisfies the dependency), **not** left `DEFERRED` — this is the regression case to watch for; see [examples.md § Multi-night dependency](../examples.md) |
 
