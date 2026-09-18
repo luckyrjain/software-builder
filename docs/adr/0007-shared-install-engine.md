@@ -58,7 +58,10 @@ it was scope discipline for the original porting task, not a standing constraint
 
 - **Positive:** One state machine to reason about and test; the `held_lock()` staleness bug
   above would previously have needed fixing twice (or drifted further) had it been found
-  later.
+  later. This is a mitigation, not a root-cause fix — lock acquisition is still `os.mkdir()`
+  followed by two separate `write_text()` calls, not one atomic operation, so a window with an
+  identity-less lock directory still exists; the fix makes that window's consequences safe
+  (wait, not wrongly reclaim) rather than closing the window itself.
 - **Positive:** `install.sh`'s install path drops an internal-implementation-detail stdout
   line (`validate_references.py`'s own `"ok: <staging-dir>"` banner, a leftover of shelling
   out to that script separately) — one fewer subprocess invocation per install, not just
@@ -69,3 +72,9 @@ it was scope discipline for the original porting task, not a standing constraint
   still bounds what gets touched). `install.sh` previously did perform that check.
 - **Follow-up:** unify the shadow-warning message *formatting* the same way (tracked
   separately, not blocking on this ADR).
+- **Follow-up:** make lock creation genuinely atomic (e.g. a single `O_CREAT | O_EXCL` file
+  write instead of `mkdir` + two `write_text()` calls) instead of relying on staleness
+  fallbacks to make a non-atomic window safe. Not done here because the current on-disk lock
+  format (`.{skill}.lock/pid`, `.{skill}.lock/acquired_at` as separate files) is directly
+  inspected by `scripts/tests/test_install_concurrency.py` and
+  `test_install_engine_locking.py`; a format change needs its own pass.

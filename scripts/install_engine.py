@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import signal
 import sys
 import tempfile
 import time
@@ -30,7 +31,7 @@ from pathlib import Path
 from typing import Iterator
 
 from scripts.install_support import registry_skill_ids
-from scripts.package_skill import package_skill, validate_skill_name
+from scripts.package_skill import _resolve_source_dir, package_skill, validate_skill_name
 from scripts.reference_utils import (
     OWNERSHIP_ABSENT,
     OWNERSHIP_CORRUPT_OWNERSHIP,
@@ -129,6 +130,26 @@ def _reclaim_stale_lock(lock_dir: Path) -> None:
 
 
 @contextmanager
+def _sigterm_as_system_exit() -> Iterator[None]:
+    """Converts SIGTERM into a catchable SystemExit for the duration of the block, mirroring
+    install.sh's own `trap on_install_interrupt INT TERM`. Python's default SIGTERM
+    disposition terminates the process immediately, bypassing try/finally -- unlike SIGINT,
+    which Python already converts to a catchable KeyboardInterrupt -- so a supervisor kill or
+    CI timeout sent as SIGTERM would otherwise skip install_skill()'s own
+    (KeyboardInterrupt, SystemExit) cleanup handler entirely. Not registered on Windows, which
+    has no equivalent POSIX signal semantics.
+    """
+    if sys.platform == "win32":
+        yield
+        return
+    previous_handler = signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(130))
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous_handler)
+
+
+@contextmanager
 def held_lock(
     dest_root: Path,
     skill: str,
@@ -173,7 +194,12 @@ def held_lock(
                         age = time.time() - lock_dir.stat().st_mtime
                     except OSError:
                         age = None
-                is_stale = age is not None and age > stale_after
+                # age is None here only when acquired_at AND the directory's own stat() both
+                # failed (e.g. the holder's cleanup removed lock_dir out from under this read) --
+                # matching the pre-fallback behavior, treat that as stale rather than live: the
+                # reclaim below is a harmless no-op if the directory is already gone (os.rename
+                # raises, is swallowed, and the next loop iteration's mkdir succeeds anyway).
+                is_stale = age is None or age > stale_after
             if is_stale:
                 _reclaim_stale_lock(lock_dir)
                 continue
@@ -258,23 +284,31 @@ def install_skill(
     """
     try:
         validate_skill_name(skill_id)
-    except ValueError as exc:
-        return InstallOutcome(skill_id, dest_root / skill_id, "failed", str(exc))
 
-    if skill_id not in set(registry_skill_ids(repo_root)):
+        if skill_id not in set(registry_skill_ids(repo_root)):
+            return InstallOutcome(
+                skill_id, dest_root / skill_id, "failed", f"{skill_id!r} is not in skills.yaml"
+            )
+
+        skill_dest = dest_root / skill_id
+        classification = classify_install_destination(skill_dest, skill_id=skill_id)
+        if classification in _BLOCKING_OWNERSHIP_STATES:
+            message = _INSTALL_BLOCK_MESSAGES[classification].format(dest=skill_dest)
+            return InstallOutcome(skill_id, skill_dest, "failed", message)
+
+        if dry_run:
+            # package_skill() is only called below, on the non-dry-run path -- check the same
+            # thing it would fail on (a missing/mismatched skills.yaml `path:` entry) so a
+            # dry-run doesn't report "would install" for a skill that can't actually install.
+            skill_md = _resolve_source_dir(repo_root, skill_id) / "SKILL.md"
+            if not skill_md.is_file():
+                return InstallOutcome(skill_id, skill_dest, "failed", f"skill not found at {skill_md}")
+            return InstallOutcome(
+                skill_id, skill_dest, "dry_run", f"would install {skill_id} → {skill_dest} (host={host_label})"
+            )
+    except Exception as exc:
         return InstallOutcome(
-            skill_id, dest_root / skill_id, "failed", f"{skill_id!r} is not in skills.yaml"
-        )
-
-    skill_dest = dest_root / skill_id
-    classification = classify_install_destination(skill_dest, skill_id=skill_id)
-    if classification in _BLOCKING_OWNERSHIP_STATES:
-        message = _INSTALL_BLOCK_MESSAGES[classification].format(dest=skill_dest)
-        return InstallOutcome(skill_id, skill_dest, "failed", message)
-
-    if dry_run:
-        return InstallOutcome(
-            skill_id, skill_dest, "dry_run", f"would install {skill_id} → {skill_dest} (host={host_label})"
+            skill_id, dest_root / skill_id, "failed", str(exc) if str(exc) else f"{type(exc).__name__} during install"
         )
 
     try:
@@ -283,37 +317,40 @@ def install_skill(
             stage_dir: Path | None = None
             backup_dir: Path | None = None
             try:
-                stage_dir = Path(tempfile.mkdtemp(dir=dest_root, prefix=f".{skill_id}.staging."))
-                package_skill(skill=skill_id, repo_root=repo_root, dest=stage_dir, host=host_label)
+                # SIGTERM (a supervisor kill, CI timeout) must reach the same cleanup path as
+                # SIGINT/KeyboardInterrupt below -- Python has no built-in conversion for it.
+                with _sigterm_as_system_exit():
+                    stage_dir = Path(tempfile.mkdtemp(dir=dest_root, prefix=f".{skill_id}.staging."))
+                    package_skill(skill=skill_id, repo_root=repo_root, dest=stage_dir, host=host_label)
 
-                errors = validate_tree(stage_dir, check_anchors=False, installed_package=True)
-                if errors:
-                    raise ValueError("; ".join(errors))
+                    errors = validate_tree(stage_dir, check_anchors=False, installed_package=True)
+                    if errors:
+                        raise ValueError("; ".join(errors))
 
-                reclassification = classify_install_destination(skill_dest, skill_id=skill_id)
-                if reclassification in _BLOCKING_OWNERSHIP_STATES:
-                    message = _INSTALL_BLOCK_MESSAGES[reclassification].format(dest=skill_dest)
-                    raise ValueError(message)
+                    reclassification = classify_install_destination(skill_dest, skill_id=skill_id)
+                    if reclassification in _BLOCKING_OWNERSHIP_STATES:
+                        message = _INSTALL_BLOCK_MESSAGES[reclassification].format(dest=skill_dest)
+                        raise ValueError(message)
 
-                if reclassification == OWNERSHIP_SOFTWARE_BUILDER_OWNED:
-                    # install.sh golden-tests this exact line -- see _cleanup_failed_install's
-                    # matching "restored previous install" print for the rollback half of the pair.
-                    print(f"warning: replacing existing install at {skill_dest}", file=sys.stderr)
-                    backup_dir = Path(tempfile.mkdtemp(dir=dest_root, prefix=f".{skill_id}.backup."))
-                    try:
-                        os.replace(skill_dest, backup_dir / "skill")
-                    except OSError:
-                        # Nothing was actually backed up, so _cleanup_failed_install's restore
-                        # branch is a no-op here; this matches install.sh's own dedicated
-                        # backup-failure message rather than falling through to the generic
-                        # exception handler below, which would report the raw OSError text.
-                        _cleanup_failed_install(stage_dir, backup_dir, skill_dest)
-                        return InstallOutcome(
-                            skill_id, skill_dest, "failed", f"failed to back up existing install at {skill_dest}"
-                        )
+                    if reclassification == OWNERSHIP_SOFTWARE_BUILDER_OWNED:
+                        # install.sh golden-tests this exact line -- see _cleanup_failed_install's
+                        # matching "restored previous install" print for the rollback half of the pair.
+                        print(f"warning: replacing existing install at {skill_dest}", file=sys.stderr)
+                        backup_dir = Path(tempfile.mkdtemp(dir=dest_root, prefix=f".{skill_id}.backup."))
+                        try:
+                            os.replace(skill_dest, backup_dir / "skill")
+                        except OSError:
+                            # Nothing was actually backed up, so _cleanup_failed_install's restore
+                            # branch is a no-op here; this matches install.sh's own dedicated
+                            # backup-failure message rather than falling through to the generic
+                            # exception handler below, which would report the raw OSError text.
+                            _cleanup_failed_install(stage_dir, backup_dir, skill_dest)
+                            return InstallOutcome(
+                                skill_id, skill_dest, "failed", f"failed to back up existing install at {skill_dest}"
+                            )
 
-                os.replace(stage_dir, skill_dest)
-                stage_dir = None  # now living at skill_dest; nothing left to clean up on success
+                    os.replace(stage_dir, skill_dest)
+                    stage_dir = None  # now living at skill_dest; nothing left to clean up on success
             except (KeyboardInterrupt, SystemExit):
                 # Mirrors install.sh's own INT/TERM trap: on_install_interrupt() runs
                 # cleanup_failed_install() and then `exit 130`, terminating the whole process
@@ -400,12 +437,13 @@ def uninstall_skill(
             return UninstallOutcome(
                 skill_id, skill_dest, "uninstalled", f"Uninstalled {skill_id} from {skill_dest}"
             )
-    except (LockTimeoutError, OSError) as exc:
-        # See install_skill()'s matching handler: a concurrent/stuck lock or a failure
-        # acquiring it (e.g. permission denied on dest_root.mkdir) must become a failed
-        # outcome, not an unhandled traceback, so a multi-skill `sb uninstall` run can
-        # continue to the next skill instead of crashing mid-run.
-        return UninstallOutcome(skill_id, skill_dest, "failed", str(exc))
+    except Exception as exc:
+        # Covers a concurrent/stuck lock (LockTimeoutError), a failure acquiring it (OSError,
+        # e.g. permission denied on dest_root.mkdir), and classify_install_destination() above
+        # raising something unexpected (e.g. a malformed on-disk manifest) -- any of these must
+        # become a failed outcome, not an unhandled traceback, so a multi-skill `sb uninstall`
+        # run can continue to the next skill instead of crashing mid-run.
+        return UninstallOutcome(skill_id, skill_dest, "failed", str(exc) if str(exc) else f"{type(exc).__name__} during uninstall")
 
 
 # Status -> (line prefix, stream) for the CLI presentation below. install_skill()/
@@ -426,12 +464,19 @@ def _print_outcome(outcome: InstallOutcome | UninstallOutcome) -> None:
     print(f"{prefix}{outcome.message}", file=stream)
 
 
+def _env_float(name: str, default: float) -> float:
+    # Mirrors bash's `${VAR:-default}`, which install.sh's own acquire_lock previously used to
+    # read these same two env vars: an empty value falls back to the default exactly like an
+    # unset one, rather than failing float() with an empty string.
+    value = os.environ.get(name, "")
+    return float(value) if value else default
+
+
 def _lock_timing_from_env() -> tuple[float, float]:
-    # Same two env vars install.sh's own acquire_lock previously read, kept for test parity:
     # scripts/tests/test_install_concurrency.py sets these to exercise timeout/staleness
     # behavior without waiting out real-world-sized delays.
-    wait_timeout = float(os.environ.get("LOCK_WAIT_TIMEOUT_SECONDS", DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS))
-    stale_after = float(os.environ.get("LOCK_STALE_SECONDS", DEFAULT_LOCK_STALE_SECONDS))
+    wait_timeout = _env_float("LOCK_WAIT_TIMEOUT_SECONDS", DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS)
+    stale_after = _env_float("LOCK_STALE_SECONDS", DEFAULT_LOCK_STALE_SECONDS)
     return wait_timeout, stale_after
 
 
@@ -447,12 +492,13 @@ def _cli_install(args: argparse.Namespace) -> int:
             wait_timeout=wait_timeout,
             stale_after=stale_after,
         )
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         # install_skill() already ran its own cleanup before re-raising (see the
-        # (KeyboardInterrupt, SystemExit) handler inside it); 130 matches install.sh's own
-        # on_install_interrupt trap, and the caller (install.sh's run_python wrapper, or a
-        # future multi-skill batch here) must treat this as a whole-run abort, not a
-        # per-skill failure it continues past.
+        # (KeyboardInterrupt, SystemExit) handler inside it -- SystemExit is how
+        # _sigterm_as_system_exit() converts a SIGTERM into the same cleanup path); 130
+        # matches install.sh's own on_install_interrupt trap, and the caller (install.sh's
+        # run_python wrapper, or a future multi-skill batch here) must treat this as a
+        # whole-run abort, not a per-skill failure it continues past.
         return 130
     _print_outcome(outcome)
     return 1 if outcome.status == "failed" else 0
@@ -468,7 +514,7 @@ def _cli_uninstall(args: argparse.Namespace) -> int:
             wait_timeout=wait_timeout,
             stale_after=stale_after,
         )
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         return 130
     _print_outcome(outcome)
     return 1 if outcome.status == "failed" else 0
