@@ -5,6 +5,8 @@ uninstall path."""
 from __future__ import annotations
 
 import json
+import os
+import signal
 import subprocess
 import sys
 import time
@@ -71,6 +73,61 @@ def test_uninstall_refuses_to_remove_an_unowned_directory(tmp_path: Path) -> Non
     assert outcome.status == "failed"
     assert "unowned" in outcome.message.lower()
     assert dest.exists()
+
+
+def test_unexpected_exception_from_classify_destination_yields_failed_not_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """classify_install_destination() used to run inside a try whose except only caught
+    (LockTimeoutError, OSError) -- an unexpected exception type from it (e.g. a malformed
+    on-disk manifest raising something other than ManifestError) propagated straight through
+    uninstall_skill() as an uncaught traceback instead of a clean failed outcome."""
+    dest_root = tmp_path / "dest"
+    _owned_install(dest_root, "demo-skill")
+
+    def _boom(*_args: object, **_kwargs: object) -> str:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(install_engine, "classify_install_destination", _boom)
+
+    outcome = uninstall_skill("demo-skill", dest_root=dest_root)
+
+    assert outcome.status == "failed"
+    assert "boom" in outcome.message
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="os.kill(pid, SIGTERM) bypasses Python's signal module on Windows")
+def test_sigterm_during_rmtree_exits_130(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A real SIGTERM mid-uninstall must produce the same clean exit-130 convention
+    install_skill() uses, not a raw signal-death exit code install.sh's `((status == 130))`
+    check wouldn't recognize -- even though there's nothing to roll back here."""
+    dest_root = tmp_path / "dest"
+    dest = _owned_install(dest_root, "demo-skill")
+    original_handler = signal.getsignal(signal.SIGTERM)
+
+    real_rmtree = install_engine.shutil.rmtree
+    fired = False
+
+    def _send_sigterm_once(path: object, *args: object, **kwargs: object) -> None:
+        # shutil.rmtree is patched process-wide, not just for this call -- held_lock()'s own
+        # `finally` also calls it (to remove the lock directory) once this unwinds, and that
+        # second call must not fire the signal again with the handler already restored.
+        nonlocal fired
+        if not fired and Path(path) == dest:
+            fired = True
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(1)
+        real_rmtree(path, *args, **kwargs)  # unreachable for `dest` if the signal was delivered
+
+    monkeypatch.setattr(install_engine.shutil, "rmtree", _send_sigterm_once)
+
+    try:
+        with pytest.raises(SystemExit) as exc_info:
+            uninstall_skill("demo-skill", dest_root=dest_root)
+        assert exc_info.value.code == 130
+        assert signal.getsignal(signal.SIGTERM) == original_handler
+    finally:
+        signal.signal(signal.SIGTERM, original_handler)
 
 
 def test_uninstall_refuses_to_remove_a_directory_with_corrupt_manifest(tmp_path: Path) -> None:

@@ -43,6 +43,53 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### Code-review fixes on the shared install engine (2026-09-18)
+
+- SIGTERM during `install`/`uninstall` now runs the same cleanup as SIGINT: a new
+  `_sigterm_as_system_exit()` context manager converts it into a catchable `SystemExit`
+  (`SIGBREAK` on Windows, where `os.kill(pid, SIGTERM)` bypasses Python's signal module
+  entirely) around the locked/staged section of both functions, instead of terminating
+  immediately and leaving orphaned staging/backup directories on disk.
+- `install_skill()`'s `--dry-run` path now checks the skill's source directory/`SKILL.md`
+  exists (what a real install would actually fail on), instead of reporting "would install"
+  success for a registry entry whose source path is stale or deleted.
+- `registry_skill_ids()`/`classify_install_destination()` calls that sat outside any
+  try/except in `install_skill()`/`uninstall_skill()` are now covered, and `main()` gained a
+  catch-all around CLI dispatch, so a malformed `skills.yaml` or a garbled
+  `LOCK_WAIT_TIMEOUT_SECONDS`/`LOCK_STALE_SECONDS` produces a clean failure instead of an
+  uncaught traceback.
+- `_lock_timing_from_env()` now treats an empty-string `LOCK_WAIT_TIMEOUT_SECONDS`/
+  `LOCK_STALE_SECONDS` the same as unset (matching bash's `${VAR:-default}`), instead of
+  crashing on `float("")`.
+- Outcome messages contain a non-ASCII arrow (matching `install.sh`'s own historical text);
+  both `install_engine.py`'s and `sb`'s CLI entry points now force UTF-8 stdout/stderr, since
+  a successful install could otherwise crash on printing its own success message under a
+  restrictive locale (`LC_ALL=C`) and get reported as failed.
+- `cli/sb/__main__.py`'s install/uninstall status tallies now raise loudly on an
+  unrecognized outcome status instead of silently undercounting.
+- Added regression tests for all of the above (previously verified only by manual
+  reproduction) — real OS-level `SIGTERM` delivery via `os.kill()` (not a mocked/direct-raise
+  substitute), dry-run against a broken skill source, malformed `skills.yaml`, empty/garbled
+  lock-timing env vars, the mid-setup-lock-directory staleness window, and the specific
+  double-failure case (`acquired_at` and the mtime fallback both unreadable) the restored
+  staleness-safety-direction fix actually depends on.
+
+### `install.sh` delegates locking/rollback to `scripts/install_engine.py` (2026-09-18)
+
+- `install.sh`'s `install_skill`/`uninstall_skill` no longer carry their own bash lock and
+  stage/backup/replace/cleanup state machine; they now call into `scripts/install_engine.py`
+  (one subprocess call per skill × destination) via a new CLI, the same module `sb
+  install`/`sb uninstall` already called in-process. See
+  [ADR 0007](docs/adr/0007-shared-install-engine.md).
+- Fixed a real, previously-latent bug this consolidation surfaced under concurrency:
+  `held_lock()` treated a lock directory whose `pid` file hadn't been written yet as
+  immediately stale (unlike `install.sh`'s own bash `acquire_lock`, which waits instead) —
+  intermittent under real concurrent installs of the same skill.
+- Unified ownership-block/dry-run/success message wording onto `install.sh`'s
+  golden-tested text; `sb install`/`sb uninstall`'s own output changed to match it.
+- `install.sh`'s install path drops an internal `validate_references.py` staging-path
+  banner line (`"ok: <staging-dir>"`) that only ever leaked an implementation detail.
+
 ### Fix root README skill-table gaps and navigation (2026-09-12)
 
 - Added the 10 skills registered in `skills.yaml` but missing from the top-level `README.md` skills

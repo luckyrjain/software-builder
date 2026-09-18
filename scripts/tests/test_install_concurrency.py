@@ -177,9 +177,11 @@ def test_stale_lock_reclaim_renames_before_removing(tmp_path: Path) -> None:
     both remove the lock directory, with the loser's rm -rf deleting the winner's freshly created
     live lock and both then entering the section the lock serializes. Renaming first makes the
     reclaim atomic -- only the winner of the mv removes anything -- and leaves no `.stale.<pid>`
-    directory behind."""
-    installer = (ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
-    assert 'mv "${lock_dir}" "${stale_dir}"' in installer
+    directory behind. install.sh itself no longer implements this -- it delegates locking to
+    scripts/install_engine.py's held_lock(), the single implementation both it and `sb install`
+    use -- so the rename-before-remove discipline is asserted there instead."""
+    engine = (ROOT / "scripts" / "install_engine.py").read_text(encoding="utf-8")
+    assert "os.rename(lock_dir, stale_dir)" in engine
 
     home = tmp_path / "home"
     lock_dir = _lock_dir(home)

@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts import install_engine
 from scripts.install_engine import LockTimeoutError, held_lock
 
 
@@ -81,3 +82,72 @@ def test_stale_lock_reclaim_renames_before_removing(tmp_path: Path, monkeypatch:
     assert rename_calls[0][0] == lock_dir
     assert not lock_dir.exists()
     assert not rename_calls[0][1].exists()  # the stale-renamed copy was removed too
+
+
+def test_lock_dir_with_no_pid_file_yet_is_waited_on_not_reclaimed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A lock directory that exists but hasn't had its pid/acquired_at files written yet (the
+    brief window between os.mkdir and the two write_text calls) must be waited on, not treated
+    as abandoned -- mirrors install.sh's own bash acquire_lock, whose `[[ -f "${lock_dir}/pid" ]]`
+    guard likewise skips the dead-PID reclaim check on a missing pid file rather than treating
+    it as automatically stale."""
+    lock_dir = tmp_path / ".demo-skill.lock"
+    lock_dir.mkdir()  # no pid/acquired_at written -- the mid-setup window
+
+    reclaim_calls: list[Path] = []
+    real_reclaim = install_engine._reclaim_stale_lock
+
+    def spy_reclaim(target: Path) -> None:
+        reclaim_calls.append(target)
+        real_reclaim(target)
+
+    monkeypatch.setattr(install_engine, "_reclaim_stale_lock", spy_reclaim)
+
+    with pytest.raises(LockTimeoutError):
+        with held_lock(tmp_path, "demo-skill", wait_timeout=1.5):
+            pass
+
+    assert reclaim_calls == []
+
+
+def test_live_pid_with_unreadable_age_and_unreadable_mtime_fallback_is_still_reclaimed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The actual line this PR's second round restored: `is_stale = age is None or age >
+    stale_after` (not `age is not None and ...`). The two "no pid file" tests above don't
+    exercise it -- they never make lock_dir.stat() fail, so `age` is never actually None by
+    the time this line runs. This forces the real double-failure case the line is about: pid
+    present and genuinely alive (so the pid check alone doesn't mark it stale), acquired_at
+    unreadable, AND the mtime fallback also unreadable (e.g. a TOCTOU race where the lock
+    directory is removed by its own holder's cleanup between this waiter's FileExistsError
+    and its stat() call) -- age stays None, and that must still mean stale, not live."""
+    lock_dir = tmp_path / ".demo-skill.lock"
+    lock_dir.mkdir()
+    (lock_dir / "pid").write_text(str(os.getpid()), encoding="utf-8")  # alive: this process
+    # no acquired_at written -- _read_lock_age() returns None
+
+    real_stat = Path.stat
+
+    def spy_stat(self: Path, *args: object, **kwargs: object):
+        if self == lock_dir:
+            raise OSError("simulated: lock_dir vanished before stat()")
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", spy_stat)
+
+    with held_lock(tmp_path, "demo-skill", wait_timeout=5.0, stale_after=300.0):
+        pass  # must not raise LockTimeoutError -- age=None must still be treated as stale
+
+
+def test_lock_dir_with_no_pid_file_is_reclaimed_once_its_own_mtime_is_stale(tmp_path: Path) -> None:
+    """The mid-setup window above must not block forever, though: once the lock directory's
+    own mtime (the fallback used when acquired_at is unreadable) shows it's older than
+    stale_after, a bare, never-populated lock dir is still eventually reclaimable."""
+    lock_dir = tmp_path / ".demo-skill.lock"
+    lock_dir.mkdir()
+    old = time.time() - 1000
+    os.utime(lock_dir, (old, old))
+
+    with held_lock(tmp_path, "demo-skill", wait_timeout=5.0, stale_after=1.0):
+        pass  # must not raise LockTimeoutError -- the mtime fallback must reclaim it

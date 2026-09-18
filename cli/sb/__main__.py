@@ -172,6 +172,11 @@ def _cmd_install(args: argparse.Namespace) -> int:
                 _warn_if_shadowed(host_registry, host_label, outcome.dest, target_dir=args.target_dir)
             elif outcome.status == "dry_run":
                 dry_run += 1
+            else:
+                # Fail loud, not silently-undercount: install_engine.py's own CLI presentation
+                # (_PRESENTATION) enumerates the same InstallOutcome.status values independently
+                # -- a status added there without a matching branch here must not pass silently.
+                raise AssertionError(f"unhandled install outcome status: {outcome.status!r}")
     if len(args.skill_ids) * len(destinations) > 1:
         if args.dry_run:
             print(f"would install: {dry_run}, failed: {failed}", file=sys.stderr)
@@ -198,6 +203,10 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
                 uninstalled += 1
             elif outcome.status == "dry_run":
                 dry_run += 1
+            elif outcome.status != "absent":
+                # Fail loud, not silently-undercount -- see the matching branch in _cmd_install.
+                # "absent" is a valid, intentionally-untallied status (a no-op uninstall).
+                raise AssertionError(f"unhandled uninstall outcome status: {outcome.status!r}")
     if len(args.skill_ids) * len(destinations) > 1:
         if args.dry_run:
             print(f"would uninstall: {dry_run}, failed: {failed}", file=sys.stderr)
@@ -207,6 +216,13 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # install_skill()/uninstall_skill() outcome messages contain a non-ASCII arrow (U+2192,
+    # matching install.sh's own historical text byte-for-byte); Python's print() is
+    # locale-aware and can raise UnicodeEncodeError under a restrictive locale (LC_ALL=C),
+    # crashing after a successful install and getting it reported as failed.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(prog="sb")
     parser.add_argument(
         "--version", action="version", version=f"sb {_package_version()}"

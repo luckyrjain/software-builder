@@ -10,6 +10,7 @@ Lightweight ADRs for platform-level choices in **software-builder**. Each record
 | [0004](0004-live-eval-harness.md) | Mock-tool execution harness, kept out of CI | Accepted |
 | [0005](0005-registry-authoring-model.md) | Registry authoring model — fragments, profiles, and optional layers | Accepted |
 | [0006](0006-host-registry-and-evidence-model.md) | Host registry and evidence model (`agent-hosts.yaml`) | Accepted |
+| [0007](0007-shared-install-engine.md) | `install.sh` shells out to `scripts/install_engine.py` instead of a parallel bash port | Accepted |
 
 When a platform decision materially changes install, registry, or eval behavior, add a new numbered ADR and link it from [CHANGELOG.md](../../CHANGELOG.md).
 
