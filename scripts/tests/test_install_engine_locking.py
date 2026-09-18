@@ -139,6 +139,8 @@ def test_acquire_lock_dir_treats_a_resolved_rename_conflict_as_contention_not_a_
     lock_dir.mkdir()
     (lock_dir / "pid").write_text("1", encoding="utf-8")
 
+    real_rename = os.rename
+
     def flaky_rename(src: object, dst: object) -> None:
         dst = Path(dst)
         if dst == lock_dir:
@@ -147,6 +149,10 @@ def test_acquire_lock_dir_treats_a_resolved_rename_conflict_as_contention_not_a_
             # would misread.
             shutil.rmtree(lock_dir, ignore_errors=True)
             raise OSError(errno.ENOTEMPTY, "Directory not empty")
+        # This monkeypatches the real os.rename globally (install_engine.os is os), not a
+        # local reference -- any unrelated rename during this test must still go through,
+        # or it'd silently no-op instead of raising a visible failure.
+        return real_rename(src, dst)
 
     monkeypatch.setattr(install_engine.os, "rename", flaky_rename)
 
