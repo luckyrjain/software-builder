@@ -130,6 +130,13 @@ ci:
   failure_classification: null
   evidence_refs: []
 
+# Run log (see reference/run-log.md). Written only by the Orchestrator via scripts/run_log.py; `budgets.consumed`
+# is filled from `run_log.py budget`, not from the model's own tally.
+run_log:
+  run_id: null
+  path: null
+  chain_head: null
+
 budgets:
   max_files_warning: 20
   max_files_hard_stop: 40
