@@ -203,14 +203,20 @@ def _sigterm_as_system_exit() -> Iterator[None]:
     if sig is None:
         yield
         return
-    previous_handler = signal.signal(sig, lambda signum, frame: sys.exit(130))
+    previous_handler = signal.getsignal(sig)
+    if previous_handler == signal.SIG_IGN:
+        # An ignored signal (nohup, an async child of a non-interactive shell) is the
+        # caller's explicit choice; converting it into an abort would override that.
+        yield
+        return
     try:
+        signal.signal(sig, lambda signum, frame: sys.exit(130))
         yield
     finally:
-        # signal.signal() returns None when the previous handler was installed outside
-        # Python's signal module (e.g. by native/embedding-host code) -- there's no handler
-        # value to hand back to signal.signal() in that case, and passing None raises
-        # TypeError, which would mask whatever exception is already propagating through here.
+        # getsignal() returns None when the previous handler was installed outside Python's
+        # signal module (e.g. by native/embedding-host code) -- there's no handler value to
+        # hand back to signal.signal() in that case, and passing None raises TypeError, which
+        # would mask whatever exception is already propagating through here.
         if previous_handler is not None:
             signal.signal(sig, previous_handler)
 
@@ -246,25 +252,43 @@ def _defer_interrupts() -> Iterator[None]:
     if terminate is not None:
         sigs.append(terminate)
     received = False
+    failure: BaseException | None = None
 
     def _record(signum: int, frame: object) -> None:
         nonlocal received
         received = True
 
-    previous = {sig: signal.signal(sig, _record) for sig in sigs}
+    previous: dict[int, object] = {}
     try:
+        for sig in sigs:
+            handler = signal.getsignal(sig)
+            if handler == signal.SIG_IGN:
+                # Ignored on purpose by the caller (nohup, async child of a non-interactive
+                # shell): leave it ignored rather than turning it into an abort.
+                continue
+            # Recorded before it is replaced, inside the try, so a signal landing at any
+            # point between two installs still restores every handler that was replaced.
+            previous[sig] = handler
+            signal.signal(sig, _record)
         yield
+    except BaseException as exc:
+        failure = exc
+        raise
     finally:
         for sig, handler in previous.items():
-            # signal.signal() returns None when the previous handler was installed outside
+            # getsignal() returns None when the previous handler was installed outside
             # Python's signal module. Unlike _sigterm_as_system_exit()'s leftover handler
             # (which at least exits), leaving `_record` installed would swallow every later
             # signal for the life of the process -- so fall back to the interpreter's own
             # default for that signal instead.
             if handler is None:
                 handler = signal.default_int_handler if sig == signal.SIGINT else signal.SIG_DFL
-            signal.signal(sig, handler)
+            signal.signal(sig, handler)  # type: ignore[arg-type]
         if received:
+            if isinstance(failure, Exception):
+                # The exit below supersedes this; without a word the user would never learn
+                # the cleanup itself failed (e.g. a previous install stranded in a backup dir).
+                print(f"warning: cleanup failed while handling an interrupt: {failure}", file=sys.stderr)
             sys.exit(130)
 
 
@@ -527,7 +551,8 @@ def install_skill(
                 return InstallOutcome(skill_id, skill_dest, "failed", message)
 
             if backup_dir is not None:
-                shutil.rmtree(backup_dir, ignore_errors=True)
+                with _defer_interrupts():
+                    shutil.rmtree(backup_dir, ignore_errors=True)
             return InstallOutcome(skill_id, skill_dest, "installed", f"Installed {skill_id} → {skill_dest}")
     except (LockTimeoutError, OSError) as exc:
         # A concurrent/stuck lock (LockTimeoutError) or a failure acquiring it in the first
