@@ -7,6 +7,28 @@ run_python() {
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${REPO_ROOT}" python3 "$@"
 }
 
+# Runs install_engine.py as a child this script can forward signals to, and returns its exit
+# status. A plain foreground `run_python` can't be reached by `kill <this script's pid>` -- the
+# most common way a supervisor stops it: bash dies at once, and the engine is orphaned to init
+# and keeps running, holding the lock and a staging directory, with nothing left to roll it back.
+# Backgrounding it and trapping TERM/INT lets the engine run its own SIGTERM cleanup (rollback,
+# lock release, exit 130) before this script exits with that status. (An async child of a
+# non-interactive shell has SIGINT ignored, so Ctrl-C is delivered as the TERM forwarded here.)
+run_engine() {
+  local engine_pid status=0
+  PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${REPO_ROOT}" python3 "$@" &
+  engine_pid=$!
+  trap 'kill -TERM "${engine_pid}" 2>/dev/null || true' TERM INT
+  wait "${engine_pid}" || status=$?
+  # A trapped signal makes `wait` return immediately (128+n) while the engine is still cleaning
+  # up; keep waiting so the status reported is the engine's own, not the signal's.
+  while kill -0 "${engine_pid}" 2>/dev/null; do
+    wait "${engine_pid}" || status=$?
+  done
+  trap - TERM INT
+  return "${status}"
+}
+
 # install_skill/uninstall_skill below delegate their whole mutating section -- locking,
 # staging, backup, atomic replace, rollback-on-failure -- to scripts/install_engine.py's CLI,
 # the single implementation of that state machine also used in-process by `sb install`/
@@ -158,7 +180,7 @@ uninstall_skill() {
   [[ "${DRY_RUN}" == true ]] && dry_run_flag=(--dry-run)
 
   local status
-  if run_python "${REPO_ROOT}/scripts/install_engine.py" uninstall \
+  if run_engine "${REPO_ROOT}/scripts/install_engine.py" uninstall \
     "${skill}" "${dest_root}" ${dry_run_flag[@]+"${dry_run_flag[@]}"}; then
     status=0
   else
@@ -194,7 +216,7 @@ install_skill() {
   # `if` condition is what disables errexit for it, the same trick this script already uses
   # everywhere else it needs a command's exit status instead of an abort.
   local status
-  if run_python "${REPO_ROOT}/scripts/install_engine.py" install \
+  if run_engine "${REPO_ROOT}/scripts/install_engine.py" install \
     "${skill}" "${dest_root}" "${host_label}" --repo-root "${REPO_ROOT}" ${dry_run_flag[@]+"${dry_run_flag[@]}"}; then
     status=0
   else

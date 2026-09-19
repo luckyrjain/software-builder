@@ -7,6 +7,7 @@ from __future__ import annotations
 import errno
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -206,3 +207,44 @@ def test_lock_dir_with_no_pid_file_is_reclaimed_once_its_own_mtime_is_stale(tmp_
 
     with held_lock(tmp_path, "demo-skill", wait_timeout=5.0, stale_after=1.0):
         pass  # must not raise LockTimeoutError -- the mtime fallback must reclaim it
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="os.kill(pid, SIGTERM) bypasses Python's signal module on Windows"
+)
+def test_sigterm_during_held_lock_release_is_deferred_until_release_completes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, signal_sentinels: object
+) -> None:
+    """held_lock()'s own `finally: shutil.rmtree(lock_dir, ...)` runs after the caller's
+    guarded body has already returned or raised -- outside any `with
+    _sigterm_as_system_exit()` the caller itself entered. Without its own protection, a second
+    SIGTERM landing right here would terminate the process immediately (Python's default
+    disposition). Deferred, not converted: the release must actually finish (lock_dir gone),
+    and only then does the process exit 130 -- converting the signal to SystemExit inside the
+    release would just interrupt it partway."""
+    lock_dir = tmp_path / ".demo-skill.lock"
+    original_handler = signal.getsignal(signal.SIGTERM)
+
+    real_rmtree = shutil.rmtree
+    fired = False
+
+    def _send_sigterm_once(path: object, *args: object, **kwargs: object) -> None:
+        # shutil.rmtree is patched process-wide; only fire once, for the lock directory itself.
+        nonlocal fired
+        if not fired and Path(path) == lock_dir:
+            fired = True
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(1)
+        real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(install_engine.shutil, "rmtree", _send_sigterm_once)
+
+    try:
+        with pytest.raises(SystemExit) as exc_info:
+            with held_lock(tmp_path, "demo-skill"):
+                pass
+        assert exc_info.value.code == 130
+        assert not lock_dir.exists()  # the release ran to completion despite the signal
+        assert signal.getsignal(signal.SIGTERM) == original_handler
+    finally:
+        signal.signal(signal.SIGTERM, original_handler)

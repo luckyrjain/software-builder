@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import fcntl
 import os
+import signal
 import tempfile
 from pathlib import Path
 
@@ -58,3 +59,31 @@ def _serialize_against_repository_root_mutation(request: pytest.FixtureRequest):
             fcntl.flock(fd, fcntl.LOCK_UN)
     finally:
         os.close(fd)
+
+
+@pytest.fixture
+def signal_sentinels():
+    """Replace SIGINT/SIGTERM's disposition with handlers that fail the test.
+
+    The interrupt-protection tests deliver a real signal with `os.kill(os.getpid(), ...)`. If
+    the protection under test is missing or broken, the signal reaches whatever handler was
+    installed before -- normally the default, which for SIGTERM kills the whole pytest process
+    (no report, a crashed worker under xdist) rather than failing one test. With these
+    installed, the code under test saves and restores them like any previous handler, and a
+    regression surfaces as an ordinary assertion failure. Yields the sentinels' `(sigint,
+    sigterm)` handlers so a test can assert they were restored.
+    """
+
+    def _sigterm_reached_default(signum, frame):
+        raise AssertionError("SIGTERM reached the default disposition -- protection missing")
+
+    def _sigint_reached_default(signum, frame):
+        raise AssertionError("SIGINT reached the default disposition -- protection missing")
+
+    previous_int = signal.signal(signal.SIGINT, _sigint_reached_default)
+    previous_term = signal.signal(signal.SIGTERM, _sigterm_reached_default)
+    try:
+        yield _sigint_reached_default, _sigterm_reached_default
+    finally:
+        signal.signal(signal.SIGINT, previous_int)
+        signal.signal(signal.SIGTERM, previous_term)
