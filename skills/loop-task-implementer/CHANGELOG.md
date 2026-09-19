@@ -2,7 +2,7 @@
 
 For earlier history, see the `## loop-task-implementer` section in the repository root `CHANGELOG.md`.
 
-## Unreleased — non-null default task budgets (2026-09-18)
+## Unreleased — default task budgets and run log (2026-09-19)
 
 - `budgets.max_task_elapsed_minutes` now defaults to `180` and `budgets.max_task_tokens` to `2000000`
   (estimated) instead of `null`. An unset or `null` budget applies the default and is never unbounded;
@@ -11,6 +11,12 @@ For earlier history, see the `## loop-task-implementer` section in the repositor
 - Orchestrator §3 now checks both budgets before every dispatch and states how token usage is measured
   or, when unmeasurable, that the token cap is not enforced. Pressure tests 23-25 and
   `tests/test_budget_defaults.py` cover the defaults.
+- Added an append-only, redacted, SHA-256 hash-chained run log (`scripts/run_log.py`, `reference/run-log.md`,
+  orchestrator §20). Stored outside the target repository by default (`~/.software-builder/runs`, or an
+  absolute `--log-dir` outside the current git repository), written only by the Orchestrator, and never shown to a Builder or Reviewer.
+  `run_log.py budget` compares measured tokens and wall-clock time to the caps (defaults apply when unset), so
+  the budget check before each dispatch has a measured source. Adds `run_log` to `state-schema.yaml` and the
+  completion/escalation report. Pressure tests 26-31 and `tests/test_run_log.py` cover it.
 
 ## v1.4 — implementation-plan execution bridge (2026-08-26)
 

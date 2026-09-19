@@ -40,6 +40,7 @@ BOOTSTRAP_END = "# GENERATED shared-runtime-bootstrap:end"
 TARGET_FILES: tuple[tuple[str, str], ...] = (
     ("incident-rca", "scripts/incident_rca_policy_guards.py"),
     ("incident-rca", "scripts/kubesense_logs.py"),
+    ("loop-task-implementer", "scripts/run_log.py"),
     ("loop-task-implementer", "scripts/validate_loop_lifecycle.py"),
     ("pr-review", "scripts/diff-to-positions.py"),
     ("pr-review", "scripts/github-comment-positions.py"),

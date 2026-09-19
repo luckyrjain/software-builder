@@ -41,7 +41,8 @@ loop-task-implementer/
 ├── examples.md
 ├── report-template.md
 ├── scripts/
-│   └── validate_loop_lifecycle.py    # fail-closed READY/COMPLETE/merge validator
+│   ├── validate_loop_lifecycle.py    # fail-closed READY/COMPLETE/merge validator
+│   └── run_log.py                    # append-only run log + budget check (Orchestrator only)
 ├── workflow/
 │   ├── orchestrator.md               # primary Orchestrator role prompt
 │   ├── orchestrator-lifecycle.md     # mandatory Batch 5.2C lifecycle overlay
@@ -56,6 +57,7 @@ loop-task-implementer/
 │   ├── mcp-capabilities.md
 │   ├── smoke-test.md
 │   ├── pressure-tests.md
+│   ├── run-log.md
 │   ├── platform-adapters.md
 │   └── state-schema.yaml
 └── docs/skill-framework/shared/      # vendored by package_skill for installed execution

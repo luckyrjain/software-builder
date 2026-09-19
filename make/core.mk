@@ -594,11 +594,13 @@ lint-loop-task-implementer: lint-loop-task-implementer-skill lint-loop-task-impl
 # co-located with it and run from the target that lints it.
 lint-loop-task-implementer-scripts:
 	@echo "py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/validate_loop_lifecycle.py"
+	@echo "py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/run_log.py"
 	@echo "pytest $(SKILLS_DIR)/loop-task-implementer/tests/"
 	@cache="$(CURDIR)/.pycache-lint-loop-task-implementer"; \
 	export PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$$cache"; \
 	trap 'rm -rf "$$cache"' EXIT; \
 	python3 -m py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/validate_loop_lifecycle.py || exit 1; \
+	python3 -m py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/run_log.py || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
 		python3 -m pytest $(SKILLS_DIR)/loop-task-implementer/tests/ -q || exit 1; \
 	else \

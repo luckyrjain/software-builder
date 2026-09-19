@@ -89,6 +89,7 @@ rebuttal_log:
 authoritative_checks:
 lifecycle_validation_errors:
 budget_consumed:  # elapsed_minutes, estimated_tokens, unlimited_budgets (any budget the caller set to `unlimited`)
+run_log:  # run_id, path, chain_head (from `run_log.py verify`; see reference/run-log.md)
 escalation_reason:
 required_human_decision:
 required_access:
