@@ -97,3 +97,50 @@ def test_signal_to_install_sh_alone_reaches_the_engine_and_rolls_back(
     time.sleep(5)
     assert not (skills_dir / SKILL).exists(), "an orphaned engine completed the install"
     assert list(skills_dir.glob(f".{SKILL}.*")) == [], "staging/backup/lock directories left behind"
+
+
+# An engine that finishes cleanly (exit 0) as the stop request lands: the run must still stop, and
+# must report 130 -- not the 143 of the interrupted `wait`, and not carry on to the next skill.
+_FAKE_PYTHON_EXITS_0_ON_TERM = """#!/usr/bin/env bash
+if [[ "$1" == *install_engine.py ]]; then
+  echo "$@" >> "{log}"
+  trap 'exit 0' TERM
+  while :; do sleep 0.05; done
+fi
+exec "{real}" "$@"
+"""
+
+
+def test_a_stop_request_ends_a_multi_skill_run_even_if_the_engine_exits_cleanly_first(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "engine.log"
+    fake = bin_dir / "python3"
+    fake.write_text(_FAKE_PYTHON_EXITS_0_ON_TERM.format(real=sys.executable, log=log), encoding="utf-8")
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    env = {**os.environ, "HOME": str(home), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    proc = subprocess.Popen(
+        ["bash", str(INSTALLER), "--agent", "cursor", SKILL, "api-design-review"],
+        cwd=ROOT,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while not log.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert log.exists(), "engine was never started"
+        os.kill(proc.pid, signal.SIGTERM)
+        stdout, stderr = proc.communicate(timeout=30)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+    assert proc.returncode == 130, (stdout, stderr)
+    assert len(log.read_text(encoding="utf-8").splitlines()) == 1, "the next skill was started after the stop"

@@ -143,7 +143,22 @@ it was scope discipline for the original porting task, not a standing constraint
     waiting for the engine's *own* exit status. Ctrl-C arrives as that forwarded TERM (an async
     child of a non-interactive shell has SIGINT ignored). Verified end to end by signalling the
     bash PID alone, and against the old script to confirm the test fails on it.
-  - *Residual.* Signals that cannot be caught (SIGKILL, power loss), including SIGKILL of the
+  - *Round-2 hardening.* The success path's own backup removal runs under the deferral too
+    (an orphaned `.{skill}.backup.*` is never swept). A signal that was already ignored
+    (`nohup`, an async child of a non-interactive shell) is left ignored by both context
+    managers rather than turned into an abort. Handlers are recorded before being replaced,
+    inside the `try`, so a signal landing between the SIGINT and SIGTERM installs still
+    restores both. When a deferred signal supersedes a cleanup that itself failed, a
+    `cleanup failed while handling an interrupt` warning is printed, since the `SystemExit(130)`
+    would otherwise hide that failure.
+    `run_engine()` polls for the engine's exit rather than blocking in `wait`, whose status a
+    trapped signal could replace with 143 (which callers don't recognise as a stop), installs its
+    trap before launching the engine, and returns 130 for a stop request even when the engine
+    finished cleanly first.
+  - *Residual.* A signal landing in the few bytecodes between the primary work's
+    `_sigterm_as_system_exit()` exiting and the rollback's `_defer_interrupts()` starting hits
+    the default disposition; closing it needs the handler to stay installed across that
+    hand-off. Signals that cannot be caught (SIGKILL, power loss), including SIGKILL of the
     `install.sh` process itself (which orphans the engine, as before), are unaddressed -- nothing
     short of an external sweeper handles them. A hard kill between `_acquire_lock_dir()`'s
     temp-directory creation and its rename can still orphan that temp directory, the same

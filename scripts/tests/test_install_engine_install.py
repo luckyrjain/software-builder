@@ -468,3 +468,35 @@ def test_sigterm_during_the_backup_failure_cleanup_leaves_the_existing_install_i
     assert not list(dest_root.glob(".demo-skill.staging.*"))
     assert not list(dest_root.glob(".demo-skill.backup.*"))
     assert not list(dest_root.glob(".demo-skill.lock*"))
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="os.kill(pid, SIGTERM) bypasses Python's signal module on Windows")
+def test_sigterm_while_removing_the_backup_after_a_successful_replace_still_removes_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, signal_sentinels: object
+) -> None:
+    """The success path's own backup removal is cleanup too: nothing sweeps an orphaned
+    `.{skill}.backup.*` directory, so a signal landing on it must not abandon it."""
+    repo = _minimal_repo(tmp_path)
+    dest_root = tmp_path / "dest"
+    assert install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor").status == "installed"
+
+    real_rmtree = install_engine.shutil.rmtree
+    fired = False
+
+    def _send_sigterm_once(path: object, *args: object, **kwargs: object) -> None:
+        nonlocal fired
+        if not fired and ".demo-skill.backup." in str(path):
+            fired = True
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.2)
+        real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(install_engine.shutil, "rmtree", _send_sigterm_once)
+
+    with pytest.raises(SystemExit) as exc_info:
+        install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor")
+
+    assert exc_info.value.code == 130
+    assert fired
+    assert list(dest_root.glob(".demo-skill.*")) == []
+    assert (dest_root / "demo-skill" / "SKILL.md").exists()

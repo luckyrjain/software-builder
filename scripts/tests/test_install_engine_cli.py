@@ -147,11 +147,11 @@ def test_sigterm_as_system_exit_restores_the_previous_handler_even_on_exception(
 def test_sigterm_as_system_exit_skips_restore_when_previous_handler_was_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """signal.signal() returns None when the previous handler was installed outside Python's
+    """signal.getsignal() returns None when the previous handler was installed outside Python's
     signal module (e.g. native/embedding-host code) -- passing that back to signal.signal()
     raises TypeError, which would mask whatever exception is already propagating through the
-    `finally`. Simulate that case by faking the registration call to report no previous
-    handler, and confirm no second (restoring) call is attempted."""
+    `finally`. Simulate that case by faking getsignal to report no previous handler, and
+    confirm no second (restoring) call is attempted."""
     calls: list[object] = []
 
     def fake_signal(sig: int, handler: object) -> None:
@@ -159,6 +159,7 @@ def test_sigterm_as_system_exit_skips_restore_when_previous_handler_was_none(
         return None  # simulate: no Python-tracked previous handler to report back
 
     monkeypatch.setattr(install_engine.signal, "signal", fake_signal)
+    monkeypatch.setattr(install_engine.signal, "getsignal", lambda sig: None)
 
     with install_engine._sigterm_as_system_exit():
         pass
@@ -252,7 +253,7 @@ def test_defer_interrupts_restores_both_handlers_on_exception(signal_sentinels: 
 def test_defer_interrupts_falls_back_to_defaults_when_previous_handler_was_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """signal.signal() returns None for a handler installed outside Python's signal module.
+    """signal.getsignal() returns None for a handler installed outside Python's signal module.
     Leaving `_record` in place would swallow every later signal for the life of the process, so
     the restore must fall back to the interpreter's own default -- not skip, and not pass None
     (a TypeError)."""
@@ -263,6 +264,7 @@ def test_defer_interrupts_falls_back_to_defaults_when_previous_handler_was_none(
         return None
 
     monkeypatch.setattr(install_engine.signal, "signal", fake_signal)
+    monkeypatch.setattr(install_engine.signal, "getsignal", lambda sig: None)
     with install_engine._defer_interrupts():
         pass
 
@@ -334,3 +336,64 @@ def test_defer_nested_in_sigterm_as_system_exit_restores_handlers_lifo(signal_se
             time.sleep(0.2)
         assert exc_info.value.code == 130
     assert signal.getsignal(signal.SIGTERM) == sentinel_term
+
+
+@posix_only
+def test_defer_interrupts_leaves_an_ignored_signal_ignored(signal_sentinels: object) -> None:
+    """An async child of a non-interactive shell (or nohup) has SIGINT ignored on purpose;
+    deferring must not turn that ignored signal into an abort (or a 130 exit)."""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    with install_engine._defer_interrupts():
+        assert signal.getsignal(signal.SIGINT) == signal.SIG_IGN
+        os.kill(os.getpid(), signal.SIGINT)
+        time.sleep(0.1)
+    assert signal.getsignal(signal.SIGINT) == signal.SIG_IGN
+
+
+@posix_only
+def test_sigterm_as_system_exit_leaves_an_ignored_signal_ignored(signal_sentinels: object) -> None:
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    with install_engine._sigterm_as_system_exit():
+        assert signal.getsignal(signal.SIGTERM) == signal.SIG_IGN
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.sleep(0.1)
+    assert signal.getsignal(signal.SIGTERM) == signal.SIG_IGN
+
+
+@posix_only
+def test_defer_interrupts_restores_the_first_handler_if_a_signal_lands_between_installs(
+    monkeypatch: pytest.MonkeyPatch, signal_sentinels: object
+) -> None:
+    """A signal arriving after SIGINT's handler is replaced but before SIGTERM's is must not
+    leave the SIGINT one installed for the rest of the process."""
+    sigint_before = signal.getsignal(signal.SIGINT)
+    real_signal = signal.signal
+    installs = 0
+
+    def _signal_then_interrupt(sig: int, handler: object) -> object:
+        nonlocal installs
+        result = real_signal(sig, handler)  # type: ignore[arg-type]
+        installs += 1
+        if installs == 1:
+            raise SystemExit(130)  # what the old SIGTERM handler does when it fires here
+        return result
+
+    monkeypatch.setattr(install_engine.signal, "signal", _signal_then_interrupt)
+    with pytest.raises(SystemExit):
+        with install_engine._defer_interrupts():
+            pass  # pragma: no cover
+    monkeypatch.undo()
+    assert signal.getsignal(signal.SIGINT) == sigint_before
+
+
+@posix_only
+def test_a_failed_cleanup_superseded_by_a_deferred_signal_is_still_reported(
+    signal_sentinels: object, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        with install_engine._defer_interrupts():
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.2)
+            raise OSError(28, "No space left on device")
+    assert exc_info.value.code == 130
+    assert "cleanup failed while handling an interrupt" in capsys.readouterr().err
