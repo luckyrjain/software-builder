@@ -71,7 +71,7 @@ Parse per [workflow/inputs.md](workflow/inputs.md).
 | `sweep_scope` | Yes | **HARD STOP if `env` is absent; if neither `deployments` nor `namespace_prefilter` is set; or if `namespace_prefilter` is set (and `deployments` is absent) but missing `top_n_namespaces` or `top_n_deployments_per_namespace`** — `{env, deployments?: [...], namespace_prefilter?: {top_n_namespaces, top_n_deployments_per_namespace}}` |
 | `cost_rate` | Yes | **HARD STOP if absent, or if present but missing `provider`, `dollars_per_core_month`, or `dollars_per_gib_month`** — no default, `{provider, dollars_per_core_month, dollars_per_gib_month, cost_basis}` |
 | `max_deployments_per_run` | No | Default: all in-scope deployments |
-| `deadline` / `session_token_budget` | No | Same optional circuit breakers as backlog-runner |
+| `deadline` / `session_token_budget` | No | Optional circuit breakers, unset by default (this skill did not adopt backlog-runner's non-null defaults); see `reference/sweep-policy.md` |
 | `output_dir` | No | Default: current working directory — where per-deployment `decision-graph-<deployment>.json` files and the report/rollup are written |
 | `squad_map_config_path` | No | Default: none — omitting it skips the `ownership.datadog.service_aliases` reverse-lookup fallback (see `workflow/run-sweep.md` § 3) |
 

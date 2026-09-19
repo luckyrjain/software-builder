@@ -46,6 +46,11 @@ point Cursor/Kiro at `skills/backlog-runner/SKILL.md` without an install step.
 
 ## Prerequisites
 
+`loop-task-implementer`, which this skill drives, keeps a run log that needs **Python 3.10+ on a POSIX host** and a
+writable directory outside every git repository (`~/.software-builder/runs` by default). In a sandbox that blocks
+writes there, grant it or set another; otherwise every task stops at exit `2` and the three-in-a-row escalation
+breaker ends the night's run.
+
 | Requirement | Notes |
 |-------------|-------|
 | loop-task-implementer installed and configured | Repository/git access, isolation primitive (subagent/fresh-session/worktree) — see [loop-task-implementer/reference/mcp-capabilities.md](../loop-task-implementer/reference/mcp-capabilities.md) |

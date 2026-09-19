@@ -132,9 +132,17 @@ Budgets (dirty review cycles, contested rounds, review size thresholds, CI polli
 Orchestrator per task — see `workflow/orchestrator.md` §3. Batch 5.2C does not silently relax those existing
 circuit breakers.
 
-The per-task elapsed and token budgets default to `180` minutes and `2,000,000` estimated tokens. Override
-them per invocation with `max_task_elapsed_minutes` / `max_task_tokens`; pass the literal `unlimited` only
-when you intend to run with no ceiling — the report will say so.
+The per-task elapsed and token budgets default to `180` minutes of active time and `2,000,000` estimated tokens.
+Override them per invocation with `max_task_elapsed_minutes` / `max_task_tokens` (these are inputs to this skill
+only, not fields of the shared `implementation_task` contract); pass the literal `unlimited` only when you intend
+to run with no ceiling — the report will say so. (`deadline` and `session_token_budget` are different fields:
+a plan-derived task carries them as `null` for the test creators it may delegate to, where `null` means no
+ceiling; this skill's own caps are the two `max_task_*` inputs above.)
+
+The run log (orchestrator §20) needs **Python 3.10 or newer** on a POSIX host (the default macOS `python3` 3.9
+does not qualify; the repository supports 3.12+), and a writable directory outside every git repository —
+`~/.software-builder/runs` by default, or an explicit `--log-dir`. In a sandbox that blocks writes there, grant
+that directory or choose another; otherwise every run stops at exit `2`.
 
 ## Framework
 

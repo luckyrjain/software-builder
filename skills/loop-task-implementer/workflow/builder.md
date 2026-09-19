@@ -38,6 +38,8 @@ Do not infer unstated product requirements.
 
 ## Authorized actions
 
+The Orchestrator's run log is not yours: never read, write, or edit it.
+
 ```yaml
 allowed_actions:
   edit: true

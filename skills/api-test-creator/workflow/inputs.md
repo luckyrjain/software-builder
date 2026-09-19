@@ -65,7 +65,7 @@ run with no `scope` would otherwise have to guess at "every endpoint in the repo
 | `run_tests` | `true` — set `false` only when this session has no way to reach a running API instance and execute `newman run`; requests are still written, marked `UNVERIFIED` |
 | `max_files_per_run` | 20 — caps Select targets over **endpoints** (not files); overflow is always listed by name in the report, never dropped silently |
 | `deadline` | None — stop *starting* new targets at/after this wall-clock time; an in-flight target finishes |
-| `session_token_budget` | None — session-level token ceiling across the whole run |
+| `session_token_budget` | None — session-level token ceiling across the whole run. Unset means **no** ceiling here; the non-null defaults added for `loop-task-implementer` and `backlog-runner` do not apply to this skill |
 | `output_dir` | `repo_root` — where `API_TEST_REPORT.md` is written |
 
 ## Normalization
