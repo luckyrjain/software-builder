@@ -23,7 +23,7 @@ from scripts.install_engine import (
     LockTimeoutError,
     _acquire_lock_dir,
     _lock_timing_from_env,
-    _print_outcome,
+    print_outcome,
     held_lock,
     install_skill,
     is_pid_alive,
@@ -354,8 +354,8 @@ def test_sigterm_before_the_uninstall_move_completes_restores_the_install(
 def test_outcomes_are_written_to_the_streams_current_at_print_time() -> None:
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        _print_outcome(InstallOutcome("s", Path("/x"), "installed", "Installed s"))
-        _print_outcome(InstallOutcome("s", Path("/x"), "failed", "boom"))
+        print_outcome(InstallOutcome("s", Path("/x"), "installed", "Installed s"))
+        print_outcome(InstallOutcome("s", Path("/x"), "failed", "boom"))
     assert out.getvalue() == "Installed s\n"
     assert err.getvalue() == "error: boom\n"
 

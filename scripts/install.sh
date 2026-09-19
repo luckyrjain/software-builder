@@ -304,7 +304,13 @@ report_run_summary() {
   if ((${#failed[@]} == 0)); then
     return 0
   fi
-  echo "${verb}: ${succeeded}, failed: ${#failed[@]} (${failed[*]})" >&2
+  # Joined with "; ", not the default space: a skill name or destination path containing a space
+  # made the space-joined list impossible to split back into its entries.
+  local failed_list="" entry
+  for entry in "${failed[@]}"; do
+    failed_list+="${failed_list:+; }${entry}"
+  done
+  echo "${verb}: ${succeeded}, failed: ${#failed[@]} (${failed_list})" >&2
   return 1
 }
 

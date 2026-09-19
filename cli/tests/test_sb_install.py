@@ -167,3 +167,29 @@ def test_multi_skill_install_continues_past_one_failure_and_reports_a_summary(tm
     assert "failed: 1" in result.stdout or "failed: 1" in result.stderr
     assert (target_dir / ".cursor" / "skills" / "pr-review" / "SKILL.md").is_file()
     assert (target_dir / ".cursor" / "skills" / "system-design" / "SKILL.md").is_file()
+
+
+def test_outcomes_use_the_same_prefixes_and_streams_as_the_engine_cli(tmp_path: Path) -> None:
+    """sb printed every outcome message bare on stdout, so a script grepping stderr for
+    failures saw nothing; it now presents outcomes exactly as `install_engine.py`'s own CLI does
+    (failures `error: ` and absences `warning: ` on stderr, dry-runs `dry-run: ` on stdout)."""
+    target_dir = tmp_path / "target-repo"
+    target_dir.mkdir()
+
+    dry = _run_sb("install", "pr-review", "--host", "cursor", "--target-dir", str(target_dir), "--dry-run")
+    assert dry.returncode == 0, dry.stderr
+    assert dry.stdout.startswith("dry-run: would install pr-review")
+    assert "error:" not in dry.stderr
+
+    unowned = target_dir / ".cursor" / "skills" / "pr-review"
+    unowned.mkdir(parents=True)
+    (unowned / "some-file.txt").write_text("not ours\n", encoding="utf-8")
+    failed = _run_sb("install", "pr-review", "--host", "cursor", "--target-dir", str(target_dir))
+    assert failed.returncode != 0
+    assert failed.stderr.startswith("error: refusing to replace unowned directory")
+    assert failed.stdout == ""
+
+    absent = _run_sb("uninstall", "system-design", "--host", "cursor", "--target-dir", str(target_dir))
+    assert absent.returncode == 0, absent.stderr
+    assert absent.stderr.startswith("warning: not installed:")
+    assert absent.stdout == ""

@@ -718,7 +718,7 @@ _PRESENTATION = {
 }
 
 
-def _print_outcome(outcome: InstallOutcome | UninstallOutcome) -> None:
+def print_outcome(outcome: InstallOutcome | UninstallOutcome) -> None:
     # The stream is looked up at print time, not captured at import: a caller that has
     # redirected sys.stdout/sys.stderr (contextlib.redirect_stdout, a test's capture) must see
     # the output.
@@ -768,7 +768,7 @@ def _cli_install(args: argparse.Namespace) -> int:
         # what install.sh's run_engine and sb's batch loop key on, and they must treat it as a
         # whole-run abort, not a per-skill failure to continue past.
         return 130
-    _print_outcome(outcome)
+    print_outcome(outcome)
     return 1 if outcome.status == "failed" else 0
 
 
@@ -784,7 +784,7 @@ def _cli_uninstall(args: argparse.Namespace) -> int:
         )
     except (KeyboardInterrupt, SystemExit):
         return 130
-    _print_outcome(outcome)
+    print_outcome(outcome)
     return 1 if outcome.status == "failed" else 0
 
 

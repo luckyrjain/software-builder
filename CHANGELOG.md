@@ -49,6 +49,18 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   that `write_authority` in `skills.yaml` implied but nothing stated, and `CONTEXT.md`'s **Write
   authority** entry now links it. New executors must be wrappers around `loop-task-implementer`.
 
+### Cosmetic follow-ups: unambiguous failure summary, `sb` outcome streams, Windows CI (2026-09-19)
+
+- `install.sh`'s failure summary joins the failed `skill -> destination` entries with `; ` instead of a
+  bare space, so an entry (or a path containing a space) can be told apart from its neighbours.
+- `sb install`/`sb uninstall` present outcomes exactly as `install_engine.py`'s own CLI does: failures
+  as `error: ...` and absences as `warning: ...` on stderr, dry-runs as `dry-run: ...` on stdout.
+  Before, every outcome was printed bare on stdout, so a script grepping stderr for failures saw
+  nothing. `print_outcome` is now a public function of `install_engine`.
+- New `install-engine-windows` CI job runs the install engine's own tests on `windows-latest`, so the
+  Windows-only branches (`is_pid_alive` via ctypes, SIGBREAK, directory-rename semantics) are executed
+  at all. The pytest snapshot lock is skipped on Windows.
+
 ### Install engine round-3 review fixes: lock exclusion, atomic uninstall, stop handling (2026-09-19)
 
 - Stale-lock reclaim no longer breaks mutual exclusion. A lock that vanished between a waiter's

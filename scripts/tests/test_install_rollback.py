@@ -284,3 +284,33 @@ def test_multi_skill_uninstall_continues_past_a_failure_and_reports_a_summary(
     assert "uninstalled: 1, failed: 1" in result.stderr
     assert (home / ".cursor" / "skills" / skills[0]).is_dir()
     assert not (home / ".cursor" / "skills" / skills[1]).exists()
+
+
+def test_failure_summary_entries_stay_separable_when_a_path_contains_spaces(tmp_path: Path) -> None:
+    """The summary used to join failed entries with a bare space, so with a space in a path
+    (or two failures) the list could not be split back into its entries."""
+    home = tmp_path / "my home"
+    skills = ("squad-map", "new-hire-guide")
+    for skill in skills:
+        blocked = home / ".cursor" / "skills" / skill
+        blocked.mkdir(parents=True)
+        (blocked / "README.md").write_text("not ours", encoding="utf-8")
+
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts" / "install.sh"), "--agent", "cursor", *skills],
+        cwd=ROOT,
+        env={
+            "HOME": str(home),
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PATH": f"{ROOT / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    skills_dir = home / ".cursor" / "skills"
+    assert (
+        f"installed: 0, failed: 2 ({skills[0]} → {skills_dir}; {skills[1]} → {skills_dir})"
+    ) in result.stderr
