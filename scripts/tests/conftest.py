@@ -26,12 +26,12 @@ from __future__ import annotations
 import fcntl
 import os
 import signal
-import tempfile
-from pathlib import Path
 
 import pytest
 
-_LOCK_PATH = Path(tempfile.gettempdir()) / "software-builder-pytest-registry-root.lock"
+from scripts.tests.registry_root_lock import LOCK_PATH
+
+_LOCK_PATH = LOCK_PATH
 
 
 def _open_lock_fd() -> int:

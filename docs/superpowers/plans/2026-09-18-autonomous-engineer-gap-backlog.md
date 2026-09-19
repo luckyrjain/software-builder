@@ -30,8 +30,8 @@ Suggested order: E6 -> A2, A3 -> A1 -> A4, A5, A6 -> B* -> C* -> D*. E1-E5 can r
 | ID | Ticket | Size | Depends | Acceptance |
 |----|--------|------|---------|------------|
 | A1 | Certified live-eval baseline for `loop-task-implementer`: record 5-10 real tickets, track CI pass, review rounds, tokens, time, merge outcome | L | A2, A3 | Cases live under `evals/live/`, marked certified, run via the existing harness; a results table exists; regression threshold documented |
-| A2 (done 2026-09-18, uncommitted) | Non-null default budgets: task token cap, elapsed-time cap, session budget for `backlog-runner` | S | none | `state-schema.yaml` defaults set and documented; orchestrator stops and escalates on breach; test covers breach |
-| A3 | Append-only run log and token/cost telemetry for every agent action (PR created, review verdict, CI poll, escalation) | M | none | One structured record per action with run id; redaction applied; documented location; a lint or test validates the schema |
+| A2 (done, #281) | Non-null default budgets: task token cap, elapsed-time cap, session budget for `backlog-runner` | S | none | `state-schema.yaml` defaults set and documented; orchestrator stops and escalates on breach; test covers breach |
+| A3 (done, #284) | Append-only run log and token/cost telemetry for every agent action (PR created, review verdict, CI poll, escalation) | M | none | One structured record per action with run id; redaction applied; documented location; a lint or test validates the schema |
 | A4 | Verify the Claude host end to end: skill execution and subagent isolation, not only file placement | M | none | New RUNTIME evidence in `agent-hosts.yaml`; `loop-task-implementer` moves off BLOCKED for role isolation, CI status, PR write on `claude` (or documents the exact remaining block) |
 | A5 | Durable run-state store and Builder in-flight checkpoint | M | A3 | State written to a defined location; a crash mid-Builder resumes from the checkpoint instead of restarting; pressure test added |
 | A6 | Enforcement layer: host permission templates (allowlist for git/CI commands), atomic lease for run identity | M | none | Shipped `claude` settings template; docs state which gates are enforced vs instruction-level; lease test shows no double execution |
@@ -83,7 +83,7 @@ Twelve analysis skills currently stop at a report. Pattern: wrapper task envelop
 | E3 | Exercise the signed release pipeline (no tags or releases found) | S | Publishing is outward-facing: needs an explicit go from the owner |
 | E4 | Triage open Dependabot PRs #273-#278 | S | Follow the repo's dependency-review process |
 | E5 | Decision: consolidate or clarify overlapping readiness skills and architecture skills | M | Route to `engineering-decision-discovery` |
-| E6 (P0, done 2026-09-18, uncommitted) | ADR 0008: record the write-authority doctrine above and add it to `CONTEXT.md` | S | Do first; gates all executor work |
+| E6 (P0, done, #281) | ADR 0008: record the write-authority doctrine above and add it to `CONTEXT.md` | S | Do first; gates all executor work |
 
 ## Decisions needed from the owner
 
