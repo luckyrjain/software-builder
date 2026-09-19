@@ -37,6 +37,8 @@ in [reference/state-schema.yaml](reference/state-schema.yaml) exactly. `HUMAN_AC
 "verified ready, waiting for authorized merge" and "escalated" — check `escalation.active` to distinguish them.
 
 **Human action required:** <exact action, or "none">
+**Budgets:** `<estimated_tokens>` tokens, `<elapsed_minutes>` active minutes — unlimited: `<none | tokens | elapsed_minutes>`; not enforced (no usage recorded): `<none | tokens>`
+**Run log:** `<run_id>`, chain head `<chain_head>`
 ```
 
 A `Lifecycle gate: PASS` means `validate_loop_lifecycle.py --state ...` exited `0` for the freshly rebuilt current identity/requirements and current repository gates. It does **not** grant merge authority. Conversely, do not render a stale lens, a mismatched review/evidence generation, stale third-party check, old-head CI, or exception bound to another review identity/generation as current merely because the task was previously READY.
@@ -88,7 +90,7 @@ fix_attempts:
 rebuttal_log:
 authoritative_checks:
 lifecycle_validation_errors:
-budget_consumed:  # elapsed_minutes, estimated_tokens, unlimited_budgets (caller set `unlimited`), unmeasured_budgets (`tokens` if no usage was recorded)
+budget_consumed:  # elapsed_minutes (active), estimated_tokens, unlimited_budgets (caller set `unlimited`), unmeasured_budgets (`tokens` if no usage was recorded)
 run_log:  # run_id and chain_head only (from the final `run_log.py verify`; see reference/run-log.md)
 escalation_reason:
 required_human_decision:

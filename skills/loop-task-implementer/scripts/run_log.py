@@ -134,7 +134,6 @@ EVENTS = (
     "budget_checked",
     "escalated",
     "merge_attempted",
-    "log_recovered",
     "run_completed",
 )
 ACTORS = ("orchestrator", "builder", "reviewer", "ci", "human", "system")
@@ -143,7 +142,6 @@ OUTCOMES = ("COMPLETE", "ESCALATED", "HUMAN_ACTION_REQUIRED", "ABANDONED")
 _USAGE_INT_FIELDS = ("input_tokens", "output_tokens", "total_tokens")
 # Events whose record is where a session's token usage is supposed to appear.
 USAGE_EVENTS = ("builder_returned", "review_returned", "remediation_returned", "orchestrator_usage")
-DISPATCH_EVENTS = ("builder_dispatched", "review_dispatched", "remediation_dispatched")
 REASON_CODES = (
     "DIRTY_REVIEW_LIMIT", "FIX_ATTEMPT_LIMIT", "CONTESTED_TWICE", "SIZE_HARD_STOP", "FINGERPRINT_ALTERNATION",
     "SCOPE_EXCEEDED", "MISSING_DECISION", "THIRD_PARTY_CHANGE", "CI_UNDIAGNOSABLE", "SESSION_TIMEOUT",
@@ -161,12 +159,22 @@ _SENSITIVE_MARKER = "[REDACTED]"
 # A key is judged by its WORDS (split on separators and camelCase), not by substrings: `passed`, `bypass`,
 # `compass` and `max_tokens` are not secrets, `password`, `apiKey` and `DB_SECRET` are.
 _STRONG_KEY_WORDS = frozenset(
-    "password passwd pwd passphrase secret secrets apikey credential credentials authorization cookie cookies "
-    "privatekey jwt bearer accesskey secretkey sessionid".split()
+    "password passwords passwd pwd pw pass passcode passphrase passphrases secret secrets apikey apikeys credential "
+    "credentials creds authorization cookie cookies privatekey privatekeys jwt bearer accesskey accesskeys secretkey "
+    "secretkeys sessionid sessionids dsn".split()
 )
 _WEAK_KEY_WORDS = frozenset({"token", "auth"})  # a text value is masked; a number under them is a count
 _KEY_WORD_PAIRS = frozenset(
-    {("api", "key"), ("private", "key"), ("access", "key"), ("secret", "key"), ("session", "id"), ("client", "secret")}
+    {
+        (a, b)
+        for a in ("api", "private", "access", "secret", "signing", "master", "ssh", "encryption", "hmac", "auth")
+        for b in ("key", "keys")
+    }
+    | {("session", "id"), ("session", "ids"), ("client", "secret"), ("client", "secrets"), ("database", "url")}
+)
+_CREDENTIAL_WORDS = (
+    r"(?:secrets?|token|passw(?:or)?ds?|(?<=[_.-])pass|pwd|passphrases?|api[_-]?keys?|credentials?|creds|"
+    r"session[_-]?ids?|signature|auth(?:orization)?)(?![a-z])"
 )
 _CAMEL_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
 
@@ -249,8 +257,23 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             token("aws_key_id_any", r"(?<![A-Z0-9])(?:AKIA|ASIA|AGPA|AIDA|AROA)[A-Z0-9]{16}(?![A-Z0-9])"),
             redaction.RedactionPattern(
                 name="url_userinfo",
-                pattern=re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^\s/@:]+:[^\s/@]+@"),
+                pattern=re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^\s/@:]*:[^\s/@]+@"),
                 replacement=r"\1{marker}@",
+                category="secret",
+            ),
+            token("huggingface_token", r"hf_[A-Za-z0-9]{30,}"),
+            token("digitalocean_token", r"dop_v1_[a-f0-9]{40,}"),
+            token("sentry_token", r"sntrys_[A-Za-z0-9+/=_-]{30,}"),
+            redaction.RedactionPattern(
+                name="authorization_scheme",
+                pattern=re.compile(r"(?i)(authorization\s*[:=]\s*(?:token|basic|digest|negotiate|bearer)\s+)[A-Za-z0-9._~+/=-]{8,}"),
+                replacement=r"\1{marker}",
+                category="token",
+            ),
+            redaction.RedactionPattern(
+                name="cli_user_flag",
+                pattern=re.compile(r"(?i)(\s-(?:u|-user)[ =])[^\s:]+:\S+"),
+                replacement=r"\1{marker}",
                 category="secret",
             ),
             token("azure_account_key", r"AccountKey=[A-Za-z0-9+/=]{20,}", "secret"),
@@ -264,19 +287,24 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             redaction.RedactionPattern(
                 name="secretish_kv",
                 pattern=re.compile(
-                    r"(?i)\b([A-Za-z0-9_.-]*(?:secret|token|passw(?:or)?d|pwd|passphrase|api[_-]?key|credential|auth(?:orization)?)"
-                    r"[A-Za-z0-9_.-]*)(\s*[:=]\s*)[\"']?(?!unlimited\b)[A-Za-z0-9+/_.~=-]{12,}"
+                    r"(?i)\b(?P<key>[A-Za-z0-9_.-]{0,64}" + _CREDENTIAL_WORDS + r"[A-Za-z0-9_.-]{0,64})"
+                    r"(?P<sep>\s*[:=]\s*)[\"']?(?!unlimited\b)"
+                    r"(?P<value>[A-Za-z0-9+/_.~=-]{12,})"
                 ),
-                replacement=r"\1\2{marker}",
+                replacement=lambda m, marker: (
+                    f"{m.group('key')}{m.group('sep')}{marker}" if _secret_shaped(m.group("value")) else None
+                ),
                 category="secret",
             ),
             redaction.RedactionPattern(
                 name="secretish_json",
                 pattern=re.compile(
-                    r'(?i)("[A-Za-z0-9_.-]*(?:secret|token|passw(?:or)?d|pwd|passphrase|api[_-]?key|credential|auth(?:orization)?)'
-                    r'[A-Za-z0-9_.-]*"\s*:\s*")(?!unlimited")[^"]{8,}(")'
+                    r'(?i)(?P<head>["\'][A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS + r'[A-Za-z0-9_.-]{0,64}["\']\s*:\s*["\'])'
+                    r'(?P<value>[^"\']{8,})(?P<tail>["\'])'
                 ),
-                replacement=r"\1{marker}\2",
+                replacement=lambda m, marker: (
+                    f"{m.group('head')}{marker}{m.group('tail')}" if _secret_shaped(m.group("value")) else None
+                ),
                 category="secret",
             ),
             redaction.RedactionPattern(
@@ -324,7 +352,8 @@ def _sanitize(value: Any, hits: set[str], depth: int = 0, key: str | None = None
     if value is None or isinstance(value, bool):
         return value
     strength = _key_strength(key) if key is not None else 0
-    if strength == 2 or (strength == 1 and isinstance(value, str)):
+    counted = isinstance(value, (int, float)) and _is_count_key(key or "")
+    if (strength == 2 and not counted) or (strength == 1 and not isinstance(value, (int, float))):
         hits.add("sensitive_key")
         return _SENSITIVE_MARKER  # whatever shape the value has, its key says it is a secret
     if isinstance(value, (int, float)):
@@ -337,7 +366,7 @@ def _sanitize(value: Any, hits: set[str], depth: int = 0, key: str | None = None
         cleaned: dict[str, Any] = {}
         for name, item in value.items():
             if not isinstance(name, str) or not _KEY_RE.fullmatch(name):
-                raise ValueError(f"data key {name!r} must match {_KEY_RE.pattern}")
+                raise ValueError(f"data key {_short(name)} must match {_KEY_RE.pattern}")
             scratch: set[str] = set()
             if _clean_text(name, scratch) != name:
                 raise ValueError("a data key looks like a secret; keys must be plain field names")
@@ -358,6 +387,28 @@ def _short(value: object) -> str:
     if isinstance(value, (bool, int, float)) or value is None:
         return repr(value)[:24]
     return f"<{type(value).__name__}>"
+
+
+def _is_count_key(key: str) -> bool:
+    words = [word.lower() for word in _CAMEL_RE.findall(key)]
+    return bool(words) and words[-1] in {"count", "total", "limit", "size"}
+
+
+def _secret_shaped(value: str) -> bool:
+    """Whether a value after a credential-named key should be masked: anything of credential length and
+    charset that is not clearly an identifier. Kebab/snake-case words (`enabled-by-default`,
+    `cl100k_base_tokenizer_v2`), ALL_CAPS codes (`E_AUTH_TOKEN_EXPIRED_0042`) and absolute paths are what
+    such keys usually hold in an audit trail (`secret_scan=completed-no-findings-detected`); a secret is
+    almost never shaped like that. Human-chosen passwords and random keys are both masked."""
+    if len(value) < 12 or not re.fullmatch(r"[A-Za-z0-9+/_=.~-]+", value):
+        return False
+    if value.startswith(("/", "./", "../", "~/")) or value.isdigit():
+        return False
+    if re.fullmatch(r"\d{4}-\d\d-\d\d(?:[T ]\d\d)?", value):
+        return False
+    if re.fullmatch(r"[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)+", value) or re.fullmatch(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+", value):
+        return False
+    return True
 
 
 def _key_strength(key: str) -> int:
@@ -404,17 +455,16 @@ def _tokens_of(usage: dict[str, Any]) -> int:
 
 
 def _has_token_usage(usage: dict[str, Any]) -> bool:
-    return any(key in usage for key in _USAGE_INT_FIELDS)
+    """Real usage is non-zero: an all-zero record is a placeholder, not a measurement."""
+    return any(usage.get(key, 0) > 0 for key in _USAGE_INT_FIELDS)
 
 
 def _validate_event_data(event: str, data: dict[str, Any]) -> None:
     """Free prose is the injection channel, so the two events that invite it take codes, not sentences."""
-    reason = data.get("reason")
-    if event == "escalated" and reason is not None and reason not in REASON_CODES:
-        raise ValueError(f"escalated data.reason must be one of: {', '.join(REASON_CODES)}")
-    outcome = data.get("outcome")
-    if event == "run_completed" and outcome is not None and outcome not in OUTCOMES:
-        raise ValueError(f"run_completed data.outcome must be one of: {', '.join(OUTCOMES)}")
+    if event == "escalated" and data.get("reason") not in REASON_CODES:
+        raise ValueError(f"escalated needs data.reason, one of: {', '.join(REASON_CODES)}")
+    if event == "run_completed" and data.get("outcome") not in OUTCOMES:
+        raise ValueError(f"run_completed needs data.outcome, one of: {', '.join(OUTCOMES)}")
 
 
 def _now() -> datetime:
@@ -450,7 +500,7 @@ def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError(f"duplicate JSON key {key!r}")
+            raise ValueError(f"duplicate JSON key {_short(key)}")
         result[key] = value
     return result
 
@@ -500,18 +550,6 @@ def _record_shape_errors(record: dict[str, Any], run_id: str) -> list[str]:
     for field in ("prev_hash", "hash"):
         if not isinstance(record[field], str) or not _HASH_RE.fullmatch(record[field]):
             errors.append(f"{field} is not a SHA-256 hex digest")
-    if record["event"] == "log_recovered":
-        data = record["data"]
-        if (
-            record["actor"] != "system"
-            or not isinstance(data, dict)
-            or set(data) != {"dropped_bytes", "previous_head"}
-            or type(data["dropped_bytes"]) is not int
-            or data["dropped_bytes"] < 0
-            or not isinstance(data["previous_head"], str)
-            or not _HASH_RE.fullmatch(data["previous_head"])
-        ):
-            errors.append("log_recovered is not a well-formed system record")
     return errors
 
 
@@ -520,7 +558,7 @@ def _transition_error(seq: int, event: str, completed: bool) -> str | None:
         return f"the first record must be run_started, not {event}"
     if seq > 1 and event == "run_started":
         return "run_started may only be the first record (use run_resumed to continue a run)"
-    if completed and event not in ("run_resumed", "log_recovered"):
+    if completed and event != "run_resumed":
         return f"{event} after run_completed; only run_resumed may continue a completed run"
     return None
 
@@ -579,6 +617,8 @@ def _refuse_repository(directory: Path) -> None:
             raise ValueError(f"the run log directory must be outside any git repository (found one at {ancestor})")
     known = [repo for repo in (_enclosing_repo(Path.cwd().resolve()),) if repo is not None]
     known += [Path(value) for value in (os.environ.get("GIT_DIR"), os.environ.get("GIT_WORK_TREE")) if value]
+    if os.environ.get("GIT_DIR") and not os.environ.get("GIT_WORK_TREE"):
+        known.append(Path.cwd())  # git treats the current directory as the work tree in that case
     for repo in known:
         for ancestor in chain:
             try:
@@ -590,6 +630,8 @@ def _refuse_repository(directory: Path) -> None:
 
 def resolve_log_dir(explicit: str | os.PathLike[str] | None) -> Path:
     """The directory the log may live in: absolute, no ``..``, and outside every git repository."""
+    if explicit is not None and str(explicit) == "":
+        raise ValueError("--log-dir must not be empty")
     raw = str(explicit) if explicit else ""
     if raw.startswith("~") and raw != "~" and not raw.startswith("~/"):
         raise ValueError("only a plain '~' (this account's home) is supported in --log-dir, not ~user")
@@ -634,7 +676,11 @@ def _private_dir(directory: Path) -> None:
     if hasattr(os, "geteuid") and info.st_uid != os.geteuid():
         raise OSError(f"refusing to use a log directory owned by another user: {directory}")
     if info.st_mode & 0o077:
-        os.chmod(directory, 0o700)
+        # Not ours to chmod: a directory that already exists (a home directory, a shared folder) may hold other
+        # things, and tightening it would change who can reach them. Only directories this call created are 0700.
+        raise OSError(f"the log directory is accessible to others; make it 0700 yourself or choose another: {directory}")
+    if os.path.samefile(directory, _home_dir()):
+        raise OSError("refusing to use the home directory itself as the log directory")
 
 
 @contextmanager
@@ -743,13 +789,13 @@ def _full_check(raw: bytes, run_id: str) -> tuple[VerifyResult, list[dict[str, A
     completed = False
     torn = bool(raw) and not raw.endswith(b"\n")
     if torn:
-        errors.append("log does not end with a newline (a torn final write; an append with your last head repairs a fragment under 16 KiB)")
+        errors.append("log does not end with a newline (a torn final write; an append with your last head repairs a fragment under 64 KiB)")
     lines = raw.split(b"\n")
     if lines and lines[-1] == b"":
         lines.pop()
     elif torn:
         lines.pop()  # the unterminated final line is reported once, as the torn write it is
-    now_limit = _now() + timedelta(seconds=CLOCK_SKEW_SECONDS)
+    now_limit = _now() + timedelta(seconds=FORGED_CLOCK_SECONDS)
     for index, line in enumerate(lines, start=1):
         record, problem = _parse_line(line, index)
         if record is None:
@@ -769,7 +815,7 @@ def _full_check(raw: bytes, run_id: str) -> tuple[VerifyResult, list[dict[str, A
         if prev_ts is not None and moment < prev_ts:
             errors.append(f"line {index}: timestamp goes backwards")
         if moment > now_limit:
-            errors.append(f"line {index}: timestamp is in the future")
+            errors.append(f"line {index}: timestamp is far in the future")
         problem = _transition_error(index, record["event"], completed)
         if problem:
             errors.append(f"line {index}: {problem}")
@@ -781,7 +827,7 @@ def _full_check(raw: bytes, run_id: str) -> tuple[VerifyResult, list[dict[str, A
         head = record["hash"]
         records.append(record)
     ok = not errors and bool(records)
-    recoverable = torn and len(errors) == 1 and len(raw) - raw.rfind(b"\n") - 1 <= MAX_RECORD_BYTES
+    recoverable = torn and len(errors) == 1 and 0 <= raw.rfind(b"\n") and len(raw) - raw.rfind(b"\n") - 1 < TAIL_WINDOW
     result = VerifyResult(
         ok, len(records), head, errors or ([] if records else ["log is empty"]),
         records[-1]["event"] if records else None, recoverable,
@@ -848,12 +894,7 @@ def _tail_state(fd: int, size: int, run_id: str) -> _Tail:
         else:
             truncate_to = size - len(fragment)
 
-    completed = False
-    for record in reversed(prior):
-        if record["event"] == "log_recovered":
-            continue
-        completed = record["event"] == "run_completed"
-        break
+    completed = bool(prior) and prior[-1]["event"] == "run_completed"
     return _Tail(tail_seq, tail_head, tail_ts, completed, truncate_to, add_newline, prior[-1] if prior else None)
 
 
@@ -880,6 +921,13 @@ def _make_record(
     return record
 
 
+_SCRIPT_DATA_KEYS = frozenset({"recovered_bytes", "recovered_sha256"})  # added by a repair, never by the caller
+
+
+def _without_script_keys(data: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in data.items() if key not in _SCRIPT_DATA_KEYS}
+
+
 def _head_matches(head: str, given: str) -> bool:
     return hmac.compare_digest(head[: len(given)], given)
 
@@ -895,7 +943,6 @@ def append_event(
     ts: str | None = None,
     expect_head: str | None = None,
     unanchored: bool = False,
-    _internal: bool = False,
 ) -> dict[str, Any]:
     """Validate, redact, chain, and append one record; return it.
 
@@ -908,8 +955,6 @@ def append_event(
     validate_run_id(run_id)
     if event not in EVENTS:
         raise ValueError(f"unknown event {_short(event)}; expected one of: {', '.join(EVENTS)}")
-    if event == "log_recovered" and not _internal:
-        raise ValueError("log_recovered is written by the script itself")
     if actor not in ACTORS:
         raise ValueError(f"unknown actor {_short(actor)}; expected one of: {', '.join(ACTORS)}")
     if data is not None and not isinstance(data, dict):
@@ -932,7 +977,6 @@ def append_event(
     path = log_path(directory, run_id)
     existed = path.exists()
     fd = _open_private(path, os.O_RDWR | os.O_CREAT | os.O_APPEND)
-    committed = False
     try:
         with _locked(fd, exclusive=True):
             size = os.fstat(fd).st_size
@@ -950,7 +994,7 @@ def append_event(
                 if (
                     last is not None
                     and _head_matches(last["prev_hash"], expect_head)
-                    and (last["event"], last["actor"], last["data"], last["usage"])
+                    and (last["event"], last["actor"], _without_script_keys(last["data"]), last["usage"])
                     == (event, actor, cleaned_data, cleaned_usage)
                 ):
                     if tail.add_newline:  # committed, only its newline was lost: finish it
@@ -974,21 +1018,17 @@ def append_event(
                 raise ValueError(problem)  # a wrong call, not a damaged log: exit 2, not 1
 
             blob = b"\n" if tail.add_newline else b""
-            seq, prev = tail.seq, tail.head
             if tail.truncate_to is not None:
-                dropped = size - tail.truncate_to
-                # Keep what is being dropped, durably, before the log is cut: the loss is on the record.
-                _save_torn_fragment(directory, run_id, tail.seq + 1, os.pread(fd, dropped, tail.truncate_to))
-                if tail.seq > 0:
-                    recovered = _make_record(
-                        seq + 1, prev, run_id, "log_recovered", "system",
-                        {"dropped_bytes": dropped, "previous_head": prev}, {}, set(), moment,
-                    )
-                    blob += (_canonical(recovered) + "\n").encode("utf-8")
-                    seq, prev = seq + 1, recovered["hash"]
-                else:  # nothing valid came before it, so there is no chain to record the loss in
-                    cleaned_data = {**cleaned_data, "recovered_bytes": dropped}
-            record = _make_record(seq + 1, prev, run_id, event, actor, cleaned_data, cleaned_usage, hits, moment)
+                # A torn final write was never acknowledged, so nothing acknowledged is lost by cutting it; the
+                # loss is recorded on the record that follows, not in a record of its own, so a retry with the
+                # caller's head still finds that record's predecessor.
+                fragment = os.pread(fd, size - tail.truncate_to, tail.truncate_to)
+                cleaned_data = {
+                    **cleaned_data,
+                    "recovered_bytes": len(fragment),
+                    "recovered_sha256": hashlib.sha256(fragment).hexdigest()[:16],
+                }
+            record = _make_record(tail.seq + 1, tail.head, run_id, event, actor, cleaned_data, cleaned_usage, hits, moment)
             blob += (_canonical(record) + "\n").encode("utf-8")
 
             restore = size
@@ -1004,33 +1044,11 @@ def append_event(
                 except OSError:
                     pass
                 raise
-        committed = True
         if not existed:
             _fsync_dir(directory)
     finally:
-        try:
-            if not existed and not committed and os.fstat(fd).st_size == 0:
-                os.unlink(path)  # a rejected first call must not leave an empty log to confuse the next one
-        except OSError:
-            pass
         os.close(fd)
     return record
-
-
-def _save_torn_fragment(directory: Path, run_id: str, seq: int, fragment: bytes) -> None:
-    for attempt in range(100):
-        name = f"{run_id}.jsonl.torn-{seq}" + (f"-{attempt}" if attempt else "")
-        try:
-            fd = os.open(directory / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
-        except FileExistsError:
-            continue
-        try:
-            _write_all(fd, fragment)
-            _fsync(fd)
-        finally:
-            os.close(fd)
-        return
-    raise OSError("could not save the dropped fragment: too many earlier ones")
 
 
 def _read_log(log_dir: str | os.PathLike[str], run_id: str) -> bytes:
@@ -1097,7 +1115,7 @@ def _usage_totals(records: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def summarize_log(
-    log_dir: str | os.PathLike[str], run_id: str, *, now: str | None = None, expect_head: str | None = None
+    log_dir: str | os.PathLike[str], run_id: str, *, expect_head: str | None = None
 ) -> dict[str, Any]:
     result, records = _checked(log_dir, run_id, expect_head)
     _require_ok(result)
@@ -1119,23 +1137,26 @@ def summarize_log(
 
 
 def _active_minutes(records: list[dict[str, Any]], now: datetime) -> float:
-    """Time spent working. A gap after a session was dispatched is real work in flight and counts in full
-    (a hung session must show up); any other gap counts at most MAX_GAP_MINUTES, so a human decision or an
-    overnight pause does not spend the budget. Host-reported session durations set a floor."""
+    """Time spent working. Each gap between consecutive records counts at most MAX_GAP_MINUTES, so a human
+    decision or an overnight pause does not spend the budget; a gap that ends at a record carrying the host's
+    `elapsed_seconds` for the session that just returned counts up to that duration instead, so a long real
+    session is charged what it took (and parallel sessions are not charged twice, since this is wall time)."""
     cap = timedelta(minutes=MAX_GAP_MINUTES)
     moments = [_parse_ts(record["ts"]) for record in records]
     ends = [*moments[1:], max(now, moments[-1])]
     total = timedelta(0)
-    for record, begin, end in zip(records, moments, ends):
-        gap = max(end - begin, timedelta(0))
-        total += gap if record["event"] in DISPATCH_EVENTS else min(gap, cap)
-    reported = timedelta(seconds=sum(float(record["usage"].get("elapsed_seconds", 0)) for record in records))
-    return max(total, reported).total_seconds() / 60.0
+    for index, (begin, end) in enumerate(zip(moments, ends)):
+        allowed = cap
+        if index + 1 < len(records):
+            allowed = max(cap, timedelta(seconds=float(records[index + 1]["usage"].get("elapsed_seconds", 0))))
+        total += min(max(end - begin, timedelta(0)), allowed)
+    return total.total_seconds() / 60.0
 
 
 def _task_window_start(records: list[dict[str, Any]]) -> int:
     """Index where the current task's budget window begins: the first of the latest run of `task_selected`
-    records for the same task_id, so re-selecting the task after a resume does not reset its budget."""
+    records for the same task_id, so re-selecting it after a resume does not reset its budget (a task that
+    was COMPLETE and is then run again does get a new one)."""
     starts = [i for i, record in enumerate(records) if record["event"] == "task_selected"]
     if not starts:
         return 0
@@ -1144,6 +1165,12 @@ def _task_window_start(records: list[dict[str, Any]]) -> int:
     for earlier in reversed(starts[:-1]):
         if task_id is None or records[earlier]["data"].get("task_id") != task_id:
             break
+        finished = any(
+            record["event"] == "run_completed" and record["data"].get("outcome") == "COMPLETE"
+            for record in records[earlier:start]
+        )
+        if finished:
+            break  # the task was completed and is being run again: a new window
         start = earlier
     return start
 
@@ -1228,6 +1255,8 @@ def _cap(raw: str | None, default: int | float) -> int | float | None:
 
 
 def _read_stdin(name: str) -> str:
+    if sys.stdin.isatty():
+        raise ValueError(f"{name} reads its input from stdin (a heredoc or a pipe), not from a terminal")
     data = sys.stdin.buffer.read(MAX_STDIN_BYTES + 1)
     if len(data) > MAX_STDIN_BYTES:
         raise ValueError(f"{name} input exceeds {MAX_STDIN_BYTES} bytes")
@@ -1252,8 +1281,13 @@ def _json_arg(raw: str | None, name: str, stdin_used: list[str]) -> object:
 
 
 class _Parser(argparse.ArgumentParser):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        kwargs.setdefault("allow_abbrev", False)  # sub-parsers too: `--run` must not stand for `--run-id`
+        super().__init__(*args, **kwargs)
+
     def error(self, message: str) -> "NoReturn":  # type: ignore[name-defined]  # noqa: F821
-        raise ValueError(message)
+        # argparse quotes what it was given; whatever the caller passed is not to be echoed back at length
+        raise ValueError(re.sub(r"[^\x20-\x7e]", "?", message)[:100])
 
     def exit(self, status: int = 0, message: str | None = None) -> "NoReturn":  # type: ignore[name-defined]  # noqa: F821
         raise ValueError(message.strip() if message else "argument parsing exited early")
@@ -1297,8 +1331,11 @@ def _emit_line(text: str) -> None:
     try:
         print(text)
         sys.stdout.flush()
-    except BrokenPipeError:
-        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    except (BrokenPipeError, ValueError, AttributeError, OSError):
+        try:
+            os.dup2(os.open(os.devnull, os.O_WRONLY), 1)
+        except OSError:
+            pass
 
 
 def _emit(payload: dict[str, Any]) -> None:
@@ -1338,7 +1375,11 @@ def _run(argv: list[str]) -> int:
         _emit(receipt)
         return EXIT_OK
     if args.command == "verify":
-        result = verify_log(log_dir, args.run_id, expect_head=args.expect_head)
+        try:
+            result = verify_log(log_dir, args.run_id, expect_head=args.expect_head)
+        except NoLogError as exc:  # exit 2, but say so in a form a caller can branch on
+            _emit({"ok": False, "no_log": True, "detail": _short(str(exc))})
+            return EXIT_ERROR
         _emit({"ok": result.ok, "events": result.events, "chain_head": result.head, "last_event": result.last_event,
                "recoverable": result.recoverable, "error_count": len(result.errors), "errors": result.errors[:5]})
         return EXIT_OK if result.ok else EXIT_INTEGRITY

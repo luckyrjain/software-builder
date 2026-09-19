@@ -27,7 +27,7 @@ For earlier history, see the `## loop-task-implementer` section in the repositor
     budget), reports `unmeasured` when no usage was recorded, and the Orchestrator passes the resolved caps
     every call.
   - **Durability**: writes are all-or-nothing (a failed or short write is rolled back), a torn final line is
-    recovered with an explicit `log_recovered` record, appends read only the tail (linear in run length), and
+    repaired by the next append (see round 3 below), appends read only the tail (constant time in run length), and
     locks time out instead of hanging.
   - **Safety**: `data` is sent on stdin (`--data-json -`) so untrusted text never enters a shell string;
     receipts replace echoed records; keys are redacted and secret-named keys masked; more token families are
@@ -39,18 +39,39 @@ For earlier history, see the `## loop-task-implementer` section in the repositor
     append after the first (a 16+ character prefix is enough), with `run_resumed --unanchored` as the one recorded
     way to continue without it, and a repeated append whose receipt was lost is idempotent; a head with no log
     is an integrity failure on every command; sequencing mistakes exit `2` (a wrong call), not `1`; the budget
-    window is the current `task_id`, so re-selecting a task after a resume no longer resets it, a session in
-    flight is charged in full (a hung one shows up), and host-reported `elapsed_seconds` sets a floor; `total_tokens`
+    window is the current `task_id`, so re-selecting a task after a resume no longer resets it; `total_tokens`
     is accepted; `unmeasured` is judged per returned session and receipts flag `usage_missing`; `escalated.reason`
-    is a closed set of codes; `log_recovered` is the script's own record and the dropped fragment is saved to
-    `<run>.jsonl.torn-<seq>` before the log is cut; redaction now covers generic `key=value` / `"key":"value"` /
-    `--flag value` credentials, more token families, unterminated PEM blocks and integer values under secret
-    keys, and a key is judged by its words (`token_count`, `max_tokens`, `compass` are not secrets); strings over
-    8000 characters are refused instead of half-redacted; errors describe file-derived text by length and digest
-    instead of quoting it (an injection channel); repository detection is structural (bare repos, `GIT_DIR`,
-    gitfiles; a stub `.git` no longer locks the directory out); FIFOs, deep-nesting lines and broken pipes are
-    handled; macOS uses `F_FULLFSYNC`; Python 3.10+ and POSIX are checked with a clear message. Pressure tests
-    26-43, `tests/test_run_log.py` (237 tests, mutation-tested twice) and `tests/test_packaged_run_log.py` cover it.
+    is a closed set of codes; redaction covers generic `key=value` / `"key":"value"` / `--flag value` credentials,
+    more token families, unterminated PEM blocks and integer values under secret keys, and a key is judged by its
+    words (`token_count`, `max_tokens`, `compass` are not secrets); strings over 8000 characters are refused
+    instead of half-redacted; errors describe file-derived text by length and digest instead of quoting it (an
+    injection channel); repository detection is structural (bare repos, `GIT_DIR`, gitfiles; a stub `.git` no
+    longer locks the directory out); FIFOs, deep-nesting lines and broken pipes are handled; macOS uses
+    `F_FULLFSYNC`; Python 3.10+ and POSIX are checked with a clear message.
+  - **Round 3 review** simplified rather than patched again. A torn final write is repaired by the next append,
+    which records `recovered_bytes` and `recovered_sha256` **on the record it writes** — there is no separate
+    `log_recovered` event, no saved fragment file and no unlink cleanup, so a retry with the caller's head still
+    finds that record's predecessor (a separate recovery record had broken idempotence), and the file-accumulation,
+    unlink-race and directory-fsync problems disappear with them. Time is wall time with each gap capped at 30
+    minutes, or at the host-reported `elapsed_seconds` when the gap ends at a session's return: no in-flight
+    charging (a crash then a resume no longer trips the cap) and no summed floor (parallel lenses are not charged
+    twice). A `COMPLETE` task that is run again gets a new budget window. `escalated.reason` and
+    `run_completed.outcome` are required; an all-zero usage record is not a measurement; `verify` flags only a
+    far-future record (consistent with `append`), says `"recoverable": true` for anything the next append can
+    repair (up to 64 KiB), and prints `"no_log": true` for a missing or empty log so a caller can tell "new run"
+    from "unusable"; a pre-existing loose directory is refused instead of `chmod`ed, and the home directory is
+    never the log directory. Redaction: the generic `key=value` pattern was cubic (5.6K characters took 21 s) and
+    is bounded, values are masked unless they are clearly identifiers (`enabled-by-default`,
+    `cl100k_base_tokenizer_v2`, `E_AUTH_TOKEN_EXPIRED_0042`, absolute paths), plural and more credential key
+    names are covered (`passwords`, `api_keys`, `creds`, `dsn`, `signing_key`), any non-number under a weak key
+    is masked whole, a `*_count` number is a count, more token shapes (`hf_`, `dop_v1_`, `sntrys_`,
+    `Authorization: Token`, `redis://:pw@`, `sessionid=`), and caller-supplied text (data keys, duplicate keys,
+    argparse errors) is no longer echoed. Docs: `run-log.md` and section 20 keep the same procedure in fewer
+    words, with explicit branches for a held head, a lost head, a wiped log, a crash mid-resume, and a JSON-escaped
+    heredoc with an unpredictable delimiter; the completion report now carries `Budgets` and `Run log` lines
+    (backlog-runner sums them); backlog-runner's SETUP states the Python/POSIX/log-directory prerequisite.
+    Pressure tests 26-46, `tests/test_run_log.py` (about 300 tests, mutation-tested three times) and
+    `tests/test_packaged_run_log.py` cover it.
 
 ## v1.4 — implementation-plan execution bridge (2026-08-26)
 
