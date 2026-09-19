@@ -23,13 +23,16 @@ outside the repository so it never needs a .gitignore entry or shows up in `git 
 
 from __future__ import annotations
 
-import fcntl
 import os
 import signal
+import sys
 
 import pytest
 
 from scripts.tests.registry_root_lock import LOCK_PATH
+
+if sys.platform != "win32":
+    import fcntl
 
 _LOCK_PATH = LOCK_PATH
 
@@ -44,11 +47,16 @@ def _open_lock_fd() -> int:
     separate `Path.is_symlink()` check-then-open (see package_skill.py's dest-symlink guard for
     the same distinction: a static pre-check on this kind of path is known to be racy).
     """
-    return os.open(_LOCK_PATH, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    return os.open(_LOCK_PATH, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)  # POSIX-only flag
 
 
 @pytest.fixture(autouse=True)
 def _serialize_against_repository_root_mutation(request: pytest.FixtureRequest):
+    if sys.platform == "win32":
+        # No flock (or O_NOFOLLOW) here, and the suites that rebuild cli/sb's snapshot are not
+        # run on Windows; the Windows CI job only exercises the install engine's own tests.
+        yield
+        return
     exclusive = request.node.get_closest_marker("mutates_repository_root") is not None
     fd = _open_lock_fd()
     try:

@@ -71,9 +71,11 @@ def is_pid_alive(pid: int) -> bool:
     this branch is untested on real Windows; treat it as best-effort until it's exercised for
     real, not as a verified-equal port of the POSIX branch above.
     """
-    if pid <= 0:
+    if pid <= 0 or (sys.platform == "win32" and pid > 0xFFFFFFFF):
         # os.kill(0, 0) and os.kill(-1, 0) address a process *group*/every process and
-        # succeed, which would make a lock file holding "0" or "-1" look permanently live.
+        # succeed, which would make a lock file holding "0" or "-1" look permanently live. On
+        # Windows a pid is a DWORD: anything larger cannot name a process, and ctypes would
+        # raise OverflowError converting it.
         return False
 
     if sys.platform == "win32":
@@ -122,6 +124,13 @@ def _read_lock_identity(lock_dir: Path) -> tuple[str | None, str | None]:
             return None
 
     return _read("pid"), _read("acquired_at")
+
+
+def _is_empty_dir(path: Path) -> bool:
+    try:
+        return not any(path.iterdir())
+    except OSError:
+        return False
 
 
 def _parse_lock_pid(raw: str | None) -> int | None:
@@ -396,6 +405,12 @@ def held_lock(
                 identity = _read_lock_identity(lock_dir)
                 lock_pid = _parse_lock_pid(identity[0])
                 is_stale = lock_pid is not None and not is_pid_alive(lock_pid)
+                if not is_stale and identity == (None, None) and _is_empty_dir(lock_dir):
+                    # A lock is only ever published fully populated, so an empty directory is a
+                    # vacated one (an interrupted release). POSIX's rename absorbs it on the next
+                    # acquire; Windows' refuses to rename onto any existing directory, so it
+                    # would otherwise be waited on until it aged out.
+                    is_stale = True
                 if not is_stale:
                     age = _parse_lock_age(identity[1])
                     if age is None:
@@ -718,7 +733,7 @@ _PRESENTATION = {
 }
 
 
-def _print_outcome(outcome: InstallOutcome | UninstallOutcome) -> None:
+def print_outcome(outcome: InstallOutcome | UninstallOutcome) -> None:
     # The stream is looked up at print time, not captured at import: a caller that has
     # redirected sys.stdout/sys.stderr (contextlib.redirect_stdout, a test's capture) must see
     # the output.
@@ -768,7 +783,7 @@ def _cli_install(args: argparse.Namespace) -> int:
         # what install.sh's run_engine and sb's batch loop key on, and they must treat it as a
         # whole-run abort, not a per-skill failure to continue past.
         return 130
-    _print_outcome(outcome)
+    print_outcome(outcome)
     return 1 if outcome.status == "failed" else 0
 
 
@@ -784,7 +799,7 @@ def _cli_uninstall(args: argparse.Namespace) -> int:
         )
     except (KeyboardInterrupt, SystemExit):
         return 130
-    _print_outcome(outcome)
+    print_outcome(outcome)
     return 1 if outcome.status == "failed" else 0
 
 

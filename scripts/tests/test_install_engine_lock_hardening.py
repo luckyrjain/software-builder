@@ -23,7 +23,7 @@ from scripts.install_engine import (
     LockTimeoutError,
     _acquire_lock_dir,
     _lock_timing_from_env,
-    _print_outcome,
+    print_outcome,
     held_lock,
     install_skill,
     is_pid_alive,
@@ -354,8 +354,8 @@ def test_sigterm_before_the_uninstall_move_completes_restores_the_install(
 def test_outcomes_are_written_to_the_streams_current_at_print_time() -> None:
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        _print_outcome(InstallOutcome("s", Path("/x"), "installed", "Installed s"))
-        _print_outcome(InstallOutcome("s", Path("/x"), "failed", "boom"))
+        print_outcome(InstallOutcome("s", Path("/x"), "installed", "Installed s"))
+        print_outcome(InstallOutcome("s", Path("/x"), "failed", "boom"))
     assert out.getvalue() == "Installed s\n"
     assert err.getvalue() == "error: boom\n"
 
@@ -372,3 +372,30 @@ def test_an_empty_skill_name_is_rejected(tmp_path: Path) -> None:
     outcome = uninstall_skill("", dest_root=tmp_path)
     assert outcome.status == "failed"
     assert not (tmp_path / ".lock").exists()
+
+
+def test_an_empty_lock_directory_is_reclaimed_when_the_rename_will_not_absorb_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows refuses to rename onto any existing directory (POSIX silently replaces an empty
+    one), so an empty leftover lock -- an interrupted release -- used to be waited on until it
+    aged out. A lock is only ever published populated, so an empty one is vacated: reclaim it.
+    Forced here by making the first acquire fail the way Windows' rename does."""
+    lock_dir = tmp_path / ".demo-skill.lock"
+    lock_dir.mkdir()
+    real_acquire = install_engine._acquire_lock_dir
+    calls = 0
+
+    def acquire_refused_once(dest_root: Path, target: Path) -> bool:
+        nonlocal calls
+        calls += 1
+        return False if calls == 1 else real_acquire(dest_root, target)
+
+    monkeypatch.setattr(install_engine, "_acquire_lock_dir", acquire_refused_once)
+    sleeps: list[float] = []
+    monkeypatch.setattr(install_engine.time, "sleep", sleeps.append)
+
+    with held_lock(tmp_path, "demo-skill", wait_timeout=5.0):
+        assert (lock_dir / "pid").exists()
+    assert calls == 2
+    assert sleeps == []  # reclaimed and retried straight away, not waited on
