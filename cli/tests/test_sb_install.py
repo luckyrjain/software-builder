@@ -74,7 +74,7 @@ def test_install_warns_when_shadowed_by_a_higher_precedence_divergent_copy(tmp_p
     target_dir.mkdir()
     fake_home = tmp_path / "home"
     fake_home.mkdir()
-    env = {**os.environ, "HOME": str(fake_home)}
+    env = {**os.environ, "HOME": str(fake_home), "USERPROFILE": str(fake_home)}
 
     project_result = _run_sb(
         "install", "pr-review", "--host", "claude-project", "--target-dir", str(target_dir), env=env
@@ -109,7 +109,7 @@ def test_install_warns_unknown_precedence_when_higher_root_manifest_is_unreadabl
     target_dir.mkdir()
     fake_home = tmp_path / "home"
     fake_home.mkdir()
-    env = {**os.environ, "HOME": str(fake_home)}
+    env = {**os.environ, "HOME": str(fake_home), "USERPROFILE": str(fake_home)}
 
     project_result = _run_sb(
         "install", "pr-review", "--host", "claude-project", "--target-dir", str(target_dir), env=env
@@ -137,7 +137,7 @@ def test_install_does_not_warn_when_no_higher_precedence_copy_exists(tmp_path: P
     target_dir.mkdir()
     fake_home = tmp_path / "home"
     fake_home.mkdir()
-    env = {**os.environ, "HOME": str(fake_home)}
+    env = {**os.environ, "HOME": str(fake_home), "USERPROFILE": str(fake_home)}
 
     result = _run_sb(
         "install", "pr-review", "--host", "claude-user", "--target-dir", str(target_dir), env=env
