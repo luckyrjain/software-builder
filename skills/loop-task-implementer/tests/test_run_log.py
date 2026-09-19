@@ -2086,7 +2086,7 @@ def test_a_record_inserted_inside_a_session_cannot_shrink_what_the_session_is_ch
     assert verdict["consumed"]["elapsed_minutes"] > 215 and verdict["exceeded"] == ["elapsed_minutes"]
 
 
-def test_parallel_sessions_are_not_charged_twice(run_log, log_dir):
+def test_parallel_returns_are_unioned_not_summed(run_log, log_dir):
     _start(run_log, log_dir)
     _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z", data={"task_id": "T-1"})
     _append(run_log, log_dir, event="review_returned", actor="reviewer", ts="2026-01-15T10:41:00.000Z",
