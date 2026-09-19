@@ -28,6 +28,7 @@ Use separate, fresh-context Builder and Reviewer sessions. Pass only the minimum
 - Repository instructions
 - `state-schema.yaml`
 - Authorization policy for branch creation, pull-request creation, CI access, and merging
+- Optional `log_dir` (absolute, outside every repository; default is the account's `.software-builder/runs`)
 - Optional `max_task_elapsed_minutes` and `max_task_tokens` (a positive number, or the word `unlimited`);
   when absent or `null`, the defaults in §3 apply
 
@@ -724,32 +725,37 @@ exit codes, events, budgets, recovery) via `scripts/run_log.py` (resolve `skill_
 [orchestrator-lifecycle.md](orchestrator-lifecycle.md)). **One call per tool step, never in parallel**: each needs the head
 from the previous receipt.
 
-1. **Start or resume.** Use `run_log` from state if it holds one. Otherwise derive `run_id` with `run-id` (seeds
-   `["<repo>","<base_branch>","<task_id>"]` on stdin), use the default log directory unless the caller gave `--log-dir`,
-   and keep both in `run_log` in state. Then `verify` (add `--expect-head <it>` if state holds a head) and read its JSON:
-   - exit `0`: an existing run — `run_resumed` with `--expect-head <it>`, or `--unanchored` (reported) if no head is held.
-   - exit `1`, `"recoverable": true` (a torn tail): the same `run_resumed` repairs it; if `events` is `0`, the first record
-     was torn — send `run_started` again (no head).
-   - exit `1`, `"ahead_by"` above 0: the log is intact, N records past your head (a receipt or state save was lost) —
-     `run_resumed --unanchored`, reported.
-   - exit `2` with `"no_log": true`, and state shows no task progress: a new run — `run_started` (no head), then `task_selected`.
-   - anything else (any other `1`, including a head with no log; a `no_log` when state shows progress): the log was changed
-     or wiped — stop, integrity finding, **no appends**.
-   `task_selected` follows `run_started` only; a resumed task continues (a `COMPLETE` task run again gets a fresh budget on its
-   own). After `run_completed`, the next work needs `run_resumed`.
+1. **Start or resume.** `run_log` in state belongs to **one** `task_id`; a different task starts with it null. If null,
+   derive `run_id` with `run-id` (seeds `["<repo>","<base_branch>","<task_id>"]` on stdin), use the default log directory
+   unless the caller gave `log_dir`, and keep both in `run_log`. Then `verify` (add `--expect-head <it>` if state holds a
+   head) and read its JSON. "State shows progress" means `task.status` is not `NOT_STARTED`, or `workspace.working_branch`
+   or `pull_request_id` is set.
+   - exit `0`, head held: `run_resumed --expect-head <it>` (no `--data-json`).
+   - exit `0`, no head held: with progress, `run_resumed --unanchored` (say so in the report); **without progress, stop**
+     — a genuinely new run has no log, so this one was put there by someone else (integrity finding, no appends).
+   - exit `1`, `"recoverable": true` (a torn tail): the same `run_resumed` repairs it. If `events` is `0` the first
+     record was torn: with no head held and no progress, `run_started` again (no head); otherwise stop.
+   - exit `2`, `"no_log": true`, no progress: a new run — `run_started` (no head), then `task_selected` with its `task_id`.
+   - **anything else stops the run** with an integrity finding and **no appends**: any other `1` (a wiped or truncated log,
+     a head that does not match), a `no_log` with progress, and `"ahead_by"` above 0 — the log holds records you did
+     not write, or whose receipt was lost. Repeat your **last** append once with the head you held (idempotent if it
+     was the last record); if that does not clear it, only a person who has inspected the log may direct
+     `run_resumed --unanchored`.
+   `task_selected` comes right after `run_started`; a resumed task continues, and a `COMPLETE` task run again gets a fresh
+   budget on its own. After `run_completed`, more work needs `run_resumed`.
 2. **Every call**: `--log-dir` (if not the default), `--expect-head <previous chain_head>` (store the new one), and `data` as
    one line of JSON with control characters escaped, on stdin via `--data-json -` and a quoted heredoc (`<<'JSON'`) — never
    untrusted text in a quoted shell string.
 3. **One record per action** at the reference's event points (`ci_polled` only on a status change, `orchestrator_usage`
    once per cycle and only when the host reports your usage); `escalated` with a closed-set code for every circuit-breaker
-   stop; session usage in its return record from the host (`usage_missing: true` on a receipt means none was recorded — say so).
+   stop; session usage in its return record from the host (`usage_missing: true` on a receipt means none was recorded — say so; with no `orchestrator_usage` record, say the Orchestrator's own tokens were not counted).
 4. **Before every dispatch** (one check covers dispatches issued in the same step): `budget` with the resolved
    `--max-tokens`, `--max-minutes`, `--expect-head`. Exit `3`: `escalated` (`TOKEN_BUDGET`/`TIME_BUDGET`), stop per §3.
    `1`: integrity failure — stop. `2`: a wrong call — fix it; otherwise `LOG_UNAVAILABLE`: report it, append nothing. Append
    `budget_checked` once when a cap is reached or `unmeasured`/`unlimited` first appears. Copy `consumed` into
    `budgets.consumed`.
 5. **End.** `budget` once more (take `consumed`, `unmeasured`, `unlimited` for the report from it; if it exits `3`,
-   say so, don't escalate again), append `run_completed` (`COMPLETE` merged or ready; `HUMAN_ACTION_REQUIRED` awaiting a person; `ESCALATED`; `ABANDONED`),
+   say so, don't escalate again), append `run_completed` (`COMPLETE` only when merged; `HUMAN_ACTION_REQUIRED` for verified-ready-awaiting-merge or another human step; `ESCALATED`; `ABANDONED`),
    **then** `verify --expect-head <that receipt's chain_head>` and put its `chain_head` in `run_log.chain_head` and the report. A failed `verify` is a finding, not
    something to repair.
 

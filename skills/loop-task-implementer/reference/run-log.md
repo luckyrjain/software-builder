@@ -25,7 +25,7 @@ Keep it unchanged for the whole run.
 
 `run_id` is derived, never invented, so a resumed run finds its own log:
 `run_log.py run-id` reads a JSON array of seed strings on stdin (`["<repo>","<base_branch>","<task_id>"]`, or
-a plan's execution identity as the single seed) and prints `run-` plus 16 hex digits.
+a plan's execution identity as the single seed; §20 uses the three-seed form) and prints `run-` plus 16 hex digits.
 
 ## Record and events
 
@@ -50,7 +50,7 @@ integers up to 10^10. A record with all-zero tokens counts as **no** usage.
 | Event | Log when | Typical `data` |
 |-------|----------|----------------|
 | `run_started` | first record of a new run (only ever the first) | `allowed_actions`, budgets in force (`max_tokens`: `unlimited` allowed) |
-| `run_resumed` | continuing an interrupted, escalated, or completed run (the only event a completed run accepts) | — (`unanchored: true` is added if `--unanchored`) |
+| `run_resumed` | continuing an interrupted, escalated, or completed run (the only event a completed run accepts) | none: omit `--data-json` (`unanchored: true` is added if `--unanchored`) |
 | `task_selected` | a **new** task is chosen; starts its budget window | `task_id`, `execution_identity` |
 | `builder_dispatched` / `remediation_dispatched` / `review_dispatched` | a session starts | `attempt`, `session_ref`, `lens`, `review_generation` |
 | `builder_returned` / `remediation_returned` / `review_returned` | a session returns; **carries its `usage`** | `head_commit`, `changed_file_count`, `finding_count` (counts, never verdict text) |
@@ -62,14 +62,15 @@ integers up to 10^10. A record with all-zero tokens counts as **no** usage.
 
 `escalated.reason` is one of `DIRTY_REVIEW_LIMIT`, `FIX_ATTEMPT_LIMIT`, `CONTESTED_TWICE`, `SIZE_HARD_STOP`,
 `FINGERPRINT_ALTERNATION`, `SCOPE_EXCEEDED`, `MISSING_DECISION`, `THIRD_PARTY_CHANGE`, `CI_UNDIAGNOSABLE`,
-`SESSION_TIMEOUT`, `TOKEN_BUDGET`, `TIME_BUDGET`, `INTEGRITY_FAILURE`, `LOG_UNAVAILABLE`, `OTHER` (anything else
-is rejected with exit `2`: correct it and retry once). `run_completed.outcome` is `COMPLETE`, `ESCALATED`,
+`SESSION_TIMEOUT`, `TOKEN_BUDGET`, `TIME_BUDGET`, `OTHER` (anything else is rejected with exit `2`: correct it and retry
+once). A failing log cannot record its own failure: report `INTEGRITY_FAILURE` or `LOG_UNAVAILABLE` in the report only. `run_completed.outcome` is `COMPLETE`, `ESCALATED`,
 `HUMAN_ACTION_REQUIRED` or `ABANDONED`.
 
 ## Commands
 
-Resolve `skill_root` to the directory containing this skill's `SKILL.md` and a Python 3.10+ interpreter, as
-[orchestrator-lifecycle.md](../workflow/orchestrator-lifecycle.md) does for the lifecycle validator.
+Resolve `skill_root` to the directory containing this skill's `SKILL.md`. Use `python3` if it is 3.10 or newer, else
+the first of `python3.13` … `python3.10` on `PATH` (the script exits `2` on an older one); none found means the log is
+unavailable. The commands below write `python3`.
 
 ```text
 python3 "<skill_root>/scripts/run_log.py" append --run-id <id> --log-dir <dir> --event <event> --actor <actor> \
@@ -103,7 +104,7 @@ and continue from what it shows.)
 | Code | Meaning | What to do |
 |------|---------|------------|
 | `0` | ok | continue |
-| `1` | **integrity failure**: chain does not verify, `--expect-head` mismatch, a head with no log, a forged or far-future record | stop and report it as a finding; do not rewrite or delete the log. Two exceptions, both from `verify`: `"recoverable": true` (a torn final write: your next append, or `run_resumed`, repairs it), and `"ahead_by": N` above 0 (the log is intact but N records past the head you held: a receipt or state save was lost; continue with `run_resumed --unanchored`, reported) |
+| `1` | **integrity failure**: chain does not verify, `--expect-head` mismatch, a head with no log, a forged or far-future record | stop and report it as a finding; do not rewrite or delete the log. One exception, from `verify`: `"recoverable": true` (a torn final write: your next append, or `run_resumed`, repairs it; never reported when a supplied head does not match). `"ahead_by": N` above 0 is a diagnostic, not a way in: the log holds N records after your head that you did not write or whose receipt was lost, and a running session treats it as another writer; only §20's resume path, and only for a person who has inspected the log, may continue with `run_resumed --unanchored` |
 | `2` | bad input, a wrong call (event out of sequence, missing `--expect-head`), no log (`verify` also prints `"no_log": true` — that, and only that, means a new run), unwritable directory, lock timeout, a clock behind the log, unsupported Python, or the script could not run | fail closed: say so and report `LOG_UNAVAILABLE` (in the report only: the log is what failed, so append nothing); never continue an unlogged run silently. A wrong call: fix it and retry once |
 | `3` | `budget` only: a cap is reached | stop dispatching; escalate (`TOKEN_BUDGET` or `TIME_BUDGET`) |
 
@@ -118,7 +119,7 @@ finished `COMPLETE` and is resumed to run again starts a new window after that c
   cap counts as exceeding it.
 - **Time** is *active* time: each gap between records counts at most 30 minutes, so a human decision, a resume the
   next day, or a crash does not spend the budget; a gap that ends at a `builder_`, `remediation_` or `review_returned`
-  record counts up to that session's reported `elapsed_seconds` instead, so a long real session is charged what it took (and parallel lenses
+  record also counts the interval that session's reported `elapsed_seconds` says it ran (never less than the 30-minute gap), so a long real session is charged what it took (and parallel lenses
   are not charged twice). A session that never returns is not visible here: §3's 30-minute session wait catches it.
   `wall_clock_minutes` is for information.
 - **Caps**: always pass the resolved `--max-tokens` and `--max-minutes` (defaults `2,000,000` and `180`; omitting
@@ -134,7 +135,7 @@ finished `COMPLETE` and is resumed to run again starts a new window after that c
 - A **torn final line** (killed mid-write, disk full) is repaired by the next append or `run_resumed`: the fragment
   is cut and that record gets `recovered_bytes` and `recovered_sha256` (a torn write was never acknowledged, so
   nothing acknowledged is lost), including a torn first record (`run_started` with no head). A complete record missing only its
-  newline is kept. A fragment of 48 KiB or more, or any other damage, is not repaired: report it.
+  newline is kept. A larger fragment (`verify` stops calling it recoverable at 48 KiB), or any other damage, is reported, not repaired.
 - `append` chains from the file's tail only (constant time in the run's length); `verify`, `summarize` and `budget`
   read the whole log. Locks time out after 30 seconds (exit `2`). POSIX only.
 - `backlog-runner` sums each task's tokens from the completion report's `Budgets:` line (or an escalation's
