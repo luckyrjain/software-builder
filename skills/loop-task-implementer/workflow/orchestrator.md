@@ -724,32 +724,35 @@ exit codes, events, budgets, recovery) via `scripts/run_log.py` (resolve `skill_
 [orchestrator-lifecycle.md](orchestrator-lifecycle.md)). **One call per tool step, never in parallel**: each needs the head
 from the previous receipt.
 
-1. **Start or resume.** Derive `run_id` with `run-id` (seeds on stdin), pick an absolute `--log-dir` outside every
-   repository, keep both in `run_log` in state. Then:
-   - *State holds a `chain_head`*: `verify --expect-head <it>`. Exit `0`, or `1` with `"recoverable": true`: append
-     `run_resumed --expect-head <it>` (repairs a torn tail). Any other `1`, including "no usable log": changed or wiped
-     — stop, integrity finding.
-   - *No head held*: `verify` with none. Exit `2` with `"no_log": true`: a new run — `run_started` (no head), then
-     `task_selected`. Exit `0`: an existing run whose head you lost — `run_resumed --unanchored`, reported. Else stop.
-   - `run_resumed --expect-head` failing `1` after a crash: repeat your **last** append with the head you held
-     (idempotent if committed); else `verify` with none and, if intact, `run_resumed --unanchored`, reported.
-   - `task_selected` on resume only for a **different** task. After `run_completed`, a next task needs `run_resumed`.
-2. **Every call**: `--log-dir`, `--expect-head <previous chain_head>` (store the new one), and `data` as JSON with
-   newlines escaped, on stdin via `--data-json -` and a quoted heredoc whose delimiter cannot occur in the body
-   (`JSON_END_<8 random hex>`) — never untrusted text in a quoted shell string.
+1. **Start or resume.** Use `run_log` from state if it holds one. Otherwise derive `run_id` with `run-id` (seeds
+   `["<repo>","<base_branch>","<task_id>"]` on stdin), use the default log directory unless the caller gave `--log-dir`,
+   and keep both in `run_log` in state. Then `verify` (add `--expect-head <it>` if state holds a head) and read its JSON:
+   - exit `0`: an existing run — `run_resumed` with `--expect-head <it>`, or `--unanchored` (reported) if no head is held.
+   - exit `1`, `"recoverable": true` (a torn tail): the same `run_resumed` repairs it; if `events` is `0`, the first record
+     was torn — send `run_started` again (no head).
+   - exit `1`, `"ahead_by"` above 0: the log is intact, N records past your head (a receipt or state save was lost) —
+     `run_resumed --unanchored`, reported.
+   - exit `2` with `"no_log": true`, and state shows no task progress: a new run — `run_started` (no head), then `task_selected`.
+   - anything else (any other `1`, including a head with no log; a `no_log` when state shows progress): the log was changed
+     or wiped — stop, integrity finding, **no appends**.
+   `task_selected` follows `run_started` only; a resumed task continues (a `COMPLETE` task run again gets a fresh budget on its
+   own). After `run_completed`, the next work needs `run_resumed`.
+2. **Every call**: `--log-dir` (if not the default), `--expect-head <previous chain_head>` (store the new one), and `data` as
+   one line of JSON with control characters escaped, on stdin via `--data-json -` and a quoted heredoc (`<<'JSON'`) — never
+   untrusted text in a quoted shell string.
 3. **One record per action** at the reference's event points (`ci_polled` only on a status change, `orchestrator_usage`
-   once per cycle); `escalated` with a closed-set code for every circuit-breaker stop; session usage in its return
-   record from the host (`usage_missing: true` on a receipt means none was recorded — say so).
+   once per cycle and only when the host reports your usage); `escalated` with a closed-set code for every circuit-breaker
+   stop; session usage in its return record from the host (`usage_missing: true` on a receipt means none was recorded — say so).
 4. **Before every dispatch** (one check covers dispatches issued in the same step): `budget` with the resolved
    `--max-tokens`, `--max-minutes`, `--expect-head`. Exit `3`: `escalated` (`TOKEN_BUDGET`/`TIME_BUDGET`), stop per §3.
-   `1`: integrity failure — stop. `2`: a wrong call — fix it; otherwise escalate `LOG_UNAVAILABLE`. Append
+   `1`: integrity failure — stop. `2`: a wrong call — fix it; otherwise `LOG_UNAVAILABLE`: report it, append nothing. Append
    `budget_checked` once when a cap is reached or `unmeasured`/`unlimited` first appears. Copy `consumed` into
    `budgets.consumed`.
 5. **End.** `budget` once more (take `consumed`, `unmeasured`, `unlimited` for the report from it; if it exits `3`,
-   say so, don't escalate again), append `run_completed` (outcome code), **then** `verify --expect-head <that receipt's
-   chain_head>` and put its `chain_head` in `run_log.chain_head` and the report. A failed `verify` is a finding, not
+   say so, don't escalate again), append `run_completed` (`COMPLETE` merged or ready; `HUMAN_ACTION_REQUIRED` awaiting a person; `ESCALATED`; `ABANDONED`),
+   **then** `verify --expect-head <that receipt's chain_head>` and put its `chain_head` in `run_log.chain_head` and the report. A failed `verify` is a finding, not
    something to repair.
 
 Never give the log, its directory or path to a Builder or Reviewer, or put them in a package, PR body or report
-(`run_id` and `chain_head` only). If `run_log.py` cannot run, say so and escalate rather than continue unlogged. A run
+(`run_id` and `chain_head` only). If `run_log.py` cannot run, say so, append nothing and stop rather than continue unlogged. A run
 needs roughly fifty to eighty calls; skipping one silently weakens the trail (`verify` proves integrity, not completeness).

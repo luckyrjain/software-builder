@@ -33,9 +33,9 @@ Builder/Reviewer/PR logic here — see the [design spec](../../../docs/superpowe
      [reference/queue-policy.md § 4](../reference/queue-policy.md#4-the-continuation-decision-resolved-explicitly-not-inherited-ambiguous) —
      `HUMAN_ACTION_REQUIRED` continues normally; `ESCALATED` defers this ticket and its dependents and
      continues to the next independent ticket.
-   - Update `consumed_tokens` in the session state by adding the task's `budget_consumed.estimated_tokens` from
-     loop-task-implementer's completion or escalation report (it does not read that skill's run log). If the report
-     lists `tokens` under `unmeasured_budgets`, that task contributed nothing measurable: say so in the summary and
+   - Update `consumed_tokens` in the session state by adding the task's estimated tokens: the `Budgets:` line of a
+     completion report, or `budget_consumed.estimated_tokens` of an escalation report (it does not read that skill's run
+     log). If the report says tokens were "not enforced" (`Budgets:` line) or lists `tokens` under `unmeasured_budgets`, that task contributed nothing measurable: say so in the summary and
      do not treat `session_token_budget` as enforced for it.
 
 3. **After each ticket completes**, re-check the session-level stop conditions

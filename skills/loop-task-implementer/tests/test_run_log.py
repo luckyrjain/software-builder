@@ -68,6 +68,9 @@ def _head(run_log, log_dir):
 
 def _append(run_log, log_dir, event="task_selected", actor="orchestrator", **kwargs):
     kwargs.setdefault("expect_head", _head(run_log, log_dir))
+    given = kwargs.get("data")
+    if event == "task_selected" and (given is None or isinstance(given, dict)) and not (given or {}).get("task_id"):
+        kwargs["data"] = {**(given or {}), "task_id": "T-1"}
     return run_log.append_event(log_dir, RUN_ID, event, actor, **kwargs)
 
 
@@ -283,6 +286,9 @@ def test_escalated_and_run_completed_take_a_closed_set_of_codes(run_log, log_dir
 
 GHP = "ghp_" + "a1B2c3D4" * 4 + "a1B2"  # 36 characters after the prefix
 V = "Xk9fQ2mZp7Lr4TvB8nWd"
+PW = "S3cret" + "Pw"
+AK = "abcdefgh" + "12345678"
+WJ = "wJalrXUtnFEMI/K7MDENG" + "bPxRfiC"
 
 # (text as it appears in prose, the part that must never reach the disk)
 _SECRETS = [
@@ -309,7 +315,7 @@ _SECRETS = [
     ("sntrys_" + "a1B2c3D4" * 4, "a1B2c3D4a1B2c3D4"), (f"db_pass={V}", V),
     ("password=hunter2Hunter2Hunter2", "hunter2Hunter2Hunter2"),  # human-chosen, not random
     ("aws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "wJalrXUtnFEMI/K7MDENG"),
-    (f"authorization=Bearer {V}", V), (f"curl -u admin:{V} https://x.example", V), ("{'password': '%s'}" % V, V),
+    (f"authorization=Bearer {V}", V), (f"curl -u admin:{V}" + " https://x.example", V), ("{'password': '%s'}" % V, V),
     (f"passwords={V}", V), (f"API_KEYS={V}", V), (f"api-key: {V}", V), (f"set-cookie: sid={V}", V),
     (f"auth={V}", V), (f"session_id={V}", V), ("ghs_" + "a1B2c3D4" * 4 + "a1B2", "a1B2c3D4a1B2c3D4"),
     ("ghr_" + "a1B2c3D4" * 4 + "a1B2", "a1B2c3D4a1B2c3D4"), ("AGPA" + "ABCDEFGHIJKLMNOP", "ABCDEFGHIJKLMNOP"),
@@ -716,7 +722,7 @@ def test_expect_head_catches_truncation_wipe_and_foreign_appends(run_log, log_di
     path.unlink()  # the whole log is wiped and a new one started under the same id
     _start(run_log, log_dir)
     with pytest.raises(run_log.IntegrityError):
-        run_log.append_event(log_dir, RUN_ID, "task_selected", "orchestrator", expect_head=head)
+        run_log.append_event(log_dir, RUN_ID, "task_selected", "orchestrator", data={"task_id": "T-1"}, expect_head=head)
 
 
 def test_missing_and_empty_logs_are_not_a_pass(run_log, log_dir):
@@ -1258,12 +1264,13 @@ def test_a_valid_next_record_missing_only_its_newline_is_kept_when_it_is_the_tai
     path = _path(run_log, log_dir)
     path.write_text(path.read_text() + record)
     result = run_log.verify_log(log_dir, RUN_ID)
-    assert not result.ok and result.events == 1  # the unterminated line is not counted until it is repaired
-    assert run_log.verify_log(log_dir, RUN_ID, expect_head=first["hash"]).events == 1
+    assert not result.ok and result.recoverable and result.events == 2  # a whole record that only lacks its newline
+    repaired = _append(run_log, log_dir, event="ci_polled", actor="ci", expect_head=result.head)  # the next append adds the newline and goes on
+    assert run_log.verify_log(log_dir, RUN_ID, expect_head=repaired["hash"]).ok
 
 
 def _fat(index):
-    return {f"field_{i}": ("x" * 3800) + str(index) for i in range(4)}  # about 15 KB per record
+    return {"task_id": "T-1", **{f"field_{i}": ("x" * 3800) + str(index) for i in range(4)}}  # about 15 KB per record
 
 
 def test_appending_after_maximum_size_records_works_at_the_tail_window_edge(run_log, log_dir, monkeypatch):
@@ -1661,19 +1668,18 @@ def test_every_usage_event_is_expected_to_carry_usage(run_log, log_dir, event, a
     assert _budget(run_log, log_dir, now="2026-01-15T10:02:00.000Z")["unmeasured"] == ["tokens"]
 
 
-def test_window_edges_without_task_ids_and_with_an_interleaved_task(run_log, log_dir):
+def test_a_selection_needs_a_task_id_and_an_interleaved_task_is_a_new_window(run_log, log_dir):
     _start(run_log, log_dir)
-    _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z")  # no task_id
-    _append(run_log, log_dir, event="builder_returned", actor="builder", ts="2026-01-15T10:02:00.000Z", usage={"input_tokens": 500})
-    _append(run_log, log_dir, ts="2026-01-15T10:03:00.000Z")  # another selection with no task_id: a new window
-    assert _budget(run_log, log_dir, now="2026-01-15T10:04:00.000Z")["consumed"]["estimated_tokens"] == 0
+    for bad in (None, {}, {"task_id": ""}, {"task_id": 5}):
+        with pytest.raises(ValueError, match="task_id"):
+            run_log.append_event(log_dir, RUN_ID, "task_selected", "orchestrator", data=bad, expect_head=_head(run_log, log_dir))
     _append(run_log, log_dir, ts="2026-01-15T10:05:00.000Z", data={"task_id": "T-1"})
     _append(run_log, log_dir, event="builder_returned", actor="builder", ts="2026-01-15T10:06:00.000Z", usage={"input_tokens": 100})
     _append(run_log, log_dir, ts="2026-01-15T10:07:00.000Z", data={"task_id": "T-2"})
     _append(run_log, log_dir, ts="2026-01-15T10:08:00.000Z", data={"task_id": "T-1"})  # back to T-1 after T-2
     verdict = _budget(run_log, log_dir, now="2026-01-15T10:09:00.000Z")
     assert verdict["consumed"]["estimated_tokens"] == 0  # T-2 in between: not the same run of T-1 selections
-    assert verdict["window"]["since_seq"] == 8 and verdict["seq"] == 8
+    assert verdict["window"]["since_seq"] == 5 and verdict["seq"] == 5
 
 
 @pytest.mark.parametrize(
@@ -1786,6 +1792,272 @@ def test_a_terminal_on_stdin_is_refused_rather_than_waited_on(log_dir):
         os.close(master)
         os.close(slave)
     assert done.returncode == 2 and "not from a terminal" in done.stderr
+
+# --- round 4 ------------------------------------------------------------------------------------
+
+
+def test_resuming_a_completed_task_without_selecting_it_again_starts_a_fresh_window(run_log, log_dir):
+    _start(run_log, log_dir)
+    _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z", data={"task_id": "T-1"})
+    _append(run_log, log_dir, event="builder_returned", actor="builder", ts="2026-01-15T10:02:00.000Z", usage={"input_tokens": 1_900_000})
+    _append(run_log, log_dir, event="run_completed", data={"outcome": "COMPLETE"}, ts="2026-01-15T10:03:00.000Z")
+    # the final budget read of a finished run still sees the task's own usage
+    assert _budget(run_log, log_dir, now="2026-01-15T10:04:00.000Z")["consumed"]["estimated_tokens"] == 1_900_000
+    _append(run_log, log_dir, event="run_resumed", ts="2026-01-16T10:00:00.000Z")
+    _append(run_log, log_dir, event="builder_returned", actor="builder", ts="2026-01-16T10:02:00.000Z", usage={"input_tokens": 100_000})
+    verdict = _budget(run_log, log_dir, now="2026-01-16T10:03:00.000Z")
+    assert verdict["exceeded"] == [] and verdict["consumed"]["estimated_tokens"] == 100_000
+    assert verdict["window"]["since_seq"] == 5  # right after the completion
+
+
+def test_an_escalated_task_that_is_resumed_keeps_its_window(run_log, log_dir):
+    _start(run_log, log_dir)
+    _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z", data={"task_id": "T-1"})
+    _append(run_log, log_dir, event="builder_returned", actor="builder", ts="2026-01-15T10:02:00.000Z", usage={"input_tokens": 1_900_000})
+    _append(run_log, log_dir, event="run_completed", data={"outcome": "ESCALATED"}, ts="2026-01-15T10:03:00.000Z")
+    _append(run_log, log_dir, event="run_resumed", ts="2026-01-16T10:00:00.000Z")
+    _append(run_log, log_dir, event="builder_returned", actor="builder", ts="2026-01-16T10:02:00.000Z", usage={"input_tokens": 200_000})
+    assert _budget(run_log, log_dir, now="2026-01-16T10:03:00.000Z")["exceeded"] == ["tokens"]
+
+
+def test_a_head_that_is_behind_an_intact_log_says_how_far(run_log, log_dir):
+    _start(run_log, log_dir)
+    stale = _head(run_log, log_dir)
+    _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z")
+    _append(run_log, log_dir, ts="2026-01-15T10:02:00.000Z")
+    result = run_log.verify_log(log_dir, RUN_ID, expect_head=stale)
+    assert not result.ok and result.ahead_by == 2 and "past the head" in result.errors[0]
+    cli = _cli("verify", *_common(log_dir), "--expect-head", stale)
+    assert cli.returncode == 1 and json.loads(cli.stdout)["ahead_by"] == 2
+    assert run_log.verify_log(log_dir, RUN_ID, expect_head="f" * 16).ahead_by == 0  # unknown head: not "behind"
+    assert run_log.verify_log(log_dir, RUN_ID).ahead_by == 0
+
+
+def test_a_redacted_value_does_not_keep_a_stray_bracket(run_log):
+    assert run_log._clean_text("authorization=src/auth/authorization_service.py", set()) == "authorization=[REDACTED]"
+
+@pytest.mark.parametrize(
+    "text,core",
+    [
+        (f"secretAccessKey={WJ}", "wJalrXUtnFEMI"),
+        ("passwordHash=" + "abcdefghij" + "1234klmn", "abcdefghij1234klmn"),
+        (f"authKey={V}", V),
+        (f"tokenValue={V}", V),
+        ("token=Zx9!Qp2Lm8@Vt4#Kk", "Zx9!Qp2Lm8"),
+        ("credentials: P@ssw0rd!2024Long", "P@ssw0rd"),
+        ("creds=P@ssw0rd!2024Long", "P@ssw0rd"),
+        ("session_id=e89b12d3-a456-4266-9417-400012345678", "e89b12d3"),
+        ("secret=tok_" + "9f8a7b6c5d4e3f2a1b0c", "9f8a7b6c5d4e3f2a1b0c"),
+        (f"curl -uadmin:{PW}" + " https://x.example", PW),
+        (f"Authorization: ApiKey {AK}", AK),
+        ("Authorization: SSWS 00abcdefgh12345678", "00abcdefgh12345678"),
+        ("clone https://abcdefghijklmnopqrstuv@github.com/x", "abcdefghijklmnopqrstuv"),
+        ("clone https://user:p@ssw0rd@host/y", "ssw0rd"),
+    ],
+)
+def test_round_4_credential_shapes_are_masked(run_log, text, core):
+    assert core not in run_log._clean_text(f"see {text} here", set())
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "tokenizer=sentencepiece-bpe-32k", "token_url=https://example.com/oauth/token", "passwordless=enabled-by-default-now",
+        "secret_scan=completed-no-findings-detected", "job_token_expiry=2026-09-19T10:00:00Z", "cl100k_base_tokenizer_v2",
+    ],
+)
+def test_round_4_identifiers_are_still_kept(run_log, text):
+    assert run_log._clean_text(text, set()) == text
+
+
+@pytest.mark.parametrize(
+    "key,strength",
+    [("clientsecret", 2), ("dbpassword", 2), ("mypassword", 2), ("accesstoken", 1), ("authtoken", 1), ("apitoken", 1),
+     ("bypass", 0), ("author", 0), ("tokens_used_count", 0), ("passed", 0), ("compass", 0)],
+)
+def test_lowercase_compound_key_names_are_recognised(run_log, key, strength):
+    assert run_log._key_strength(key) == strength
+
+
+def test_a_compound_key_masks_its_value(run_log):
+    assert run_log._sanitize({"clientsecret": "Zx9!Qp2Lm8@Vt4#Kk"}, set()) == {"clientsecret": "[REDACTED]"}
+
+
+@pytest.mark.parametrize("key", ["recovered_bytes", "recovered_sha256", "unanchored"])
+def test_callers_cannot_write_the_keys_the_script_writes(run_log, log_dir, key):
+    _start(run_log, log_dir)
+    with pytest.raises(ValueError, match="script writes itself"):
+        _append(run_log, log_dir, data={key: 5})
+
+
+def test_only_a_session_return_can_lift_the_gap_cap(run_log, log_dir):
+    _start(run_log, log_dir)
+    _append(run_log, log_dir, ts="2026-01-15T10:00:30.000Z", data={"task_id": "T-1"})
+    _append(run_log, log_dir, event="orchestrator_usage", actor="orchestrator", ts="2026-01-15T15:00:00.000Z", usage={"elapsed_seconds": 20000, "input_tokens": 5})
+    assert _budget(run_log, log_dir, now="2026-01-15T15:00:10.000Z")["consumed"]["elapsed_minutes"] < 70  # 30 + 30, not ~300
+    _append(run_log, log_dir, event="builder_returned", actor="builder", ts="2026-01-15T19:00:00.000Z", usage={"elapsed_seconds": 14400, "input_tokens": 5})
+    assert _budget(run_log, log_dir, now="2026-01-15T19:00:10.000Z")["consumed"]["elapsed_minutes"] > 200  # a real session is charged
+
+
+def test_a_torn_first_record_and_a_torn_later_record_are_both_recoverable(run_log, log_dir):
+    _start(run_log, log_dir)
+    path = _path(run_log, log_dir)
+    whole = path.read_text()
+    path.write_text(whole[:150])  # the first record was torn while it was being written
+    result = run_log.verify_log(log_dir, RUN_ID)
+    assert not result.ok and result.recoverable and result.events == 0
+    assert run_log.append_event(log_dir, RUN_ID, "run_started", "orchestrator", ts=T0)["seq"] == 1
+    assert run_log.verify_log(log_dir, RUN_ID).ok
+
+
+def test_a_fragment_that_append_could_not_locate_past_is_not_called_recoverable(run_log, log_dir):
+    _start(run_log, log_dir)
+    _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z")
+    path = _path(run_log, log_dir)
+    path.write_text(path.read_text() + "x" * (run_log.TAIL_WINDOW - run_log.MAX_RECORD_BYTES))
+    assert not run_log.verify_log(log_dir, RUN_ID).recoverable
+    path.write_text(path.read_text()[: -1])
+    assert run_log.verify_log(log_dir, RUN_ID).recoverable
+
+
+def test_readers_do_not_change_a_log_files_mode_and_a_writer_still_tightens_it(run_log, log_dir):
+    _start(run_log, log_dir)
+    path = _path(run_log, log_dir)
+    os.chmod(path, 0o444)
+    assert run_log.verify_log(log_dir, RUN_ID).ok
+    assert (path.stat().st_mode & 0o777) == 0o444
+    os.chmod(path, 0o644)
+    _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z")
+    assert (path.stat().st_mode & 0o777) == 0o600
+
+
+def test_the_directory_entry_is_synced_for_the_first_record_even_after_a_rejected_call(run_log, log_dir, monkeypatch):
+    calls = []
+    monkeypatch.setattr(run_log, "_fsync_dir", lambda directory: calls.append(directory))
+    with pytest.raises(ValueError):
+        run_log.append_event(log_dir, RUN_ID, "task_selected", "orchestrator", data={"task_id": "T-1"})  # no head: rejected
+    assert _path(run_log, log_dir).exists() and not calls
+    _start(run_log, log_dir)
+    assert len(calls) == 1
+    _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z")
+    assert len(calls) == 1
+
+@pytest.mark.parametrize(
+    "text,core",
+    [
+        ("SECRET_KEY=django-insecure-abc123def456ghi789", "django-insecure"),
+        ("secret_key: my-app-secret-value-abc", "my-app-secret"),
+        ('{"client_secret": "my-oauth-client-secret-abc"}', "my-oauth-client"),
+        ("aws --aws-secret-access-key abcdefghijklmnopqrst", "abcdefghijklmnopqrst"),
+        ("docker login --password-stdin --password s3cretvalue1", "s3cretvalue1"),
+        ("hook https://hooks.slack.com/services/T0123ABCD/B0123ABCD/xyzXYZ0123456789abcd", "xyzXYZ0123456789abcd"),
+        ("hook https://discord.com/api/webhooks/123456789/abcdEFGH_ijkl-MNOP1234", "abcdEFGH_ijkl"),
+        ("stripe whsec_" + "a1B2c3D4" * 4, "a1B2c3D4a1B2"),
+        ("vault hvs." + "A1b2C3d4E5f6G7h8I9j0K1", "A1b2C3d4E5f6"),
+        ("google ya29." + "A1b2C3d4E5f6G7h8I9j0K1", "A1b2C3d4E5f6"),
+        ("x-auth: SharedAccessSignature sr=abcdefghij1234567890&sig=zzz", "abcdefghij1234567890"),
+        ("gsk_" + "a1B2c3D4" * 5 + " and xai-" + "a1B2c3D4" * 5 + " and pplx-" + "a1B2c3D4" * 4, "a1B2c3D4a1B2"),
+        ("api_secret=~/.ssh/id_rsa-and-more-words", "id_rsa-and-more-words"),
+        ("db_password=SOME_ALL_CAPS_PHRASE_HERE_2", "SOME_ALL_CAPS_PHRASE"),
+        ("passwords=hunter2hunter2hunter2", "hunter2hunter2"),
+        ("signature=tok_9f8a7b6c5d4e3f2a1b0c", "9f8a7b6c5d4e3f2a1b0c"),
+        (f"creds={V}", V),
+        ("db_pass=Xk9fQ2mZp7Lr4TvB8nWd", "Xk9fQ2mZp7Lr4TvB8nWd"),
+        ("--password abcdef", "abcdef"),
+        ("Authorization: Negotiate abcdefgh", "abcdefgh"),
+        (f"curl --user admin:{PW}" + " x", PW),
+        ('{"token": "%s"}' % (AK[:8] + "1234"), AK[:8] + "1234"),
+    ],
+)
+def test_round_4_review_leaks_are_masked(run_log, text, core):
+    assert core not in run_log._clean_text(f"see {text} here", set())
+
+
+@pytest.mark.parametrize("key", ["secrets_found", "passwords_rotated", "tokens_used", "password_length", "password_min", "secret_max", "password_age"])
+def test_numbers_of_things_found_under_a_credential_word_are_counts(run_log, key):
+    assert run_log._sanitize({key: 3}, set()) == {key: 3}
+
+
+def test_a_masked_key_is_named_in_redactions(run_log, log_dir):
+    _start(run_log, log_dir)
+    record = _append(run_log, log_dir, data={"password": "x"})
+    assert "sensitive_key" in record["redactions"]
+
+
+def test_a_full_head_that_differs_after_the_first_sixteen_characters_is_a_mismatch(run_log, log_dir):
+    _start(run_log, log_dir)
+    head = _head(run_log, log_dir)
+    forged = head[:20] + ("0" if head[20] != "0" else "1") * (len(head) - 20)
+    with pytest.raises(run_log.IntegrityError):
+        _append(run_log, log_dir, expect_head=forged)
+    assert not run_log.verify_log(log_dir, RUN_ID, expect_head=forged).ok
+    assert run_log.verify_log(log_dir, RUN_ID, expect_head=head[:16]).ok
+
+
+def test_a_completion_after_the_latest_selection_does_not_hide_an_earlier_window(run_log, log_dir):
+    _start(run_log, log_dir)
+    _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z", data={"task_id": "T-1"})
+    _append(run_log, log_dir, event="builder_returned", actor="builder", ts="2026-01-15T10:02:00.000Z", usage={"input_tokens": 700})
+    _append(run_log, log_dir, event="run_completed", data={"outcome": "COMPLETE"}, ts="2026-01-15T10:03:00.000Z")
+    _append(run_log, log_dir, event="run_resumed", ts="2026-01-15T10:04:00.000Z")
+    _append(run_log, log_dir, ts="2026-01-15T10:05:00.000Z", data={"task_id": "T-1"})
+    _append(run_log, log_dir, event="builder_returned", actor="builder", ts="2026-01-15T10:06:00.000Z", usage={"input_tokens": 50})
+    _append(run_log, log_dir, event="run_completed", data={"outcome": "COMPLETE"}, ts="2026-01-15T10:07:00.000Z")
+    verdict = _budget(run_log, log_dir, now="2026-01-15T10:08:00.000Z")
+    assert verdict["consumed"]["estimated_tokens"] == 50  # the redo, not the first run, and not zero
+    assert verdict["window"]["since_seq"] == 6
+
+
+@pytest.mark.parametrize("mode", [0o750, 0o770, 0o705, 0o701])
+def test_a_directory_reachable_by_group_or_others_is_refused(run_log, log_dir, mode):
+    log_dir.mkdir()
+    os.chmod(log_dir, mode)
+    with pytest.raises(OSError, match="accessible to others"):
+        _start(run_log, log_dir)
+
+
+def test_a_missing_home_directory_does_not_break_an_explicit_log_dir(run_log, log_dir, monkeypatch):
+    monkeypatch.setattr(run_log, "_home_dir", lambda: Path("/nonexistent-home-for-this-test"))
+    assert _start(run_log, log_dir)["seq"] == 1
+
+
+def test_size_caps_are_exact(run_log, log_dir):
+    _start(run_log, log_dir)
+    _append(run_log, log_dir, data={"note": "a" * run_log.MAX_REDACT_INPUT_CHARS})  # exactly the input limit is accepted
+    with pytest.raises(ValueError):
+        _append(run_log, log_dir, data={"note": "a" * (run_log.MAX_REDACT_INPUT_CHARS + 1)})
+
+
+def test_the_wall_clock_figure_is_never_negative(run_log, log_dir):
+    _start(run_log, log_dir, ts="2026-01-15T10:00:00.000Z")
+    _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z", data={"task_id": "T-1"})
+    verdict = _budget(run_log, log_dir, now="2026-01-15T09:00:00.000Z")  # a `now` before the last record
+    assert verdict["consumed"]["wall_clock_minutes"] >= 0 and verdict["consumed"]["elapsed_minutes"] >= 0
+
+
+def test_a_completion_missing_only_its_newline_still_locks_the_run(run_log, log_dir):
+    _start(run_log, log_dir)
+    head = _head(run_log, log_dir)
+    done = _forge_record(run_log, seq=2, prev_hash=head, event="run_completed", ts="2026-01-15T10:01:00.000Z", data={"outcome": "COMPLETE"})
+    path = _path(run_log, log_dir)
+    path.write_text(path.read_text() + done)  # no trailing newline
+    tail_head = json.loads(done)["hash"]
+    with pytest.raises(ValueError, match="run_resumed"):
+        run_log.append_event(log_dir, RUN_ID, "task_selected", "orchestrator", data={"task_id": "T-1"}, expect_head=tail_head)
+    assert run_log.append_event(log_dir, RUN_ID, "run_resumed", "orchestrator", expect_head=tail_head)["seq"] == 3
+
+
+def test_appending_onto_a_last_record_whose_hash_was_edited_is_refused(run_log, log_dir):
+    _start(run_log, log_dir)
+    _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z")
+    path = _path(run_log, log_dir)
+    lines = path.read_text().split("\n")
+    record = json.loads(lines[1])
+    record["data"] = {"task_id": "T-9"}  # content edited, hash left alone
+    lines[1] = run_log._canonical(record)
+    path.write_text("\n".join(lines))
+    with pytest.raises(run_log.IntegrityError):
+        run_log.append_event(log_dir, RUN_ID, "ci_polled", "ci", expect_head=record["hash"])
 
 
 # --- docs and wiring stay in sync -------------------------------------------------------------

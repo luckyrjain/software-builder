@@ -11,6 +11,7 @@ from scripts.package_skill import package_skill
 
 ROOT = Path(__file__).resolve().parents[3]
 RUN_ID = "run-packaged-1"
+SECRET = "Xk9f" + "Q2mZp7Lr4TvB8nWd"  # a made-up value, assembled so a scanner does not read it as a real one
 
 
 def _package(tmp_path: Path) -> Path:
@@ -36,10 +37,10 @@ def test_the_installed_run_log_works_from_another_directory_and_ships_redaction(
     common = ["--run-id", RUN_ID, "--log-dir", str(log_dir)]
 
     started = _run(script, elsewhere, "append", *common, "--event", "run_started", "--actor", "orchestrator",
-                   "--data-json", "-", stdin=json.dumps({"note": "token=Xk9fQ2mZp7Lr4TvB8nWd"}))
+                   "--data-json", "-", stdin=json.dumps({"note": "token=" + SECRET}))
     assert started.returncode == 0, started.stderr
     head = json.loads(started.stdout)["chain_head"]
-    assert "Xk9fQ2mZp7Lr4TvB8nWd" not in (log_dir / f"{RUN_ID}.jsonl").read_text()  # the vendored redaction ran
+    assert SECRET not in (log_dir / f"{RUN_ID}.jsonl").read_text()  # the vendored redaction ran
     assert _run(script, elsewhere, "verify", *common, "--expect-head", head).returncode == 0
     assert _run(script, elsewhere, "budget", *common, "--expect-head", head).returncode == 0
     made = _run(script, elsewhere, "run-id", stdin='["repo","main","T-1"]')

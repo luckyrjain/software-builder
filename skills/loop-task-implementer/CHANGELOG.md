@@ -58,7 +58,7 @@ For earlier history, see the `## loop-task-implementer` section in the repositor
     twice). A `COMPLETE` task that is run again gets a new budget window. `escalated.reason` and
     `run_completed.outcome` are required; an all-zero usage record is not a measurement; `verify` flags only a
     far-future record (consistent with `append`), says `"recoverable": true` for anything the next append can
-    repair (up to 64 KiB), and prints `"no_log": true` for a missing or empty log so a caller can tell "new run"
+    repair (a fragment under 48 KiB), and prints `"no_log": true` for a missing or empty log so a caller can tell "new run"
     from "unusable"; a pre-existing loose directory is refused instead of `chmod`ed, and the home directory is
     never the log directory. Redaction: the generic `key=value` pattern was cubic (5.6K characters took 21 s) and
     is bounded, values are masked unless they are clearly identifiers (`enabled-by-default`,
@@ -72,6 +72,27 @@ For earlier history, see the `## loop-task-implementer` section in the repositor
     (backlog-runner sums them); backlog-runner's SETUP states the Python/POSIX/log-directory prerequisite.
     Pressure tests 26-46, `tests/test_run_log.py` (about 300 tests, mutation-tested three times) and
     `tests/test_packaged_run_log.py` cover it.
+  - **Round 4 review** (five reviewers again) found regressions and gaps in the round-3 redaction and resume logic,
+    all fixed with tests: the case-insensitive lookahead had stopped `secretAccessKey=`, `passwordHash=` and
+    `authKey=` from matching; a value containing punctuation, a UUID, `tok_<random>` and anything under a key that
+    names a credential itself (`SECRET_KEY=my-app-secret-value`) counted as an identifier and leaked; compound
+    lowercase keys (`clientsecret`, `dbpassword`) were not recognised; more shapes are covered (`curl -uUSER:PW`,
+    `Authorization: <any scheme>`, `https://token@host`, a `@` inside a password, `--aws-secret-access-key`, Slack and
+    Discord webhooks, `whsec_`, `gsk_`, `xai-`, `hvs.`, `ya29.`); counts of things found or rotated under a
+    credential word (`secrets_found`) stay numbers. A `COMPLETE` task that is resumed with no new `task_selected`
+    starts a fresh budget window (it used to inherit the old one and trip the cap), `task_selected` now requires a
+    `task_id`, and only a session's own return record (not `orchestrator_usage`) can lift the 30-minute gap cap.
+    `verify --expect-head` reports `ahead_by` when the log is intact but past the head that was held (a lost receipt
+    or state save), so the Orchestrator resumes with `run_resumed --unanchored` instead of stopping on a false
+    integrity finding; a torn first record and a record missing only its newline are now `recoverable`; the
+    script-written keys `recovered_bytes`, `recovered_sha256` and `unanchored` are refused from callers; readers no
+    longer `chmod` the log; an explicit `--log-dir` works when the account's home directory does not exist; the
+    directory entry of a first record is synced even after a rejected first call. Docs: section 20's step 1 covers
+    every `verify` outcome, the log-failure path no longer asks for an append the log would refuse, the heredoc rule
+    is "one escaped line, quoted delimiter", `orchestrator_usage` is only logged when the host reports it, and
+    backlog-runner reads the completion report's `Budgets:` line (it had named fields only the escalation report
+    has). Deliberately not done: replacing the redaction stack with a per-event allowlist (a rewrite for no leak
+    the current stack misses) and a queue-start log-writability preflight.
 
 ## v1.4 — implementation-plan execution bridge (2026-08-26)
 

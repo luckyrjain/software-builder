@@ -141,6 +141,7 @@ OUTCOMES = ("COMPLETE", "ESCALATED", "HUMAN_ACTION_REQUIRED", "ABANDONED")
 
 _USAGE_INT_FIELDS = ("input_tokens", "output_tokens", "total_tokens")
 # Events whose record is where a session's token usage is supposed to appear.
+SESSION_RETURNS = ("builder_returned", "review_returned", "remediation_returned")
 USAGE_EVENTS = ("builder_returned", "review_returned", "remediation_returned", "orchestrator_usage")
 REASON_CODES = (
     "DIRTY_REVIEW_LIMIT", "FIX_ATTEMPT_LIMIT", "CONTESTED_TWICE", "SIZE_HARD_STOP", "FINGERPRINT_ALTERNATION",
@@ -172,9 +173,10 @@ _KEY_WORD_PAIRS = frozenset(
     }
     | {("session", "id"), ("session", "ids"), ("client", "secret"), ("client", "secrets"), ("database", "url")}
 )
+_KEY_STEMS = ("password", "passwd", "passphrase", "credential", "apikey", "privatekey", "secretkey", "accesskey")
 _CREDENTIAL_WORDS = (
     r"(?:secrets?|token|passw(?:or)?ds?|(?<=[_.-])pass|pwd|passphrases?|api[_-]?keys?|credentials?|creds|"
-    r"session[_-]?ids?|signature|auth(?:orization)?)(?![a-z])"
+    r"session[_-]?ids?|signature|auth(?:orization)?)(?-i:(?![a-z]))"
 )
 _CAMEL_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
 
@@ -205,6 +207,7 @@ class VerifyResult(NamedTuple):
     errors: list[str]
     last_event: str | None = None
     recoverable: bool = False  # the only problem is a torn final line that the next append repairs
+    ahead_by: int = 0  # the log is intact and this many records beyond the head that was supplied
 
 
 class _Tail(NamedTuple):
@@ -257,7 +260,7 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             token("aws_key_id_any", r"(?<![A-Z0-9])(?:AKIA|ASIA|AGPA|AIDA|AROA)[A-Z0-9]{16}(?![A-Z0-9])"),
             redaction.RedactionPattern(
                 name="url_userinfo",
-                pattern=re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^\s/@:]*:[^\s/@]+@"),
+                pattern=re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)(?:[^\s/@:]*:[^\s/]+|[^\s/@:]{20,})@"),
                 replacement=r"\1{marker}@",
                 category="secret",
             ),
@@ -266,13 +269,13 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             token("sentry_token", r"sntrys_[A-Za-z0-9+/=_-]{30,}"),
             redaction.RedactionPattern(
                 name="authorization_scheme",
-                pattern=re.compile(r"(?i)(authorization\s*[:=]\s*(?:token|basic|digest|negotiate|bearer)\s+)[A-Za-z0-9._~+/=-]{8,}"),
+                pattern=re.compile(r"(?i)(authorization\s*[:=]\s*[A-Za-z][A-Za-z0-9_-]*\s+)[A-Za-z0-9._~+/=-]{8,}"),
                 replacement=r"\1{marker}",
                 category="token",
             ),
             redaction.RedactionPattern(
                 name="cli_user_flag",
-                pattern=re.compile(r"(?i)(\s-(?:u|-user)[ =])[^\s:]+:\S+"),
+                pattern=re.compile(r"(?i)(\s-(?:u[ =]?|-user[ =]))[^\s:]+:\S+"),
                 replacement=r"\1{marker}",
                 category="secret",
             ),
@@ -283,33 +286,45 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             token("sendgrid_key", r"SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}"),
             token("shopify_token", r"shp(?:at|ca|pa)_[0-9a-f]{32}"),
             token("pypi_token", r"pypi-[A-Za-z0-9_-]{30,}"),
+            token("stripe_webhook_secret", r"whsec_[A-Za-z0-9]{24,}"),
+            token("groq_key", r"gsk_[A-Za-z0-9]{40,}"),
+            token("xai_key", r"xai-[A-Za-z0-9]{40,}"),
+            token("perplexity_key", r"pplx-[A-Za-z0-9]{30,}"),
+            token("vault_token", r"hvs\.[A-Za-z0-9_-]{20,}"),
+            token("docker_pat", r"dckr_pat_[A-Za-z0-9_-]{20,}"),
+            token("google_oauth_token", r"ya29\.[A-Za-z0-9_-]{20,}"),
+            token("slack_webhook", r"https://hooks\.slack\.com/services/[A-Za-z0-9/]{20,}"),
+            token("discord_webhook", r"discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]{20,}"),
+            token("azure_sas_signature", r"SharedAccessSignature\s+[^\s]{20,}", "secret"),
             token("pem_private_key_open", r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*", "secret"),
             redaction.RedactionPattern(
                 name="secretish_kv",
                 pattern=re.compile(
                     r"(?i)\b(?P<key>[A-Za-z0-9_.-]{0,64}" + _CREDENTIAL_WORDS + r"[A-Za-z0-9_.-]{0,64})"
                     r"(?P<sep>\s*[:=]\s*)[\"']?(?!unlimited\b)"
-                    r"(?P<value>[A-Za-z0-9+/_.~=-]{12,})"
+                    r"(?P<value>[^\s\"',;]{8,})"
                 ),
                 replacement=lambda m, marker: (
-                    f"{m.group('key')}{m.group('sep')}{marker}" if _secret_shaped(m.group("value")) else None
+                    f"{m.group('key')}{m.group('sep')}{marker}" if _secret_shaped(m.group("value"), m.group("key")) else None
                 ),
                 category="secret",
             ),
             redaction.RedactionPattern(
                 name="secretish_json",
                 pattern=re.compile(
-                    r'(?i)(?P<head>["\'][A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS + r'[A-Za-z0-9_.-]{0,64}["\']\s*:\s*["\'])'
+                    r'(?i)(?P<head>["\'](?P<key>[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS + r'[A-Za-z0-9_.-]{0,64})["\']\s*:\s*["\'])'
                     r'(?P<value>[^"\']{8,})(?P<tail>["\'])'
                 ),
                 replacement=lambda m, marker: (
-                    f"{m.group('head')}{marker}{m.group('tail')}" if _secret_shaped(m.group("value")) else None
+                    f"{m.group('head')}{marker}{m.group('tail')}" if _secret_shaped(m.group("value"), m.group("key")) else None
                 ),
                 category="secret",
             ),
             redaction.RedactionPattern(
                 name="secretish_flag",
-                pattern=re.compile(r"(?i)(--?(?:password|passwd|pwd|passphrase|token|secret|api-key)[ =])[^\s]{6,}"),
+                pattern=re.compile(
+                    r"(?i)(--?[a-z-]{0,40}(?:password|passwd|pwd|passphrase|token|secret|api-key|secret-access-key|access-key)[ =])[^\s]{6,}"
+                ),
                 replacement=r"\1{marker}",
                 category="secret",
             ),
@@ -339,6 +354,8 @@ def _clean_text(text: str, hits: set[str]) -> str:
         text, patterns=_patterns(redaction), marker=redaction.DEFAULT_MARKER, passes=1
     )
     hits.update(hit.name for hit in found)
+    # A later shared pattern can re-match the marker one of ours just wrote and leave its closing bracket behind.
+    redacted = re.sub(re.escape(redaction.DEFAULT_MARKER) + r"\]+", redaction.DEFAULT_MARKER, redacted)
     if len(redacted) > MAX_STRING_CHARS:
         redacted = redacted[: MAX_STRING_CHARS - len(_TRUNCATED)] + _TRUNCATED
     return redacted
@@ -391,21 +408,46 @@ def _short(value: object) -> str:
 
 def _is_count_key(key: str) -> bool:
     words = [word.lower() for word in _CAMEL_RE.findall(key)]
-    return bool(words) and words[-1] in {"count", "total", "limit", "size"}
+    return bool(words) and words[-1] in {
+        "count", "total", "limit", "size", "found", "detected", "rotated", "scanned", "leaked", "used", "issued", "expired",
+        "length", "min", "max", "age",
+    }
 
 
-def _secret_shaped(value: str) -> bool:
+def _credential_named(key: str) -> bool:
+    """A key that names a credential itself (`api_key`, `SECRET_KEY`, `client_secret`, `db_password`), as opposed to
+    one that merely mentions the word (`secret_scan`, `token_source`)."""
+    words = [word.lower() for word in _CAMEL_RE.findall(key)]
+    if not words:
+        return False
+    joined = "".join(words)
+    return (
+        words[-1] in _STRONG_KEY_WORDS
+        or words[-1] in {"key", "keys", "token", "tokens"} and any(pair in _KEY_WORD_PAIRS for pair in zip(words, words[1:]))
+        or joined.endswith(("secret", "secrets", "password", "apikey", "secretkey", "privatekey"))
+    )
+
+
+def _secret_shaped(value: str, key: str = "") -> bool:
     """Whether a value after a credential-named key should be masked: anything of credential length and
     charset that is not clearly an identifier. Kebab/snake-case words (`enabled-by-default`,
     `cl100k_base_tokenizer_v2`), ALL_CAPS codes (`E_AUTH_TOKEN_EXPIRED_0042`) and absolute paths are what
     such keys usually hold in an audit trail (`secret_scan=completed-no-findings-detected`); a secret is
     almost never shaped like that. Human-chosen passwords and random keys are both masked."""
-    if len(value) < 12 or not re.fullmatch(r"[A-Za-z0-9+/_=.~-]+", value):
+    if re.fullmatch(r"\d{4}-\d\d-\d\d(?:[T ]\d\d(?::\d\d(?::\d\d(?:\.\d+)?)?)?(?:Z|[+-]\d\d:?\d\d)?)?", value):
+        return False  # a date or timestamp
+    if re.match(r"(?i)https?://[^\s@]*$", value) or value.startswith(("/", "./", "../", "~/")) or value.isdigit():
+        return False  # a URL without userinfo, a path, a number
+    if not re.fullmatch(r"[A-Za-z0-9+/_=.~-]+", value):
+        return True  # punctuation is what human-chosen passwords are made of
+    if len(value) < 12:
         return False
-    if value.startswith(("/", "./", "../", "~/")) or value.isdigit():
-        return False
-    if re.fullmatch(r"\d{4}-\d\d-\d\d(?:[T ]\d\d)?", value):
-        return False
+    if re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", value):
+        return True  # a UUID under a credential key is a session or API identifier
+    if any(len(seg) >= 8 and re.search(r"\d", seg) and re.search(r"[A-Za-z]", seg) for seg in re.split(r"[-_.]", value)):
+        return True  # a long segment that mixes letters and digits looks random, not like a word
+    if _credential_named(key):
+        return True  # `secret_key=my-app-secret-value`: a phrase or a word chain is a credential here
     if re.fullmatch(r"[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)+", value) or re.fullmatch(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+", value):
         return False
     return True
@@ -416,7 +458,12 @@ def _key_strength(key: str) -> int:
     words = [word.lower() for word in _CAMEL_RE.findall(key)]
     if any(word in _STRONG_KEY_WORDS for word in words) or any(pair in _KEY_WORD_PAIRS for pair in zip(words, words[1:])):
         return 2
-    return 1 if any(word in _WEAK_KEY_WORDS for word in words) else 0
+    joined = "".join(words)  # `clientsecret`, `dbpassword`, `accesstoken`: one word to the splitter, two to a reader
+    if any(stem in joined for stem in _KEY_STEMS) or joined.endswith(("secret", "secrets")):
+        return 2
+    if any(word in _WEAK_KEY_WORDS for word in words) or joined.endswith(("token", "auth")):
+        return 1
+    return 0
 
 
 def validate_run_id(run_id: object) -> str:
@@ -463,6 +510,8 @@ def _validate_event_data(event: str, data: dict[str, Any]) -> None:
     """Free prose is the injection channel, so the two events that invite it take codes, not sentences."""
     if event == "escalated" and data.get("reason") not in REASON_CODES:
         raise ValueError(f"escalated needs data.reason, one of: {', '.join(REASON_CODES)}")
+    if event == "task_selected" and not (isinstance(data.get("task_id"), str) and data["task_id"]):
+        raise ValueError("task_selected needs data.task_id, the task's id: it is what the per-task budget is counted against")
     if event == "run_completed" and data.get("outcome") not in OUTCOMES:
         raise ValueError(f"run_completed needs data.outcome, one of: {', '.join(OUTCOMES)}")
 
@@ -657,7 +706,8 @@ def log_path(log_dir: Path, run_id: str) -> Path:
 
 
 def _private_dir(directory: Path) -> None:
-    """Create `directory` (and missing parents) private to this user, and tighten it if it already exists."""
+    """Create `directory` (and the missing parents) private to this user; refuse one that already exists and is
+    reachable by others, is not ours, or is the home directory (it is not ours to chmod)."""
     if directory.is_symlink():
         raise OSError(f"refusing to use a symlinked log directory: {directory}")
     missing: list[Path] = []
@@ -679,7 +729,11 @@ def _private_dir(directory: Path) -> None:
         # Not ours to chmod: a directory that already exists (a home directory, a shared folder) may hold other
         # things, and tightening it would change who can reach them. Only directories this call created are 0700.
         raise OSError(f"the log directory is accessible to others; make it 0700 yourself or choose another: {directory}")
-    if os.path.samefile(directory, _home_dir()):
+    try:
+        is_home = os.path.samefile(directory, _home_dir())
+    except OSError:  # an account whose home directory was never created cannot be the log directory
+        is_home = False
+    if is_home:
         raise OSError("refusing to use the home directory itself as the log directory")
 
 
@@ -733,7 +787,7 @@ def _open_private(path: Path, flags: int) -> int:
             raise OSError(f"the run log path is not a regular file: {path}")
         if hasattr(os, "geteuid") and info.st_uid != os.geteuid():
             raise OSError(f"refusing to use a run log owned by another user: {path}")
-        if info.st_mode & 0o077:
+        if info.st_mode & 0o077 and flags & (os.O_WRONLY | os.O_RDWR):  # readers tolerate a loose or read-only copy
             os.fchmod(fd, 0o600)
     except BaseException:
         os.close(fd)
@@ -789,12 +843,12 @@ def _full_check(raw: bytes, run_id: str) -> tuple[VerifyResult, list[dict[str, A
     completed = False
     torn = bool(raw) and not raw.endswith(b"\n")
     if torn:
-        errors.append("log does not end with a newline (a torn final write; an append with your last head repairs a fragment under 64 KiB)")
+        errors.append("log does not end with a newline (a torn final write; the next append repairs a fragment under 48 KiB)")
     lines = raw.split(b"\n")
     if lines and lines[-1] == b"":
         lines.pop()
-    elif torn:
-        lines.pop()  # the unterminated final line is reported once, as the torn write it is
+    elif torn and _parse_line(lines[-1], len(lines))[0] is None:
+        lines.pop()  # an unparseable final line is reported once, as the torn write it is
     now_limit = _now() + timedelta(seconds=FORGED_CLOCK_SECONDS)
     for index, line in enumerate(lines, start=1):
         record, problem = _parse_line(line, index)
@@ -827,7 +881,7 @@ def _full_check(raw: bytes, run_id: str) -> tuple[VerifyResult, list[dict[str, A
         head = record["hash"]
         records.append(record)
     ok = not errors and bool(records)
-    recoverable = torn and len(errors) == 1 and 0 <= raw.rfind(b"\n") and len(raw) - raw.rfind(b"\n") - 1 < TAIL_WINDOW
+    recoverable = torn and len(errors) == 1 and len(raw) - raw.rfind(b"\n") - 1 < TAIL_WINDOW - MAX_RECORD_BYTES
     result = VerifyResult(
         ok, len(records), head, errors or ([] if records else ["log is empty"]),
         records[-1]["event"] if records else None, recoverable,
@@ -959,6 +1013,8 @@ def append_event(
         raise ValueError(f"unknown actor {_short(actor)}; expected one of: {', '.join(ACTORS)}")
     if data is not None and not isinstance(data, dict):
         raise ValueError("data must be an object")
+    if data and (_SCRIPT_DATA_KEYS | {"unanchored"}) & set(data):
+        raise ValueError("data may not use the keys the script writes itself: recovered_bytes, recovered_sha256, unanchored")
     if expect_head is not None and not _HEAD_RE.fullmatch(expect_head):
         raise ValueError("expect_head must be the chain_head from your last receipt (16-64 hex characters)")
     if unanchored and (event != "run_resumed" or expect_head is not None):
@@ -975,7 +1031,6 @@ def append_event(
     directory = Path(log_dir)
     _private_dir(directory)
     path = log_path(directory, run_id)
-    existed = path.exists()
     fd = _open_private(path, os.O_RDWR | os.O_CREAT | os.O_APPEND)
     try:
         with _locked(fd, exclusive=True):
@@ -1044,7 +1099,7 @@ def append_event(
                 except OSError:
                     pass
                 raise
-        if not existed:
+        if size == 0:  # the directory entry of a new (or still empty) log
             _fsync_dir(directory)
     finally:
         os.close(fd)
@@ -1080,9 +1135,15 @@ def _checked(
         raise
     result, records = _full_check(raw, run_id)
     if result.ok and expect_head is not None and not _head_matches(result.head, expect_head):
-        result = result._replace(
-            ok=False, errors=["the log's head does not match the head from your last receipt; it was truncated or replaced"]
+        ahead = next(
+            (len(records) - 1 - i for i, record in enumerate(records) if _head_matches(record["hash"], expect_head)), 0
         )
+        note = (
+            f"the log is {ahead} records past the head from your last receipt (a receipt or state save was lost)"
+            if ahead
+            else "the log's head does not match the head from your last receipt; it was truncated or replaced"
+        )
+        result = result._replace(ok=False, errors=[note], ahead_by=ahead)
     return result, records
 
 
@@ -1147,7 +1208,7 @@ def _active_minutes(records: list[dict[str, Any]], now: datetime) -> float:
     total = timedelta(0)
     for index, (begin, end) in enumerate(zip(moments, ends)):
         allowed = cap
-        if index + 1 < len(records):
+        if index + 1 < len(records) and records[index + 1]["event"] in SESSION_RETURNS:
             allowed = max(cap, timedelta(seconds=float(records[index + 1]["usage"].get("elapsed_seconds", 0))))
         total += min(max(end - begin, timedelta(0)), allowed)
     return total.total_seconds() / 60.0
@@ -1172,6 +1233,13 @@ def _task_window_start(records: list[dict[str, Any]]) -> int:
         if finished:
             break  # the task was completed and is being run again: a new window
         start = earlier
+    # A COMPLETE task that is resumed (without a fresh `task_selected`) is a redo: its window begins after the
+    # completion, unless the completion is the last record (the final budget read of a finished run).
+    completed = [
+        i for i, record in enumerate(records) if record["event"] == "run_completed" and record["data"].get("outcome") == "COMPLETE"
+    ]
+    if completed and start < completed[-1] < len(records) - 1:
+        start = completed[-1] + 1
     return start
 
 
@@ -1186,8 +1254,8 @@ def check_budget(
 ) -> dict[str, Any]:
     """Compare the CURRENT TASK's usage to its caps. ``None`` means the caller explicitly chose ``unlimited``.
 
-    The current task is everything since the most recent ``task_selected`` record (the whole log if there
-    is none), because the caps are per task and a run may work several. Reaching a cap counts as exceeding it.
+    The current task is everything since the first ``task_selected`` of the latest run of selections of the
+    same task (the whole log if there is none), or since a completion that a resume followed, because the caps are per task and a run may work several. Reaching a cap counts as exceeding it.
     """
     result, records = _checked(log_dir, run_id, expect_head)
     _require_ok(result)
@@ -1381,7 +1449,7 @@ def _run(argv: list[str]) -> int:
             _emit({"ok": False, "no_log": True, "detail": _short(str(exc))})
             return EXIT_ERROR
         _emit({"ok": result.ok, "events": result.events, "chain_head": result.head, "last_event": result.last_event,
-               "recoverable": result.recoverable, "error_count": len(result.errors), "errors": result.errors[:5]})
+               "recoverable": result.recoverable, "ahead_by": result.ahead_by, "error_count": len(result.errors), "errors": result.errors[:5]})
         return EXIT_OK if result.ok else EXIT_INTEGRITY
     if args.command == "summarize":
         _emit(summarize_log(log_dir, args.run_id, expect_head=args.expect_head))
