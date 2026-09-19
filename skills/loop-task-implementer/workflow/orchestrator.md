@@ -159,8 +159,16 @@ Record per-task budgets before dispatch:
 - Maximum active CI polling per pipeline: default `15 minutes`
 - Maximum wait for a dispatched Builder or Reviewer session to return a result: default `30 minutes`
   — treat a non-responding session as a failure, escalate, do not silently retry indefinitely
-- Maximum total elapsed task budget: configured by the caller
-- Maximum model/token budget: configured by the caller
+- Maximum total elapsed task budget: default `180 minutes`; the caller may raise or lower it
+- Maximum model/token budget: default `2,000,000` estimated tokens across the Orchestrator, Builder,
+  and all Reviewer sessions; the caller may raise or lower it
+- A caller who supplies nothing (or `null`) gets the defaults above — an unset budget is never
+  treated as unbounded. Running without a ceiling requires the caller to pass the explicit value
+  `unlimited` for that budget, and the completion/escalation report must state that it was used.
+- Track `budgets.consumed.elapsed_minutes` and `estimated_tokens` continuously. Use host-reported usage
+  when the host exposes it; otherwise estimate and label the figure an estimate. If token usage cannot
+  be measured or estimated at all, say so in the report — the elapsed cap still applies and the token
+  cap must not be claimed as enforced.
 - Review size threshold:
   - Default warning: more than `20 files` or `800 changed lines`
   - Default hard stop: more than `40 files` or `1500 changed lines`
@@ -169,7 +177,9 @@ When the warning threshold is exceeded, shard review by coherent area while pres
 
 When the hard threshold is exceeded, split the task or escalate unless the user explicitly authorizes a larger review.
 
-Budget exhaustion must stop the workflow. Do not silently degrade review depth.
+Budget exhaustion must stop the workflow: check the elapsed and token budgets before every dispatch
+(Builder, Reviewer, remediation), stop when either is reached, and escalate with `budget_consumed`
+populated. Do not silently degrade review depth to fit the remaining budget.
 
 ---
 
@@ -688,6 +698,7 @@ third_party_changes:
 budget_consumed:
   elapsed_minutes:
   estimated_tokens:
+  unlimited_budgets: []   # budgets the caller explicitly set to `unlimited`; empty when defaults or caps applied
 escalation_reason:
 required_human_decision:
 required_access:

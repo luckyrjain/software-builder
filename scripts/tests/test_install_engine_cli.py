@@ -10,6 +10,7 @@ import argparse
 import os
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -163,3 +164,173 @@ def test_sigterm_as_system_exit_skips_restore_when_previous_handler_was_none(
         pass
 
     assert len(calls) == 1  # only the registration call; the restore was correctly skipped
+
+
+# --- _terminate_signal / _defer_interrupts ---------------------------------------------------
+
+posix_only = pytest.mark.skipif(
+    sys.platform == "win32", reason="os.kill(pid, SIGTERM) bypasses Python's signal module on Windows"
+)
+
+
+def test_terminate_signal_is_sigterm_on_posix(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(install_engine.sys, "platform", "linux")
+    assert install_engine._terminate_signal() == signal.SIGTERM
+
+
+def test_terminate_signal_uses_sigbreak_on_windows_and_none_when_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(install_engine.sys, "platform", "win32")
+    monkeypatch.setattr(signal, "SIGBREAK", 21, raising=False)
+    assert install_engine._terminate_signal() == 21
+    monkeypatch.delattr(signal, "SIGBREAK")
+    assert install_engine._terminate_signal() is None
+
+
+def test_terminate_signal_is_none_off_the_main_thread() -> None:
+    result: list[object] = []
+    worker = threading.Thread(target=lambda: result.append(install_engine._terminate_signal()))
+    worker.start()
+    worker.join()
+    assert result == [None]
+
+
+def test_context_managers_are_no_ops_off_the_main_thread() -> None:
+    """signal.signal() raises ValueError anywhere but the main thread. A direct held_lock()
+    user on a worker thread worked before signals were involved in the release path; it must
+    still work (unprotected), not crash and strand the lock."""
+    errors: list[BaseException] = []
+
+    def _run() -> None:
+        try:
+            with install_engine._sigterm_as_system_exit():
+                with install_engine._defer_interrupts():
+                    pass
+        except BaseException as exc:  # noqa: BLE001 - reporting whatever escaped the worker
+            errors.append(exc)
+
+    worker = threading.Thread(target=_run)
+    worker.start()
+    worker.join()
+    assert errors == []
+
+
+def test_held_lock_works_and_releases_from_a_worker_thread(tmp_path: Path) -> None:
+    errors: list[BaseException] = []
+
+    def _run() -> None:
+        try:
+            with install_engine.held_lock(tmp_path, "demo-skill"):
+                pass
+        except BaseException as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    worker = threading.Thread(target=_run)
+    worker.start()
+    worker.join()
+    assert errors == []
+    assert not (tmp_path / ".demo-skill.lock").exists()
+
+
+def test_defer_interrupts_restores_both_handlers_on_exit(signal_sentinels: object) -> None:
+    before = (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM))
+    with install_engine._defer_interrupts():
+        assert signal.getsignal(signal.SIGINT) != before[0]
+        assert signal.getsignal(signal.SIGTERM) != before[1]
+    assert (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)) == before
+
+
+def test_defer_interrupts_restores_both_handlers_on_exception(signal_sentinels: object) -> None:
+    before = (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM))
+    with pytest.raises(ValueError):
+        with install_engine._defer_interrupts():
+            raise ValueError("boom")
+    assert (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)) == before
+
+
+def test_defer_interrupts_falls_back_to_defaults_when_previous_handler_was_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """signal.signal() returns None for a handler installed outside Python's signal module.
+    Leaving `_record` in place would swallow every later signal for the life of the process, so
+    the restore must fall back to the interpreter's own default -- not skip, and not pass None
+    (a TypeError)."""
+    calls: list[tuple[int, object]] = []
+
+    def fake_signal(sig: int, handler: object) -> None:
+        calls.append((sig, handler))
+        return None
+
+    monkeypatch.setattr(install_engine.signal, "signal", fake_signal)
+    with install_engine._defer_interrupts():
+        pass
+
+    restores = calls[len(calls) // 2 :]
+    assert {sig for sig, _ in restores} == {signal.SIGINT, signal.SIGTERM}
+    for sig, handler in restores:
+        assert handler is not None
+        expected = signal.default_int_handler if sig == signal.SIGINT else signal.SIG_DFL
+        assert handler == expected
+
+
+@posix_only
+def test_defer_interrupts_defers_sigterm_until_the_block_finishes(signal_sentinels: object) -> None:
+    completed = False
+    with pytest.raises(SystemExit) as exc_info:
+        with install_engine._defer_interrupts():
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.2)
+            completed = True
+    assert exc_info.value.code == 130
+    assert completed  # the block ran to the end; the signal did not interrupt it
+
+
+@posix_only
+def test_defer_interrupts_defers_sigint_too_not_a_keyboard_interrupt(signal_sentinels: object) -> None:
+    """Ctrl-C mid-rollback would otherwise raise KeyboardInterrupt straight through it."""
+    completed = False
+    with pytest.raises(SystemExit) as exc_info:
+        with install_engine._defer_interrupts():
+            os.kill(os.getpid(), signal.SIGINT)
+            time.sleep(0.2)
+            completed = True
+    assert exc_info.value.code == 130
+    assert completed
+
+
+@posix_only
+def test_a_deferred_signal_supersedes_an_exception_raised_by_the_block(signal_sentinels: object) -> None:
+    """The block raising must not swallow a recorded signal: a failed rollback would otherwise
+    let a multi-skill run continue after being told to stop. The original stays visible as
+    `__context__`."""
+    with pytest.raises(SystemExit) as exc_info:
+        with install_engine._defer_interrupts():
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.2)
+            raise ValueError("cleanup failed")
+    assert exc_info.value.code == 130
+    assert isinstance(exc_info.value.__context__, ValueError)
+
+
+@posix_only
+def test_an_exception_alone_still_propagates_unchanged(signal_sentinels: object) -> None:
+    with pytest.raises(ValueError, match="boom"):
+        with install_engine._defer_interrupts():
+            raise ValueError("boom")
+
+
+@posix_only
+def test_defer_nested_in_sigterm_as_system_exit_restores_handlers_lifo(signal_sentinels: object) -> None:
+    sentinel_term = signal.getsignal(signal.SIGTERM)
+    with install_engine._sigterm_as_system_exit():
+        outer = signal.getsignal(signal.SIGTERM)
+        assert outer != sentinel_term
+        with install_engine._defer_interrupts():
+            assert signal.getsignal(signal.SIGTERM) not in (outer, sentinel_term)
+        assert signal.getsignal(signal.SIGTERM) == outer  # back to the converting handler
+        with pytest.raises(SystemExit) as exc_info:
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.2)
+        assert exc_info.value.code == 130
+    assert signal.getsignal(signal.SIGTERM) == sentinel_term

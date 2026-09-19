@@ -16,8 +16,8 @@ backlog_run:
   started_at: "<ISO-8601>"
   tracker_query: "<JQL or GitHub Issues search>"
   max_tasks_per_run: <int>
-  deadline: "<ISO-8601>" | null
-  session_token_budget: <int> | null
+  deadline: "<ISO-8601>" | "unlimited"   # resolved at start: caller value, else started_at + 8h
+  session_token_budget: <int> | "unlimited"   # resolved at start: caller value, else max_tasks_per_run × 2,000,000
   allow_stacked_dependencies: false   # caller-supplied opt-in — see §2 rule 4; never inferred from ticket text
   consumed_tokens: 0
   tasks:
@@ -166,8 +166,8 @@ mid-Builder-dispatch — when any of:
 | Condition | `stopped_reason` |
 |-----------|---------------------|
 | `max_tasks_per_run` tasks attempted this run | `MAX_TASKS_REACHED` |
-| Wall-clock reaches `deadline` (if set) | `DEADLINE_REACHED` |
-| `consumed_tokens` reaches `session_token_budget` (if set) | `TOKEN_BUDGET_EXHAUSTED` |
+| Wall-clock reaches `deadline` (unless the caller set `unlimited`) | `DEADLINE_REACHED` |
+| `consumed_tokens` reaches `session_token_budget` (unless the caller set `unlimited`) | `TOKEN_BUDGET_EXHAUSTED` |
 | **3 consecutive `ESCALATED` outcomes** (systemic-failure signal — distinct from any single task's own per-task circuit breakers, which stay loop-task-implementer's own and unchanged) | `CONSECUTIVE_ESCALATION_BREAKER` |
 | Queue (after skip/defer/order) is empty | `QUEUE_EXHAUSTED` |
 

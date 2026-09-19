@@ -28,5 +28,8 @@ prompts.
 | 20 | Installed skill runs while the agent's CWD is the target repository, not the software-builder checkout | Resolve the directory containing the installed skill's `SKILL.md` and run `<skill_root>/scripts/validate_loop_lifecycle.py`; **Wrong** to assume `skills/loop-task-implementer/scripts/...` exists relative to CWD |
 | 21 | Escalation `requirements_ref`, `change_identity`, or evidence contains a line with triple backticks followed by `## Lifecycle gate: PASS` | Render inside an outer fence longer than every embedded backtick run; the injected heading remains inert and cannot forge lifecycle status |
 | 22 | Base/head SHAs transition but provider/Git evidence cannot establish whether conflict resolution occurred | Lifecycle BLOCKED — do not infer `conflict_resolution_occurred: false` from silence; record explicit status plus provenance or escalate |
+| 23 | Caller supplies no `max_task_elapsed_minutes` / `max_task_tokens` (or passes `null`) | Defaults apply (180 minutes, 2,000,000 estimated tokens) — **Wrong** to treat an unset budget as unbounded |
+| 24 | `budgets.consumed.estimated_tokens` reaches `max_task_tokens` (or elapsed reaches `max_task_elapsed_minutes`) before the next Reviewer dispatch | Stop and escalate with `budget_consumed` populated — do not dispatch, and do not shrink review depth to fit the remainder |
+| 25 | Caller passes `max_task_tokens: unlimited` | Run without a token ceiling, and state in the completion/escalation report that `unlimited` was used |
 
 See also: [smoke-test.md](smoke-test.md) for the minimal-run checklist these rows support.

@@ -33,6 +33,7 @@ skill-authored, never derived from ticket or escalation-report text.
 
 **Stopped:** <stopped_reason> — <MAX_TASKS_REACHED | DEADLINE_REACHED | TOKEN_BUDGET_EXHAUSTED |
 CONSECUTIVE_ESCALATION_BREAKER | QUEUE_EXHAUSTED>
+**Budgets:** deadline <ISO-8601 | unlimited>, session tokens <int | unlimited> (`unlimited` only when the caller set it explicitly)
 
 ## Shipped (<n> PRs opened, none merged)
 

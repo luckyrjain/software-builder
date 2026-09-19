@@ -2,6 +2,16 @@
 
 For earlier history, see the `## loop-task-implementer` section in the repository root `CHANGELOG.md`.
 
+## Unreleased — non-null default task budgets (2026-09-18)
+
+- `budgets.max_task_elapsed_minutes` now defaults to `180` and `budgets.max_task_tokens` to `2000000`
+  (estimated) instead of `null`. An unset or `null` budget applies the default and is never unbounded;
+  the only way to run without a ceiling is the explicit value `unlimited`, which the report echoes in
+  `budget_consumed.unlimited_budgets`.
+- Orchestrator §3 now checks both budgets before every dispatch and states how token usage is measured
+  or, when unmeasurable, that the token cap is not enforced. Pressure tests 23-25 and
+  `tests/test_budget_defaults.py` cover the defaults.
+
 ## v1.4 — implementation-plan execution bridge (2026-08-26)
 
 - Added validated `implementation_plan` input while preserving legacy `implementation_task` behavior.
