@@ -59,6 +59,11 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   signal arriving between the SIGINT and SIGTERM installs still restores both.
 - A deferred signal that supersedes a cleanup which itself failed now prints
   `cleanup failed while handling an interrupt`, instead of hiding the failure behind exit 130.
+- `install.sh`'s `run_engine()` now reports the engine's own exit status after a forwarded signal.
+  It could return the interrupted `wait`'s 143 instead (about 1 run in 25 for an engine exiting 130,
+  every time for one exiting 0), and callers only stop the run on exactly 130, so the next skill
+  started anyway. It polls for the engine's exit, installs its trap before launching the engine,
+  and treats a stop request as 130 even if the engine finished cleanly first.
 
 ### Interrupts during cleanup no longer abandon it; signals to `install.sh` reach the engine (2026-09-18)
 

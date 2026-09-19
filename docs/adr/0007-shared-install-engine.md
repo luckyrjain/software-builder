@@ -151,6 +151,10 @@ it was scope discipline for the original porting task, not a standing constraint
     restores both. When a deferred signal supersedes a cleanup that itself failed, a
     `cleanup failed while handling an interrupt` warning is printed, since the `SystemExit(130)`
     would otherwise hide that failure.
+    `run_engine()` polls for the engine's exit rather than blocking in `wait`, whose status a
+    trapped signal could replace with 143 (which callers don't recognise as a stop), installs its
+    trap before launching the engine, and returns 130 for a stop request even when the engine
+    finished cleanly first.
   - *Residual.* A signal landing in the few bytecodes between the primary work's
     `_sigterm_as_system_exit()` exiting and the rollback's `_defer_interrupts()` starting hits
     the default disposition; closing it needs the handler to stay installed across that
