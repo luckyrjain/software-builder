@@ -3,6 +3,11 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# A stop request (TERM, or INT where it is not already ignored) outside run_engine -- during a
+# read-only probe, or between skills -- exits 130 like one inside it, instead of dying with
+# bash's default 143 depending on which instant it landed.
+trap 'exit 130' TERM INT
+
 run_python() {
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${REPO_ROOT}" python3 "$@"
 }
@@ -34,9 +39,11 @@ run_engine() {
     sleep 0.05
   done
   if wait "${engine_pid}"; then status=0; else status=$?; fi
-  trap - TERM INT
-  # A stop request must stop the run even when the engine happened to finish first.
-  if [[ "${interrupted}" == true ]] && ((status == 0)); then
+  trap 'exit 130' TERM INT
+  # A stop request must stop the run whatever the engine reported: it can finish cleanly first
+  # (0), or die from the forwarded TERM before it installed its own handler (143) -- either
+  # would otherwise read as an ordinary result, and the loop would carry on to the next skill.
+  if [[ "${interrupted}" == true ]]; then
     status=130
   fi
   return "${status}"
@@ -77,13 +84,22 @@ Only skills.yaml-registered skills may be installed.
 EOF
 }
 
+require_option_value() {
+  if (($# < 2)); then
+    echo "error: $1 requires a value (see --help)" >&2
+    exit 2
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --agent)
+    require_option_value "$@"
     AGENT="$2"
     shift 2
     ;;
   --target-dir)
+    require_option_value "$@"
     TARGET_DIR="$2"
     shift 2
     ;;
@@ -96,11 +112,13 @@ while [[ $# -gt 0 ]]; do
     shift
     ;;
   --verify)
+    require_option_value "$@"
     MODE="verify"
     VERIFY_PATH="$2"
     shift 2
     ;;
   --uninstall)
+    require_option_value "$@"
     MODE="uninstall"
     SKILLS+=("$2")
     shift 2
@@ -171,7 +189,7 @@ registry_check_skill() {
 # but as the actual first gate the SKILLS array goes through, before destination resolution.
 validate_skill_name_format() {
   local skill="$1"
-  if [[ "${skill}" == *"/"* || "${skill}" == "." || "${skill}" == ".." ]]; then
+  if [[ -z "${skill}" || "${skill}" == *"/"* || "${skill}" == "." || "${skill}" == ".." ]]; then
     echo "error: invalid skill name '${skill}' (must be a single directory name, no path separators)" >&2
     return 1
   fi

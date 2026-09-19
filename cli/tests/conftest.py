@@ -11,7 +11,6 @@ from __future__ import annotations
 import fcntl
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -21,16 +20,17 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.build_sb_snapshot import build_snapshot  # noqa: E402
+from scripts.tests.registry_root_lock import LOCK_PATH  # noqa: E402
 
 # scripts/tests/ also rebuilds and reads cli/sb/_vendored/ and cli/sb/_registry_snapshot/
 # (test_build_sb_snapshot.py, test_sb_wheel_smoke.py), serialized against each other there
 # via a flock in scripts/tests/conftest.py. This suite runs `cd cli && pytest tests/` as a
 # *separate process* under CI's `make -j lint-suites`, so it never observes that lock unless
-# it takes it too. Reuse the exact same fixed lock-file path (there's no import link between
-# the two conftest.py files, only this shared path) and hold it exclusively for the whole
+# it takes it too. Reuse the exact same lock-file path (one definition, in
+# scripts/tests/registry_root_lock.py, imported by both conftest.py files) and hold it exclusively for the whole
 # session, so no scripts/tests/ test can run while this suite's snapshot exists mid-rebuild or
 # mid-read, and vice versa.
-_LOCK_PATH = Path(tempfile.gettempdir()) / "software-builder-pytest-registry-root.lock"
+_LOCK_PATH = LOCK_PATH
 
 
 def _open_lock_fd() -> int:
