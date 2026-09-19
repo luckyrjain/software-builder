@@ -53,8 +53,8 @@ Parse per [workflow/inputs.md](workflow/inputs.md).
 |-------|----------|-------|
 | `tracker_query` | Yes | JQL / GitHub Issues search selecting the candidate backlog — configured once, see [SETUP.md](SETUP.md) |
 | `max_tasks_per_run` | Yes | Session-level hard cap |
-| `deadline` | No | Stop *pulling new tasks* at/after this wall-clock time; in-flight work finishes its current step |
-| `session_token_budget` | No | Session-level token ceiling across all tasks this run |
+| `deadline` | No | Stop *pulling new tasks* at/after this wall-clock time; in-flight work finishes its current step. Default: start + 8 hours; `unlimited` to opt out explicitly |
+| `session_token_budget` | No | Session-level token ceiling across all tasks this run. Default: `max_tasks_per_run` × 2,000,000 estimated tokens; `unlimited` to opt out explicitly |
 | `repo_context` | Yes | Same repository-access/authorization inputs loop-task-implementer itself requires |
 
 ## Prerequisites

@@ -37,8 +37,8 @@ agent reads, only from the caller's own upfront config).
 
 | Field | Default |
 |-------|---------|
-| `deadline` | None — no wall-clock stop; only `max_tasks_per_run` (and any circuit breaker) bounds the run |
-| `session_token_budget` | None — no session-level token ceiling; only `max_tasks_per_run` (and any circuit breaker) bounds the run |
+| `deadline` | `started_at` + 8 hours. Unset or `null` never means unbounded; running with no wall-clock stop requires the explicit value `unlimited`, which the morning summary must state |
+| `session_token_budget` | `max_tasks_per_run` × 2,000,000 estimated tokens (loop-task-implementer's per-task default). Unset or `null` never means unbounded; running with no session ceiling requires the explicit value `unlimited`, which the morning summary must state. Because this default equals the sum of the per-task caps, it only binds when the caller sets a lower value |
 | `allow_stacked_dependencies` | `false` — a dependency with an open, unmerged PR defers its dependent rather than stacking on top of unmerged code; see [reference/queue-policy.md](../reference/queue-policy.md) §2 rule 4. Only a caller-supplied `true` here enables stacking — never inferred from ticket content |
 
 ## Non-negotiable, not an input

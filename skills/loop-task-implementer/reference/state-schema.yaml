@@ -139,8 +139,11 @@ budgets:
   max_fix_attempts_per_finding: 2
   max_contested_rounds_per_finding: 2
   max_ci_poll_minutes: 15
-  max_task_elapsed_minutes: null
-  max_task_tokens: null
+  # Non-null defaults (A2): a caller that sets nothing still gets a ceiling. A caller may raise or
+  # lower either value; the only way to run without one is the explicit string "unlimited", which
+  # the completion/escalation report must echo. null/absent means "unset -> default applies".
+  max_task_elapsed_minutes: 180
+  max_task_tokens: 2000000   # estimated across Orchestrator, Builder, and all Reviewer sessions
   consumed:
     elapsed_minutes: 0
     estimated_tokens: 0
