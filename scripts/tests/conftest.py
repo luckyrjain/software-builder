@@ -24,6 +24,7 @@ outside the repository so it never needs a .gitignore entry or shows up in `git 
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import os
 import signal
 import tempfile
@@ -31,7 +32,10 @@ from pathlib import Path
 
 import pytest
 
-_LOCK_PATH = Path(tempfile.gettempdir()) / "software-builder-pytest-registry-root.lock"
+# Keyed on this checkout so pytest runs from different worktrees (or another session's copy)
+# don't block each other -- they mutate different roots, so there is nothing to serialize.
+_ROOT_KEY = hashlib.sha256(str(Path(__file__).resolve().parents[2]).encode()).hexdigest()[:12]
+_LOCK_PATH = Path(tempfile.gettempdir()) / f"software-builder-pytest-registry-root-{_ROOT_KEY}.lock"
 
 
 def _open_lock_fd() -> int:

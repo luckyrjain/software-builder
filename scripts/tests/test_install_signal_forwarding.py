@@ -10,6 +10,7 @@ group, which is the case a group-signalling test can't distinguish.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 import stat
@@ -47,6 +48,30 @@ exec "{real}" "$@"
 """
 
 
+def _spawn(cmd: list[str], env: dict[str, str]) -> subprocess.Popen[str]:
+    """install.sh in its own session, so the fake engines it spawns can be reaped by group.
+
+    SIGINT is reset to its default: a runner that ignores it (nohup, a backgrounded job) would
+    otherwise pass that on, and bash cannot trap a signal it inherited as ignored."""
+    return subprocess.Popen(
+        cmd,
+        cwd=ROOT,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+        preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL),
+    )
+
+
+def _reap(proc: subprocess.Popen[str]) -> None:
+    """Kill the whole group: killing only bash leaves a fake engine's `sleep` loop running."""
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(proc.pid, signal.SIGKILL)
+    proc.wait(timeout=10)
+
+
 def _start_slow_install(tmp_path: Path) -> tuple[subprocess.Popen[str], Path]:
     home = tmp_path / "home"
     home.mkdir()
@@ -56,14 +81,7 @@ def _start_slow_install(tmp_path: Path) -> tuple[subprocess.Popen[str], Path]:
     fake.write_text(_FAKE_PYTHON.format(real=sys.executable), encoding="utf-8")
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     env = {**os.environ, "HOME": str(home), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
-    proc = subprocess.Popen(
-        ["bash", str(INSTALLER), "--agent", "cursor", SKILL],
-        cwd=ROOT,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    proc = _spawn(["bash", str(INSTALLER), "--agent", "cursor", SKILL], env)
     return proc, home / ".cursor" / "skills"
 
 
@@ -75,7 +93,7 @@ def _wait_until_staging(skills_dir: Path, proc: subprocess.Popen[str], timeout: 
         if proc.poll() is not None:
             pytest.fail(f"install.sh exited before staging began: {proc.communicate()}")
         time.sleep(0.05)
-    proc.kill()
+    _reap(proc)
     pytest.fail("install never reached staging")
 
 
@@ -89,12 +107,11 @@ def test_signal_to_install_sh_alone_reaches_the_engine_and_rolls_back(
         os.kill(proc.pid, sig)  # bash's PID only -- not the process group
         stdout, stderr = proc.communicate(timeout=30)
     finally:
-        if proc.poll() is None:
-            proc.kill()
+        _reap(proc)
 
     assert proc.returncode == 130, (stdout, stderr)
     # Long enough for an orphaned engine (the old behavior) to have finished the 4s-slow install.
-    time.sleep(5)
+    time.sleep(6)
     assert not (skills_dir / SKILL).exists(), "an orphaned engine completed the install"
     assert list(skills_dir.glob(f".{SKILL}.*")) == [], "staging/backup/lock directories left behind"
 
@@ -123,14 +140,7 @@ def test_a_stop_request_ends_a_multi_skill_run_even_if_the_engine_exits_cleanly_
     fake.write_text(_FAKE_PYTHON_EXITS_0_ON_TERM.format(real=sys.executable, log=log), encoding="utf-8")
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     env = {**os.environ, "HOME": str(home), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
-    proc = subprocess.Popen(
-        ["bash", str(INSTALLER), "--agent", "cursor", SKILL, "api-design-review"],
-        cwd=ROOT,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    proc = _spawn(["bash", str(INSTALLER), "--agent", "cursor", SKILL, "api-design-review"], env)
     try:
         deadline = time.monotonic() + 30
         while not log.exists() and time.monotonic() < deadline:
@@ -139,8 +149,7 @@ def test_a_stop_request_ends_a_multi_skill_run_even_if_the_engine_exits_cleanly_
         os.kill(proc.pid, signal.SIGTERM)
         stdout, stderr = proc.communicate(timeout=30)
     finally:
-        if proc.poll() is None:
-            proc.kill()
+        _reap(proc)
 
     assert proc.returncode == 130, (stdout, stderr)
     assert len(log.read_text(encoding="utf-8").splitlines()) == 1, "the next skill was started after the stop"
@@ -168,14 +177,7 @@ def test_an_engine_killed_by_the_forwarded_term_still_ends_a_multi_skill_run(tmp
     fake.write_text(_FAKE_PYTHON_DIES_ON_TERM.format(real=sys.executable, log=log), encoding="utf-8")
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     env = {**os.environ, "HOME": str(home), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
-    proc = subprocess.Popen(
-        ["bash", str(INSTALLER), "--agent", "cursor", SKILL, "api-design-review"],
-        cwd=ROOT,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    proc = _spawn(["bash", str(INSTALLER), "--agent", "cursor", SKILL, "api-design-review"], env)
     try:
         deadline = time.monotonic() + 30
         while not log.exists() and time.monotonic() < deadline:
@@ -184,8 +186,7 @@ def test_an_engine_killed_by_the_forwarded_term_still_ends_a_multi_skill_run(tmp
         os.kill(proc.pid, signal.SIGTERM)
         stdout, stderr = proc.communicate(timeout=30)
     finally:
-        if proc.poll() is None:
-            proc.kill()
+        _reap(proc)
 
     assert proc.returncode == 130, (stdout, stderr)
     assert len(log.read_text(encoding="utf-8").splitlines()) == 1, "the next skill was started after the stop"
@@ -208,3 +209,41 @@ def test_an_empty_skill_name_and_a_missing_option_value_are_usage_errors(tmp_pat
     assert missing.returncode == 2
     assert "--agent requires a value" in missing.stderr
     assert "unbound variable" not in missing.stderr
+
+
+# A stop request that lands while bash is between engine runs -- in a read-only python3 probe for
+# the next skill -- must still end the run with 130 and not start that skill.
+_FAKE_PYTHON_SLOW_PROBES = """#!/usr/bin/env bash
+if [[ "$1" == *install_engine.py ]]; then
+  echo "$@" >> "{log}"
+  exit 0
+fi
+if [[ -e "{log}" ]]; then sleep 1; fi
+exec "{real}" "$@"
+"""
+
+
+def test_a_stop_request_between_skills_exits_130_without_starting_the_next_skill(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "engine.log"
+    fake = bin_dir / "python3"
+    fake.write_text(_FAKE_PYTHON_SLOW_PROBES.format(real=sys.executable, log=log), encoding="utf-8")
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    env = {**os.environ, "HOME": str(home), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    proc = _spawn(["bash", str(INSTALLER), "--agent", "cursor", SKILL, "api-design-review"], env)
+    try:
+        deadline = time.monotonic() + 30
+        while not log.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert log.exists(), "engine was never started"
+        time.sleep(0.3)  # the probes after the first engine run now sleep 1s each
+        os.kill(proc.pid, signal.SIGTERM)
+        stdout, stderr = proc.communicate(timeout=30)
+    finally:
+        _reap(proc)
+
+    assert proc.returncode == 130, (stdout, stderr)
+    assert len(log.read_text(encoding="utf-8").splitlines()) == 1, "the next skill was started after the stop"

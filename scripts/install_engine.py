@@ -61,8 +61,8 @@ def is_pid_alive(pid: int) -> bool:
 
     POSIX: os.kill(pid, 0) sends no signal, just asks the kernel whether the PID exists and
     is reachable -- ProcessLookupError means dead, PermissionError means alive (but owned by
-    someone else), any other OSError is treated as "cannot tell, assume dead" (matching
-    install.sh's own kill -0 based check).
+    someone else), any other OSError is treated as "cannot tell, assume dead"
+    (the same reading the old bash `kill -0` check gave).
 
     Windows has no equivalent via os.kill: Python's os.kill on Windows only supports process
     termination and CTRL_C/CTRL_BREAK events, not a signal-0 existence probe. This uses
@@ -235,7 +235,7 @@ def _terminate_signal() -> int | None:
 @contextmanager
 def _sigterm_as_system_exit() -> Iterator[None]:
     """Converts a graceful-terminate signal into a catchable SystemExit for the duration of
-    the block, mirroring install.sh's own `trap on_install_interrupt INT TERM`. Python's
+    the block, so it reaches the same cleanup path SIGINT does. Python's
     default disposition for that signal terminates the process immediately, bypassing
     try/finally -- unlike SIGINT, which Python already converts to a catchable
     KeyboardInterrupt -- so a supervisor kill or CI timeout would otherwise skip
@@ -366,7 +366,7 @@ def held_lock(
     an externally-produced or corrupted lock directory (a manual `mkdir` at that path, a
     lock format from an older version, a directory whose files were partially removed by
     something other than this module). A pid-less directory is waited on, not treated as
-    stale outright, exactly like install.sh's own bash `[[ -f "${lock_dir}/pid" ]]` guard;
+    stale outright (the old bash lock made the same choice);
     only a genuinely old one (age > stale_after, via the pid file's timestamp when present,
     falling back to the lock directory's own mtime when unreadable) is treated as abandoned.
 
@@ -464,7 +464,7 @@ class InstallOutcome:
 
 
 def _cleanup_failed_install(stage_dir: Path | None, backup_dir: Path | None, skill_dest: Path) -> None:
-    """Mirrors install.sh's cleanup_failed_install: discard the failed staging attempt, and
+    """Discard the failed staging attempt, and
     if a previous install was moved aside into backup_dir and nothing currently occupies
     skill_dest, restore it.
 
@@ -582,12 +582,10 @@ def install_skill(
                     os.replace(stage_dir, skill_dest)
                     stage_dir = None  # now living at skill_dest; nothing left to clean up on success
             except (KeyboardInterrupt, SystemExit):
-                # Mirrors install.sh's own INT/TERM trap: on_install_interrupt() runs
-                # cleanup_failed_install() and then `exit 130`, terminating the whole process
-                # rather than falling through to per-skill failure bookkeeping the way an
-                # ordinary validation failure does (which returns 1 and lets a multi-skill loop
-                # continue to the next skill). Re-raising here after cleanup is the Python
-                # equivalent: it propagates out through this `with held_lock(...)` block --
+                # An interrupt terminates the whole run (exit 130) rather than falling through
+                # to per-skill failure bookkeeping the way an ordinary validation failure does
+                # (which returns 1 and lets a multi-skill loop continue to the next skill).
+                # Re-raising after cleanup propagates it out through this `with held_lock(...)` block --
                 # whose own `finally` still releases the lock on the way out, same as any other
                 # exit path -- instead of being swallowed into a normal InstallOutcome that a
                 # future multi-skill caller could mistake for just one more failed skill.
@@ -729,9 +727,9 @@ def _print_outcome(outcome: InstallOutcome | UninstallOutcome) -> None:
 
 
 def _env_float(name: str, default: float) -> float:
-    # Mirrors bash's `${VAR:-default}`, which install.sh's own acquire_lock previously used to
-    # read these same two env vars: an empty value falls back to the default exactly like an
-    # unset one, rather than failing float() with an empty string.
+    # An empty value falls back to the default exactly like an unset one (bash's
+    # `${VAR:-default}` semantics, which the old bash lock used for these two env vars), rather
+    # than failing float() with an empty string.
     value = os.environ.get(name, "")
     return float(value) if value else default
 
@@ -766,10 +764,9 @@ def _cli_install(args: argparse.Namespace) -> int:
     except (KeyboardInterrupt, SystemExit):
         # install_skill() already ran its own cleanup before re-raising (see the
         # (KeyboardInterrupt, SystemExit) handler inside it -- SystemExit is how
-        # _sigterm_as_system_exit() converts a SIGTERM into the same cleanup path); 130
-        # matches install.sh's own on_install_interrupt trap, and the caller (install.sh's
-        # run_python wrapper, or a future multi-skill batch here) must treat this as a
-        # whole-run abort, not a per-skill failure it continues past.
+        # _sigterm_as_system_exit() converts a SIGTERM into the same cleanup path); 130 is
+        # what install.sh's run_engine and sb's batch loop key on, and they must treat it as a
+        # whole-run abort, not a per-skill failure to continue past.
         return 130
     _print_outcome(outcome)
     return 1 if outcome.status == "failed" else 0

@@ -112,12 +112,13 @@ def test_sigterm_during_rmtree_exits_130(tmp_path: Path, monkeypatch: pytest.Mon
         # shutil.rmtree is patched process-wide, not just for this call -- held_lock()'s own
         # `finally` also calls it (to remove the lock directory) once this unwinds, and that
         # second call must not fire the signal again with the handler already restored.
+        # The skill is renamed aside first, so the deletion runs on the `.removing.*` copy.
         nonlocal fired
-        if not fired and Path(path) == dest:
+        if not fired and ".removing." in str(path):
             fired = True
             os.kill(os.getpid(), signal.SIGTERM)
-            time.sleep(1)
-        real_rmtree(path, *args, **kwargs)  # unreachable for `dest` if the signal was delivered
+            time.sleep(0.2)
+        real_rmtree(path, *args, **kwargs)
 
     monkeypatch.setattr(install_engine.shutil, "rmtree", _send_sigterm_once)
 
@@ -125,6 +126,9 @@ def test_sigterm_during_rmtree_exits_130(tmp_path: Path, monkeypatch: pytest.Mon
         with pytest.raises(SystemExit) as exc_info:
             uninstall_skill("demo-skill", dest_root=dest_root)
         assert exc_info.value.code == 130
+        # The deletion is deferred, not abandoned: it ran to completion before the exit.
+        assert not dest.exists()
+        assert list(dest_root.glob(".demo-skill.*")) == []
         assert signal.getsignal(signal.SIGTERM) == original_handler
     finally:
         signal.signal(signal.SIGTERM, original_handler)
@@ -207,9 +211,10 @@ def test_uninstall_reports_failure_when_rmtree_raises(tmp_path: Path, monkeypatc
     real_rmtree = install_engine.shutil.rmtree
 
     def _boom(path: Path, *args: object, **kwargs: object) -> None:
-        # Only the terminal removal of the skill itself should fail; held_lock's own
-        # lock-directory cleanup (a separate shutil.rmtree call) must still work normally.
-        if Path(path) == dest:
+        # Only the deletion of the skill itself (moved aside to `.removing.*` first) should
+        # fail; held_lock's own lock-directory cleanup (a separate shutil.rmtree call) must
+        # still work normally.
+        if ".removing." in str(path):
             raise OSError("permission denied")
         real_rmtree(path, *args, **kwargs)
 
@@ -219,4 +224,6 @@ def test_uninstall_reports_failure_when_rmtree_raises(tmp_path: Path, monkeypatc
 
     assert outcome.status == "failed"
     assert "permission denied" in outcome.message
-    assert dest.exists()
+    # Renamed aside before the failing delete: the destination is absent (a later install or
+    # uninstall works), not a half-deleted directory that nothing would touch again.
+    assert not dest.exists()
