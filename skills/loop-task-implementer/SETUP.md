@@ -132,9 +132,11 @@ Budgets (dirty review cycles, contested rounds, review size thresholds, CI polli
 Orchestrator per task — see `workflow/orchestrator.md` §3. Batch 5.2C does not silently relax those existing
 circuit breakers.
 
-The per-task elapsed and token budgets default to `180` minutes and `2,000,000` estimated tokens. Override
-them per invocation with `max_task_elapsed_minutes` / `max_task_tokens`; pass the literal `unlimited` only
-when you intend to run with no ceiling — the report will say so.
+The per-task elapsed and token budgets default to `180` minutes of active time and `2,000,000` estimated tokens.
+Override them per invocation with `max_task_elapsed_minutes` / `max_task_tokens` (these are inputs to this skill
+only, not fields of the shared `implementation_task` contract); pass the literal `unlimited` only when you intend
+to run with no ceiling — the report will say so. In an `implementation_plan`-derived task, `deadline` and
+`session_token_budget` are `null`, meaning *unset*: the defaults apply, not "unbounded".
 
 ## Framework
 

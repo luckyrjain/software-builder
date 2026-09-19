@@ -38,6 +38,8 @@ Do not infer unstated product requirements.
 
 ## Authorized actions
 
+The Orchestrator's run log (by default under `~/.software-builder`) is not yours: never read, write, or edit it or its directory.
+
 ```yaml
 allowed_actions:
   edit: true

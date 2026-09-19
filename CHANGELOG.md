@@ -43,11 +43,14 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
-### ADR 0008: production code is written only by `repository-write` executor skills (2026-09-18)
+### ADR 0008: production code is written only by `repository-write` executor skills (2026-09-18, corrected 2026-09-19)
 
 - New [ADR 0008](docs/adr/0008-production-code-write-authority.md) records the write-authority policy
   that `write_authority` in `skills.yaml` implied but nothing stated, and `CONTEXT.md`'s **Write
   authority** entry now links it. New executors must be wrappers around `loop-task-implementer`.
+- Corrected after review: the registry has **8** `repository-write` skills (not 9), and `mysql-to-postgres-sql` edits
+  application code directly rather than through the Builder/Reviewer loop, so the ADR now names it as a documented
+  exception instead of contradicting itself.
 
 ### Interrupt deferral hardening: backup removal, ignored signals, handler restore (2026-09-19)
 

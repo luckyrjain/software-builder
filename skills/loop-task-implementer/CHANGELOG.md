@@ -12,11 +12,29 @@ For earlier history, see the `## loop-task-implementer` section in the repositor
   or, when unmeasurable, that the token cap is not enforced. Pressure tests 23-25 and
   `tests/test_budget_defaults.py` cover the defaults.
 - Added an append-only, redacted, SHA-256 hash-chained run log (`scripts/run_log.py`, `reference/run-log.md`,
-  orchestrator §20). Stored outside the target repository by default (`~/.software-builder/runs`, or an
-  absolute `--log-dir` outside the current git repository), written only by the Orchestrator, and never shown to a Builder or Reviewer.
-  `run_log.py budget` compares measured tokens and wall-clock time to the caps (defaults apply when unset), so
-  the budget check before each dispatch has a measured source. Adds `run_log` to `state-schema.yaml` and the
-  completion/escalation report. Pressure tests 26-31 and `tests/test_run_log.py` cover it.
+  orchestrator section 20), written only by the Orchestrator and never shown to a Builder or Reviewer. After an
+  adversarial review (five personas: pentester, SRE, prompt engineer, hostile code reviewer, architect) the
+  contract is:
+  - **Exit codes** `0` ok, `1` integrity failure, `2` bad input or cannot run, `3` budget cap reached
+    (previously `1` meant both "chain broken" and "cap reached").
+  - **Tamper evidence**: `--expect-head` (the previous receipt's hash, held by the Orchestrator) catches a
+    dropped tail, a wiped log, and foreign appends; strict parsing rejects duplicate keys, NaN, non-canonical
+    lines and wrong-typed fields; the first record must be `run_started`, timestamps may not go backwards or
+    into the future, and only `run_resumed` continues a completed run. The docs state plainly that a process
+    running as the same OS user can still rewrite the whole file.
+  - **Budgets measure the current task**: `run_log.py budget` covers everything since the latest
+    `task_selected`, counts *active* time (each gap capped at 30 minutes, so a pause or resume does not spend the
+    budget), reports `unmeasured` when no usage was recorded, and the Orchestrator passes the resolved caps
+    every call.
+  - **Durability**: writes are all-or-nothing (a failed or short write is rolled back), a torn final line is
+    recovered with an explicit `log_recovered` record, appends read only the tail (linear in run length), and
+    locks time out instead of hanging.
+  - **Safety**: `data` is sent on stdin (`--data-json -`) so untrusted text never enters a shell string;
+    receipts replace echoed records; keys are redacted and secret-named keys masked; more token families are
+    covered; redaction input is bounded; `escalated.reason` and `run_completed.outcome` take codes, not prose;
+    the log directory must be outside every git repository and private, and is not read from `$HOME`/the environment.
+  - New `run-id` subcommand derives a deterministic, resumable id from task seeds. Pressure tests 26-37 and
+    `tests/test_run_log.py` cover it.
 
 ## v1.4 — implementation-plan execution bridge (2026-08-26)
 

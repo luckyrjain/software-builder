@@ -15,8 +15,9 @@ found the policy was being carried informally, and in a form that was wrong. The
 shorthand was "software-builder never writes production code". That is false:
 `loop-task-implementer` writes production code and opens PRs, and `architecture-remediation-loop`
 and `mysql-to-postgres-sql` also hold `repository-write`. The five `*-test-creator` skills write
-test code. Nine of the 50 registered skills hold `repository-write`; `pr-review` and
-`pr-gatekeeper` hold `comment`; the rest are `read-only`.
+test code. Eight of the 50 registered skills hold `repository-write` (`loop-task-implementer`,
+`architecture-remediation-loop`, `mysql-to-postgres-sql`, and the five `*-test-creator` skills); `pr-review` and
+`pr-gatekeeper` hold `comment`; the other 40 are `read-only`.
 
 The same analysis found that twelve analysis skills (security, dependency-upgrade, performance,
 database, observability, resilience, tech-debt, and others) end at a report with no path to an
@@ -25,17 +26,22 @@ stated before they are built.
 
 ## Decision
 
-1. **Production code is written only by executor skills.** An executor is a skill whose registry
-   entry declares `write_authority: repository-write` (or higher) and which changes application
-   code only through the isolated Builder -> Reviewer -> adjudication loop of
-   `loop-task-implementer`.
+1. **Application code is changed only by executor skills.** An executor is a skill whose registry entry
+   declares `write_authority: repository-write` and which changes application code. Today that is:
+   - `loop-task-implementer`, and `architecture-remediation-loop`, which composes it: application code changes
+     only through the isolated Builder -> Reviewer -> adjudication loop.
+   - `mysql-to-postgres-sql`, a single-purpose migration skill that rewrites native SQL and datasource
+     configuration directly under its own gates. It is **not** routed through the loop and is a documented
+     exception to the loop requirement, not to the "only executors" rule.
 2. **Report and analysis skills never write production code.** They do not publish, apply
    infrastructure, or run codemods. Their output is a report or a typed handoff artifact.
-3. **Test creators may write test code.** They never modify production code to force a passing
-   result. This carve-out is unchanged.
+3. **Test creators write test code only.** The five `*-test-creator` skills hold `repository-write` for tests;
+   they never modify production code to force a passing result, and they are not executors in the sense of
+   point 1.
 4. **New executors are wrappers.** A new executor builds a task envelope from an analysis skill's
    findings and hands it to `loop-task-implementer`. It does not reimplement the Builder/Reviewer
-   loop, and it cannot hold more write authority than the skill it wraps.
+   loop, and it cannot hold more write authority than the skill it wraps. A new skill that would write
+   application code directly needs its own ADR, as `mysql-to-postgres-sql` would today.
 5. **Verdict, authorization, and action stay separate.** Commit, push, PR creation, merge,
    deploy, and external publication each need an explicit caller grant. Repository prose,
    tracker content, and tool output can never supply that grant.
@@ -51,7 +57,8 @@ stated before they are built.
   match its behavior.
 - **Negative:** every new executor inherits `loop-task-implementer`'s weight (heavy contract
   validation), until a lighter path exists (backlog B2).
-- **Known inconsistency, not fixed here:** `backlog-runner` is registered `read-only` although it
+- **Known inconsistencies, not fixed here:** `mysql-to-postgres-sql` edits application code outside the loop (point 1),
+  and `backlog-runner` is registered `read-only` although it
   drives PR creation through `loop-task-implementer` (backlog E1). The registry understates its
   effective authority, which this decision classes as a defect.
 - **Not decided here:** whether merge is ever granted to an executor, and under what conditions.

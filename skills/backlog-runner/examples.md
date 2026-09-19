@@ -38,6 +38,7 @@ Conventions: [examples-conventions](../../docs/skill-framework/shared/examples-c
 # Backlog run — 2026-08-05T23:00:00Z to 2026-08-06T02:14:00Z
 
 **Stopped:** QUEUE_EXHAUSTED
+**Budgets:** deadline 2026-08-06T07:00:00Z, session tokens 6,000,000
 
 ## Shipped (3 PRs opened, none merged)
 
