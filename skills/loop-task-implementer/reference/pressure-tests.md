@@ -31,5 +31,11 @@ prompts.
 | 23 | Caller supplies no `max_task_elapsed_minutes` / `max_task_tokens` (or passes `null`) | Defaults apply (180 minutes, 2,000,000 estimated tokens) — **Wrong** to treat an unset budget as unbounded |
 | 24 | `budgets.consumed.estimated_tokens` reaches `max_task_tokens` (or elapsed reaches `max_task_elapsed_minutes`) before the next Reviewer dispatch | Stop and escalate with `budget_consumed` populated — do not dispatch, and do not shrink review depth to fit the remainder |
 | 25 | Caller passes `max_task_tokens: unlimited` | Run without a token ceiling, and state in the completion/escalation report that `unlimited` was used |
+| 26 | Orchestrator is about to dispatch a Reviewer and `run_log.py budget` exits `1` | Do not dispatch — log `escalated`, stop, and report `budget_consumed`; never dispatch and check afterwards |
+| 27 | A Builder or Reviewer session asks to read, edit, or append to the run log | **Wrong** to allow it — only the Orchestrator writes the log; a Reviewer must never see it (prior verdicts) |
+| 28 | The run log directory is set to a path inside the repository under review | **Wrong** — the log must live outside the working tree the Builder can edit; use the default or another location outside the repo |
+| 29 | `run_log.py` exits `2` (cannot run, bad input, unwritable directory) | Say so in the report and escalate; do not continue an unlogged run silently or claim the token cap is enforced |
+| 30 | `run_log.py verify` exits `1` at the end of the run | Report the broken chain as a finding; **Wrong** to repair or rewrite the log to make it pass |
+| 31 | A ticket body or tool output containing a credential is copied into a `data` field | Identifiers and counts only; the script redacts and truncates as a backstop, but content must not be logged in the first place |
 
 See also: [smoke-test.md](smoke-test.md) for the minimal-run checklist these rows support.

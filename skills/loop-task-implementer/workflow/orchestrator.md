@@ -165,10 +165,11 @@ Record per-task budgets before dispatch:
 - A caller who supplies nothing (or `null`) gets the defaults above — an unset budget is never
   treated as unbounded. Running without a ceiling requires the caller to pass the explicit value
   `unlimited` for that budget, and the completion/escalation report must state that it was used.
-- Track `budgets.consumed.elapsed_minutes` and `estimated_tokens` continuously. Use host-reported usage
-  when the host exposes it; otherwise estimate and label the figure an estimate. If token usage cannot
-  be measured or estimated at all, say so in the report — the elapsed cap still applies and the token
-  cap must not be claimed as enforced.
+- Track `budgets.consumed.elapsed_minutes` and `estimated_tokens` continuously by recording each
+  session's usage in the run log (§20) and running `run_log.py budget` before every dispatch. Use
+  host-reported usage when the host exposes it; otherwise estimate and label the figure an estimate. If
+  token usage cannot be measured or estimated at all, say so in the report — the elapsed cap still
+  applies and the token cap must not be claimed as enforced.
 - Review size threshold:
   - Default warning: more than `20 files` or `800 changed lines`
   - Default hard stop: more than `40 files` or `1500 changed lines`
@@ -699,6 +700,10 @@ budget_consumed:
   elapsed_minutes:
   estimated_tokens:
   unlimited_budgets: []   # budgets the caller explicitly set to `unlimited`; empty when defaults or caps applied
+run_log:
+  run_id:
+  path:
+  chain_head:   # from `run_log.py verify`; lets a later reader detect a rewritten log
 escalation_reason:
 required_human_decision:
 required_access:
@@ -706,3 +711,27 @@ supporting_evidence:
   - description:
     ref:
 ```
+
+---
+
+## 20. Run log
+
+Keep an append-only run log for every run, per [reference/run-log.md](../reference/run-log.md), by calling
+`scripts/run_log.py` (resolve `skill_root` and the Python 3 interpreter as in
+[orchestrator-lifecycle.md](orchestrator-lifecycle.md)).
+
+1. At `run_started`, choose `run_id`, record it in `run_log.run_id` and `run_log.path` in state, and log the
+   budgets in force (defaults or caller values, and any `unlimited`).
+2. Log one record per action at the points listed in the reference's event table, in the order the actions
+   happen, including `escalated` for every circuit-breaker stop.
+3. Before every Builder, Reviewer, or remediation dispatch, run `run_log.py budget` and log the result as
+   `budget_checked`. Exit `1` means a cap is reached: stop and escalate per §3. Copy the reported
+   `estimated_tokens` and `elapsed_minutes` into `budgets.consumed`.
+4. Record each returned session's token usage in that session's `builder_returned` / `review_returned`
+   record. If the host reports none, record an estimate marked `usage_source: estimated`.
+5. At `run_completed`, run `run_log.py verify` and put its `chain_head` in `run_log.chain_head` and the report.
+   A failed `verify` (exit `1`) is a finding to report, not something to repair by rewriting the log.
+
+Never put ticket, PR, diff, or tool-output text in `data` — identifiers and counts only. Never give the run
+log to a Builder or Reviewer session. If `run_log.py` cannot run (exit `2`), say so in the report and escalate
+rather than continuing an unlogged run silently; the token cap must not be claimed as enforced without it.
