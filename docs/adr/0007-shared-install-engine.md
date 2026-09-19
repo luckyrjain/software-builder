@@ -155,6 +155,27 @@ it was scope discipline for the original porting task, not a standing constraint
     trapped signal could replace with 143 (which callers don't recognise as a stop), installs its
     trap before launching the engine, and returns 130 for a stop request even when the engine
     finished cleanly first.
+  - *Round-3 hardening.* Lock reclaim was found to break mutual exclusion: a waiter that lost the
+    race to a holder's release read the vanished lock as "unreadable, therefore stale" and
+    renamed whatever a third party had acquired in between (two holders at once, reproduced with
+    8 processes). A vanished lock now just retries the acquire, and a genuine reclaim compares the
+    identity (`pid`/`acquired_at`) of the directory it moved with the one it judged stale,
+    putting it back if they differ; a lock that cannot be judged (unreadable age *and* mtime) is
+    waited on, not taken. Stale names are unique, a failing reclaim rename counts toward the
+    timeout, pids `<= 0` or too large for a C int are treated as dead, the lock temp directory is
+    removed on any interrupt, and waiting for a lock converts SIGTERM to the clean exit 130.
+    `uninstall` renames the skill aside before deleting it, so a failed or interrupted deletion
+    can't leave a half-removed, manifest-less directory that neither command would touch. Lock
+    timing env values must be finite, and positive for the stale age. In `install.sh`, any stop
+    request now ends the run with 130 (an engine killed by the forwarded TERM before installing
+    its handler used to read as a plain failure and the run carried on); a script-level trap
+    gives a stop outside `run_engine` the same code. `sb install`/`uninstall` report an interrupted
+    batch and exit 130 for SIGINT and SIGTERM.
+  - *Residual (round 3).* `_reclaim_stale_lock()` checks the identity of what it moved, but
+    judging, moving and putting back is not one atomic step, so a third holder acquiring in that
+    few-microsecond window is displaced. A signal in the couple of bytecodes between the lock
+    rename succeeding and `acquired` being set leaves a lock naming this process's pid, which goes
+    stale as soon as the process exits.
   - *Residual.* A signal landing in the few bytecodes between the primary work's
     `_sigterm_as_system_exit()` exiting and the rollback's `_defer_interrupts()` starting hits
     the default disposition; closing it needs the handler to stay installed across that
