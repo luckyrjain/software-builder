@@ -15,17 +15,30 @@ run_python() {
 # lock release, exit 130) before this script exits with that status. (An async child of a
 # non-interactive shell has SIGINT ignored, so Ctrl-C is delivered as the TERM forwarded here.)
 run_engine() {
-  local engine_pid status=0
+  local engine_pid="" status=0 interrupted=false
+  # Installed before the engine starts so a signal in the gap can't orphan it; the flag makes
+  # a signal that beats the launch still stop the run once the engine is up.
+  trap 'interrupted=true; if [[ -n "${engine_pid}" ]]; then kill -TERM "${engine_pid}" 2>/dev/null || true; fi' TERM INT
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${REPO_ROOT}" python3 "$@" &
   engine_pid=$!
-  trap 'kill -TERM "${engine_pid}" 2>/dev/null || true' TERM INT
-  wait "${engine_pid}" || status=$?
-  # A trapped signal makes `wait` return immediately (128+n) while the engine is still cleaning
-  # up; keep waiting so the status reported is the engine's own, not the signal's.
+  if [[ "${interrupted}" == true ]]; then
+    kill -TERM "${engine_pid}" 2>/dev/null || true
+  fi
+  # Poll for exit instead of blocking in `wait`: a trapped signal makes `wait` return at once
+  # (128+n) while the engine is still cleaning up, and if the engine has already exited by then
+  # bash may have collected its status in a way a second `wait` can't recover -- the run would
+  # report the signal's 143 instead of the engine's own code (e.g. 130, which callers key on).
+  # Nothing interrupts the single `wait` below: the engine is already gone, so it returns the
+  # status bash kept for it immediately.
   while kill -0 "${engine_pid}" 2>/dev/null; do
-    wait "${engine_pid}" || status=$?
+    sleep 0.05
   done
+  if wait "${engine_pid}"; then status=0; else status=$?; fi
   trap - TERM INT
+  # A stop request must stop the run even when the engine happened to finish first.
+  if [[ "${interrupted}" == true ]] && ((status == 0)); then
+    status=130
+  fi
   return "${status}"
 }
 

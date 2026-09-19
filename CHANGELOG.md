@@ -49,6 +49,22 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   that `write_authority` in `skills.yaml` implied but nothing stated, and `CONTEXT.md`'s **Write
   authority** entry now links it. New executors must be wrappers around `loop-task-implementer`.
 
+### Interrupt deferral hardening: backup removal, ignored signals, handler restore (2026-09-19)
+
+- The success path's own `.{skill}.backup.*` removal now runs under `_defer_interrupts()`; a signal
+  landing on it used to strand a directory nothing sweeps.
+- `_defer_interrupts()` and `_sigterm_as_system_exit()` leave an already-ignored signal ignored
+  (`nohup`, an async child of a non-interactive shell) instead of converting it into an abort.
+- `_defer_interrupts()` records each previous handler before replacing it, inside its `try`, so a
+  signal arriving between the SIGINT and SIGTERM installs still restores both.
+- A deferred signal that supersedes a cleanup which itself failed now prints
+  `cleanup failed while handling an interrupt`, instead of hiding the failure behind exit 130.
+- `install.sh`'s `run_engine()` now reports the engine's own exit status after a forwarded signal.
+  It could return the interrupted `wait`'s 143 instead (about 1 run in 25 for an engine exiting 130,
+  every time for one exiting 0), and callers only stop the run on exactly 130, so the next skill
+  started anyway. It polls for the engine's exit, installs its trap before launching the engine,
+  and treats a stop request as 130 even if the engine finished cleanly first.
+
 ### Interrupts during cleanup no longer abandon it; signals to `install.sh` reach the engine (2026-09-18)
 
 - `_cleanup_failed_install()`'s rollback and `held_lock()`'s own lock-directory removal ran after
