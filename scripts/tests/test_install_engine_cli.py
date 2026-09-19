@@ -124,13 +124,14 @@ def test_sigterm_as_system_exit_converts_a_real_signal_to_exit_130() -> None:
 
 
 def test_sigterm_as_system_exit_restores_the_previous_handler_on_exit() -> None:
-    original_handler = signal.getsignal(signal.SIGTERM)
+    sig = install_engine._terminate_signal()  # SIGTERM on POSIX, SIGBREAK on Windows
+    original_handler = signal.getsignal(sig)
     try:
         with install_engine._sigterm_as_system_exit():
-            assert signal.getsignal(signal.SIGTERM) != original_handler
-        assert signal.getsignal(signal.SIGTERM) == original_handler
+            assert signal.getsignal(sig) != original_handler
+        assert signal.getsignal(sig) == original_handler
     finally:
-        signal.signal(signal.SIGTERM, original_handler)
+        signal.signal(sig, original_handler)
 
 
 def test_sigterm_as_system_exit_restores_the_previous_handler_even_on_exception() -> None:
@@ -235,11 +236,12 @@ def test_held_lock_works_and_releases_from_a_worker_thread(tmp_path: Path) -> No
 
 
 def test_defer_interrupts_restores_both_handlers_on_exit(signal_sentinels: object) -> None:
-    before = (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM))
+    terminate = install_engine._terminate_signal()  # SIGTERM on POSIX, SIGBREAK on Windows
+    before = (signal.getsignal(signal.SIGINT), signal.getsignal(terminate))
     with install_engine._defer_interrupts():
         assert signal.getsignal(signal.SIGINT) != before[0]
-        assert signal.getsignal(signal.SIGTERM) != before[1]
-    assert (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)) == before
+        assert signal.getsignal(terminate) != before[1]
+    assert (signal.getsignal(signal.SIGINT), signal.getsignal(terminate)) == before
 
 
 def test_defer_interrupts_restores_both_handlers_on_exception(signal_sentinels: object) -> None:
@@ -269,7 +271,7 @@ def test_defer_interrupts_falls_back_to_defaults_when_previous_handler_was_none(
         pass
 
     restores = calls[len(calls) // 2 :]
-    assert {sig for sig, _ in restores} == {signal.SIGINT, signal.SIGTERM}
+    assert {sig for sig, _ in restores} == {signal.SIGINT, install_engine._terminate_signal()}
     for sig, handler in restores:
         assert handler is not None
         expected = signal.default_int_handler if sig == signal.SIGINT else signal.SIG_DFL
