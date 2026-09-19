@@ -192,15 +192,30 @@ def test_an_engine_killed_by_the_forwarded_term_still_ends_a_multi_skill_run(tmp
     assert len(log.read_text(encoding="utf-8").splitlines()) == 1, "the next skill was started after the stop"
 
 
+# Records that the install engine was started, and otherwise behaves as the real python3.
+_FAKE_PYTHON_ENGINE_LOGS_ONLY = """#!/usr/bin/env bash
+if [[ "$1" == *install_engine.py ]]; then
+  echo "$@" >> "{log}"
+fi
+exec "{real}" "$@"
+"""
+
+
 def test_an_empty_skill_name_and_a_missing_option_value_are_usage_errors(tmp_path: Path) -> None:
-    env = {**os.environ, "HOME": str(tmp_path)}
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "engine.log"
+    fake = bin_dir / "python3"
+    fake.write_text(_FAKE_PYTHON_ENGINE_LOGS_ONLY.format(real=sys.executable, log=log), encoding="utf-8")
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    env = {**os.environ, "HOME": str(tmp_path), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
     empty = subprocess.run(
         ["bash", str(INSTALLER), "--agent", "cursor", "--uninstall", ""],
         cwd=ROOT, env=env, capture_output=True, text=True, check=False,
     )
     assert empty.returncode == 1
     assert "invalid skill name ''" in empty.stderr
-    assert not (tmp_path / ".cursor").exists(), "an empty name must not reach the engine"
+    assert not log.exists(), "install.sh's own name check must reject an empty name before the engine runs"
 
     missing = subprocess.run(
         ["bash", str(INSTALLER), "--agent"],
@@ -247,3 +262,140 @@ def test_a_stop_request_between_skills_exits_130_without_starting_the_next_skill
 
     assert proc.returncode == 130, (stdout, stderr)
     assert len(log.read_text(encoding="utf-8").splitlines()) == 1, "the next skill was started after the stop"
+
+
+# `--uninstall` goes through a different install.sh function than install, and nothing above
+# signalled it: it must forward a stop to the engine and stop the run just the same.
+_FAKE_PYTHON_ENGINE_EXITS_130_ON_TERM = """#!/usr/bin/env bash
+if [[ "$1" == *install_engine.py ]]; then
+  echo "$@" >> "{log}"
+  trap 'exit 130' TERM
+  while :; do sleep 0.05; done
+fi
+exec "{real}" "$@"
+"""
+
+
+def test_a_stop_request_during_uninstall_reaches_the_engine_and_ends_the_run(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "engine.log"
+    fake = bin_dir / "python3"
+    fake.write_text(_FAKE_PYTHON_ENGINE_EXITS_130_ON_TERM.format(real=sys.executable, log=log), encoding="utf-8")
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    env = {**os.environ, "HOME": str(home), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    proc = _spawn(
+        ["bash", str(INSTALLER), "--agent", "cursor", "--uninstall", SKILL, "api-design-review"], env
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while not log.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert log.exists(), "the uninstall engine was never started"
+        os.kill(proc.pid, signal.SIGTERM)
+        stdout, stderr = proc.communicate(timeout=30)
+    finally:
+        _reap(proc)
+
+    assert proc.returncode == 130, (stdout, stderr)
+    invocations = log.read_text(encoding="utf-8").splitlines()
+    assert len(invocations) == 1, "the next skill was uninstalled after the stop"
+    assert " uninstall " in invocations[0]
+
+
+def test_run_engine_installs_its_signal_trap_before_it_launches_the_engine() -> None:
+    """A signal in the gap between launching the engine and trapping would kill bash and orphan
+    the engine. That window is microseconds wide, so no behavioural test can hit it on demand;
+    the ordering itself is the invariant, so it is asserted directly."""
+    body = INSTALLER.read_text(encoding="utf-8").split("run_engine() {", 1)[1].split("\n}\n", 1)[0]
+    launch = body.index('python3 "$@" &')
+    first_trap = body.index("trap '")
+    assert first_trap < launch
+
+
+# A stop that lands before the first engine has ever run (in a read-only probe) still exits 130
+# via the script-level trap, and no engine is started.
+_FAKE_PYTHON_ALL_CALLS_SLOW = """#!/usr/bin/env bash
+if [[ "$1" == *install_engine.py ]]; then
+  echo "$@" >> "{log}"
+  exit 0
+fi
+echo started >> "{probe_log}"
+sleep 1
+exec "{real}" "$@"
+"""
+
+
+def test_a_stop_request_during_the_first_probe_exits_130_and_starts_no_engine(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "engine.log"
+    probe_log = tmp_path / "probe.log"
+    fake = bin_dir / "python3"
+    fake.write_text(
+        _FAKE_PYTHON_ALL_CALLS_SLOW.format(real=sys.executable, log=log, probe_log=probe_log), encoding="utf-8"
+    )
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    env = {**os.environ, "HOME": str(home), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    proc = _spawn(["bash", str(INSTALLER), "--agent", "cursor", SKILL], env)
+    try:
+        deadline = time.monotonic() + 30
+        while not probe_log.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert probe_log.exists(), "install.sh never reached its first python3 probe"
+        os.kill(proc.pid, signal.SIGTERM)
+        stdout, stderr = proc.communicate(timeout=30)
+    finally:
+        _reap(proc)
+
+    assert proc.returncode == 130, (stdout, stderr)
+    assert not log.exists(), "an engine was started after the stop"
+
+
+# The engine takes a moment to clean up after the forwarded TERM. install.sh must still be waiting
+# when it finishes: returning as soon as the trapped signal interrupts `wait` would leave the
+# cleanup running unsupervised, orphaned, after the run reported it had stopped.
+_FAKE_PYTHON_SLOW_CLEANUP_ON_TERM = """#!/usr/bin/env bash
+if [[ "$1" == *install_engine.py ]]; then
+  echo "$@" >> "{log}"
+  # Drop the inherited pipes: otherwise `communicate()` cannot return until this engine exits,
+  # which would hide whether install.sh itself waited for it.
+  exec >/dev/null 2>&1
+  trap 'sleep 1; echo cleaned > "{done}"; exit 130' TERM
+  while :; do sleep 0.05; done
+fi
+exec "{real}" "$@"
+"""
+
+
+def test_install_sh_waits_for_the_engine_to_finish_cleaning_up_before_it_exits(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "engine.log"
+    done = tmp_path / "cleanup.done"
+    fake = bin_dir / "python3"
+    fake.write_text(
+        _FAKE_PYTHON_SLOW_CLEANUP_ON_TERM.format(real=sys.executable, log=log, done=done), encoding="utf-8"
+    )
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    env = {**os.environ, "HOME": str(home), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    proc = _spawn(["bash", str(INSTALLER), "--agent", "cursor", SKILL], env)
+    try:
+        deadline = time.monotonic() + 30
+        while not log.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert log.exists(), "engine was never started"
+        os.kill(proc.pid, signal.SIGTERM)
+        stdout, stderr = proc.communicate(timeout=30)
+        cleanup_finished_before_exit = done.exists()
+    finally:
+        _reap(proc)
+
+    assert proc.returncode == 130, (stdout, stderr)
+    assert cleanup_finished_before_exit, "install.sh exited while the engine was still cleaning up"
