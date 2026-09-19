@@ -122,9 +122,10 @@ jobs:
 
   install-engine-windows:
     # The install engine has Windows-specific branches (is_pid_alive via ctypes, SIGBREAK as the
-    # terminate signal, directory-rename semantics) that ubuntu and macOS never execute. This
-    # runs only the engine's own tests -- install.sh is POSIX-only and the sb snapshot suites
-    # are not Windows targets.
+    # terminate signal, directory-rename semantics) that ubuntu and macOS never execute. `sb` is
+    # the Windows install path, so its snapshot build and CLI suites run here too. install.sh is
+    # not covered: the README supports it on macOS, Linux and WSL only (WSL is Linux, exercised
+    # by the ubuntu jobs).
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -147,3 +148,10 @@ jobs:
           scripts/tests/test_install_engine_uninstall.py
           scripts/tests/test_install_engine_lock_hardening.py
           scripts/tests/test_registry_root_lock.py
+
+      - name: sb snapshot build tests
+        run: python -m pytest -q -p no:cacheprovider scripts/tests/test_build_sb_snapshot.py
+
+      - name: sb CLI tests
+        working-directory: cli
+        run: python -m pytest -q -p no:cacheprovider tests
