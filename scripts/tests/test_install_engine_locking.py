@@ -111,9 +111,9 @@ def test_empty_leftover_lock_dir_is_claimed_immediately_via_atomic_rename(
     reclaim_calls: list[Path] = []
     real_reclaim = install_engine._reclaim_stale_lock
 
-    def spy_reclaim(target: Path) -> None:
+    def spy_reclaim(target: Path, *args: object) -> bool:
         reclaim_calls.append(target)
-        real_reclaim(target)
+        return real_reclaim(target, *args)
 
     monkeypatch.setattr(install_engine, "_reclaim_stale_lock", spy_reclaim)
 
@@ -121,7 +121,11 @@ def test_empty_leftover_lock_dir_is_claimed_immediately_via_atomic_rename(
     with held_lock(tmp_path, "demo-skill", wait_timeout=20.0):
         elapsed = time.monotonic() - start
     assert elapsed < 2.0  # claimed immediately, not waited on
-    assert reclaim_calls == []  # no reclaim needed -- the rename absorbed it directly
+    if sys.platform == "win32":
+        # Windows refuses to rename onto an existing directory, so the empty one is reclaimed.
+        assert reclaim_calls == [lock_dir]
+    else:
+        assert reclaim_calls == []  # no reclaim needed -- the rename absorbed it directly
 
 
 def test_acquire_lock_dir_treats_a_resolved_rename_conflict_as_contention_not_a_crash(
