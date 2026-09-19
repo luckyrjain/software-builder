@@ -159,9 +159,12 @@ jobs:
       - name: install.sh under Git Bash
         shell: bash
         run: |
-          # install.sh calls `python3`, which setup-python does not provide on Windows.
-          py_dir="$(dirname "$(command -v python)")"
-          cp "${py_dir}/python.exe" "${py_dir}/python3.exe"
+          # install.sh calls `python3`; make sure one resolves to the interpreter setup-python
+          # installed rather than assuming the runner image provides it.
+          if ! command -v python3 >/dev/null 2>&1; then
+            py_dir="$(dirname "$(command -v python)")"
+            cp "${py_dir}/python.exe" "${py_dir}/python3.exe"
+          fi
           python -m pytest -q -p no:cacheprovider \
             scripts/tests/test_install_legacy_golden.py \
             scripts/tests/test_install_rollback.py \
