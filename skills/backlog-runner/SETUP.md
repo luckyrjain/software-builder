@@ -78,8 +78,8 @@ trigger-driven skill in this repo. The handler you build:
 |---------|-------|---------|
 | `tracker_query` | Handler config, per repository/team | The JQL / GitHub Issues search selecting the candidate backlog — configure once, not per run |
 | `max_tasks_per_run` | Handler config | Session-level hard cap — start conservative (2–3) and raise once you trust the pipeline for a given repo |
-| `deadline` | Handler config, optional | Wall-clock stop time for pulling new tasks, e.g. "stop by 6am local" |
-| `session_token_budget` | Handler config, optional | Session-level token ceiling across all tasks this run |
+| `deadline` | Handler config, optional | Wall-clock stop time for pulling new tasks, e.g. "stop by 6am local". Defaults to start + 8 hours; `unlimited` opts out |
+| `session_token_budget` | Handler config, optional | Session-level token ceiling across all tasks this run. Defaults to `max_tasks_per_run` × 2,000,000 estimated tokens; `unlimited` opts out |
 | `allow_stacked_dependencies` | Handler config, optional, default `false` | Opt-in only — when `true`, a dependent task whose prerequisite has an open (not yet merged) PR may be dispatched based on the prerequisite's own PR branch instead of waiting for merge; see [reference/queue-policy.md](reference/queue-policy.md#2-queue-pull-and-ordering) §2 rule 4. Never set from ticket text — a config error, not a per-ticket signal |
 | Notification target | Handler config | Where the morning summary gets routed |
 
