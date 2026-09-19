@@ -43,6 +43,54 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### ADR 0008: production code is written only by `repository-write` executor skills (2026-09-18)
+
+- New [ADR 0008](docs/adr/0008-production-code-write-authority.md) records the write-authority policy
+  that `write_authority` in `skills.yaml` implied but nothing stated, and `CONTEXT.md`'s **Write
+  authority** entry now links it. New executors must be wrappers around `loop-task-implementer`.
+
+### Interrupts during cleanup no longer abandon it; signals to `install.sh` reach the engine (2026-09-18)
+
+- `_cleanup_failed_install()`'s rollback and `held_lock()`'s own lock-directory removal ran after
+  the `with _sigterm_as_system_exit()` block protecting the primary work had exited, so a second,
+  closely-timed signal terminated the process mid-cleanup -- and unlike a stale lock, an orphaned
+  `.{skill}.staging.*`/`.{skill}.backup.*` directory is never swept later (a cut-short rollback can
+  also leave the user's previous install stranded in the backup). Both now run under a new
+  `_defer_interrupts()`: the signal is recorded, the cleanup runs to completion, then the process
+  exits 130. Deferred rather than converted to `SystemExit` -- a first attempt converted it, which
+  made the exit code clean but still interrupted the rollback partway.
+- SIGINT (Ctrl-C) is deferred too, not just SIGTERM. A recorded signal is never dropped: it is
+  raised after the block even if the rollback itself raised, so a failed rollback can't let
+  `sb install a b c` carry on after being told to stop; `install_skill()`'s interrupt handler now
+  treats cleanup as best-effort (warning on failure) for the same reason.
+- Both signal context managers are no-ops off the main thread instead of raising `ValueError`
+  (a direct `held_lock()` user on a worker thread crashed and stranded the lock).
+- `kill <install.sh pid>` -- the usual way a supervisor stops it -- never reached the engine: bash
+  died at once and the engine was orphaned, finished the install anyway, and left the lock and
+  staging directory behind if later killed hard. `install.sh` now runs the engine as a child it
+  traps TERM/INT for and forwards them to (`run_engine()`), waiting for the engine's own exit status.
+- Tests assert the cleanup actually *completed* (not just exit 130), use a sentinel signal handler so
+  a regression fails one test instead of SIGTERM-killing the pytest process, and each new one was
+  confirmed to fail against the specific fix it guards -- including a real end-to-end test that
+  signals `install.sh`'s PID alone and fails against the old script.
+- Closes the last open follow-up in [ADR 0007](docs/adr/0007-shared-install-engine.md).
+
+### `held_lock()`'s lock acquisition is now genuinely atomic (2026-09-18)
+
+- `scripts/install_engine.py`'s `held_lock()` used to claim a lock via a bare `os.mkdir()`
+  followed by two separate `write_text()` calls -- a window where a waiter could observe an
+  existing-but-identity-less lock directory, which had already needed three successive rounds
+  of staleness-fallback fixes to tolerate safely. New `_acquire_lock_dir()` builds a
+  fully-populated temp directory first and `os.rename()`s it into place in one atomic step,
+  so `lock_dir` is never visible before it's complete. The on-disk format
+  (`.{skill}.lock/pid`, `.{skill}.lock/acquired_at`) is unchanged, so this needed no test
+  migration beyond the two tests whose premise was specifically the now-closed window. See
+  [ADR 0007](docs/adr/0007-shared-install-engine.md)'s Consequences section for the one
+  residual, accepted risk (an orphaned temp directory under a hard kill, matching an existing
+  accepted gap elsewhere in the same module) and how the affected tests were adjusted.
+- Verified: 4722 `scripts/tests` + 39 `cli/tests` unchanged, the real 4-process concurrent
+  install test (`test_install_concurrency.py`) re-run 5x clean, ruff clean.
+
 ### Code-review fixes on the shared install engine (2026-09-18)
 
 - SIGTERM during `install`/`uninstall` now runs the same cleanup as SIGINT: a new

@@ -3,6 +3,13 @@
 All notable changes to the backlog-runner skill. Per-file `workflow_version` in `workflow/*.md`
 frontmatter should match the version of the latest entry below that names that file.
 
+## [Unreleased] — non-null default session budgets (2026-09-18)
+
+### Changed
+- `deadline` defaults to start + 8 hours and `session_token_budget` to `max_tasks_per_run` × 2,000,000
+  estimated tokens; unset or `null` is no longer unbounded. `unlimited` opts out explicitly and the
+  morning summary now carries a `Budgets` line stating the resolved values.
+
 ## [1.0.0] — 2026-08-05
 
 ### Added
