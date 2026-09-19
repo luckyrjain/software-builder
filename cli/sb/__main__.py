@@ -17,7 +17,7 @@ sys.path.insert(0, str(vendored_scripts_root()))
 from scripts.doctor import cmd_doctor_resolved  # noqa: E402
 from scripts.registry.cli import cmd_compatibility, cmd_explain, cmd_list  # noqa: E402
 from scripts.registry.host_registry import HostRegistry, parse_host_registry  # noqa: E402
-from scripts.install_engine import install_skill, uninstall_skill  # noqa: E402
+from scripts.install_engine import _sigterm_as_system_exit, install_skill, uninstall_skill  # noqa: E402
 from scripts.install_support import cmd_verify  # noqa: E402
 from scripts.registry.install_resolver import (  # noqa: E402
     host_and_target_for_label,
@@ -100,23 +100,34 @@ def _run_batch(
     hook (now `on_success`).
     """
     succeeded = failed = dry_run_count = 0
-    for skill_id in skill_ids:
-        for dest_root, host_label in destinations:
-            outcome = operation(skill_id, dest_root, host_label)
-            print(outcome.message)
-            if outcome.status == "failed":
-                failed += 1
-            elif outcome.status == success_status:
-                succeeded += 1
-                if on_success is not None:
-                    on_success(host_label, outcome)
-            elif outcome.status == "dry_run":
-                dry_run_count += 1
-            elif outcome.status not in extra_ok_statuses:
-                # Fail loud, not silently-undercount: install_engine.py's own CLI presentation
-                # (_PRESENTATION) enumerates the same status values independently -- a status
-                # added there without a matching branch here must not pass silently.
-                raise AssertionError(f"unhandled {verb} outcome status: {outcome.status!r}")
+    try:
+        # The engine converts a terminate signal only while it is doing the work of one
+        # install; between skills (and while printing) it would kill the process with the raw
+        # 143 instead of the clean stop `sb` promises. SIGINT already arrives as
+        # KeyboardInterrupt.
+        with _sigterm_as_system_exit():
+            for skill_id in skill_ids:
+                for dest_root, host_label in destinations:
+                    outcome = operation(skill_id, dest_root, host_label)
+                    print(outcome.message)
+                    if outcome.status == "failed":
+                        failed += 1
+                    elif outcome.status == success_status:
+                        succeeded += 1
+                        if on_success is not None:
+                            on_success(host_label, outcome)
+                    elif outcome.status == "dry_run":
+                        dry_run_count += 1
+                    elif outcome.status not in extra_ok_statuses:
+                        # Fail loud, not silently-undercount: install_engine.py's own CLI presentation
+                        # (_PRESENTATION) enumerates the same status values independently -- a status
+                        # added there without a matching branch here must not pass silently.
+                        raise AssertionError(f"unhandled {verb} outcome status: {outcome.status!r}")
+    except (KeyboardInterrupt, SystemExit):
+        # The engine has already rolled back the interrupted skill; report what did finish
+        # rather than a traceback, and exit 130 so a wrapper treats it as a whole-run stop.
+        print(f"interrupted: {succeeded} completed, {failed} failed", file=sys.stderr)
+        return 130
     if len(skill_ids) * len(destinations) > 1:
         if dry_run:
             print(f"would {verb}: {dry_run_count}, failed: {failed}", file=sys.stderr)

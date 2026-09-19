@@ -379,7 +379,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def validate_skill_name(skill: str) -> None:
-    if "/" in skill or skill in {".", ".."}:
+    if not skill or "/" in skill or skill in {".", ".."}:
         raise ValueError(
             f"invalid skill name {skill!r} (must be a single directory name, no path separators)",
         )

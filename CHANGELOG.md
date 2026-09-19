@@ -52,6 +52,31 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   application code directly rather than through the Builder/Reviewer loop, so the ADR now names it as a documented
   exception instead of contradicting itself.
 
+### Install engine round-3 review fixes: lock exclusion, atomic uninstall, stop handling (2026-09-19)
+
+- Stale-lock reclaim no longer breaks mutual exclusion. A lock that vanished between a waiter's
+  failed acquire and its read used to count as "stale", so the waiter renamed whatever a third
+  party had just acquired (two holders ran at once; reproduced with 8 processes). A vanished lock
+  now just retries the acquire, and a real reclaim checks that the directory it moved is the one
+  it judged stale, putting it back otherwise. Stale directories get unique names, and a reclaim
+  rename that keeps failing now counts toward the wait timeout instead of spinning.
+- A `pid` of `0`, a negative number, or one too large for a C int in a lock file is treated as
+  dead rather than live (or a crash in `install_skill`).
+- The lock's temp directory is removed on any interrupt, and waiting for a lock now turns SIGTERM
+  into the same clean exit 130 as the work under it.
+- `LOCK_WAIT_TIMEOUT_SECONDS` / `LOCK_STALE_SECONDS` reject `nan`, `inf`, negative and (for the
+  stale age) zero values instead of waiting forever or making every live lock stealable.
+- `uninstall` moves the skill aside before deleting it, so a failed or interrupted deletion can no
+  longer leave a half-removed directory that neither `install` nor `uninstall` would touch.
+- Outcome printing follows the current `sys.stdout`/`sys.stderr`, and `main()` no longer assumes
+  they can be reconfigured.
+- `sb install`/`sb uninstall` report an interrupted batch (`interrupted: N completed, M failed`)
+  and exit 130 for both Ctrl-C and SIGTERM, instead of a traceback or a raw 143.
+- `install.sh`: any stop request now ends the run with 130. An engine killed by the forwarded TERM
+  before it installed its handler (143) used to read as an ordinary failure, and the run carried
+  on to the next skill (11 of 40 timed runs). A stop landing outside `run_engine` exits 130 too. An
+  empty skill name and an option missing its value are usage errors.
+
 ### Interrupt deferral hardening: backup removal, ignored signals, handler restore (2026-09-19)
 
 - The success path's own `.{skill}.backup.*` removal now runs under `_defer_interrupts()`; a signal
