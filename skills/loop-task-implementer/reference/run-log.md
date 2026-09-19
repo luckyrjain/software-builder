@@ -23,9 +23,9 @@ changed). The directory must be absolute, without `..`, owned by you, not a
 symlink, and **not inside any git repository** (a home that is itself a repo needs an explicit `--log-dir` elsewhere).
 Keep it unchanged for the whole run.
 
-`run_id` is derived, never invented, so a resumed run finds its own log:
-`run_log.py run-id` reads a JSON array of seed strings on stdin (`["<repo>","<base_branch>","<task_id>"]`, or
-a plan's execution identity as the single seed; §20 uses the three-seed form) and prints `run-` plus 16 hex digits.
+`run_id` is derived, never invented, and kept in state (a resume uses the stored one; the UTC start time is a seed, so a task started again later is a new run):
+`run_log.py run-id` reads a JSON array of seed strings on stdin (`["<repo>","<base_branch>","<task_id>","<UTC start time>"]`, or
+a plan's execution identity plus the start time) and prints `run-` plus 16 hex digits.
 
 ## Record and events
 
@@ -95,9 +95,8 @@ time. Every append after the first needs it. `--unanchored` (only with `run_resu
 continue without it, and the record says so.
 
 An append whose outcome you do not know (crash, timeout, closed pipe) is safe to **repeat exactly**, with the
-same `--expect-head`: if it was already committed, the script returns that record and writes nothing. (Not
-`run_started`, which takes no head, and not `--unanchored`, which would write a second record: for those, `verify`
-and continue from what it shows.)
+same `--expect-head`: if it was already committed, the script returns that record and writes nothing. Not
+`run_started` (no head) and not `--unanchored` (it would write a second record): for those, follow §20 step 1.
 
 ### Exit codes
 
@@ -117,8 +116,10 @@ finished `COMPLETE` and is resumed to run again starts a new window after that c
 
 - **Tokens**: each record counts `total_tokens` if given, else `input_tokens + output_tokens`; reaching the
   cap counts as exceeding it.
-- **Time** is *active* time: each gap between records counts at most 30 minutes, so a human decision, a resume the
-  next day, or a crash does not spend the budget; a gap that ends at a `builder_`, `remediation_` or `review_returned`
+- **In short:** a task's window runs from its first `task_selected` (or after a completed run that is resumed); tokens
+  are summed over it; time is active time. **Time** is *active* time: each gap between records counts at most 30
+  minutes, and the wait before a `run_resumed` counts nothing, so a human decision, a resume the next day, or a
+  crash does not spend the budget (the work between the last record and a crash is not charged either, at most 30 minutes); a gap that ends at a `builder_`, `remediation_` or `review_returned`
   record also counts the interval that session's reported `elapsed_seconds` says it ran (never less than the 30-minute gap), so a long real session is charged what it took (and parallel lenses
   are not charged twice). A session that never returns is not visible here: §3's 30-minute session wait catches it.
   `wall_clock_minutes` is for information.

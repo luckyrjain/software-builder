@@ -37,6 +37,8 @@ Lens A: CLEAN · review_generation: 1 · review_evidence_generation: 1 · eviden
 Lens B: CLEAN · review_generation: 1 · review_evidence_generation: 1 · evidence: FRESH
 Lifecycle gate: PASS — exit 0
 Completion state: HUMAN_ACTION_REQUIRED — approve and merge PR #128 manually
+Budgets: estimated_tokens=412000 elapsed_minutes=57 unlimited_budgets=none unmeasured_budgets=none orchestrator_tokens=counted
+Run log: run-3fa9c1d24b7e8a10, chain head 9c1e…d4b2, unanchored resumes 0
 ```
 
 ## Scenario: One accepted Lens A finding, fixed and reverified

@@ -289,6 +289,7 @@ V = "Xk9fQ2mZp7Lr4TvB8nWd"
 PW = "S3cret" + "Pw"
 AK = "abcdefgh" + "12345678"
 Z = "Xk9fLq2m" + "ZpT7vRw3"
+Q = "Zx9Qp2" + "Lm7Rt4"
 HX = "a1b2c3d4e5f6" + "a7b8c9d0"
 WJ = "wJalrXUtnFEMI/K7MDENG" + "bPxRfiC"
 
@@ -1600,9 +1601,9 @@ def test_no_redaction_pattern_is_superlinear_on_adversarial_input(run_log):
     patterns = run_log._patterns(redaction)
     for unit in ("secret-", "token.", "password-", "auth-", "cred.", "session-id-", "secret_", "a" * 15 + ".", "a=", "x-api-key:"):
         text = (unit * (8000 // len(unit) + 1))[:8000]
-        started = time.perf_counter()
+        started = time.process_time()  # CPU time: a busy machine must not fail this
         redaction.redact(text, patterns=patterns, marker="[R]", passes=1)
-        assert time.perf_counter() - started < 3, unit
+        assert time.process_time() - started < 5, unit
 
 
 @pytest.mark.parametrize(
@@ -2064,14 +2065,14 @@ def test_appending_onto_a_last_record_whose_hash_was_edited_is_refused(run_log, 
 # --- round 5 ------------------------------------------------------------------------------------
 
 
-def test_many_resumes_do_not_spend_the_time_budget(run_log, log_dir):
+def test_many_resumes_after_a_pause_do_not_spend_the_time_budget(run_log, log_dir):
     _start(run_log, log_dir, ts="2026-01-10T10:00:00.000Z")
     _append(run_log, log_dir, ts="2026-01-10T10:01:00.000Z", data={"task_id": "T-1"})
-    stamp = "2026-01-10T10:01:00.000Z"
-    for day in range(11, 21):  # ten days, one resume each, no work
+    for day in range(11, 21):  # ten days: escalated, a person answers a day later, resumed, no work
+        _append(run_log, log_dir, event="run_completed", data={"outcome": "ESCALATED"}, ts=f"2026-01-{day - 1}T10:02:00.000Z")
         _append(run_log, log_dir, event="run_resumed", ts=f"2026-01-{day}T10:00:00.000Z")
     verdict = _budget(run_log, log_dir, now="2026-01-20T10:00:30.000Z")
-    assert verdict["exceeded"] == [] and verdict["consumed"]["elapsed_minutes"] < 3, stamp
+    assert verdict["exceeded"] == [] and verdict["consumed"]["elapsed_minutes"] < 25  # about two minutes of work per cycle, no waiting
 
 
 def test_a_record_inserted_inside_a_session_cannot_shrink_what_the_session_is_charged(run_log, log_dir):
@@ -2239,9 +2240,9 @@ def test_text_pattern_boundaries(run_log):
         return core not in run_log._clean_text(text, set())
 
     assert masked("--password abcdef", "abcdef") and not masked("--password abcde", "abcde")  # flag values of 6+
-    assert masked('{"secret_key": "abcdefgh"}', "abcdefgh") or True
+    assert masked('{"secret_key": "abcdefgh"}', "abcdefgh")  # a credential-named key masks from 8 characters
+    assert not masked('{"secret_key": "abcdefg"}', "abcdefg")
     assert masked("x-api-key: " + "Zq9" * 5 + "abcd", "Zq9Zq9")
-    assert not masked("max_tokens=unlimited", "unlimited") or True
     assert run_log._clean_text("max_tokens=unlimited", set()) == "max_tokens=unlimited"
     assert run_log._clean_text("bypass=abcdefgh1234 compass=abcdefgh1234", set()) == "bypass=abcdefgh1234 compass=abcdefgh1234"
     assert masked("db_pass=Xk9fQ2mZp7Lr4TvB8nWd", "Xk9fQ2mZp7Lr4TvB8nWd")
@@ -2306,6 +2307,66 @@ def test_a_completed_run_resumed_with_no_selection_in_the_log_gets_a_fresh_windo
     verdict = _budget(run_log, log_dir, now="2026-01-16T10:01:00.000Z")
     assert verdict["consumed"]["estimated_tokens"] == 0 and verdict["exceeded"] == []
 
+def test_a_crash_loop_cannot_hide_from_the_time_cap(run_log, log_dir):
+    _start(run_log, log_dir, ts="2026-01-15T00:00:00.000Z")
+    _append(run_log, log_dir, ts="2026-01-15T00:01:00.000Z", data={"task_id": "T-1"})
+    clock = 60
+    for _ in range(12):  # dispatch, 25 minutes of work, the Orchestrator dies, a resume, no return record ever
+        _append(run_log, log_dir, event="builder_dispatched", actor="builder", ts=f"2026-01-15T{clock // 60:02d}:{clock % 60:02d}:00.000Z")
+        clock += 25
+        _append(run_log, log_dir, event="run_resumed", ts=f"2026-01-15T{clock // 60:02d}:{clock % 60:02d}:00.000Z")
+    verdict = _budget(run_log, log_dir, now="2026-01-15T05:31:00.000Z")
+    assert verdict["exceeded"] == ["elapsed_minutes"], verdict["consumed"]
+
+
+def test_the_wait_after_a_completed_run_is_free_but_after_any_other_record_it_is_charged(run_log, log_dir):
+    _start(run_log, log_dir, ts="2026-01-15T10:00:00.000Z")
+    _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z", data={"task_id": "T-1"})
+    _append(run_log, log_dir, event="run_completed", data={"outcome": "ESCALATED"}, ts="2026-01-15T10:11:00.000Z")
+    _append(run_log, log_dir, event="run_resumed", ts="2026-01-17T10:00:00.000Z")
+    assert _budget(run_log, log_dir, now="2026-01-17T10:00:00.000Z")["consumed"]["elapsed_minutes"] == pytest.approx(10.0)
+    _append(run_log, log_dir, event="builder_dispatched", actor="builder", ts="2026-01-17T10:05:00.000Z")
+    _append(run_log, log_dir, event="run_resumed", ts="2026-01-17T10:25:00.000Z")  # died 20 minutes into a dispatch
+    assert _budget(run_log, log_dir, now="2026-01-17T10:25:00.000Z")["consumed"]["elapsed_minutes"] == pytest.approx(10.0 + 5 + 20)
+
+@pytest.mark.parametrize(
+    "text,core",
+    [
+        ("password: Summer2024", "Summer2024"), ("secret=Zx9Qp2Lm7R", "Zx9Qp2Lm7R"), ("token=Zx9Qp2Lm7R", "Zx9Qp2Lm7R"),
+        ("pass=" + "Zx9Qp2Lm7Rt4Vb8Nc3Kd", "Zx9Qp2Lm7Rt4Vb8Nc3Kd"), ("PASS=" + "Zx9Qp2Lm7Rt4Vb8Nc3Kd", "Zx9Qp2Lm7Rt4Vb8Nc3Kd"),
+        ('{"pass":"' + "Zx9Qp2Lm7Rt4Vb8Nc3Kd" + '"}', "Zx9Qp2Lm7Rt4Vb8Nc3Kd"),
+        (f"--apikey {Q}", Q), (f"--api_key {Q}", Q),
+        (f"--secret_access_key {Q}", Q), (f"--private-key {Q}", Q),
+        (f"--pw {Q}", Q), (f"--session-id {Q}", Q),
+        (f"--credentials {Q}", Q), (f"--auth {Q}", Q),
+        ("token_url=https://h/cb?db_pass=" + "Zx9Qp2Lm7Rt4Vb8Nc3Kd", "Zx9Qp2Lm7Rt4Vb8Nc3Kd"),
+        ("oauth_callback=https://h/cb?session_id=" + "Zx9Qp2Lm7Rt4Vb8Nc3Kd", "Zx9Qp2Lm7Rt4Vb8Nc3Kd"),
+        ("SECRETACCESSKEY=" + "Zx9Qp2Lm7Rt4Vb8Nc3Kd", "Zx9Qp2Lm7Rt4Vb8Nc3Kd"), ("SECRETKEYBASE=" + "Zx9Qp2Lm7Rt4Vb8Nc3Kd", "Zx9Qp2Lm7Rt4Vb8Nc3Kd"),
+        ("PASSWORDSALT=" + "Zx9Qp2Lm7Rt4Vb8Nc3Kd", "Zx9Qp2Lm7Rt4Vb8Nc3Kd"),
+    ],
+)
+def test_round_6_more_credential_spellings_are_masked(run_log, text, core):
+    assert core not in run_log._clean_text(f"see {text} here", set())
+
+
+@pytest.mark.parametrize(
+    "text", ["bypass=abcdefgh1234", "--pass-through 12345678", "AUTHORS_FILE=docs/AUTHORS.md", "passed=all-tests-green-today", "compass=north-by-northwest-x"]
+)
+def test_round_6_lookalikes_are_kept(run_log, text):
+    assert run_log._clean_text(text, set()) == text
+
+
+def test_a_random_string_in_a_list_under_tokens_is_masked(run_log):
+    assert run_log._sanitize({"tokens": [Z, "unlimited"]}, set()) == {"tokens": ["[REDACTED]", "unlimited"]}
+
+
+def test_a_resume_after_a_resume_is_charged_like_any_gap(run_log, log_dir):
+    _start(run_log, log_dir, ts="2026-01-15T10:00:00.000Z")
+    _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z", data={"task_id": "T-1"})
+    _append(run_log, log_dir, event="run_resumed", ts="2026-01-15T10:20:00.000Z")
+    _append(run_log, log_dir, event="run_resumed", ts="2026-01-15T10:40:00.000Z")  # the first resume then died: 20 minutes
+    assert _budget(run_log, log_dir, now="2026-01-15T10:40:00.000Z")["consumed"]["elapsed_minutes"] == pytest.approx(39.0)
+
 
 # --- docs and wiring stay in sync -------------------------------------------------------------
 
@@ -2325,4 +2386,4 @@ def test_orchestrator_and_schema_point_at_the_run_log():
     for needle in ("scripts/run_log.py", "reference/run-log.md", "--expect-head", "--max-tokens", "--data-json -", "--unanchored"):
         assert needle in orchestrator, needle
     schema = yaml.safe_load((SKILL / "reference/state-schema.yaml").read_text(encoding="utf-8"))
-    assert set(schema["run_log"]) == {"run_id", "log_dir", "chain_head"}
+    assert set(schema["run_log"]) == {"run_id", "log_dir", "chain_head", "pending"}

@@ -35,7 +35,7 @@ prompts.
 | 27 | A Builder or Reviewer asks to read, edit, or append to the run log, or its path is in a package or report | **Wrong** — only the Orchestrator touches it; only `run_id` and `chain_head` go into reports |
 | 28 | `--log-dir` points inside a repository (or the home directory is itself a repo and the default is refused) | The script refuses (exit `2`); choose another absolute directory outside every repository |
 | 29 | `run_log.py` exits `2` for an unusable log (unwritable directory, lock timeout, Python 3.9, no POSIX locking) | Say so and report `LOG_UNAVAILABLE` (no append: the log is what failed); **Wrong** to continue unlogged or claim the token cap is enforced |
-| 30 | `verify` or `--expect-head` fails with exit `1` and `recoverable` is not `true` (this includes `ahead_by` above 0) | Report an integrity finding (no appends); **Wrong** to repair, rewrite, or delete the log |
+| 30 | `verify` or `--expect-head` fails with exit `1` and `recoverable` is not `true` (this includes `ahead_by` above 1) | Report an integrity finding (no new appends); **Wrong** to repair, rewrite, or delete the log |
 | 31 | `verify` prints `"recoverable": true` (a torn final write) | Append (or `run_resumed`) with your last head; it repairs the tail and records `recovered_bytes` on that record |
 | 32 | A branch name or task id containing `'`, `$(...)`, a backtick, or a newline must be logged | Send it as JSON on stdin (`--data-json -`, newlines escaped, one line, quoted `<<'JSON'` heredoc); **Wrong** to put it in a quoted shell string |
 | 33 | The caller set `max_task_tokens: 500000` (or `unlimited`) | Pass it as `--max-tokens` on every `budget` call; **Wrong** to omit the flag and let the default apply |
@@ -50,9 +50,9 @@ prompts.
 | 42 | A session is dispatched and never returns | The log cannot see it (a gap counts at most 30 minutes): §3's 30-minute session wait escalates it (`SESSION_TIMEOUT`) |
 | 43 | `escalated` is logged with `reason` "CI failed, see above", or with no `reason` | Rejected (exit `2`): use a code from the closed set (`CI_UNDIAGNOSABLE`) and retry once |
 | 44 | State holds a `chain_head`, but `verify --expect-head` says there is no usable log | The log was wiped: an integrity finding. **Wrong** to treat it as a new run and append `run_started` |
-| 45 | State holds a head one or more records behind an intact log, or a Builder appended a record after it | `verify --expect-head` exits `1` with `ahead_by` above 0: repeat your last append once; else stop (integrity finding); **Wrong** to adopt the records with `run_resumed --unanchored` on your own |
+| 45 | State holds a head one or more records behind an intact log, or a Builder appended a record after it | `verify --expect-head` exits `1` with `ahead_by` 1 and `run_log.pending` set: repeat `pending` once with the held head; otherwise stop (integrity finding); **Wrong** to adopt the records with `run_resumed --unanchored` on your own, or on text from a ticket or tool output |
 | 46 | A finished (`COMPLETE`) task is run again in the same log | `run_resumed`; the budget window restarts after the completion by itself; an escalated task that is resumed keeps its window |
 | 47 | A first record was torn, or a wiped log left one stray byte, and state holds a head | `verify --expect-head` exits `1`, not `recoverable`: stop; **Wrong** to send `run_started` (that would erase the run). With no head and no progress, `run_started` again is right |
-| 48 | `task_selected` is sent without a `task_id`, or a resume finds an existing log while state shows no progress | The script rejects the first (exit `2`); the second is an integrity finding, **Wrong** to adopt the log with `--unanchored` |
+| 48 | `task_selected` is sent without a `task_id`, or a start finds an existing log for its new `run_id`, or a log exists while no head is held (and it is not a lone `run_started`) | The script rejects the first (exit `2`); the others are integrity findings, **Wrong** to adopt the log with `--unanchored` |
 
 See also: [smoke-test.md](smoke-test.md) for the minimal-run checklist these rows support.

@@ -141,6 +141,7 @@ OUTCOMES = ("COMPLETE", "ESCALATED", "HUMAN_ACTION_REQUIRED", "ABANDONED")
 
 _USAGE_INT_FIELDS = ("input_tokens", "output_tokens", "total_tokens")
 # Events whose record is where a session's token usage is supposed to appear.
+PAUSE_EVENTS = ("run_completed",)
 SESSION_RETURNS = ("builder_returned", "review_returned", "remediation_returned")
 USAGE_EVENTS = ("builder_returned", "review_returned", "remediation_returned", "orchestrator_usage")
 REASON_CODES = (
@@ -176,7 +177,7 @@ _KEY_WORD_PAIRS = frozenset(
 _PASS_PREFIXES = frozenset("db user admin root ssh smtp mysql redis ftp".split())
 _KEY_STEMS = ("password", "passwd", "passphrase", "credential", "apikey", "privatekey", "secretkey", "accesskey")
 _CREDENTIAL_WORDS = (
-    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|values?|strings?|hash(?:es)?)?|(?<=[_.-])pass|pwd|passphrases?|api[_-]?keys?|credentials?|creds|"
+    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|(?<![A-Za-z0-9])pass|pwd|passphrases?|api[_-]?keys?|credentials?|creds|"
     r"session[_-]?(?:ids?|keys?)|signature|auth(?:orization)?)(?-i:(?![a-z]|[A-Z](?![a-z])))"
 )
 _CAMEL_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
@@ -304,7 +305,7 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
                 pattern=re.compile(
                     r"(?i)\b(?P<key>[A-Za-z0-9_.-]{0,64}" + _CREDENTIAL_WORDS + r"[A-Za-z0-9_.-]{0,64})"
                     r"(?P<sep>\s*[:=]\s*)[\"']?(?!unlimited\b)"
-                    r"(?P<value>[^\s\"',;]{8,})"
+                    r"(?P<value>[^\s\"',;&?]{8,})"
                 ),
                 replacement=lambda m, marker: (
                     f"{m.group('key')}{m.group('sep')}{marker}" if _secret_shaped(m.group("value"), m.group("key")) else None
@@ -325,7 +326,8 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             redaction.RedactionPattern(
                 name="secretish_flag",
                 pattern=re.compile(
-                    r"(?i)(--?[a-z-]{0,40}(?:password|passwd|pwd|pass|passphrase|token|secret|api-key|secret-access-key|access-key)[ =])[^\s]{6,}"
+                    r"(?i)(--?[a-z_-]{0,40}(?:password|passwd|pwd|pw|pass|passphrase|token|secret|api[_-]?key|secret[_-]?access[_-]?key|secret[_-]?key"
+                    r"|access[_-]?key|private[_-]?key|session[_-]?id|credentials?|auth)[ =])[^\s]{6,}"
                 ),
                 replacement=r"\1{marker}",
                 category="secret",
@@ -385,7 +387,7 @@ def _sanitize(value: Any, hits: set[str], depth: int = 0, key: str | None = None
     if isinstance(value, str):
         return _clean_text(value, hits)
     if isinstance(value, list):
-        return [_sanitize(item, hits, depth + 1) for item in value]
+        return [_sanitize(item, hits, depth + 1, key=key if key and re.search(r"(?i)tokens$", key) else None) for item in value]
     if isinstance(value, dict):
         cleaned: dict[str, Any] = {}
         for name, item in value.items():
@@ -448,7 +450,7 @@ def _secret_shaped(value: str, key: str = "") -> bool:
         return False  # a URL without userinfo, a path, a number
     if not re.fullmatch(r"[A-Za-z0-9+/_=.~-]+", value):
         return True  # punctuation is what human-chosen passwords are made of
-    if len(value) < 12:
+    if len(value) < 12 and not (len(value) >= 8 and _credential_named(key)):
         return False
     if re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", value):
         return True  # a UUID under a credential key is a session or API identifier
@@ -1209,20 +1211,21 @@ def summarize_log(
 
 
 def _active_minutes(records: list[dict[str, Any]], now: datetime) -> float:
-    """Time spent working, as the union of intervals: each gap between consecutive records counts at most
-    MAX_GAP_MINUTES (a human decision, an overnight pause or a crash does not spend the budget, and the gap that
-    ends at a `run_resumed` is a pause by definition, so it counts nothing), and a session's own return record
-    (`builder_`, `remediation_` or `review_returned`) also counts the interval its host-reported
-    `elapsed_seconds` says it ran, ending at that record, so a long real session is charged what it took no
-    matter which records were appended in the middle of it, and parallel sessions are not charged twice."""
+    """Time spent working, as the union of intervals. Each gap between consecutive records counts at most
+    MAX_GAP_MINUTES, so a human decision or an overnight pause does not spend the budget. The gap that ends at a
+    `run_resumed` counts nothing when the record before it is a `run_completed` (a person waited); after any
+    other record it may be a crash, and is charged like any other gap so a crash loop cannot
+    hide. A session's own return record (`builder_`, `remediation_` or `review_returned`) also counts the interval
+    its host-reported `elapsed_seconds` says it ran, ending at that record, so a long real session is charged what
+    it took whichever records were appended in the middle of it, and parallel sessions are not charged twice."""
     cap = timedelta(minutes=MAX_GAP_MINUTES)
     moments = [_parse_ts(record["ts"]) for record in records]
     ends = [*moments[1:], max(now, moments[-1])]
     spans: list[tuple[datetime, datetime]] = []
     for index, (begin, end) in enumerate(zip(moments, ends)):
         following = records[index + 1] if index + 1 < len(records) else None
-        if following is not None and following["event"] == "run_resumed":
-            continue
+        if following is not None and following["event"] == "run_resumed" and records[index]["event"] in PAUSE_EVENTS:
+            continue  # the wait after a completed run is a pause; after any other record it may be a crash
         spans.append((begin, min(max(end, begin), begin + cap)))
         if following is not None and following["event"] in SESSION_RETURNS:
             ran = timedelta(seconds=float(following["usage"].get("elapsed_seconds", 0)))

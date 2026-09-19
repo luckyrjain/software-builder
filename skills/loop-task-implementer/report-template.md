@@ -90,7 +90,7 @@ fix_attempts:
 rebuttal_log:
 authoritative_checks:
 lifecycle_validation_errors:
-budget_consumed:  # elapsed_minutes (active), estimated_tokens, unlimited_budgets (caller set `unlimited`), unmeasured_budgets (`tokens` if no usage was recorded)
+budget_consumed:  # elapsed_minutes (active), estimated_tokens, unlimited_budgets (caller set `unlimited`), unmeasured_budgets (`tokens` if no usage was recorded), orchestrator_tokens (`counted` | `not_counted`)
 run_log:  # run_id and chain_head only (from the final `run_log.py verify`; see reference/run-log.md)
 escalation_reason:
 required_human_decision:
