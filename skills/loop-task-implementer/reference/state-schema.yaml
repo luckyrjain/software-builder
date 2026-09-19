@@ -133,9 +133,10 @@ ci:
 # Run log (see reference/run-log.md). Written only by the Orchestrator via scripts/run_log.py; `budgets.consumed`
 # is filled from `run_log.py budget`, not from the model's own tally.
 run_log:
-  run_id: null      # derived with `run_log.py run-id`; deterministic per task so a resumed run finds its log
+  run_id: null      # derived with `run_log.py run-id`; kept here; the UTC start time is a seed, so a task started again later is a new run
   log_dir: null     # absolute, outside any git repository; Orchestrator-only, never in a package, PR body, or report
   chain_head: null  # the latest receipt's head, passed as --expect-head on the next call
+  pending: null     # the exact append being sent (event, actor, data, usage); null once its receipt is stored
 
 budgets:
   max_files_warning: 20

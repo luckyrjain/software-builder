@@ -12,87 +12,41 @@ For earlier history, see the `## loop-task-implementer` section in the repositor
   or, when unmeasurable, that the token cap is not enforced. Pressure tests 23-25 and
   `tests/test_budget_defaults.py` cover the defaults.
 - Added an append-only, redacted, SHA-256 hash-chained run log (`scripts/run_log.py`, `reference/run-log.md`,
-  orchestrator section 20), written only by the Orchestrator and never shown to a Builder or Reviewer. After an
-  adversarial review (five personas: pentester, SRE, prompt engineer, hostile code reviewer, architect) the
-  contract is:
-  - **Exit codes** `0` ok, `1` integrity failure, `2` bad input or cannot run, `3` budget cap reached
-    (previously `1` meant both "chain broken" and "cap reached").
-  - **Tamper evidence**: `--expect-head` (the previous receipt's hash, held by the Orchestrator) catches a
-    dropped tail, a wiped log, and foreign appends; strict parsing rejects duplicate keys, NaN, non-canonical
-    lines and wrong-typed fields; the first record must be `run_started`, timestamps may not go backwards or
-    into the future, and only `run_resumed` continues a completed run. The docs state plainly that a process
-    running as the same OS user can still rewrite the whole file.
-  - **Budgets measure the current task**: `run_log.py budget` covers everything since the latest
-    `task_selected`, counts *active* time (each gap capped at 30 minutes, so a pause or resume does not spend the
-    budget), reports `unmeasured` when no usage was recorded, and the Orchestrator passes the resolved caps
-    every call.
-  - **Durability**: writes are all-or-nothing (a failed or short write is rolled back), a torn final line is
-    repaired by the next append (see round 3 below), appends read only the tail (constant time in run length), and
-    locks time out instead of hanging.
-  - **Safety**: `data` is sent on stdin (`--data-json -`) so untrusted text never enters a shell string;
-    receipts replace echoed records; keys are redacted and secret-named keys masked; more token families are
-    covered; redaction input is bounded; `escalated.reason` and `run_completed.outcome` take codes, not prose;
-    the log directory must be outside every git repository and private, and is not read from `$HOME`/the environment.
-  - New `run-id` subcommand derives a deterministic, resumable id from task seeds (hashed from a JSON encoding,
-    so NUL-joined seeds cannot collide).
-  - **Round 2 review** (five fresh personas against the fixed code) added: `--expect-head` is required on every
-    append after the first (a 16+ character prefix is enough), with `run_resumed --unanchored` as the one recorded
-    way to continue without it, and a repeated append whose receipt was lost is idempotent; a head with no log
-    is an integrity failure on every command; sequencing mistakes exit `2` (a wrong call), not `1`; the budget
-    window is the current `task_id`, so re-selecting a task after a resume no longer resets it; `total_tokens`
-    is accepted; `unmeasured` is judged per returned session and receipts flag `usage_missing`; `escalated.reason`
-    is a closed set of codes; redaction covers generic `key=value` / `"key":"value"` / `--flag value` credentials,
-    more token families, unterminated PEM blocks and integer values under secret keys, and a key is judged by its
-    words (`token_count`, `max_tokens`, `compass` are not secrets); strings over 8000 characters are refused
-    instead of half-redacted; errors describe file-derived text by length and digest instead of quoting it (an
-    injection channel); repository detection is structural (bare repos, `GIT_DIR`, gitfiles; a stub `.git` no
-    longer locks the directory out); FIFOs, deep-nesting lines and broken pipes are handled; macOS uses
-    `F_FULLFSYNC`; Python 3.10+ and POSIX are checked with a clear message.
-  - **Round 3 review** simplified rather than patched again. A torn final write is repaired by the next append,
-    which records `recovered_bytes` and `recovered_sha256` **on the record it writes** — there is no separate
-    `log_recovered` event, no saved fragment file and no unlink cleanup, so a retry with the caller's head still
-    finds that record's predecessor (a separate recovery record had broken idempotence), and the file-accumulation,
-    unlink-race and directory-fsync problems disappear with them. Time is wall time with each gap capped at 30
-    minutes, or at the host-reported `elapsed_seconds` when the gap ends at a session's return: no in-flight
-    charging (a crash then a resume no longer trips the cap) and no summed floor (parallel lenses are not charged
-    twice). A `COMPLETE` task that is run again gets a new budget window. `escalated.reason` and
-    `run_completed.outcome` are required; an all-zero usage record is not a measurement; `verify` flags only a
-    far-future record (consistent with `append`), says `"recoverable": true` for anything the next append can
-    repair (a fragment under 48 KiB), and prints `"no_log": true` for a missing or empty log so a caller can tell "new run"
-    from "unusable"; a pre-existing loose directory is refused instead of `chmod`ed, and the home directory is
-    never the log directory. Redaction: the generic `key=value` pattern was cubic (5.6K characters took 21 s) and
-    is bounded, values are masked unless they are clearly identifiers (`enabled-by-default`,
-    `cl100k_base_tokenizer_v2`, `E_AUTH_TOKEN_EXPIRED_0042`, absolute paths), plural and more credential key
-    names are covered (`passwords`, `api_keys`, `creds`, `dsn`, `signing_key`), any non-number under a weak key
-    is masked whole, a `*_count` number is a count, more token shapes (`hf_`, `dop_v1_`, `sntrys_`,
-    `Authorization: Token`, `redis://:pw@`, `sessionid=`), and caller-supplied text (data keys, duplicate keys,
-    argparse errors) is no longer echoed. Docs: `run-log.md` and section 20 keep the same procedure in fewer
-    words, with explicit branches for a held head, a lost head, a wiped log, a crash mid-resume, and a JSON-escaped
-    heredoc with an unpredictable delimiter; the completion report now carries `Budgets` and `Run log` lines
-    (backlog-runner sums them); backlog-runner's SETUP states the Python/POSIX/log-directory prerequisite.
-    Pressure tests 26-46, `tests/test_run_log.py` (about 300 tests, mutation-tested three times) and
-    `tests/test_packaged_run_log.py` cover it.
-  - **Round 4 review** (five reviewers again) found regressions and gaps in the round-3 redaction and resume logic,
-    all fixed with tests: the case-insensitive lookahead had stopped `secretAccessKey=`, `passwordHash=` and
-    `authKey=` from matching; a value containing punctuation, a UUID, `tok_<random>` and anything under a key that
-    names a credential itself (`SECRET_KEY=my-app-secret-value`) counted as an identifier and leaked; compound
-    lowercase keys (`clientsecret`, `dbpassword`) were not recognised; more shapes are covered (`curl -uUSER:PW`,
-    `Authorization: <any scheme>`, `https://token@host`, a `@` inside a password, `--aws-secret-access-key`, Slack and
-    Discord webhooks, `whsec_`, `gsk_`, `xai-`, `hvs.`, `ya29.`); counts of things found or rotated under a
-    credential word (`secrets_found`) stay numbers. A `COMPLETE` task that is resumed with no new `task_selected`
-    starts a fresh budget window (it used to inherit the old one and trip the cap), `task_selected` now requires a
-    `task_id`, and only a session's own return record (not `orchestrator_usage`) can lift the 30-minute gap cap.
-    `verify --expect-head` reports `ahead_by` when the log is intact but past the head that was held (a lost receipt
-    or state save), so the Orchestrator resumes with `run_resumed --unanchored` instead of stopping on a false
-    integrity finding; a torn first record and a record missing only its newline are now `recoverable`; the
-    script-written keys `recovered_bytes`, `recovered_sha256` and `unanchored` are refused from callers; readers no
-    longer `chmod` the log; an explicit `--log-dir` works when the account's home directory does not exist; the
-    directory entry of a first record is synced even after a rejected first call. Docs: section 20's step 1 covers
-    every `verify` outcome, the log-failure path no longer asks for an append the log would refuse, the heredoc rule
-    is "one escaped line, quoted delimiter", `orchestrator_usage` is only logged when the host reports it, and
-    backlog-runner reads the completion report's `Budgets:` line (it had named fields only the escalation report
-    has). Deliberately not done: replacing the redaction stack with a per-event allowlist (a rewrite for no leak
-    the current stack misses) and a queue-start log-writability preflight.
+  orchestrator section 20), written only by the Orchestrator and never shown to a Builder or Reviewer. Four rounds of
+  adversarial review (pentester, SRE, prompt engineer, code reviewer, architect) shaped the contract:
+  - **Exit codes** `0` ok, `1` integrity failure, `2` bad input or cannot run, `3` budget cap reached.
+  - **Tamper evidence**: strict canonical parsing; the first record is `run_started`; timestamps never go backwards;
+    only `run_resumed` continues a completed run. `--expect-head` (the previous receipt's hash, held in the
+    Orchestrator's state) is required on every append after the first and catches a dropped tail, a wiped log
+    (including one left as a stray byte) and foreign appends; `verify` reports the number of records beyond a held
+    head as `ahead_by`, but that is a diagnostic: a mismatch stops the run, and only a person who has inspected the log
+    may continue with `run_resumed --unanchored` (counted in `verify` as `unanchored_resumes`). A process running as
+    the same OS user can still rewrite the whole file; the docs say so.
+  - **Durability**: writes are all-or-nothing, appends read only the tail, locks time out, and a torn final write
+    (a fragment under 48 KiB, including a torn first record) is repaired by the next append, which records
+    `recovered_bytes` and `recovered_sha256` on that record. A repeated append whose receipt was lost is idempotent.
+  - **Budgets measure the current task** (`task_selected` requires a `task_id`). Time is active time: each gap between
+    records counts at most 30 minutes, the wait before a `run_resumed` counts nothing, and a session's own return record
+    counts the interval its host-reported `elapsed_seconds` says it ran (unioned, so parallel sessions are not
+    charged twice and an inserted record cannot shrink it). A `COMPLETE` task that is resumed starts a fresh window.
+    `unmeasured` is judged per returned session, an all-zero usage record is not a measurement, and the caps are
+    passed on every call.
+  - **Safety**: `data` goes on stdin so untrusted text never enters a shell string; receipts replace echoed records;
+    `escalated.reason` and `run_completed.outcome` take codes, not prose; caller-supplied text is never echoed back
+    (errors show a length and digest); the script-written keys `recovered_bytes`, `recovered_sha256` and
+    `unanchored` are refused from callers; the log directory is outside every git repository, private, not the
+    home directory itself, and never chmodded if it already existed; readers never change the file's mode.
+  - **Redaction** (shared patterns plus local extras, bounded against ReDoS): keys are judged by their words, values by
+    shape (a punctuated value, a UUID, a random-looking segment or anything under a key that names a credential is
+    masked; kebab-case, ALL_CAPS and path identifiers under a merely credential-flavoured key are kept), and text
+    under a credential-worded key is always replaced, so log such facts as codes under another name. Many token
+    families, `Authorization: <scheme>`, URL userinfo, CLI password flags and webhook URLs are covered. Not done, by
+    design: replacing the stack with a per-event allowlist, and a queue-start log-writability preflight.
+  - New `run-id` subcommand derives a deterministic, resumable id from task seeds.
+  - Docs: section 20 step 1 covers every `verify` outcome (a new run only when there is no log and no progress; an
+    existing log with no state is an integrity finding), a failing log appends nothing, the completion report carries
+    `Budgets:` and `Run log:` lines in `key=value` form that backlog-runner reads, and pressure tests 26-48,
+    `tests/test_run_log.py` and `tests/test_packaged_run_log.py` cover it.
 
 ## v1.4 — implementation-plan execution bridge (2026-08-26)
 

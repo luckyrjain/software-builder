@@ -64,3 +64,11 @@ stated before they are built.
   effective authority, which this decision classes as a defect.
 - **Not decided here:** whether merge is ever granted to an executor, and under what conditions.
   Merge stays a per-run caller grant, and `backlog-runner` hardcodes it to false.
+
+## Amended 2026-09-19
+
+Point 1 now reads "Application code is changed only by executor skills" (the tests carve-out is unchanged), and the
+executor count is eight `repository-write` skills, two `comment` skills and forty `read-only` skills. The
+"Known inconsistencies" bullet names `mysql-to-postgres-sql` as an executor that edits application code outside the
+loop. The run log the loop keeps (backlog A3) is described in
+[the skill's reference](../../skills/loop-task-implementer/reference/run-log.md), not here.

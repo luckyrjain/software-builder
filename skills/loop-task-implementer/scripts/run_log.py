@@ -141,12 +141,13 @@ OUTCOMES = ("COMPLETE", "ESCALATED", "HUMAN_ACTION_REQUIRED", "ABANDONED")
 
 _USAGE_INT_FIELDS = ("input_tokens", "output_tokens", "total_tokens")
 # Events whose record is where a session's token usage is supposed to appear.
+PAUSE_EVENTS = ("run_completed",)
 SESSION_RETURNS = ("builder_returned", "review_returned", "remediation_returned")
 USAGE_EVENTS = ("builder_returned", "review_returned", "remediation_returned", "orchestrator_usage")
 REASON_CODES = (
     "DIRTY_REVIEW_LIMIT", "FIX_ATTEMPT_LIMIT", "CONTESTED_TWICE", "SIZE_HARD_STOP", "FINGERPRINT_ALTERNATION",
     "SCOPE_EXCEEDED", "MISSING_DECISION", "THIRD_PARTY_CHANGE", "CI_UNDIAGNOSABLE", "SESSION_TIMEOUT",
-    "TOKEN_BUDGET", "TIME_BUDGET", "INTEGRITY_FAILURE", "LOG_UNAVAILABLE", "OTHER",
+    "TOKEN_BUDGET", "TIME_BUDGET", "OTHER",
 )
 _USAGE_FLOAT_FIELDS = ("elapsed_seconds", "cost_usd")
 _USAGE_MAX = {
@@ -160,7 +161,7 @@ _SENSITIVE_MARKER = "[REDACTED]"
 # A key is judged by its WORDS (split on separators and camelCase), not by substrings: `passed`, `bypass`,
 # `compass` and `max_tokens` are not secrets, `password`, `apiKey` and `DB_SECRET` are.
 _STRONG_KEY_WORDS = frozenset(
-    "password passwords passwd pwd pw pass passcode passphrase passphrases secret secrets apikey apikeys credential "
+    "password passwords passwd pwd pw passcode passphrase passphrases secret secrets apikey apikeys credential "
     "credentials creds authorization cookie cookies privatekey privatekeys jwt bearer accesskey accesskeys secretkey "
     "secretkeys sessionid sessionids dsn".split()
 )
@@ -173,10 +174,11 @@ _KEY_WORD_PAIRS = frozenset(
     }
     | {("session", "id"), ("session", "ids"), ("client", "secret"), ("client", "secrets"), ("database", "url")}
 )
+_PASS_PREFIXES = frozenset("db user admin root ssh smtp mysql redis ftp".split())
 _KEY_STEMS = ("password", "passwd", "passphrase", "credential", "apikey", "privatekey", "secretkey", "accesskey")
 _CREDENTIAL_WORDS = (
-    r"(?:secrets?|token|passw(?:or)?ds?|(?<=[_.-])pass|pwd|passphrases?|api[_-]?keys?|credentials?|creds|"
-    r"session[_-]?ids?|signature|auth(?:orization)?)(?-i:(?![a-z]))"
+    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|(?<![A-Za-z0-9])pass|pwd|passphrases?|api[_-]?keys?|credentials?|creds|"
+    r"session[_-]?(?:ids?|keys?)|signature|auth(?:orization)?)(?-i:(?![a-z]|[A-Z](?![a-z])))"
 )
 _CAMEL_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
 
@@ -207,7 +209,8 @@ class VerifyResult(NamedTuple):
     errors: list[str]
     last_event: str | None = None
     recoverable: bool = False  # the only problem is a torn final line that the next append repairs
-    ahead_by: int = 0  # the log is intact and this many records beyond the head that was supplied
+    unanchored_resumes: int = 0  # `run_resumed` records that continued without a held head
+    ahead_by: int = 0  # diagnostic: the log is intact and holds this many records after the head that was supplied
 
 
 class _Tail(NamedTuple):
@@ -302,7 +305,7 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
                 pattern=re.compile(
                     r"(?i)\b(?P<key>[A-Za-z0-9_.-]{0,64}" + _CREDENTIAL_WORDS + r"[A-Za-z0-9_.-]{0,64})"
                     r"(?P<sep>\s*[:=]\s*)[\"']?(?!unlimited\b)"
-                    r"(?P<value>[^\s\"',;]{8,})"
+                    r"(?P<value>[^\s\"',;&?]{8,})"
                 ),
                 replacement=lambda m, marker: (
                     f"{m.group('key')}{m.group('sep')}{marker}" if _secret_shaped(m.group("value"), m.group("key")) else None
@@ -323,7 +326,8 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             redaction.RedactionPattern(
                 name="secretish_flag",
                 pattern=re.compile(
-                    r"(?i)(--?[a-z-]{0,40}(?:password|passwd|pwd|passphrase|token|secret|api-key|secret-access-key|access-key)[ =])[^\s]{6,}"
+                    r"(?i)(--?[a-z_-]{0,40}(?:password|passwd|pwd|pw|pass|passphrase|token|secret|api[_-]?key|secret[_-]?access[_-]?key|secret[_-]?key"
+                    r"|access[_-]?key|private[_-]?key|session[_-]?id|credentials?|auth)[ =])[^\s]{6,}"
                 ),
                 replacement=r"\1{marker}",
                 category="secret",
@@ -369,6 +373,11 @@ def _sanitize(value: Any, hits: set[str], depth: int = 0, key: str | None = None
     if value is None or isinstance(value, bool):
         return value
     strength = _key_strength(key) if key is not None else 0
+    if (
+        key is not None and isinstance(value, str) and re.search(r"(?i)tokens$", key)
+        and _secret_shaped(value, key)
+    ):
+        strength = 1  # `tokens` is usually a count, but a random-looking string under it is a credential
     counted = isinstance(value, (int, float)) and _is_count_key(key or "")
     if (strength == 2 and not counted) or (strength == 1 and not isinstance(value, (int, float))):
         hits.add("sensitive_key")
@@ -378,7 +387,7 @@ def _sanitize(value: Any, hits: set[str], depth: int = 0, key: str | None = None
     if isinstance(value, str):
         return _clean_text(value, hits)
     if isinstance(value, list):
-        return [_sanitize(item, hits, depth + 1) for item in value]
+        return [_sanitize(item, hits, depth + 1, key=key if key and re.search(r"(?i)tokens$", key) else None) for item in value]
     if isinstance(value, dict):
         cleaned: dict[str, Any] = {}
         for name, item in value.items():
@@ -423,8 +432,9 @@ def _credential_named(key: str) -> bool:
     joined = "".join(words)
     return (
         words[-1] in _STRONG_KEY_WORDS
-        or words[-1] in {"key", "keys", "token", "tokens"} and any(pair in _KEY_WORD_PAIRS for pair in zip(words, words[1:]))
-        or joined.endswith(("secret", "secrets", "password", "apikey", "secretkey", "privatekey"))
+        or words[-1] == "token"  # `api_token`, `authToken`, `token`: a token itself, unlike `tokens` (usually a count)
+        or (words[-1] in {"key", "keys"} and any(pair in _KEY_WORD_PAIRS for pair in zip(words, words[1:])))
+        or joined.endswith(("secret", "secrets", "password", "apikey", "secretkey", "privatekey", "sessionkey"))
     )
 
 
@@ -440,7 +450,7 @@ def _secret_shaped(value: str, key: str = "") -> bool:
         return False  # a URL without userinfo, a path, a number
     if not re.fullmatch(r"[A-Za-z0-9+/_=.~-]+", value):
         return True  # punctuation is what human-chosen passwords are made of
-    if len(value) < 12:
+    if len(value) < 12 and not (len(value) >= 8 and _credential_named(key)):
         return False
     if re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", value):
         return True  # a UUID under a credential key is a session or API identifier
@@ -459,6 +469,8 @@ def _key_strength(key: str) -> int:
     if any(word in _STRONG_KEY_WORDS for word in words) or any(pair in _KEY_WORD_PAIRS for pair in zip(words, words[1:])):
         return 2
     joined = "".join(words)  # `clientsecret`, `dbpassword`, `accesstoken`: one word to the splitter, two to a reader
+    if joined == "pass" or (words[-1] == "pass" and len(words) == 2 and words[0] in _PASS_PREFIXES):
+        return 2  # `pass`, `db_pass`; not `review_pass` or `pass_number`, which count things
     if any(stem in joined for stem in _KEY_STEMS) or joined.endswith(("secret", "secrets")):
         return 2
     if any(word in _WEAK_KEY_WORDS for word in words) or joined.endswith(("token", "auth")):
@@ -885,6 +897,7 @@ def _full_check(raw: bytes, run_id: str) -> tuple[VerifyResult, list[dict[str, A
     result = VerifyResult(
         ok, len(records), head, errors or ([] if records else ["log is empty"]),
         records[-1]["event"] if records else None, recoverable,
+        sum(1 for record in records if record["data"].get("unanchored") is True),
     )
     return result, records
 
@@ -1134,16 +1147,16 @@ def _checked(
             raise IntegrityError(f"a head was supplied but there is no usable log ({exc})") from exc
         raise
     result, records = _full_check(raw, run_id)
-    if result.ok and expect_head is not None and not _head_matches(result.head, expect_head):
+    if (result.ok or result.recoverable) and expect_head is not None and not _head_matches(result.head, expect_head):
         ahead = next(
             (len(records) - 1 - i for i, record in enumerate(records) if _head_matches(record["hash"], expect_head)), 0
         )
         note = (
-            f"the log is {ahead} records past the head from your last receipt (a receipt or state save was lost)"
+            f"the log has {ahead} record(s) after the head from your last receipt that you did not write or whose receipt was lost"
             if ahead
             else "the log's head does not match the head from your last receipt; it was truncated or replaced"
         )
-        result = result._replace(ok=False, errors=[note], ahead_by=ahead)
+        result = result._replace(ok=False, recoverable=False, errors=[note], ahead_by=ahead)
     return result, records
 
 
@@ -1198,49 +1211,55 @@ def summarize_log(
 
 
 def _active_minutes(records: list[dict[str, Any]], now: datetime) -> float:
-    """Time spent working. Each gap between consecutive records counts at most MAX_GAP_MINUTES, so a human
-    decision or an overnight pause does not spend the budget; a gap that ends at a record carrying the host's
-    `elapsed_seconds` for the session that just returned counts up to that duration instead, so a long real
-    session is charged what it took (and parallel sessions are not charged twice, since this is wall time)."""
+    """Time spent working, as the union of intervals. Each gap between consecutive records counts at most
+    MAX_GAP_MINUTES, so a human decision or an overnight pause does not spend the budget. The gap that ends at a
+    `run_resumed` counts nothing when the record before it is a `run_completed` (a person waited); after any
+    other record it may be a crash, and is charged like any other gap so a crash loop cannot
+    hide. A session's own return record (`builder_`, `remediation_` or `review_returned`) also counts the interval
+    its host-reported `elapsed_seconds` says it ran, ending at that record, so a long real session is charged what
+    it took whichever records were appended in the middle of it, and parallel sessions are not charged twice."""
     cap = timedelta(minutes=MAX_GAP_MINUTES)
     moments = [_parse_ts(record["ts"]) for record in records]
     ends = [*moments[1:], max(now, moments[-1])]
-    total = timedelta(0)
+    spans: list[tuple[datetime, datetime]] = []
     for index, (begin, end) in enumerate(zip(moments, ends)):
-        allowed = cap
-        if index + 1 < len(records) and records[index + 1]["event"] in SESSION_RETURNS:
-            allowed = max(cap, timedelta(seconds=float(records[index + 1]["usage"].get("elapsed_seconds", 0))))
-        total += min(max(end - begin, timedelta(0)), allowed)
+        following = records[index + 1] if index + 1 < len(records) else None
+        if following is not None and following["event"] == "run_resumed" and records[index]["event"] in PAUSE_EVENTS:
+            continue  # the wait after a completed run is a pause; after any other record it may be a crash
+        spans.append((begin, min(max(end, begin), begin + cap)))
+        if following is not None and following["event"] in SESSION_RETURNS:
+            ran = timedelta(seconds=float(following["usage"].get("elapsed_seconds", 0)))
+            if ran > timedelta(0):
+                spans.append((max(end - ran, moments[0]), end))
+    total = timedelta(0)
+    reach: datetime | None = None
+    for begin, end in sorted(spans):
+        if reach is None or begin > reach:
+            total += end - begin
+            reach = end
+        elif end > reach:
+            total += end - reach
+            reach = end
     return total.total_seconds() / 60.0
 
 
 def _task_window_start(records: list[dict[str, Any]]) -> int:
     """Index where the current task's budget window begins: the first of the latest run of `task_selected`
-    records for the same task_id, so re-selecting it after a resume does not reset its budget (a task that
-    was COMPLETE and is then run again does get a new one)."""
+    records for the same task_id (re-selecting it after a resume does not reset its budget), or the start of the
+    log if there is none. A `COMPLETE` completion that is followed by more records ends the previous window: a
+    finished task that is resumed is a redo, with or without a new `task_selected`. A completion that is the last
+    record is the run finishing, not a reset, so the final budget read of a run still sees all of it."""
     starts = [i for i, record in enumerate(records) if record["event"] == "task_selected"]
-    if not starts:
-        return 0
-    start = starts[-1]
-    task_id = records[start]["data"].get("task_id")
+    start = starts[-1] if starts else 0
+    task_id = records[start]["data"].get("task_id") if starts else None
     for earlier in reversed(starts[:-1]):
         if task_id is None or records[earlier]["data"].get("task_id") != task_id:
             break
-        finished = any(
-            record["event"] == "run_completed" and record["data"].get("outcome") == "COMPLETE"
-            for record in records[earlier:start]
-        )
-        if finished:
-            break  # the task was completed and is being run again: a new window
         start = earlier
-    # A COMPLETE task that is resumed (without a fresh `task_selected`) is a redo: its window begins after the
-    # completion, unless the completion is the last record (the final budget read of a finished run).
-    completed = [
-        i for i, record in enumerate(records) if record["event"] == "run_completed" and record["data"].get("outcome") == "COMPLETE"
+    finished = [
+        i for i, record in enumerate(records[:-1]) if record["event"] == "run_completed" and record["data"].get("outcome") == "COMPLETE"
     ]
-    if completed and start < completed[-1] < len(records) - 1:
-        start = completed[-1] + 1
-    return start
+    return max(start, finished[-1] + 1) if finished else start
 
 
 def check_budget(
@@ -1449,7 +1468,8 @@ def _run(argv: list[str]) -> int:
             _emit({"ok": False, "no_log": True, "detail": _short(str(exc))})
             return EXIT_ERROR
         _emit({"ok": result.ok, "events": result.events, "chain_head": result.head, "last_event": result.last_event,
-               "recoverable": result.recoverable, "ahead_by": result.ahead_by, "error_count": len(result.errors), "errors": result.errors[:5]})
+               "recoverable": result.recoverable, "ahead_by": result.ahead_by,
+               "unanchored_resumes": result.unanchored_resumes, "error_count": len(result.errors), "errors": result.errors[:5]})
         return EXIT_OK if result.ok else EXIT_INTEGRITY
     if args.command == "summarize":
         _emit(summarize_log(log_dir, args.run_id, expect_head=args.expect_head))
