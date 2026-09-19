@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import math
 import os
 import shutil
 import signal
@@ -27,6 +28,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,6 +71,11 @@ def is_pid_alive(pid: int) -> bool:
     this branch is untested on real Windows; treat it as best-effort until it's exercised for
     real, not as a verified-equal port of the POSIX branch above.
     """
+    if pid <= 0:
+        # os.kill(0, 0) and os.kill(-1, 0) address a process *group*/every process and
+        # succeed, which would make a lock file holding "0" or "-1" look permanently live.
+        return False
+
     if sys.platform == "win32":
         import ctypes
 
@@ -92,7 +99,9 @@ def is_pid_alive(pid: int) -> bool:
         return False
     except PermissionError:
         return True
-    except OSError:
+    except (OSError, OverflowError):
+        # OverflowError: a corrupted lock file holding an integer too large for a C int can't
+        # name a real process.
         return False
     return True
 
@@ -101,17 +110,33 @@ def _lock_dir_for(dest_root: Path, skill: str) -> Path:
     return dest_root / f".{skill}.lock"
 
 
-def _read_lock_pid(lock_dir: Path) -> int | None:
+def _read_lock_identity(lock_dir: Path) -> tuple[str | None, str | None]:
+    """The raw (pid, acquired_at) text of a lock directory, None for whichever is unreadable.
+    Kept raw so a reclaim can later check the directory it moved is the very one it judged
+    stale, not a lock someone else acquired in between."""
+
+    def _read(name: str) -> str | None:
+        try:
+            return (lock_dir / name).read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+
+    return _read("pid"), _read("acquired_at")
+
+
+def _parse_lock_pid(raw: str | None) -> int | None:
     try:
-        return int((lock_dir / "pid").read_text(encoding="utf-8").strip())
-    except (OSError, ValueError):
+        return int(raw) if raw is not None else None
+    except ValueError:
         return None
 
 
-def _read_lock_age(lock_dir: Path) -> float | None:
+def _parse_lock_age(raw: str | None) -> float | None:
     try:
-        acquired_at = float((lock_dir / "acquired_at").read_text(encoding="utf-8").strip())
-    except (OSError, ValueError):
+        acquired_at = float(raw) if raw is not None else None
+    except ValueError:
+        return None
+    if acquired_at is None or not math.isfinite(acquired_at):
         return None
     return time.time() - acquired_at
 
@@ -147,27 +172,47 @@ def _acquire_lock_dir(dest_root: Path, lock_dir: Path) -> bool:
         (temp_dir / "pid").write_text(str(os.getpid()), encoding="utf-8")
         (temp_dir / "acquired_at").write_text(str(time.time()), encoding="utf-8")
         os.rename(temp_dir, lock_dir)
-    except OSError as exc:
+    except BaseException as exc:
+        # BaseException, not just OSError: an interrupt between mkdtemp and the rename would
+        # otherwise strand this directory, and nothing sweeps a stray `.lock.tmp.*` later.
         shutil.rmtree(temp_dir, ignore_errors=True)
-        if exc.errno not in _RENAME_DESTINATION_TAKEN:
-            raise
-        return False
+        if isinstance(exc, OSError) and exc.errno in _RENAME_DESTINATION_TAKEN:
+            return False
+        raise
     return True
 
 
-def _reclaim_stale_lock(lock_dir: Path) -> None:
-    """Rename-then-remove, mirroring install.sh's reclaim_stale_lock exactly: only the
-    renamer whose os.rename actually succeeds ever deletes anything, so two racing waiters
-    can't have one delete a lock the other just freshly re-mkdir'd. A rename failure (the
-    lock was already reclaimed/removed by a racing waiter) is not an error -- it just means
-    this call lost the race, and the caller's retry loop will re-observe the current state.
+def _reclaim_stale_lock(lock_dir: Path, observed: tuple[str | None, str | None]) -> bool:
+    """Take over a lock judged stale from `observed` (the identity read when it was judged).
+    Rename-then-remove, so only the waiter whose rename succeeds ever deletes anything.
+
+    Renaming is by *path*, though, so between judging and renaming the lock can be released
+    and a third party can legitimately acquire it -- a plain rename would then delete that
+    live lock and let two holders run at once. So the moved directory's identity is compared
+    with `observed`; if it differs, it was not the lock judged stale and is put back (or, if
+    someone has already taken the path again, discarded, since it is no longer the lock of
+    record). A narrow window remains between the rename and the put-back, accepted and
+    documented in ADR 0007.
+
+    Returns True when the caller should retry acquiring straight away (the stale lock was
+    removed, or was already gone), False when it should wait as for a live lock (the rename
+    failed for a persistent reason, or what it moved turned out not to be stale).
     """
-    stale_dir = lock_dir.with_name(f"{lock_dir.name}.stale.{os.getpid()}")
+    stale_dir = lock_dir.with_name(f"{lock_dir.name}.stale.{os.getpid()}.{uuid.uuid4().hex[:8]}")
     try:
         os.rename(lock_dir, stale_dir)
+    except FileNotFoundError:
+        return True
     except OSError:
-        return
+        return False
+    if _read_lock_identity(stale_dir) != observed:
+        try:
+            os.rename(stale_dir, lock_dir)
+        except OSError:
+            shutil.rmtree(stale_dir, ignore_errors=True)
+        return False
     shutil.rmtree(stale_dir, ignore_errors=True)
+    return True
 
 
 def _terminate_signal() -> int | None:
@@ -332,52 +377,62 @@ def held_lock(
     Nothing sweeps a stray `.tmp.*` directory later, the same accepted gap this module already
     has for `install_skill()`'s `.{skill}.staging.*`/`.{skill}.backup.*` directories under an
     equivalent hard-kill window (see docs/adr/0007-shared-install-engine.md).
+
+    Also accepted: `_reclaim_stale_lock()` checks the identity of the directory it moved, but
+    has no way to make judging, moving and (if it was not the stale one) putting back a single
+    atomic step, so a third holder acquiring inside that few-microsecond window is displaced.
     """
     lock_dir = _lock_dir_for(dest_root, skill)
     waited = 0.0
-    while True:
-        if not _acquire_lock_dir(dest_root, lock_dir):
-            lock_pid = _read_lock_pid(lock_dir)
-            is_stale = lock_pid is not None and not is_pid_alive(lock_pid)
-            if not is_stale:
-                age = _read_lock_age(lock_dir)
-                if age is None:
-                    try:
-                        age = time.time() - lock_dir.stat().st_mtime
-                    except OSError:
-                        age = None
-                # age is None here only when acquired_at AND the directory's own stat() both
-                # failed (e.g. the holder's cleanup removed lock_dir out from under this read) --
-                # matching the pre-fallback behavior, treat that as stale rather than live: the
-                # reclaim below is a harmless no-op if the directory is already gone (os.rename
-                # raises, is swallowed, and the next loop iteration's mkdir succeeds anyway).
-                is_stale = age is None or age > stale_after
-            if is_stale:
-                _reclaim_stale_lock(lock_dir)
-                continue
-            if waited >= wait_timeout:
-                raise LockTimeoutError(
-                    f"timed out waiting for lock on {skill} at {lock_dir} "
-                    f"(held by pid {lock_pid if lock_pid is not None else 'unknown'})"
-                )
-            time.sleep(_LOCK_POLL_INTERVAL_SECONDS)
-            waited += _LOCK_POLL_INTERVAL_SECONDS
-            continue
-        break
-
-    # pid/acquired_at were already written into the now-renamed-into-place lock_dir by
-    # _acquire_lock_dir() itself, before it became visible at this path.
+    acquired = False
     try:
+        # Waiting must be stoppable by a supervisor's SIGTERM the same as the work under the
+        # lock: unconverted, the process dies with the raw 143 install.sh does not recognise.
+        with _sigterm_as_system_exit():
+            while True:
+                if _acquire_lock_dir(dest_root, lock_dir):
+                    acquired = True
+                    break
+                identity = _read_lock_identity(lock_dir)
+                lock_pid = _parse_lock_pid(identity[0])
+                is_stale = lock_pid is not None and not is_pid_alive(lock_pid)
+                if not is_stale:
+                    age = _parse_lock_age(identity[1])
+                    if age is None:
+                        try:
+                            age = time.time() - lock_dir.stat().st_mtime
+                        except FileNotFoundError:
+                            # Released between the failed acquire and this read. Not stale --
+                            # "gone" is not "abandoned": reclaiming here would rename whatever
+                            # a third party has acquired since, breaking mutual exclusion.
+                            continue
+                        except OSError:
+                            age = None
+                    is_stale = age is not None and age > stale_after
+                if is_stale and _reclaim_stale_lock(lock_dir, identity):
+                    continue
+                if waited >= wait_timeout:
+                    raise LockTimeoutError(
+                        f"timed out waiting for lock on {skill} at {lock_dir} "
+                        f"(held by pid {lock_pid if lock_pid is not None else 'unknown'})"
+                    )
+                time.sleep(_LOCK_POLL_INTERVAL_SECONDS)
+                waited += _LOCK_POLL_INTERVAL_SECONDS
         yield
     finally:
-        # This runs after the caller's guarded body has already returned or raised, so it's
-        # outside any `with _sigterm_as_system_exit()` the caller itself entered -- a
-        # second, closely-timed SIGTERM landing here would otherwise terminate the process
-        # mid-release. Deferred rather than converted: the release finishes, then exits 130.
-        # (An interrupted release would be self-healing anyway -- a stale/partial lock is
-        # reclaimed by the next waiter -- but there's no reason to leave one behind.)
-        with _defer_interrupts():
-            shutil.rmtree(lock_dir, ignore_errors=True)
+        # Only what this call acquired: a failed or interrupted wait must never remove
+        # another holder's lock. A signal in the couple of bytecodes between the rename
+        # succeeding and `acquired` being set would leave a lock behind, but it names this
+        # process's pid, so it goes stale the moment the process exits.
+        if acquired:
+            # This runs after the caller's guarded body has already returned or raised, so it's
+            # outside any `with _sigterm_as_system_exit()` the caller itself entered -- a
+            # second, closely-timed SIGTERM landing here would otherwise terminate the process
+            # mid-release. Deferred rather than converted: the release finishes, then exits 130.
+            # (An interrupted release would be self-healing anyway -- a stale/partial lock is
+            # reclaimed by the next waiter -- but there's no reason to leave one behind.)
+            with _defer_interrupts():
+                shutil.rmtree(lock_dir, ignore_errors=True)
 
 
 _BLOCKING_OWNERSHIP_STATES = frozenset(
@@ -612,18 +667,33 @@ def uninstall_skill(
             if dry_run:
                 return UninstallOutcome(skill_id, skill_dest, "dry_run", f"would remove {skill_dest}")
 
+            removing_dir: Path | None = None
             try:
-                # There's nothing to roll back to here (see the docstring), so this doesn't
-                # change what a SIGTERM mid-rmtree leaves on disk -- but it does give the
-                # process a clean, well-defined exit 130 for it (matching install_skill()'s
-                # convention) instead of whatever raw signal-death code the OS would otherwise
-                # produce, which install.sh's `((status == 130))` check wouldn't recognize.
+                # Renamed aside first and deleted from there, so the destination is atomically
+                # either the intact install or absent. An in-place rmtree that failed or was
+                # interrupted partway left a half-deleted directory whose manifest was already
+                # gone -- classified "unowned", so neither uninstall nor install would touch it
+                # again and only a manual `rm -rf` recovered.
                 with _sigterm_as_system_exit():
-                    shutil.rmtree(skill_dest)
+                    try:
+                        removing_dir = Path(tempfile.mkdtemp(dir=dest_root, prefix=f".{skill_id}.removing."))
+                        os.replace(skill_dest, removing_dir / "skill")
+                    except BaseException:
+                        if removing_dir is not None:
+                            if (removing_dir / "skill").exists() and not skill_dest.exists():
+                                os.replace(removing_dir / "skill", skill_dest)
+                            shutil.rmtree(removing_dir, ignore_errors=True)
+                        raise
+                # The skill is gone from its destination; finishing the deletion of what was
+                # moved aside must not be abandoned by a second signal (nothing sweeps it).
+                with _defer_interrupts():
+                    shutil.rmtree(removing_dir)
             except (KeyboardInterrupt, SystemExit):
                 raise
             except Exception as exc:
                 message = str(exc) if str(exc) else f"{type(exc).__name__} during uninstall"
+                if removing_dir is not None and not skill_dest.exists() and removing_dir.exists():
+                    message = f"removed {skill_dest} but could not delete the leftover at {removing_dir}: {message}"
                 return UninstallOutcome(skill_id, skill_dest, "failed", message)
             return UninstallOutcome(
                 skill_id, skill_dest, "uninstalled", f"Uninstalled {skill_id} from {skill_dest}"
@@ -642,17 +712,20 @@ def uninstall_skill(
 # cli/sb/__main__.py already calls and tests against directly); the prefix and stdout-vs-
 # stderr split are presentation, decided once here rather than duplicated by each caller.
 _PRESENTATION = {
-    "installed": ("", sys.stdout),
-    "uninstalled": ("", sys.stdout),
-    "dry_run": ("dry-run: ", sys.stdout),
-    "absent": ("warning: ", sys.stderr),
-    "failed": ("error: ", sys.stderr),
+    "installed": ("", "stdout"),
+    "uninstalled": ("", "stdout"),
+    "dry_run": ("dry-run: ", "stdout"),
+    "absent": ("warning: ", "stderr"),
+    "failed": ("error: ", "stderr"),
 }
 
 
 def _print_outcome(outcome: InstallOutcome | UninstallOutcome) -> None:
-    prefix, stream = _PRESENTATION[outcome.status]
-    print(f"{prefix}{outcome.message}", file=stream)
+    # The stream is looked up at print time, not captured at import: a caller that has
+    # redirected sys.stdout/sys.stderr (contextlib.redirect_stdout, a test's capture) must see
+    # the output.
+    prefix, stream_name = _PRESENTATION[outcome.status]
+    print(f"{prefix}{outcome.message}", file=getattr(sys, stream_name))
 
 
 def _env_float(name: str, default: float) -> float:
@@ -668,6 +741,13 @@ def _lock_timing_from_env() -> tuple[float, float]:
     # behavior without waiting out real-world-sized delays.
     wait_timeout = _env_float("LOCK_WAIT_TIMEOUT_SECONDS", DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS)
     stale_after = _env_float("LOCK_STALE_SECONDS", DEFAULT_LOCK_STALE_SECONDS)
+    # float() accepts "nan"/"inf"/negatives. nan or inf as the wait timeout waits forever; a
+    # zero or negative stale age makes every live lock immediately stealable; nan as the stale
+    # age makes age-based reclaim unreachable. Reject them rather than run with a broken lock.
+    if not (math.isfinite(wait_timeout) and wait_timeout >= 0):
+        raise ValueError(f"LOCK_WAIT_TIMEOUT_SECONDS must be a finite number >= 0, got {wait_timeout!r}")
+    if not (math.isfinite(stale_after) and stale_after > 0):
+        raise ValueError(f"LOCK_STALE_SECONDS must be a finite number > 0, got {stale_after!r}")
     return wait_timeout, stale_after
 
 
@@ -717,8 +797,10 @@ def main(argv: list[str] | None = None) -> int:
     # of locale, but Python's print() is locale-aware and raises UnicodeEncodeError under a
     # restrictive locale like LC_ALL=C. Force UTF-8 output so a successful install can't crash
     # on its own success message and get misreported as failed.
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    for stream in (sys.stdout, sys.stderr):
+        # Not every stream has it (an in-process caller may have swapped in a StringIO).
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
     parser = argparse.ArgumentParser(
         prog="install_engine.py",

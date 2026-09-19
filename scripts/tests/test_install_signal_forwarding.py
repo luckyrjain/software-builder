@@ -144,3 +144,67 @@ def test_a_stop_request_ends_a_multi_skill_run_even_if_the_engine_exits_cleanly_
 
     assert proc.returncode == 130, (stdout, stderr)
     assert len(log.read_text(encoding="utf-8").splitlines()) == 1, "the next skill was started after the stop"
+
+
+# An engine killed by the forwarded TERM before it could install its own handler dies with 143.
+# That is still a stop request, not an ordinary failure: reading it as one made install_skill
+# `return 1` and the loop carry on installing the remaining skills.
+_FAKE_PYTHON_DIES_ON_TERM = """#!/usr/bin/env bash
+if [[ "$1" == *install_engine.py ]]; then
+  echo "$@" >> "{log}"
+  exec sleep 30
+fi
+exec "{real}" "$@"
+"""
+
+
+def test_an_engine_killed_by_the_forwarded_term_still_ends_a_multi_skill_run(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "engine.log"
+    fake = bin_dir / "python3"
+    fake.write_text(_FAKE_PYTHON_DIES_ON_TERM.format(real=sys.executable, log=log), encoding="utf-8")
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    env = {**os.environ, "HOME": str(home), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    proc = subprocess.Popen(
+        ["bash", str(INSTALLER), "--agent", "cursor", SKILL, "api-design-review"],
+        cwd=ROOT,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while not log.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert log.exists(), "engine was never started"
+        os.kill(proc.pid, signal.SIGTERM)
+        stdout, stderr = proc.communicate(timeout=30)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+    assert proc.returncode == 130, (stdout, stderr)
+    assert len(log.read_text(encoding="utf-8").splitlines()) == 1, "the next skill was started after the stop"
+
+
+def test_an_empty_skill_name_and_a_missing_option_value_are_usage_errors(tmp_path: Path) -> None:
+    env = {**os.environ, "HOME": str(tmp_path)}
+    empty = subprocess.run(
+        ["bash", str(INSTALLER), "--agent", "cursor", "--uninstall", ""],
+        cwd=ROOT, env=env, capture_output=True, text=True, check=False,
+    )
+    assert empty.returncode == 1
+    assert "invalid skill name ''" in empty.stderr
+    assert not (tmp_path / ".cursor").exists(), "an empty name must not reach the engine"
+
+    missing = subprocess.run(
+        ["bash", str(INSTALLER), "--agent"],
+        cwd=ROOT, env=env, capture_output=True, text=True, check=False,
+    )
+    assert missing.returncode == 2
+    assert "--agent requires a value" in missing.stderr
+    assert "unbound variable" not in missing.stderr
