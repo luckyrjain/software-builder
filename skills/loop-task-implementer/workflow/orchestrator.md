@@ -167,14 +167,11 @@ Record per-task budgets before dispatch:
 - A caller who supplies nothing (or `null`) gets the defaults above — an unset budget is never
   treated as unbounded. Running without a ceiling requires the caller to pass the explicit value
   `unlimited` for that budget, and the completion/escalation report must state that it was used.
-- Measure, don't tally: record each session's usage in the run log (§20) and run `run_log.py budget`
-  before every dispatch, passing the **resolved** caps as `--max-tokens` and `--max-minutes` (the caller's
-  values, or the defaults above, or `unlimited`). Copy its `consumed` values into `budgets.consumed`. Usage
-  comes from what the host reports for a session, never from a figure a Builder or Reviewer states in
-  prose; if the host reports none, record an estimate marked `usage_source: estimated`. When `budget` lists
-  `tokens` under `unmeasured`, the token cap is **not enforced** — say so in the report; the time cap still
-  applies. Time is active time for the current task (pauses do not count), so the budget window resets at
-  each `task_selected`.
+- Measure, don't tally: usage is recorded and checked through the run log (§20, and
+  [reference/run-log.md](../reference/run-log.md) for what counts): pass the **resolved** caps to
+  `run_log.py budget` before every dispatch, and copy its `consumed` values into `budgets.consumed`. Usage comes
+  from what the host reports for a session, never from a Builder's or Reviewer's own prose. If `budget` lists
+  `tokens` under `unmeasured`, the token cap was **not enforced** for that session — say so in the report.
 - Review size threshold:
   - Default warning: more than `20 files` or `800 changed lines`
   - Default hard stop: more than `40 files` or `1500 changed lines`
@@ -722,34 +719,37 @@ supporting_evidence:
 ## 20. Run log
 
 Keep an append-only run log for every run, per [reference/run-log.md](../reference/run-log.md), by calling
-`scripts/run_log.py` (resolve `skill_root` and the Python 3 interpreter as in
-[orchestrator-lifecycle.md](orchestrator-lifecycle.md)). The reference is the contract for commands,
-exit codes, the event table, and recovery; this section is the procedure.
+`scripts/run_log.py` (resolve `skill_root` and a Python 3.10+ interpreter as in
+[orchestrator-lifecycle.md](orchestrator-lifecycle.md)). The reference is the contract (commands, exit codes,
+events, budgets, recovery); this is the procedure. **One `run_log.py` call per tool step, never in parallel** —
+each call needs the head from the previous receipt.
 
-1. **Start.** After policy discovery and task selection, derive `run_id` with `run_log.py run-id` (seeds on
-   stdin, never interpolated into the command line), pick a `--log-dir` outside the repository (the default is
-   fine unless it is unwritable), and store `run_id` and `log_dir` in `run_log` in state. Append `run_started`
-   (or `run_resumed` when continuing a run whose log already exists), then `task_selected`.
-2. **Every call**: pass `--log-dir`, and pass `--expect-head` set to the `chain_head` from your previous
-   receipt; then store the new receipt's `chain_head`. Send `data` on stdin with `--data-json -` and a quoted
-   heredoc — never put a branch name, task id, finding text, or any tool output inside a quoted shell string.
-3. **Log one record per action** at the points in the reference's event table, in order, including
-   `escalated` (with a code) for every circuit-breaker stop and `orchestrator_usage` for your own tokens.
-4. **Before every Builder, Reviewer, or remediation dispatch**, run `run_log.py budget` with the resolved
-   `--max-tokens` and `--max-minutes` and `--expect-head`. Exit `3`: a cap is reached — append `escalated`
-   (`TOKEN_BUDGET` or `TIME_BUDGET`) and stop per §3. Exit `1`: integrity failure — stop and report it. Exit `2`:
-   the log cannot be used — say so and escalate. Append `budget_checked` only when the verdict reports a cap
-   reached, `unmeasured`, or `unlimited`. Copy `consumed` into `budgets.consumed`.
-5. **Record usage** in each returned session's own record (`builder_returned`, `review_returned`,
-   `remediation_returned`) from the host's reported usage, as in §3.
-6. **End.** Append `run_completed` (outcome as a code), **then** run `run_log.py verify --expect-head <that
-   receipt's chain_head>` and put the resulting `chain_head` in `run_log.chain_head` and the report. Verifying
-   first would report a head that the final record then changes. A failed `verify` (exit `1`) is a finding to
-   report, not something to repair.
+1. **Start or resume.** Derive `run_id` with `run_log.py run-id` (seeds on stdin, never on the command line),
+   pick an absolute `--log-dir` outside every repository (the default is fine unless unwritable), and store
+   `run_id` and `log_dir` in `run_log` in state. Run `verify` with no head. Exit `2` ("no run log"): a new run —
+   append `run_started` (no `--expect-head`), then `task_selected`. Exit `0`: an existing run — append
+   `run_resumed` with `--expect-head` set to `state.run_log.chain_head`, and if you no longer hold one use
+   `--unanchored` and say so in the report. On resume append `task_selected` only for a **different** task; the
+   same task keeps its budget.
+2. **Every call**: `--log-dir`, `--expect-head <the previous receipt's chain_head>` (then store the new one), and
+   `data` on stdin with `--data-json -` and a quoted heredoc — never a branch name, task id, finding text or tool
+   output inside a quoted shell string. If a call's outcome is unknown, repeat it exactly; it is idempotent.
+3. **One record per action** at the points in the reference's event table, in order: `escalated` (with a code from
+   the closed set) for every circuit-breaker stop, and `orchestrator_usage` for your own tokens.
+4. **Before every Builder, Reviewer, or remediation dispatch** run `run_log.py budget` with the resolved
+   `--max-tokens`, `--max-minutes` and `--expect-head`. Exit `3`: append `escalated` (`TOKEN_BUDGET` or
+   `TIME_BUDGET`) and stop per §3. Exit `1`: an integrity failure — stop and report it. Exit `2`: fix the call if it
+   was a wrong call, else the log is unusable — say so and escalate. Append `budget_checked` only when the verdict
+   reports a cap reached, `unmeasured`, or `unlimited`. Copy `consumed` into `budgets.consumed`.
+5. **Record usage** in each session's own return record (`builder_returned`, `review_returned`,
+   `remediation_returned`), from the host's reported usage; a receipt with `usage_missing: true` means it was not
+   recorded — do not hide that.
+6. **End.** Run `budget` once more and take `consumed`, `unmeasured` and `unlimited` for the report from that
+   verdict only; append `run_completed` (outcome as a code); **then** run `verify --expect-head <that receipt's
+   chain_head>` and put the resulting `chain_head` in `run_log.chain_head` and the report. A failed `verify` is a
+   finding to report, not something to repair.
 
-Never give the run log, its directory, or its path to a Builder or Reviewer session, or put them in a
-dispatch package, PR body, or report (`run_id` and `chain_head` are the only parts that go out). If `run_log.py`
-cannot run (exit `2`), say so in the report and escalate rather than continuing an unlogged run silently; the
-token cap must not be claimed as enforced without it. Each action costs about two shell calls (the append and,
-before a dispatch, the budget check); skipping either silently weakens the audit trail, and `verify` proves
-integrity, not completeness.
+Never give the run log, its directory or its path to a Builder or Reviewer, or put them in a dispatch package,
+PR body or report (`run_id` and `chain_head` only). If `run_log.py` cannot run, say so in the report and escalate
+rather than continuing an unlogged run silently. A realistic run needs on the order of fifty calls; skipping one
+silently weakens the trail, and `verify` proves integrity, not completeness.

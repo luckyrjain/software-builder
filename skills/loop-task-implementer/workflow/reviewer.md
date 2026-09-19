@@ -62,8 +62,8 @@ Clearly distinguish checks you executed from checks merely reported by another s
 
 ## Review boundary
 
-Do not read, list, or open the Orchestrator's run log or its directory (by default under `~/.software-builder`), and do not
-ask for it: it can hold prior lens verdicts, which would break review independence.
+Do not read, list, or open the Orchestrator's run log, and do not ask for it: it can hold prior lens verdicts,
+which would break review independence.
 
 Review:
 

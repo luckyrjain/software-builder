@@ -134,8 +134,7 @@ ci:
 # is filled from `run_log.py budget`, not from the model's own tally.
 run_log:
   run_id: null      # derived with `run_log.py run-id`; deterministic per task so a resumed run finds its log
-  log_dir: null     # absolute, outside any git repository; pass the same --log-dir on every call
-  path: null        # Orchestrator-only; never in a dispatch package, PR body, or report
+  log_dir: null     # absolute, outside any git repository; Orchestrator-only, never in a package, PR body, or report
   chain_head: null  # the latest receipt's head, passed as --expect-head on the next call
 
 budgets:

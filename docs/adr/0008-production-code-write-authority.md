@@ -31,8 +31,8 @@ stated before they are built.
    - `loop-task-implementer`, and `architecture-remediation-loop`, which composes it: application code changes
      only through the isolated Builder -> Reviewer -> adjudication loop.
    - `mysql-to-postgres-sql`, a single-purpose migration skill that rewrites native SQL and datasource
-     configuration directly under its own gates. It is **not** routed through the loop and is a documented
-     exception to the loop requirement, not to the "only executors" rule.
+     configuration directly. It is **not** routed through the loop: a known exception to the loop requirement
+     (not to the "only executors" rule), recorded here because the skill's own docs do not yet say so.
 2. **Report and analysis skills never write production code.** They do not publish, apply
    infrastructure, or run codemods. Their output is a report or a typed handoff artifact.
 3. **Test creators write test code only.** The five `*-test-creator` skills hold `repository-write` for tests;
@@ -58,7 +58,8 @@ stated before they are built.
 - **Negative:** every new executor inherits `loop-task-implementer`'s weight (heavy contract
   validation), until a lighter path exists (backlog B2).
 - **Known inconsistencies, not fixed here:** `mysql-to-postgres-sql` edits application code outside the loop (point 1),
-  and `backlog-runner` is registered `read-only` although it
+  and `backlog-runner` is registered `read-only` (with `permissions.merge: true`, although its docs hardcode merge to
+  false) although it
   drives PR creation through `loop-task-implementer` (backlog E1). The registry understates its
   effective authority, which this decision classes as a defect.
 - **Not decided here:** whether merge is ever granted to an executor, and under what conditions.

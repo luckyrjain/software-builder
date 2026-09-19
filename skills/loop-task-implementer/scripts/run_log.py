@@ -13,7 +13,6 @@ Subcommands (see ``reference/run-log.md`` for the full contract):
     summarize  run-level totals          run_log.py summarize --run-id ID
     budget     compare the current task's usage to its caps
                                          run_log.py budget --run-id ID [--max-tokens N|unlimited] ...
-    path       print the log file path   run_log.py path --run-id ID
     run-id     derive a resumable id     run_log.py run-id      (JSON array of strings on stdin)
 
 Exit codes: 0 ok; 1 integrity failure (chain broken, head mismatch, forged/out-of-order record);
@@ -29,7 +28,7 @@ detects tail truncation, a wiped log, and appends by anyone else. It does NOT st
 the same OS user from rewriting the whole file, because that process can also run this script. Isolation
 of the Builder from the log directory is what defends against that, not this file.
 
-Windows locking and ``O_NOFOLLOW`` semantics are best-effort and untested on real Windows.
+POSIX only (Linux, macOS): it needs ``flock`` and ``pread``, and refuses to run elsewhere rather than run unlocked.
 """
 from __future__ import annotations
 
@@ -41,6 +40,7 @@ import json
 import math
 import os
 import re
+import stat
 import sys
 import time
 from contextlib import contextmanager
@@ -51,7 +51,7 @@ from typing import Any, Iterator, NamedTuple
 
 try:  # POSIX
     import fcntl
-except ImportError:  # pragma: no cover - Windows
+except ImportError:  # pragma: no cover - not POSIX
     fcntl = None  # type: ignore[assignment]
 
 
@@ -111,6 +111,7 @@ DEFAULT_MAX_TASK_MINUTES = 180
 # day) does not consume the task's time budget. Matches the Orchestrator's per-session wait cap.
 MAX_GAP_MINUTES = 30.0
 CLOCK_SKEW_SECONDS = 300.0
+FORGED_CLOCK_SECONDS = 86400.0  # a last record this far ahead is not clock skew
 LOCK_TIMEOUT_SECONDS = 30.0
 _LOCK_POLL_SECONDS = 0.05
 
@@ -139,19 +140,37 @@ EVENTS = (
 ACTORS = ("orchestrator", "builder", "reviewer", "ci", "human", "system")
 OUTCOMES = ("COMPLETE", "ESCALATED", "HUMAN_ACTION_REQUIRED", "ABANDONED")
 
-_USAGE_INT_FIELDS = ("input_tokens", "output_tokens")
+_USAGE_INT_FIELDS = ("input_tokens", "output_tokens", "total_tokens")
+# Events whose record is where a session's token usage is supposed to appear.
+USAGE_EVENTS = ("builder_returned", "review_returned", "remediation_returned", "orchestrator_usage")
+DISPATCH_EVENTS = ("builder_dispatched", "review_dispatched", "remediation_dispatched")
+REASON_CODES = (
+    "DIRTY_REVIEW_LIMIT", "FIX_ATTEMPT_LIMIT", "CONTESTED_TWICE", "SIZE_HARD_STOP", "FINGERPRINT_ALTERNATION",
+    "SCOPE_EXCEEDED", "MISSING_DECISION", "THIRD_PARTY_CHANGE", "CI_UNDIAGNOSABLE", "SESSION_TIMEOUT",
+    "TOKEN_BUDGET", "TIME_BUDGET", "INTEGRITY_FAILURE", "LOG_UNAVAILABLE", "OTHER",
+)
 _USAGE_FLOAT_FIELDS = ("elapsed_seconds", "cost_usd")
-_USAGE_MAX = {"input_tokens": 10**10, "output_tokens": 10**10, "elapsed_seconds": 10**7, "cost_usd": 10**6}
+_USAGE_MAX = {
+    "input_tokens": 10**10, "output_tokens": 10**10, "total_tokens": 10**10, "elapsed_seconds": 10**7, "cost_usd": 10**6,
+}
 _RUN_ID_RE = re.compile(r"[A-Za-z0-9._][A-Za-z0-9._-]{0,127}")
 _KEY_RE = re.compile(r"[A-Za-z0-9_.-]{1,64}")
 _HASH_RE = re.compile(r"[0-9a-f]{64}")
-_REASON_RE = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
-_SENSITIVE_KEY_RE = re.compile(
-    r"(?i)(pass(?:word|wd)?|secret|token|api[_-]?key|credential|authorization|cookie|private[_-]?key)"
-)
+_HEAD_RE = re.compile(r"[0-9a-f]{16,64}")  # a full head, or its first 16+ characters
 _SENSITIVE_MARKER = "[REDACTED]"
+# A key is judged by its WORDS (split on separators and camelCase), not by substrings: `passed`, `bypass`,
+# `compass` and `max_tokens` are not secrets, `password`, `apiKey` and `DB_SECRET` are.
+_STRONG_KEY_WORDS = frozenset(
+    "password passwd pwd passphrase secret secrets apikey credential credentials authorization cookie cookies "
+    "privatekey jwt bearer accesskey secretkey sessionid".split()
+)
+_WEAK_KEY_WORDS = frozenset({"token", "auth"})  # a text value is masked; a number under them is a count
+_KEY_WORD_PAIRS = frozenset(
+    {("api", "key"), ("private", "key"), ("access", "key"), ("secret", "key"), ("session", "id"), ("client", "secret")}
+)
+_CAMEL_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
 
-MAX_REDACT_INPUT_CHARS = 8000  # bound the regex work; anything past this is cut before redaction
+MAX_REDACT_INPUT_CHARS = 8000  # bound the regex work; a longer string is refused, never half-redacted
 MAX_STRING_CHARS = 4000
 MAX_RECORD_BYTES = 16 * 1024
 MAX_DEPTH = 6
@@ -176,6 +195,8 @@ class VerifyResult(NamedTuple):
     events: int
     head: str
     errors: list[str]
+    last_event: str | None = None
+    recoverable: bool = False  # the only problem is a torn final line that the next append repairs
 
 
 class _Tail(NamedTuple):
@@ -185,6 +206,7 @@ class _Tail(NamedTuple):
     completed: bool
     truncate_to: int | None  # drop an unparseable partial final line back to this size
     add_newline: bool  # the final line is a complete, valid record that only lacks its newline
+    last: dict[str, Any] | None = None  # the last complete record, if any
 
 
 # --- redaction --------------------------------------------------------------------------------
@@ -231,6 +253,38 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
                 replacement=r"\1{marker}@",
                 category="secret",
             ),
+            token("azure_account_key", r"AccountKey=[A-Za-z0-9+/=]{20,}", "secret"),
+            token("twilio_key", r"SK[0-9a-f]{32}"),
+            token("databricks_pat", r"dapi[0-9a-f]{32}"),
+            token("atlassian_token", r"ATATT[A-Za-z0-9_=-]{20,}"),
+            token("sendgrid_key", r"SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}"),
+            token("shopify_token", r"shp(?:at|ca|pa)_[0-9a-f]{32}"),
+            token("pypi_token", r"pypi-[A-Za-z0-9_-]{30,}"),
+            token("pem_private_key_open", r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*", "secret"),
+            redaction.RedactionPattern(
+                name="secretish_kv",
+                pattern=re.compile(
+                    r"(?i)\b([A-Za-z0-9_.-]*(?:secret|token|passw(?:or)?d|pwd|passphrase|api[_-]?key|credential|auth(?:orization)?)"
+                    r"[A-Za-z0-9_.-]*)(\s*[:=]\s*)[\"']?(?!unlimited\b)[A-Za-z0-9+/_.~=-]{12,}"
+                ),
+                replacement=r"\1\2{marker}",
+                category="secret",
+            ),
+            redaction.RedactionPattern(
+                name="secretish_json",
+                pattern=re.compile(
+                    r'(?i)("[A-Za-z0-9_.-]*(?:secret|token|passw(?:or)?d|pwd|passphrase|api[_-]?key|credential|auth(?:orization)?)'
+                    r'[A-Za-z0-9_.-]*"\s*:\s*")(?!unlimited")[^"]{8,}(")'
+                ),
+                replacement=r"\1{marker}\2",
+                category="secret",
+            ),
+            redaction.RedactionPattern(
+                name="secretish_flag",
+                pattern=re.compile(r"(?i)(--?(?:password|passwd|pwd|passphrase|token|secret|api-key)[ =])[^\s]{6,}"),
+                replacement=r"\1{marker}",
+                category="secret",
+            ),
             redaction.RedactionPattern(
                 name="cookie_header",
                 pattern=re.compile(r"(?i)\b((?:set-)?cookie\s*:\s*)[^\r\n]+"),
@@ -238,20 +292,26 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
                 category="secret",
             ),
         )
-        _PATTERNS = (*redaction.LOG_PATTERNS, *extras)
+        # Ours run first: the shared `Bearer <chars>=*` pattern would otherwise eat an `api_token=` (or
+        # `AccountKey=`) prefix and leave the value behind.
+        _PATTERNS = (
+            *extras,
+            *redaction.LOG_PATTERNS,
+            *(p for p in redaction.DOCUMENT_PATTERNS if p.name != "email"),  # generic key=value credentials
+        )
     return _PATTERNS
 
 
 def _clean_text(text: str, hits: set[str]) -> str:
+    if len(text) > MAX_REDACT_INPUT_CHARS:
+        # Cutting before redacting can leave half a secret; identifiers and counts are short, so refuse.
+        raise ValueError(f"a string longer than {MAX_REDACT_INPUT_CHARS} characters; log identifiers and counts, not content")
     redaction = _redaction_runtime()
     redacted, found = redaction.redact(
-        text[:MAX_REDACT_INPUT_CHARS],
-        patterns=_patterns(redaction),
-        marker=redaction.DEFAULT_MARKER,
-        passes=1,
+        text, patterns=_patterns(redaction), marker=redaction.DEFAULT_MARKER, passes=1
     )
     hits.update(hit.name for hit in found)
-    if len(redacted) > MAX_STRING_CHARS or len(text) > MAX_REDACT_INPUT_CHARS:
+    if len(redacted) > MAX_STRING_CHARS:
         redacted = redacted[: MAX_STRING_CHARS - len(_TRUNCATED)] + _TRUNCATED
     return redacted
 
@@ -259,15 +319,16 @@ def _clean_text(text: str, hits: set[str]) -> str:
 def _sanitize(value: Any, hits: set[str], depth: int = 0, key: str | None = None) -> Any:
     if depth > MAX_DEPTH:
         raise ValueError(f"data nests deeper than {MAX_DEPTH} levels")
-    if isinstance(value, bool) or value is None or isinstance(value, int):
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError("data contains a non-finite number")
+    if value is None or isinstance(value, bool):
         return value
-    if isinstance(value, float):
-        if not math.isfinite(value):
-            raise ValueError("data contains a non-finite number")
-        return value
-    if key is not None and _SENSITIVE_KEY_RE.search(key):
+    strength = _key_strength(key) if key is not None else 0
+    if strength == 2 or (strength == 1 and isinstance(value, str)):
         hits.add("sensitive_key")
         return _SENSITIVE_MARKER  # whatever shape the value has, its key says it is a secret
+    if isinstance(value, (int, float)):
+        return value
     if isinstance(value, str):
         return _clean_text(value, hits)
     if isinstance(value, list):
@@ -288,6 +349,25 @@ def _sanitize(value: Any, hits: set[str], depth: int = 0, key: str | None = None
 # --- validation helpers -----------------------------------------------------------------------
 
 
+def _short(value: object) -> str:
+    """Describe a value that came from a file or a caller without quoting it. Untrusted text that reaches
+    the model is an injection channel, and even a 60-character excerpt is enough for one, so a string is
+    reduced to its length and a short digest (enough to tell two apart); a number or bool is safe to show."""
+    if isinstance(value, str):
+        return f"<text len={len(value)} sha={hashlib.sha256(value.encode('utf-8', 'replace')).hexdigest()[:8]}>"
+    if isinstance(value, (bool, int, float)) or value is None:
+        return repr(value)[:24]
+    return f"<{type(value).__name__}>"
+
+
+def _key_strength(key: str) -> int:
+    """0 not sensitive, 1 weak (mask text values), 2 strong (mask any value)."""
+    words = [word.lower() for word in _CAMEL_RE.findall(key)]
+    if any(word in _STRONG_KEY_WORDS for word in words) or any(pair in _KEY_WORD_PAIRS for pair in zip(words, words[1:])):
+        return 2
+    return 1 if any(word in _WEAK_KEY_WORDS for word in words) else 0
+
+
 def validate_run_id(run_id: object) -> str:
     if not isinstance(run_id, str) or not _RUN_ID_RE.fullmatch(run_id) or run_id in {".", ".."}:
         raise ValueError("run_id must be 1-128 characters of [A-Za-z0-9._-], not starting with '-'")
@@ -301,7 +381,7 @@ def _validate_usage(usage: object) -> dict[str, int | float]:
         raise ValueError("usage must be an object")
     unknown = sorted(set(usage) - set(_USAGE_INT_FIELDS) - set(_USAGE_FLOAT_FIELDS))
     if unknown:
-        raise ValueError(f"unknown usage field(s): {', '.join(unknown)}")
+        raise ValueError(f"unknown usage field(s): {_short(', '.join(str(u) for u in unknown))}")
     cleaned: dict[str, int | float] = {}
     for key, value in usage.items():
         if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -311,16 +391,27 @@ def _validate_usage(usage: object) -> dict[str, int | float]:
         if not math.isfinite(value) or value < 0 or value > _USAGE_MAX[key]:
             raise ValueError(f"usage.{key} must be finite, non-negative, and at most {_USAGE_MAX[key]}")
         cleaned[key] = value
+    if "total_tokens" in cleaned and cleaned["total_tokens"] < cleaned.get("input_tokens", 0) + cleaned.get("output_tokens", 0):
+        raise ValueError("usage.total_tokens is smaller than input_tokens + output_tokens")
     return cleaned
+
+
+def _tokens_of(usage: dict[str, Any]) -> int:
+    """A record's tokens: the host's total if it gave one, else input + output."""
+    if "total_tokens" in usage:
+        return int(usage["total_tokens"])
+    return int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0))
+
+
+def _has_token_usage(usage: dict[str, Any]) -> bool:
+    return any(key in usage for key in _USAGE_INT_FIELDS)
 
 
 def _validate_event_data(event: str, data: dict[str, Any]) -> None:
     """Free prose is the injection channel, so the two events that invite it take codes, not sentences."""
     reason = data.get("reason")
-    if event == "escalated" and reason is not None and not (
-        isinstance(reason, str) and _REASON_RE.fullmatch(reason)
-    ):
-        raise ValueError(f"escalated data.reason must be an UPPER_SNAKE code matching {_REASON_RE.pattern}")
+    if event == "escalated" and reason is not None and reason not in REASON_CODES:
+        raise ValueError(f"escalated data.reason must be one of: {', '.join(REASON_CODES)}")
     outcome = data.get("outcome")
     if event == "run_completed" and outcome is not None and outcome not in OUTCOMES:
         raise ValueError(f"run_completed data.outcome must be one of: {', '.join(OUTCOMES)}")
@@ -336,13 +427,13 @@ def _fmt_ts(moment: datetime) -> str:
 
 def _parse_ts(ts: object) -> datetime:
     if not isinstance(ts, str):
-        raise ValueError(f"invalid timestamp {ts!r}")
+        raise ValueError(f"invalid timestamp {_short(ts)}")
     try:
         parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
     except ValueError as exc:
-        raise ValueError(f"invalid timestamp {ts!r}") from exc
+        raise ValueError(f"invalid timestamp {_short(ts)}") from exc
     if parsed.tzinfo is None:
-        raise ValueError(f"timestamp {ts!r} has no timezone")
+        raise ValueError(f"timestamp {_short(ts)} has no timezone")
     return parsed
 
 
@@ -378,20 +469,20 @@ def _record_shape_errors(record: dict[str, Any], run_id: str) -> list[str]:
     unknown = sorted(set(record) - _RECORD_FIELDS)
     missing = sorted(_RECORD_FIELDS - set(record))
     if unknown:
-        errors.append(f"unknown field(s) {', '.join(unknown)}")
+        errors.append(f"unknown field(s) {_short(', '.join(unknown))}")
     if missing:
         errors.append(f"missing field(s) {', '.join(missing)}")
         return errors
     if type(record["schema_version"]) is not int or record["schema_version"] not in SUPPORTED_SCHEMA_VERSIONS:
-        errors.append(f"unsupported schema_version {record['schema_version']!r}")
+        errors.append(f"unsupported schema_version {_short(record['schema_version'])}")
     if type(record["seq"]) is not int or record["seq"] < 1:
-        errors.append(f"seq {record['seq']!r} is not a positive integer")
+        errors.append(f"seq {_short(record['seq'])} is not a positive integer")
     if record["run_id"] != run_id:
-        errors.append(f"run_id {record['run_id']!r} does not match {run_id!r}")
+        errors.append(f"run_id {_short(record['run_id'])} does not match this run")
     if record["event"] not in EVENTS:
-        errors.append(f"unknown event {record['event']!r}")
+        errors.append(f"unknown event {_short(record['event'])}")
     if record["actor"] not in ACTORS:
-        errors.append(f"unknown actor {record['actor']!r}")
+        errors.append(f"unknown actor {_short(record['actor'])}")
     try:
         _parse_ts(record["ts"])
     except ValueError as exc:
@@ -409,6 +500,18 @@ def _record_shape_errors(record: dict[str, Any], run_id: str) -> list[str]:
     for field in ("prev_hash", "hash"):
         if not isinstance(record[field], str) or not _HASH_RE.fullmatch(record[field]):
             errors.append(f"{field} is not a SHA-256 hex digest")
+    if record["event"] == "log_recovered":
+        data = record["data"]
+        if (
+            record["actor"] != "system"
+            or not isinstance(data, dict)
+            or set(data) != {"dropped_bytes", "previous_head"}
+            or type(data["dropped_bytes"]) is not int
+            or data["dropped_bytes"] < 0
+            or not isinstance(data["previous_head"], str)
+            or not _HASH_RE.fullmatch(data["previous_head"])
+        ):
+            errors.append("log_recovered is not a well-formed system record")
     return errors
 
 
@@ -443,9 +546,22 @@ def _within(child: str, parent: str) -> bool:
         return False
 
 
+def _is_repo_root(path: Path) -> bool:
+    """A real git repository root, not a stub `.git` an attacker planted to make the check misfire."""
+    git = path / ".git"
+    try:
+        if git.is_file():
+            return git.read_text(encoding="utf-8", errors="ignore").startswith("gitdir:")
+        if git.is_dir():
+            return (git / "HEAD").is_file()
+        return (path / "HEAD").is_file() and (path / "objects").is_dir() and (path / "refs").is_dir()  # bare
+    except OSError:
+        return False
+
+
 def _enclosing_repo(start: Path) -> Path | None:
     for candidate in (start, *start.parents):
-        if (candidate / ".git").exists():
+        if _is_repo_root(candidate):
             return candidate
     return None
 
@@ -459,13 +575,14 @@ def _refuse_repository(directory: Path) -> None:
     chain = [Path(os.path.realpath(directory))]
     chain.extend(chain[0].parents)
     for ancestor in chain:
-        if (ancestor / ".git").exists():
+        if _is_repo_root(ancestor):
             raise ValueError(f"the run log directory must be outside any git repository (found one at {ancestor})")
-    repo = _enclosing_repo(Path.cwd().resolve())
-    if repo is not None:
+    known = [repo for repo in (_enclosing_repo(Path.cwd().resolve()),) if repo is not None]
+    known += [Path(value) for value in (os.environ.get("GIT_DIR"), os.environ.get("GIT_WORK_TREE")) if value]
+    for repo in known:
         for ancestor in chain:
             try:
-                if ancestor.exists() and os.path.samefile(ancestor, repo):
+                if ancestor.exists() and repo.exists() and os.path.samefile(ancestor, repo):
                     raise ValueError(f"the run log directory must be outside the repository at {repo}")
             except OSError:
                 continue
@@ -474,10 +591,12 @@ def _refuse_repository(directory: Path) -> None:
 def resolve_log_dir(explicit: str | os.PathLike[str] | None) -> Path:
     """The directory the log may live in: absolute, no ``..``, and outside every git repository."""
     raw = str(explicit) if explicit else ""
-    try:
-        directory = Path(raw).expanduser() if raw else _home_dir() / ".software-builder" / "runs"
-    except RuntimeError as exc:  # unknown ~user
-        raise ValueError(f"cannot resolve the run log directory: {exc}") from exc
+    if raw.startswith("~") and raw != "~" and not raw.startswith("~/"):
+        raise ValueError("only a plain '~' (this account's home) is supported in --log-dir, not ~user")
+    directory = (
+        _home_dir() / raw[2:] if raw.startswith("~/") else _home_dir() if raw == "~"
+        else Path(raw) if raw else _home_dir() / ".software-builder" / "runs"
+    )
     if not directory.is_absolute():
         raise ValueError(f"the run log directory must be an absolute path, got {str(directory)!r}")
     if ".." in directory.parts:
@@ -523,12 +642,7 @@ def _locked(fd: int, *, exclusive: bool) -> Iterator[None]:
     deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
     while True:
         try:
-            if fcntl is not None:
-                fcntl.flock(fd, (fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH) | fcntl.LOCK_NB)
-            else:  # pragma: no cover - Windows
-                import msvcrt
-
-                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            fcntl.flock(fd, (fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH) | fcntl.LOCK_NB)
             break
         except OSError:
             if time.monotonic() >= deadline:
@@ -537,27 +651,14 @@ def _locked(fd: int, *, exclusive: bool) -> Iterator[None]:
     try:
         yield
     finally:
-        if fcntl is not None:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        else:  # pragma: no cover - Windows
-            import msvcrt
-
-            os.lseek(fd, 0, os.SEEK_SET)
-            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
-
-
-def _pread(fd: int, length: int, offset: int) -> bytes:
-    if hasattr(os, "pread"):
-        return os.pread(fd, length, offset)
-    os.lseek(fd, offset, os.SEEK_SET)  # pragma: no cover - Windows
-    return os.read(fd, length)  # pragma: no cover - Windows
+        fcntl.flock(fd, fcntl.LOCK_UN)
 
 
 def _read_all(fd: int) -> bytes:
     chunks = []
     offset = 0
     while True:
-        chunk = _pread(fd, 1 << 20, offset)
+        chunk = os.pread(fd, 1 << 20, offset)
         if not chunk:
             break
         chunks.append(chunk)
@@ -565,10 +666,25 @@ def _read_all(fd: int) -> bytes:
     return b"".join(chunks)
 
 
+def _fsync(fd: int) -> None:
+    """Flush to the device: macOS `fsync` only reaches the drive's cache, `F_FULLFSYNC` goes further."""
+    full = getattr(fcntl, "F_FULLFSYNC", None)
+    if full is not None:
+        try:
+            fcntl.fcntl(fd, full)
+            return
+        except OSError:
+            pass
+    os.fsync(fd)
+
+
 def _open_private(path: Path, flags: int) -> int:
-    fd = os.open(path, flags | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    # O_NONBLOCK so a FIFO planted at the log path cannot hang the open; only regular files are accepted.
+    fd = os.open(path, flags | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0), 0o600)
     try:
         info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise OSError(f"the run log path is not a regular file: {path}")
         if hasattr(os, "geteuid") and info.st_uid != os.geteuid():
             raise OSError(f"refusing to use a run log owned by another user: {path}")
         if info.st_mode & 0o077:
@@ -605,11 +721,13 @@ def _fsync_dir(directory: Path) -> None:
 
 
 def _parse_line(raw: bytes, index: int) -> tuple[dict[str, Any] | None, str | None]:
+    if len(raw) > MAX_RECORD_BYTES:
+        return None, f"line {index}: longer than any valid record"
     try:
         text = raw.decode("utf-8")
         record = strict_loads(text)
-    except (UnicodeDecodeError, ValueError) as exc:
-        return None, f"line {index}: {exc}"
+    except (UnicodeDecodeError, ValueError, RecursionError, MemoryError) as exc:
+        return None, f"line {index}: {_short(str(exc))}"
     if not isinstance(record, dict):
         return None, f"line {index}: record is not an object"
     if _canonical(record) != text:
@@ -623,11 +741,15 @@ def _full_check(raw: bytes, run_id: str) -> tuple[VerifyResult, list[dict[str, A
     head = ZERO_HASH
     prev_ts: datetime | None = None
     completed = False
-    if raw and not raw.endswith(b"\n"):
-        errors.append("log does not end with a newline (torn final write; the next append recovers it)")
+    torn = bool(raw) and not raw.endswith(b"\n")
+    if torn:
+        errors.append("log does not end with a newline (a torn final write; an append with your last head repairs a fragment under 16 KiB)")
     lines = raw.split(b"\n")
     if lines and lines[-1] == b"":
         lines.pop()
+    elif torn:
+        lines.pop()  # the unterminated final line is reported once, as the torn write it is
+    now_limit = _now() + timedelta(seconds=CLOCK_SKEW_SECONDS)
     for index, line in enumerate(lines, start=1):
         record, problem = _parse_line(line, index)
         if record is None:
@@ -646,6 +768,8 @@ def _full_check(raw: bytes, run_id: str) -> tuple[VerifyResult, list[dict[str, A
         moment = _parse_ts(record["ts"])
         if prev_ts is not None and moment < prev_ts:
             errors.append(f"line {index}: timestamp goes backwards")
+        if moment > now_limit:
+            errors.append(f"line {index}: timestamp is in the future")
         problem = _transition_error(index, record["event"], completed)
         if problem:
             errors.append(f"line {index}: {problem}")
@@ -657,16 +781,21 @@ def _full_check(raw: bytes, run_id: str) -> tuple[VerifyResult, list[dict[str, A
         head = record["hash"]
         records.append(record)
     ok = not errors and bool(records)
-    return VerifyResult(ok, len(records), head, errors or ([] if records else ["log is empty"])), records
+    recoverable = torn and len(errors) == 1 and len(raw) - raw.rfind(b"\n") - 1 <= MAX_RECORD_BYTES
+    result = VerifyResult(
+        ok, len(records), head, errors or ([] if records else ["log is empty"]),
+        records[-1]["event"] if records else None, recoverable,
+    )
+    return result, records
 
 
 def _tail_state(fd: int, size: int, run_id: str) -> _Tail:
     """What the next append must chain from, read from the end of the file only (append stays O(1) in
     the log's length). Full-chain verification is `verify`'s job."""
     if size == 0:
-        return _Tail(0, ZERO_HASH, None, False, None, False)
+        return _Tail(0, ZERO_HASH, None, False, None, False, None)
     window = min(size, TAIL_WINDOW)
-    buf = _pread(fd, window, size - window)
+    buf = os.pread(fd, window, size - window)
     base = size - window
     truncate_to: int | None = None
     add_newline = False
@@ -689,7 +818,7 @@ def _tail_state(fd: int, size: int, run_id: str) -> _Tail:
     if not buf.endswith(b"\n"):
         cut = buf.rfind(b"\n")
         if cut == -1 and window < size:
-            raise IntegrityError("the final line of the log is longer than any valid record")
+            raise IntegrityError("the final line of the log is longer than any valid record; it cannot be repaired by an append")
         fragment = buf[cut + 1 :]
         buf = buf[: cut + 1]
     prior = last_records(buf) if buf else []
@@ -725,7 +854,7 @@ def _tail_state(fd: int, size: int, run_id: str) -> _Tail:
             continue
         completed = record["event"] == "run_completed"
         break
-    return _Tail(tail_seq, tail_head, tail_ts, completed, truncate_to, add_newline)
+    return _Tail(tail_seq, tail_head, tail_ts, completed, truncate_to, add_newline, prior[-1] if prior else None)
 
 
 def _make_record(
@@ -751,6 +880,10 @@ def _make_record(
     return record
 
 
+def _head_matches(head: str, given: str) -> bool:
+    return hmac.compare_digest(head[: len(given)], given)
+
+
 def append_event(
     log_dir: str | os.PathLike[str],
     run_id: str,
@@ -761,26 +894,37 @@ def append_event(
     usage: object = None,
     ts: str | None = None,
     expect_head: str | None = None,
+    unanchored: bool = False,
+    _internal: bool = False,
 ) -> dict[str, Any]:
     """Validate, redact, chain, and append one record; return it.
 
-    ``expect_head`` is the head hash from the previous receipt. If the log's head is anything else
-    (records were dropped, a different writer appended, the file was replaced) it raises IntegrityError.
-    ``ts`` exists for replay and tests; the CLI never exposes it.
+    Every append after the first must carry ``expect_head``, the head hash from the previous receipt (a
+    16+ character prefix is enough). If the log's head is anything else it raises IntegrityError, unless the
+    tail record is exactly this request, already committed before its receipt was lost: then that record is
+    returned and nothing is written (a retry is idempotent). ``unanchored`` is the one way to continue
+    without a head, only for ``run_resumed``, and the record says so. ``ts`` exists for replay and tests.
     """
     validate_run_id(run_id)
     if event not in EVENTS:
-        raise ValueError(f"unknown event {event!r}; expected one of: {', '.join(EVENTS)}")
+        raise ValueError(f"unknown event {_short(event)}; expected one of: {', '.join(EVENTS)}")
+    if event == "log_recovered" and not _internal:
+        raise ValueError("log_recovered is written by the script itself")
     if actor not in ACTORS:
-        raise ValueError(f"unknown actor {actor!r}; expected one of: {', '.join(ACTORS)}")
+        raise ValueError(f"unknown actor {_short(actor)}; expected one of: {', '.join(ACTORS)}")
     if data is not None and not isinstance(data, dict):
         raise ValueError("data must be an object")
-    if expect_head is not None and not _HASH_RE.fullmatch(expect_head):
-        raise ValueError("expect_head must be a SHA-256 hex digest")
+    if expect_head is not None and not _HEAD_RE.fullmatch(expect_head):
+        raise ValueError("expect_head must be the chain_head from your last receipt (16-64 hex characters)")
+    if unanchored and (event != "run_resumed" or expect_head is not None):
+        raise ValueError("--unanchored is only for run_resumed, and not together with --expect-head")
+    _redaction_runtime()  # fail closed now if redaction cannot load, not only when a data key happens to need it
     cleaned_usage = _validate_usage(usage)
     given_ts = _parse_ts(ts) if ts is not None else None
     hits: set[str] = set()
     cleaned_data = _sanitize(data or {}, hits)
+    if unanchored:
+        cleaned_data["unanchored"] = True
     _validate_event_data(event, cleaned_data)
 
     directory = Path(log_dir)
@@ -788,15 +932,38 @@ def append_event(
     path = log_path(directory, run_id)
     existed = path.exists()
     fd = _open_private(path, os.O_RDWR | os.O_CREAT | os.O_APPEND)
+    committed = False
     try:
         with _locked(fd, exclusive=True):
             size = os.fstat(fd).st_size
             tail = _tail_state(fd, size, run_id)
-            if expect_head is not None and not hmac.compare_digest(tail.head, expect_head):
+            if expect_head is None:
+                if tail.seq > 0 and not unanchored:
+                    raise ValueError(
+                        "append needs --expect-head (the chain_head from your previous receipt); to resume without "
+                        "one, use run_resumed with --unanchored"
+                    )
+            elif tail.seq == 0:
+                raise IntegrityError("a head was supplied but the log is missing, empty, or was wiped")
+            elif not _head_matches(tail.head, expect_head):
+                last = tail.last
+                if (
+                    last is not None
+                    and _head_matches(last["prev_hash"], expect_head)
+                    and (last["event"], last["actor"], last["data"], last["usage"])
+                    == (event, actor, cleaned_data, cleaned_usage)
+                ):
+                    if tail.add_newline:  # committed, only its newline was lost: finish it
+                        _write_all(fd, b"\n")
+                        _fsync(fd)
+                    return last
                 raise IntegrityError("the log's head does not match the head from your last receipt; it was changed")
             now = _now()
             if tail.ts is not None and tail.ts > now + timedelta(seconds=CLOCK_SKEW_SECONDS):
-                raise IntegrityError("the last record is timestamped in the future; clock skew or a forged log")
+                ahead = (tail.ts - now).total_seconds()
+                if ahead > FORGED_CLOCK_SECONDS:
+                    raise IntegrityError("the last record is timestamped far in the future; a forged log")
+                raise ValueError(f"the clock is {int(ahead)}s behind the log's last record; wait, or fix the clock")
             moment = given_ts or now
             if tail.ts is not None:
                 if given_ts is not None and given_ts < tail.ts:
@@ -804,18 +971,23 @@ def append_event(
                 moment = max(moment, tail.ts)
             problem = _transition_error(tail.seq + 1, event, tail.completed)
             if problem:
-                raise IntegrityError(problem)
+                raise ValueError(problem)  # a wrong call, not a damaged log: exit 2, not 1
 
             blob = b"\n" if tail.add_newline else b""
             seq, prev = tail.seq, tail.head
-            if tail.truncate_to is not None and tail.seq > 0:
+            if tail.truncate_to is not None:
                 dropped = size - tail.truncate_to
-                recovered = _make_record(
-                    seq + 1, prev, run_id, "log_recovered", "system",
-                    {"dropped_bytes": dropped, "previous_head": prev}, {}, set(), moment,
-                )
-                blob += (_canonical(recovered) + "\n").encode("utf-8")
-                seq, prev = seq + 1, recovered["hash"]
+                # Keep what is being dropped, durably, before the log is cut: the loss is on the record.
+                _save_torn_fragment(directory, run_id, tail.seq + 1, os.pread(fd, dropped, tail.truncate_to))
+                if tail.seq > 0:
+                    recovered = _make_record(
+                        seq + 1, prev, run_id, "log_recovered", "system",
+                        {"dropped_bytes": dropped, "previous_head": prev}, {}, set(), moment,
+                    )
+                    blob += (_canonical(recovered) + "\n").encode("utf-8")
+                    seq, prev = seq + 1, recovered["hash"]
+                else:  # nothing valid came before it, so there is no chain to record the loss in
+                    cleaned_data = {**cleaned_data, "recovered_bytes": dropped}
             record = _make_record(seq + 1, prev, run_id, event, actor, cleaned_data, cleaned_usage, hits, moment)
             blob += (_canonical(record) + "\n").encode("utf-8")
 
@@ -825,18 +997,40 @@ def append_event(
                     os.ftruncate(fd, tail.truncate_to)
                     restore = tail.truncate_to
                 _write_all(fd, blob)
-                os.fsync(fd)
+                _fsync(fd)
             except BaseException:
                 try:  # a failed or short write must not leave a torn record behind
                     os.ftruncate(fd, restore)
                 except OSError:
                     pass
                 raise
+        committed = True
         if not existed:
             _fsync_dir(directory)
     finally:
+        try:
+            if not existed and not committed and os.fstat(fd).st_size == 0:
+                os.unlink(path)  # a rejected first call must not leave an empty log to confuse the next one
+        except OSError:
+            pass
         os.close(fd)
     return record
+
+
+def _save_torn_fragment(directory: Path, run_id: str, seq: int, fragment: bytes) -> None:
+    for attempt in range(100):
+        name = f"{run_id}.jsonl.torn-{seq}" + (f"-{attempt}" if attempt else "")
+        try:
+            fd = os.open(directory / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        except FileExistsError:
+            continue
+        try:
+            _write_all(fd, fragment)
+            _fsync(fd)
+        finally:
+            os.close(fd)
+        return
+    raise OSError("could not save the dropped fragment: too many earlier ones")
 
 
 def _read_log(log_dir: str | os.PathLike[str], run_id: str) -> bytes:
@@ -858,13 +1052,18 @@ def _read_log(log_dir: str | os.PathLike[str], run_id: str) -> bytes:
 def _checked(
     log_dir: str | os.PathLike[str], run_id: str, expect_head: str | None
 ) -> tuple[VerifyResult, list[dict[str, Any]]]:
-    if expect_head is not None and not _HASH_RE.fullmatch(expect_head):
-        raise ValueError("expect_head must be a SHA-256 hex digest")
-    result, records = _full_check(_read_log(log_dir, run_id), run_id)
-    if result.ok and expect_head is not None and not hmac.compare_digest(result.head, expect_head):
-        result = VerifyResult(
-            False, result.events, result.head,
-            ["the log's head does not match the head from your last receipt; it was truncated or replaced"],
+    if expect_head is not None and not _HEAD_RE.fullmatch(expect_head):
+        raise ValueError("expect_head must be the chain_head from your last receipt (16-64 hex characters)")
+    try:
+        raw = _read_log(log_dir, run_id)
+    except NoLogError as exc:
+        if expect_head is not None:
+            raise IntegrityError(f"a head was supplied but there is no usable log ({exc})") from exc
+        raise
+    result, records = _full_check(raw, run_id)
+    if result.ok and expect_head is not None and not _head_matches(result.head, expect_head):
+        result = result._replace(
+            ok=False, errors=["the log's head does not match the head from your last receipt; it was truncated or replaced"]
         )
     return result, records
 
@@ -882,16 +1081,17 @@ def _require_ok(result: VerifyResult) -> None:
 
 def _usage_totals(records: list[dict[str, Any]]) -> dict[str, Any]:
     totals: dict[str, Any] = {"input_tokens": 0, "output_tokens": 0, "elapsed_seconds": 0.0, "cost_usd": 0.0}
-    usage_records = 0
+    usage_records = total_tokens = 0
     for record in records:
         usage = record["usage"]
-        if any(key in usage for key in _USAGE_INT_FIELDS):
+        if _has_token_usage(usage):
             usage_records += 1
-        for key in _USAGE_INT_FIELDS:
+        total_tokens += _tokens_of(usage)
+        for key in ("input_tokens", "output_tokens"):
             totals[key] += int(usage.get(key, 0))
         for key in _USAGE_FLOAT_FIELDS:
             totals[key] += float(usage.get(key, 0))
-    totals["total_tokens"] = totals["input_tokens"] + totals["output_tokens"]
+    totals["total_tokens"] = total_tokens
     totals["usage_records"] = usage_records
     return totals
 
@@ -905,11 +1105,8 @@ def summarize_log(
     by_actor: dict[str, dict[str, int]] = {}
     for record in records:
         counts[record["event"]] = counts.get(record["event"], 0) + 1
-        actor = by_actor.setdefault(record["actor"], {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0})
-        for key in _USAGE_INT_FIELDS:
-            amount = int(record["usage"].get(key, 0))
-            actor[key] += amount
-            actor["total_tokens"] += amount
+        actor = by_actor.setdefault(record["actor"], {"total_tokens": 0})
+        actor["total_tokens"] += _tokens_of(record["usage"])
     return {
         "run_id": run_id,
         "events": len(records),
@@ -917,20 +1114,38 @@ def summarize_log(
         "counts": counts,
         "usage": _usage_totals(records),
         "by_actor": by_actor,
-        "wall_clock_minutes": max((_parse_ts(now) if now else _now()) - _parse_ts(records[0]["ts"]), timedelta(0)).total_seconds() / 60.0,
+        "span_minutes": (_parse_ts(records[-1]["ts"]) - _parse_ts(records[0]["ts"])).total_seconds() / 60.0,
     }
 
 
 def _active_minutes(records: list[dict[str, Any]], now: datetime) -> float:
-    """Time spent working: each gap between consecutive records counts at most MAX_GAP_MINUTES, including
-    the gap from the last record to now, so a pause does not burn the budget."""
+    """Time spent working. A gap after a session was dispatched is real work in flight and counts in full
+    (a hung session must show up); any other gap counts at most MAX_GAP_MINUTES, so a human decision or an
+    overnight pause does not spend the budget. Host-reported session durations set a floor."""
     cap = timedelta(minutes=MAX_GAP_MINUTES)
     moments = [_parse_ts(record["ts"]) for record in records]
+    ends = [*moments[1:], max(now, moments[-1])]
     total = timedelta(0)
-    for earlier, later in zip(moments, moments[1:]):
-        total += min(max(later - earlier, timedelta(0)), cap)
-    total += min(max(now - moments[-1], timedelta(0)), cap)
-    return total.total_seconds() / 60.0
+    for record, begin, end in zip(records, moments, ends):
+        gap = max(end - begin, timedelta(0))
+        total += gap if record["event"] in DISPATCH_EVENTS else min(gap, cap)
+    reported = timedelta(seconds=sum(float(record["usage"].get("elapsed_seconds", 0)) for record in records))
+    return max(total, reported).total_seconds() / 60.0
+
+
+def _task_window_start(records: list[dict[str, Any]]) -> int:
+    """Index where the current task's budget window begins: the first of the latest run of `task_selected`
+    records for the same task_id, so re-selecting the task after a resume does not reset its budget."""
+    starts = [i for i, record in enumerate(records) if record["event"] == "task_selected"]
+    if not starts:
+        return 0
+    start = starts[-1]
+    task_id = records[start]["data"].get("task_id")
+    for earlier in reversed(starts[:-1]):
+        if task_id is None or records[earlier]["data"].get("task_id") != task_id:
+            break
+        start = earlier
+    return start
 
 
 def check_budget(
@@ -949,18 +1164,16 @@ def check_budget(
     """
     result, records = _checked(log_dir, run_id, expect_head)
     _require_ok(result)
-    moment = _parse_ts(now) if now else _now()
-    if _parse_ts(records[-1]["ts"]) > moment + timedelta(seconds=CLOCK_SKEW_SECONDS):
-        raise IntegrityError("the last record is timestamped in the future; clock skew or a forged log")
-    start = max((i for i, record in enumerate(records) if record["event"] == "task_selected"), default=0)
-    window = records[start:]
+    moment = _parse_ts(now) if now else _now()  # a future-dated record already failed verification above
+    window = records[_task_window_start(records):]
     totals = _usage_totals(window)
     active = _active_minutes(window, moment)
     exceeded: list[str] = []
     unlimited: list[str] = []
     unmeasured: list[str] = []
-    if totals["usage_records"] == 0:
-        unmeasured.append("tokens")
+    expected = [record for record in window if record["event"] in USAGE_EVENTS]
+    if any(not _has_token_usage(record["usage"]) for record in expected):
+        unmeasured.append("tokens")  # a session returned and no usage was recorded for it
     if max_tokens is None:
         unlimited.append("tokens")
     elif totals["total_tokens"] >= max_tokens:
@@ -996,7 +1209,7 @@ def derive_run_id(seeds: object) -> str:
         raise ValueError("run-id takes a JSON array of 1-16 strings on stdin")
     if not all(isinstance(item, str) and 0 < len(item) <= 4000 for item in seeds):
         raise ValueError("every run-id seed must be a non-empty string of at most 4000 characters")
-    digest = hashlib.sha256("\x00".join(seeds).encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(json.dumps(seeds, separators=(",", ":"), ensure_ascii=True).encode("utf-8")).hexdigest()
     return f"run-{digest[:16]}"
 
 
@@ -1005,12 +1218,23 @@ def _cap(raw: str | None, default: int | float) -> int | float | None:
         return default
     if raw == "unlimited":
         return None
-    if not re.fullmatch(r"[0-9][0-9,_]*(\.[0-9]+)?", raw):
-        raise ValueError(f"budget must be a positive number or the word 'unlimited', got {raw!r}")
+    # plain digits, or digits grouped in threes by "," or "_" ("1,5" is not fifteen); an optional decimal part
+    if not re.fullmatch(r"(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,3}(?:_[0-9]{3})+)(?:\.[0-9]+)?", raw):
+        raise ValueError(f"budget must be a positive number or the word 'unlimited', got {_short(raw)}")
     value = float(raw.replace(",", "").replace("_", ""))
     if not math.isfinite(value) or value <= 0:
-        raise ValueError(f"budget must be a positive number or the word 'unlimited', got {raw!r}")
+        raise ValueError(f"budget must be a positive number or the word 'unlimited', got {_short(raw)}")
     return int(value) if value.is_integer() else value
+
+
+def _read_stdin(name: str) -> str:
+    data = sys.stdin.buffer.read(MAX_STDIN_BYTES + 1)
+    if len(data) > MAX_STDIN_BYTES:
+        raise ValueError(f"{name} input exceeds {MAX_STDIN_BYTES} bytes")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{name} input is not valid UTF-8") from exc
 
 
 def _json_arg(raw: str | None, name: str, stdin_used: list[str]) -> object:
@@ -1020,9 +1244,7 @@ def _json_arg(raw: str | None, name: str, stdin_used: list[str]) -> object:
         if stdin_used:
             raise ValueError(f"--{name} - cannot read stdin: --{stdin_used[0]} already did")
         stdin_used.append(name)
-        raw = sys.stdin.read(MAX_STDIN_BYTES + 1)
-        if len(raw) > MAX_STDIN_BYTES:
-            raise ValueError(f"--{name} - input exceeds {MAX_STDIN_BYTES} bytes")
+        raw = _read_stdin(name)
     try:
         return strict_loads(raw)
     except ValueError as exc:
@@ -1052,6 +1274,7 @@ def _build_parser() -> argparse.ArgumentParser:
     common(append)
     expect(append)
     append.add_argument("--event", required=True)
+    append.add_argument("--unanchored", action="store_true", help="resume without a head (run_resumed only)")
     append.add_argument("--actor", required=True)
     append.add_argument("--data-json", default=None, help="JSON object, or '-' to read it from stdin")
     append.add_argument("--usage-json", default=None, help="JSON object, or '-' to read it from stdin")
@@ -1059,7 +1282,6 @@ def _build_parser() -> argparse.ArgumentParser:
         p = sub.add_parser(name)
         common(p)
         expect(p)
-    common(sub.add_parser("path"))
     sub.add_parser("run-id")
     budget = sub.add_parser("budget")
     common(budget)
@@ -1069,36 +1291,59 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _emit_line(text: str) -> None:
+    """Print one line; a reader that has gone away (`| head`, a closed pipe) must not turn a committed
+    append into exit 120."""
+    try:
+        print(text)
+        sys.stdout.flush()
+    except BrokenPipeError:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+
+
+def _emit(payload: dict[str, Any]) -> None:
+    _emit_line(json.dumps(payload, sort_keys=True))
+
+
+def _require_supported_platform() -> None:
+    if sys.version_info < (3, 10):
+        raise RuntimeError(
+            f"run_log.py needs Python 3.10 or newer (this repository supports 3.12+); found {sys.version.split()[0]}"
+        )
+    if fcntl is None:
+        raise RuntimeError("run_log.py needs POSIX file locking (Linux or macOS)")
+
+
 def _run(argv: list[str]) -> int:
+    _require_supported_platform()
     args = _build_parser().parse_args(argv)
     if args.command == "run-id":
-        text = sys.stdin.read(MAX_STDIN_BYTES + 1)
-        if len(text) > MAX_STDIN_BYTES:
-            raise ValueError(f"run-id input exceeds {MAX_STDIN_BYTES} bytes")
-        print(derive_run_id(strict_loads(text)))
+        _emit_line(derive_run_id(strict_loads(_read_stdin("run-id"))))
         return EXIT_OK
     validate_run_id(args.run_id)
     log_dir = resolve_log_dir(getattr(args, "log_dir", None))
 
-    if args.command == "path":
-        print(log_path(log_dir, args.run_id))
-        return EXIT_OK
     if args.command == "append":
         stdin_used: list[str] = []
         data = _json_arg(args.data_json, "data-json", stdin_used)
         usage = _json_arg(args.usage_json, "usage-json", stdin_used)
         record = append_event(
-            log_dir, args.run_id, args.event, args.actor, data=data, usage=usage, expect_head=args.expect_head
+            log_dir, args.run_id, args.event, args.actor, data=data, usage=usage,
+            expect_head=args.expect_head, unanchored=args.unanchored,
         )
         # A receipt, not the record: the full record would re-enter the model's context for nothing.
-        print(json.dumps({"seq": record["seq"], "event": record["event"], "chain_head": record["hash"]}))
+        receipt: dict[str, Any] = {"seq": record["seq"], "event": record["event"], "chain_head": record["hash"]}
+        if record["event"] in USAGE_EVENTS and not _has_token_usage(record["usage"]):
+            receipt["usage_missing"] = True
+        _emit(receipt)
         return EXIT_OK
     if args.command == "verify":
         result = verify_log(log_dir, args.run_id, expect_head=args.expect_head)
-        print(json.dumps({"ok": result.ok, "events": result.events, "chain_head": result.head, "errors": result.errors}))
+        _emit({"ok": result.ok, "events": result.events, "chain_head": result.head, "last_event": result.last_event,
+               "recoverable": result.recoverable, "error_count": len(result.errors), "errors": result.errors[:5]})
         return EXIT_OK if result.ok else EXIT_INTEGRITY
     if args.command == "summarize":
-        print(json.dumps(summarize_log(log_dir, args.run_id, expect_head=args.expect_head), sort_keys=True))
+        _emit(summarize_log(log_dir, args.run_id, expect_head=args.expect_head))
         return EXIT_OK
     verdict = check_budget(
         log_dir,
@@ -1107,7 +1352,7 @@ def _run(argv: list[str]) -> int:
         max_minutes=_cap(args.max_minutes, DEFAULT_MAX_TASK_MINUTES),
         expect_head=args.expect_head,
     )
-    print(json.dumps(verdict, sort_keys=True))
+    _emit(verdict)
     return EXIT_BUDGET if verdict["exceeded"] else EXIT_OK
 
 

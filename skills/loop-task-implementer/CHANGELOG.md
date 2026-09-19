@@ -33,8 +33,24 @@ For earlier history, see the `## loop-task-implementer` section in the repositor
     receipts replace echoed records; keys are redacted and secret-named keys masked; more token families are
     covered; redaction input is bounded; `escalated.reason` and `run_completed.outcome` take codes, not prose;
     the log directory must be outside every git repository and private, and is not read from `$HOME`/the environment.
-  - New `run-id` subcommand derives a deterministic, resumable id from task seeds. Pressure tests 26-37 and
-    `tests/test_run_log.py` cover it.
+  - New `run-id` subcommand derives a deterministic, resumable id from task seeds (hashed from a JSON encoding,
+    so NUL-joined seeds cannot collide).
+  - **Round 2 review** (five fresh personas against the fixed code) added: `--expect-head` is required on every
+    append after the first (a 16+ character prefix is enough), with `run_resumed --unanchored` as the one recorded
+    way to continue without it, and a repeated append whose receipt was lost is idempotent; a head with no log
+    is an integrity failure on every command; sequencing mistakes exit `2` (a wrong call), not `1`; the budget
+    window is the current `task_id`, so re-selecting a task after a resume no longer resets it, a session in
+    flight is charged in full (a hung one shows up), and host-reported `elapsed_seconds` sets a floor; `total_tokens`
+    is accepted; `unmeasured` is judged per returned session and receipts flag `usage_missing`; `escalated.reason`
+    is a closed set of codes; `log_recovered` is the script's own record and the dropped fragment is saved to
+    `<run>.jsonl.torn-<seq>` before the log is cut; redaction now covers generic `key=value` / `"key":"value"` /
+    `--flag value` credentials, more token families, unterminated PEM blocks and integer values under secret
+    keys, and a key is judged by its words (`token_count`, `max_tokens`, `compass` are not secrets); strings over
+    8000 characters are refused instead of half-redacted; errors describe file-derived text by length and digest
+    instead of quoting it (an injection channel); repository detection is structural (bare repos, `GIT_DIR`,
+    gitfiles; a stub `.git` no longer locks the directory out); FIFOs, deep-nesting lines and broken pipes are
+    handled; macOS uses `F_FULLFSYNC`; Python 3.10+ and POSIX are checked with a clear message. Pressure tests
+    26-43, `tests/test_run_log.py` (237 tests, mutation-tested twice) and `tests/test_packaged_run_log.py` cover it.
 
 ## v1.4 — implementation-plan execution bridge (2026-08-26)
 
