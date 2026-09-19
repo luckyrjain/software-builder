@@ -106,6 +106,8 @@ def test_a_lock_that_vanishes_between_the_failed_acquire_and_the_read_is_not_rec
         return False if calls == 1 else real_acquire(dest_root, lock_dir)
 
     reclaims: list[object] = []
+    sleeps: list[float] = []
+    monkeypatch.setattr(install_engine.time, "sleep", sleeps.append)
     monkeypatch.setattr(install_engine, "_acquire_lock_dir", acquire_losing_once)
     monkeypatch.setattr(install_engine, "_reclaim_stale_lock", lambda *a, **k: reclaims.append(a) or True)
 
@@ -114,6 +116,7 @@ def test_a_lock_that_vanishes_between_the_failed_acquire_and_the_read_is_not_rec
 
     assert calls == 2
     assert reclaims == []
+    assert sleeps == []  # retried the acquire straight away, as for any released lock
 
 
 def test_reclaim_puts_back_a_lock_that_is_not_the_one_judged_stale(tmp_path: Path) -> None:
