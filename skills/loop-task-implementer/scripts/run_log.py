@@ -325,8 +325,8 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             redaction.RedactionPattern(
                 name="secretish_json",
                 pattern=re.compile(
-                    r'(?i)(?P<head>\\*["\'](?P<key>[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS + r'[A-Za-z0-9_.-]{0,64})\\*["\']\s*:\s*\\*["\'])'
-                    r'(?P<value>[^"\'\\]{8,})(?P<tail>\\*["\'])'
+                    r'(?i)(?P<head>(?<!\\)\\*["\'](?P<key>[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS + r'[A-Za-z0-9_.-]{0,64})\\*["\']\s*:\s*\\*(?P<q>["\']))'
+                    r'(?P<value>(?:(?!(?P=q))[^\\]){8,})(?P<tail>\\*(?P=q))'
                 ),
                 replacement=lambda m, marker: (
                     f"{m.group('head')}{marker}{m.group('tail')}" if _secret_shaped(m.group("value"), m.group("key")) else None
@@ -336,8 +336,9 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             redaction.RedactionPattern(
                 name="secretish_name_value",
                 pattern=re.compile(
-                    r'(?is)(?P<head>["\']?name["\']?\s*[:=]\s*["\']?[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS
-                    + r'[A-Za-z0-9_.-]{0,64}["\']?\s*,?\s*["\']?value["\']?\s*[:=]\s*["\']?)(?P<value>[^\s"\',}]{6,})'
+                    r'(?i)(?P<head>["\']?name["\']?[ \t]*[:=][ \t]*["\']?[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS
+                    + r'[A-Za-z0-9_.-]{0,64}["\']?[\s,]*["\']?value["\']?[ \t]*[:=][ \t]*(?P<q>["\']?))'
+                    r'(?P<value>(?(q)[^"\'\r\n]{6,}|[^\s"\',}]{6,}))'
                 ),
                 replacement=lambda m, marker: f"{m.group('head')}{marker}",
                 category="secret",
@@ -351,7 +352,7 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             redaction.RedactionPattern(
                 name="secretish_spaced",
                 pattern=re.compile(
-                    r"(?i)(\b(?:aws_)?(?:secret_access_key|session_token)\s+|\b_auth(?:token)?\s+|\blogin\s+\S+\s+password\s+)\S{6,}"
+                    r"(?i)(\b(?:aws_)?(?:secret_access_key|session_token)\s+|\b_auth(?:token)?\s+|\blogin\s+\S+\s+password\s+)\S{8,}"
                 ),
                 replacement=r"\1{marker}",
                 category="secret",
@@ -409,7 +410,7 @@ def _sanitize(value: Any, hits: set[str], depth: int = 0, key: str | None = None
     strength = _key_strength(key) if key is not None else 0
     if (
         key is not None and isinstance(value, str) and re.search(r"(?i)tokens$", key)
-        and _secret_shaped(value, key)
+        and re.fullmatch(r"[A-Za-z0-9+/_=.~-]{12,}", value) and _secret_shaped(value, key)
     ):
         strength = 1  # `tokens` is usually a count, but a random-looking string under it is a credential
     counted = isinstance(value, (int, float)) and _is_count_key(key or "")
@@ -483,8 +484,10 @@ def _secret_shaped(value: str, key: str = "") -> bool:
     almost never shaped like that. Human-chosen passwords and random keys are both masked."""
     if re.fullmatch(r"\d{4}-\d\d-\d\d(?:[T ]\d\d(?::\d\d(?::\d\d(?:\.\d+)?)?)?(?:Z|[+-]\d\d:?\d\d)?)?", value):
         return False  # a date or timestamp
-    if re.match(r"(?i)https?://[^\s@]*$", value) or value.startswith(("/", "./", "../", "~/")) or value.isdigit():
+    if re.match(r"(?i)https?://[^\s@]*$", value) or value.startswith(("./", "../", "~/")) or value.isdigit():
         return False  # a URL without userinfo, a path, a number
+    if re.fullmatch(r"/[\w.@%~-]+(?:/[\w.@%~-]+)+/?", value):
+        return False  # an absolute path: at least two segments and none of the characters base64 adds (+ =)
     if not re.fullmatch(r"[A-Za-z0-9+/_=.~-]+", value):
         return True  # punctuation is what human-chosen passwords are made of
     if len(value) < 12 and not (len(value) >= 8 and _credential_named(key)):

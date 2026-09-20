@@ -562,11 +562,11 @@ def test_append_cost_does_not_grow_with_the_log(run_log, log_dir):
     head = [_head(run_log, log_dir)]
 
     def batch(n):
-        started = time.perf_counter()
+        started = time.process_time()
         for _ in range(n):
             head[0] = run_log.append_event(log_dir, RUN_ID, "ci_polled", "ci", data={"status": "PENDING"},
                                            expect_head=head[0])["hash"]
-        return time.perf_counter() - started
+        return time.process_time() - started
 
     early = batch(150)
     batch(1200)
@@ -1505,10 +1505,10 @@ def test_append_time_is_flat_from_a_tiny_log_to_a_huge_one(run_log, log_dir, tmp
         return head
 
     def time_appends(directory, head, count=60):
-        started = time.perf_counter()
+        started = time.process_time()
         for _ in range(count):
             head = run_log.append_event(directory, RUN_ID, "ci_polled", "ci", expect_head=head)["hash"]
-        return time.perf_counter() - started
+        return time.process_time() - started
 
     small = time_appends(tmp_path / "small", build(tmp_path / "small", 5))
     large_head = build(tmp_path / "large", 30_000)  # a few MB
@@ -1603,7 +1603,8 @@ def test_no_redaction_pattern_is_superlinear_on_adversarial_input(run_log):
     """The first version of the generic key=value pattern was cubic: 5,600 characters took 21 seconds."""
     redaction = run_log._redaction_runtime()
     patterns = run_log._patterns(redaction)
-    for unit in ("secret-", "token.", "password-", "auth-", "cred.", "session-id-", "secret_", "a" * 15 + ".", "a=", "x-api-key:"):
+    for unit in ("secret-", "token.", "password-", "auth-", "cred.", "session-id-", "secret_", "a" * 15 + ".", "a=", "x-api-key:",
+                 "name: token" + " " * 30, " ", "<secret>", "\\", "aws_session_token ", "login a password ", "name:secret,value:"):
         text = (unit * (8000 // len(unit) + 1))[:8000]
         started = time.process_time()  # CPU time: a busy machine must not fail this
         redaction.redact(text, patterns=patterns, marker="[R]", passes=1)
@@ -2484,6 +2485,45 @@ def test_round_9_escaped_json_name_value_pairs_and_more_layouts_are_masked(run_l
 )
 def test_round_9_lookalikes_are_kept(run_log, text):
     assert run_log._clean_text(text, set()) == text
+
+@pytest.mark.parametrize(
+    "text,core",
+    [
+        ('{"name":"Authorization","value":"Bearer opaqueTok3n9999"}', "opaqueTok3n9999"),
+        ('{"name":"Cookie","value":"a=1; sid=zzzzzzzz"}', "zzzzzzzz"),
+        ('{"client_secret":"it\'sALongSecret1"}', "sALongSecret1"),
+        ("aws_secret_access_key=/" + "Ab12cD34eF56gH78iJ90kL12mN34oP56qR78sT9", "Ab12cD34eF56"),
+    ],
+)
+def test_round_10_values_with_spaces_apostrophes_or_a_leading_slash_are_masked_whole(run_log, text, core):
+    assert core not in run_log._clean_text(text, set())
+
+
+@pytest.mark.parametrize(
+    "text", ["session_token expired", "login failed password expired", "token_path=/var/run/secrets/token", "name: LOG_LEVEL\n  value: debug"]
+)
+def test_round_10_prose_and_paths_are_kept(run_log, text):
+    assert run_log._clean_text(text, set()) == text
+
+
+def test_tokens_holding_a_count_or_a_note_is_kept_and_a_random_string_is_masked(run_log):
+    assert run_log._sanitize({"tokens": "12,345"}, set()) == {"tokens": "12,345"}
+    assert run_log._sanitize({"tokens": ""}, set()) == {"tokens": ""}
+    assert run_log._sanitize({"tokens": "not measured"}, set()) == {"tokens": "not measured"}
+    assert run_log._sanitize({"tokens": Z}, set()) == {"tokens": "[REDACTED]"}
+
+
+def test_a_long_run_of_whitespace_after_a_name_is_linear_not_quadratic(run_log):
+    redaction = run_log._redaction_runtime()
+    patterns = run_log._patterns(redaction)
+    small = "name: token" + " " * 2000 + "x"
+    large = "name: token" + " " * 7900 + "x"
+    started = time.process_time()
+    redaction.redact(small, patterns=patterns, marker="[R]", passes=1)
+    t_small = time.process_time() - started
+    started = time.process_time()
+    redaction.redact(large, patterns=patterns, marker="[R]", passes=1)
+    assert time.process_time() - started < max(t_small * 12, 0.5)  # a quadratic pattern would be about 16x
 
 
 # --- docs and wiring stay in sync -------------------------------------------------------------
