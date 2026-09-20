@@ -325,8 +325,8 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             redaction.RedactionPattern(
                 name="secretish_json",
                 pattern=re.compile(
-                    r'(?i)(?P<head>(?<!\\)\\*["\'](?P<key>[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS + r'[A-Za-z0-9_.-]{0,64})\\*["\']\s*:\s*\\*(?P<q>["\']))'
-                    r'(?P<value>(?:(?!(?P=q))[^\\]){8,})(?P<tail>\\*(?P=q))'
+                    r'(?i)(?P<head>(?<!\\)(?P<e>\\+)?["\'](?P<key>[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS + r'[A-Za-z0-9_.-]{0,64})\\*["\']\s*:\s*\\*(?P<q>["\']))'
+                    r'(?P<value>(?:(?(e)(?!(?P=q))[^\\]|(?:\\.|(?!(?P=q))[^\\]))){8,})(?P<tail>\\*(?P=q))'
                 ),
                 replacement=lambda m, marker: (
                     f"{m.group('head')}{marker}{m.group('tail')}" if _secret_shaped(m.group("value"), m.group("key")) else None
@@ -336,9 +336,9 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             redaction.RedactionPattern(
                 name="secretish_name_value",
                 pattern=re.compile(
-                    r'(?i)(?P<head>["\']?name["\']?[ \t]*[:=][ \t]*["\']?[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS
-                    + r'[A-Za-z0-9_.-]{0,64}["\']?[\s,]*["\']?value["\']?[ \t]*[:=][ \t]*(?P<q>["\']?))'
-                    r'(?P<value>(?(q)[^"\'\r\n]{6,}|[^\s"\',}]{6,}))'
+                    r'(?i)(?P<head>(?<!\\)\\*["\']?name\\*["\']?[ \t]*[:=][ \t]*\\*["\']?[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS
+                    + r'[A-Za-z0-9_.-]{0,64}\\*["\']?[\s,]*\\*["\']?value\\*["\']?[ \t]*[:=][ \t]*\\*(?P<q>["\'])?)'
+                    r'(?P<value>(?(q)(?:(?!(?P=q))[^\r\n\\]){6,}|[^\r\n,}]{6,}))'
                 ),
                 replacement=lambda m, marker: f"{m.group('head')}{marker}",
                 category="secret",

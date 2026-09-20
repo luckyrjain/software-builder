@@ -2513,17 +2513,44 @@ def test_tokens_holding_a_count_or_a_note_is_kept_and_a_random_string_is_masked(
     assert run_log._sanitize({"tokens": Z}, set()) == {"tokens": "[REDACTED]"}
 
 
-def test_a_long_run_of_whitespace_after_a_name_is_linear_not_quadratic(run_log):
+def test_long_runs_of_whitespace_or_backslashes_do_not_cost_quadratic_time(run_log):
     redaction = run_log._redaction_runtime()
     patterns = run_log._patterns(redaction)
-    small = "name: token" + " " * 2000 + "x"
-    large = "name: token" + " " * 7900 + "x"
-    started = time.process_time()
-    redaction.redact(small, patterns=patterns, marker="[R]", passes=1)
-    t_small = time.process_time() - started
-    started = time.process_time()
-    redaction.redact(large, patterns=patterns, marker="[R]", passes=1)
-    assert time.process_time() - started < max(t_small * 12, 0.5)  # a quadratic pattern would be about 16x
+
+    def cost(text):
+        best = float("inf")
+        for _ in range(3):
+            started = time.process_time()
+            redaction.redact(text, patterns=patterns, marker="[R]", passes=1)
+            best = min(best, time.process_time() - started)
+        return best
+
+    for head, fill in (("name: token", " "), ("", "\\"), ("name:secret,value:", " ")):
+        small = (head + fill * 3000)[:3000]
+        large = (head + fill * 7900)[:7900]
+        assert cost(large) < max(cost(small) * 6, 0.05), head  # a quadratic pattern costs about 7x, so 6x plus a floor
+
+@pytest.mark.parametrize(
+    "text,core",
+    [
+        ('{"name":"DB_PASSWORD","value":"ab\'cdefghij"}', "cdefghij"),
+        ('{"name":"DB_PASSWORD","value":"abcdef\'ghij"}', "ghij"),
+        ('{\\"name\\":\\"API_KEY\\",\\"value\\":\\"%s\\"}' % Y, Y),
+        ("- name: DB_PASSWORD\n  value: Summer 2024 Rocks!", "2024 Rocks"),
+        ('"password":"abc\\\\defghijkl"', "defghijkl"), ('"password":"pa\\"ssword123"', "ssword123"),
+        ('{"password":"abcdefgh\\"ijklmnop"}', "ijklmnop"), ('{"password":"abc\'defghijk"}', "defghijk"),
+    ],
+)
+def test_round_11_quotes_and_backslashes_inside_a_value_do_not_end_it(run_log, text, core):
+    assert core not in run_log._clean_text(text, set())
+
+
+def test_round_11_masking_stops_at_the_value_it_belongs_to(run_log):
+    text = 'curl -d "{\\"password\\": \\"%s\\", \\"x\\": \\"keepme12345\\"}"' % U
+    cleaned = run_log._clean_text(text, set())
+    assert U not in cleaned and "keepme12345" in cleaned
+    flow = run_log._clean_text("{name: X_TOKEN, value: abcdefg}, {name: Y, value: ok}", set())
+    assert "abcdefg" not in flow and "{name: Y, value: ok}" in flow
 
 
 # --- docs and wiring stay in sync -------------------------------------------------------------
