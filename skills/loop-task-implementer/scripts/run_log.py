@@ -187,7 +187,7 @@ def _is_pass_key(words: list[str]) -> bool:
 _KEY_STEMS = ("password", "passwd", "passphrase", "credential", "apikey", "privatekey", "secretkey", "accesskey", "sessionkey", "keybase",
               "sshkey", "signingkey", "hmackey", "encryptionkey", "masterkey")
 _CREDENTIAL_WORDS = (
-    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|(?<![A-Za-z0-9])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|pwd|passphrases?|api[_-]?keys?|(?:ssh|signing|hmac|encryption|master|private|access)[_-]?keys?|cookies?|connect\.sid|credentials?|creds|"
+    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|(?<![A-Za-z0-9])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|pwd|passphrases?|api[_-]?keys?|(?:ssh|signing|hmac|encryption|master|private|access|app|license|subscription|functions|account)[_-]?keys?|cookies?|connect\.sid|passcode|psk|(?<![A-Za-z0-9])pw|(?<=[?&])sig|credentials?|creds|"
     r"sess(?:ion)?[_-]?(?:ids?|keys?)|signature|auth(?:orization)?)(?-i:(?![a-z]|[A-Z](?![a-z])))"
 )
 _CAMEL_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
@@ -325,8 +325,8 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             redaction.RedactionPattern(
                 name="secretish_json",
                 pattern=re.compile(
-                    r'(?i)(?P<head>["\'](?P<key>[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS + r'[A-Za-z0-9_.-]{0,64})["\']\s*:\s*["\'])'
-                    r'(?P<value>[^"\']{8,})(?P<tail>["\'])'
+                    r'(?i)(?P<head>\\*["\'](?P<key>[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS + r'[A-Za-z0-9_.-]{0,64})\\*["\']\s*:\s*\\*["\'])'
+                    r'(?P<value>[^"\'\\]{8,})(?P<tail>\\*["\'])'
                 ),
                 replacement=lambda m, marker: (
                     f"{m.group('head')}{marker}{m.group('tail')}" if _secret_shaped(m.group("value"), m.group("key")) else None
@@ -334,10 +334,34 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
                 category="secret",
             ),
             redaction.RedactionPattern(
+                name="secretish_name_value",
+                pattern=re.compile(
+                    r'(?is)(?P<head>["\']?name["\']?\s*[:=]\s*["\']?[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS
+                    + r'[A-Za-z0-9_.-]{0,64}["\']?\s*,?\s*["\']?value["\']?\s*[:=]\s*["\']?)(?P<value>[^\s"\',}]{6,})'
+                ),
+                replacement=lambda m, marker: f"{m.group('head')}{marker}",
+                category="secret",
+            ),
+            redaction.RedactionPattern(
+                name="secretish_xml",
+                pattern=re.compile(r"(?i)(<[A-Za-z0-9_.-]{0,64}" + _CREDENTIAL_WORDS + r"[A-Za-z0-9_.-]{0,64}>)([^<\s]{6,})(</)"),
+                replacement=r"\1{marker}\3",
+                category="secret",
+            ),
+            redaction.RedactionPattern(
+                name="secretish_spaced",
+                pattern=re.compile(
+                    r"(?i)(\b(?:aws_)?(?:secret_access_key|session_token)\s+|\b_auth(?:token)?\s+|\blogin\s+\S+\s+password\s+)\S{6,}"
+                ),
+                replacement=r"\1{marker}",
+                category="secret",
+            ),
+            redaction.RedactionPattern(
                 name="secretish_flag",
                 pattern=re.compile(
                     r"(?i)((?<![A-Za-z0-9])--?[a-z0-9_-]{0,40}(?:password|passwd|pwd|pw|(?<![a-z])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|cookies?|passphrase|token|secret|api[_-]?key|secret[_-]?access[_-]?key|secret[_-]?key"
-                    r"|access[_-]?key|private[_-]?key|session[_-]?(?:id|key)|keybase|jwt|credentials?|auth)[ =])[^\s]{6,}"
+                    r"|access[_-]?key|private[_-]?key|session[_-]?(?:id|key)|keybase|jwt|credentials?|auth"
+                    r"|(?:encryption|signing|master|hmac|auth|account)[_-]?key|authkey|secret[_-]?(?:string|id|value)|storepass|keypass|passcode|psk)[ =])[^\s]{6,}"
                 ),
                 replacement=r"\1{marker}",
                 category="secret",

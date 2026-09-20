@@ -35,7 +35,7 @@ prompts.
 | 27 | A Builder or Reviewer asks to read, edit, or append to the run log, or its path is in a package or report | **Wrong** — only the Orchestrator touches it; only `run_id` and `chain_head` go into reports |
 | 28 | `--log-dir` points inside a repository (or the home directory is itself a repo and the default is refused) | The script refuses (exit `2`); choose another absolute directory outside every repository |
 | 29 | `run_log.py` exits `2` for an unusable log (unwritable directory, lock timeout, Python 3.9, no POSIX locking) | Say so and report `LOG_UNAVAILABLE` (no append: the log is what failed); **Wrong** to continue unlogged or claim the token cap is enforced |
-| 30 | `verify` or `--expect-head` fails with exit `1` and `recoverable` is not `true` (this includes `ahead_by` above 1) | Report an integrity finding (no new appends); **Wrong** to repair, rewrite, or delete the log |
+| 30 | `verify` or `--expect-head` fails with exit `1` and `recoverable` is not `true` (this includes any `ahead_by`) | Report an integrity finding (no new appends); **Wrong** to repair, rewrite, or delete the log |
 | 31 | `verify` prints `"recoverable": true` (a torn final write) | Append (or `run_resumed`) with your last head; it repairs the tail and records `recovered_bytes` on that record |
 | 32 | A branch name or task id containing `'`, `$(...)`, a backtick, or a newline must be logged | Send it as JSON on stdin (`--data-json -`, newlines escaped, one line, quoted `<<'JSON'` heredoc); **Wrong** to put it in a quoted shell string |
 | 33 | The caller set `max_task_tokens: 500000` (or `unlimited`) | Pass it as `--max-tokens` on every `budget` call; **Wrong** to omit the flag and let the default apply |

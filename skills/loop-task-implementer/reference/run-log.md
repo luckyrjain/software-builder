@@ -54,7 +54,7 @@ integers up to 10^10. A record with all-zero tokens counts as **no** usage.
 | `task_selected` | a **new** task is chosen; starts its budget window | `task_id`, `execution_identity` |
 | `builder_dispatched` / `remediation_dispatched` / `review_dispatched` | a session starts | `attempt`, `session_ref`, `lens`, `review_generation` |
 | `builder_returned` / `remediation_returned` / `review_returned` | a session returns; **carries its `usage`** | `head_commit`, `changed_file_count`, `finding_count` (counts, never verdict text) |
-| `orchestrator_usage` | your own tokens, once per cycle, **only if the host reports them** (never a guess) | — (`usage`) |
+| `orchestrator_usage` | after each Builder or Reviewer return: the tokens you used since your last such record (a delta), **only if the host reports them** (never a guess) | — (`usage`) |
 | `pr_opened`, `adjudicated`, `ci_polled`, `merge_attempted` | the action happens | ids and counts |
 | `budget_checked` | only when a check reports a cap reached, `unmeasured`, or `unlimited` | those lists |
 | `escalated` | a circuit breaker fires | `reason`, **required**, one of the codes below |
@@ -87,7 +87,7 @@ python3 "<skill_root>/scripts/run_log.py" summarize --run-id <id> --log-dir <dir
 `$(...)`, backticks and newlines. Send `data` on stdin with `--data-json -`, as JSON with newlines escaped (`\n`),
 as **one line** of JSON with every control character escaped, in a heredoc with a **quoted** delimiter (`<<'JSON'`); one
 escaped line cannot contain the delimiter line, so it cannot end the heredoc early. The same goes for `run-id`:
-`python3 "<skill_root>/scripts/run_log.py" run-id <<'JSON'` then `["<repo>","<base>","<task_id>"]` then `JSON`. Make **one call per tool step, never in parallel**: each needs the head from the previous receipt.
+`python3 "<skill_root>/scripts/run_log.py" run-id <<'JSON'` then `["<repo>","<base>","<task_id>","<UTC start time>"]` then `JSON`. Make **one call per tool step, never in parallel**: each needs the head from the previous receipt.
 
 `append` prints a **receipt**: `seq`, `event`, `chain_head`, and `usage_missing: true` on a session or usage
 event that carried no token usage. Pass `chain_head` (or its first 16+ characters) as `--expect-head` next

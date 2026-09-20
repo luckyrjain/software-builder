@@ -24,9 +24,11 @@ For earlier history, see the `## loop-task-implementer` section in the repositor
     the same OS user can still rewrite the whole file; the docs say so.
   - **Durability**: writes are all-or-nothing, appends read only the tail, locks time out, and a torn final write
     (a fragment under 48 KiB, including a torn first record) is repaired by the next append, which records
-    `recovered_bytes` and `recovered_sha256` on that record. A repeated append whose receipt was lost is idempotent.
+    `recovered_bytes` and `recovered_sha256` on that record. A repeated append whose receipt was lost is idempotent, and the Orchestrator saves each call with the head it is
+    sent with in `run_log.pending`, so a crash before the receipt is replayed (before `verify`) whether or not it landed.
   - **Budgets measure the current task** (`task_selected` requires a `task_id`). Time is active time: each gap between
-    records counts at most 30 minutes, the wait before a `run_resumed` counts nothing, and a session's own return record
+    records counts at most 30 minutes (a crash loop cannot hide), only the wait before a `run_resumed` that follows a
+    `run_completed` counts nothing, a budget read after a finished run adds no tail, and a session's own return record
     counts the interval its host-reported `elapsed_seconds` says it ran (unioned, so parallel sessions are not
     charged twice and an inserted record cannot shrink it). A `COMPLETE` task that is resumed starts a fresh window.
     `unmeasured` is judged per returned session, an all-zero usage record is not a measurement, and the caps are
@@ -40,11 +42,13 @@ For earlier history, see the `## loop-task-implementer` section in the repositor
     shape (a punctuated value, a UUID, a random-looking segment or anything under a key that names a credential is
     masked; kebab-case, ALL_CAPS and path identifiers under a merely credential-flavoured key are kept), and text
     under a credential-worded key is always replaced, so log such facts as codes under another name. Many token
-    families, `Authorization: <scheme>`, URL userinfo, CLI password flags and webhook URLs are covered. Not done, by
+    families, `Authorization: <scheme>`, URL userinfo, CLI password flags (digits and prefixes allowed), cookies, session
+    ids, JSON quoted for a shell, Kubernetes name/value pairs, XML elements, and `aws`/`npm`/netrc layouts are covered. Not done, by
     design: replacing the stack with a per-event allowlist, and a queue-start log-writability preflight.
-  - New `run-id` subcommand derives a deterministic, resumable id from task seeds.
-  - Docs: section 20 step 1 covers every `verify` outcome (a new run only when there is no log and no progress; an
-    existing log with no state is an integrity finding), a failing log appends nothing, the completion report carries
+  - New `run-id` subcommand derives a deterministic id from task seeds; the UTC start time is a seed, so a task started again
+    later is a new run.
+  - Docs: section 20 step 1 covers every `verify` outcome (a new run only when there is no log and no held head; an
+    existing log with no matching head is an integrity finding, apart from a lone `run_started`), a failing log appends nothing, the completion report carries
     `Budgets:` and `Run log:` lines in `key=value` form that backlog-runner reads, and pressure tests 26-48,
     `tests/test_run_log.py` and `tests/test_packaged_run_log.py` cover it.
 

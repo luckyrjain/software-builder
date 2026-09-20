@@ -292,6 +292,8 @@ Z = "Xk9fLq2m" + "ZpT7vRw3"
 Q = "Zx9Qp2" + "Lm7Rt4"
 S = "Zk9qLw3x" + "PvAb12cd"
 W = "Xk9fQ2mZ" + "pL4vR8sT1wYb"
+U = "Summer20" + "24!Rocks"
+Y = "Xk9fQ2mZpL4vR8sT" + "1wYbHc3d"
 HX = "a1b2c3d4e5f6" + "a7b8c9d0"
 WJ = "wJalrXUtnFEMI/K7MDENG" + "bPxRfiC"
 
@@ -2458,6 +2460,30 @@ def test_a_matching_record_from_the_future_is_not_adopted_as_a_retry(run_log, lo
     path.write_text(path.read_text() + forged + "\n")
     with pytest.raises(run_log.IntegrityError):
         run_log.append_event(log_dir, RUN_ID, "ci_polled", "ci", expect_head=head)
+
+@pytest.mark.parametrize(
+    "text,core",
+    [
+        ('curl -d "{\\"password\\": \\"%s\\"}" https://x' % U, U), ('{\\"client_secret\\":\\"%s\\"}' % Y, Y),
+        ("- name: DB_PASSWORD\n  value: " + U, U), ('{"name":"API_KEY","value":"%s"}' % Y, Y), ("<password>%s</password>" % U, U),
+        (f"aws configure set aws_secret_access_key {Y}", Y), (f"aws configure set aws_session_token {Y}", Y),
+        (f"npm config set //registry.npmjs.org/:_authToken {Y}", Y), (f"machine h login bob password {U}", U),
+        (f"--encryption-key {Y}", Y), (f"--signing-key {Y}", Y), (f"--master-key {Y}", Y), (f"--secret-id {Y}", Y),
+        (f"-storepass {U}", U), (f"passcode={U}", U), (f"psk={Y}", Y), (f"pw={U}", U), (f"APP_KEY=base64:{Y}", Y),
+        (f"LICENSE_KEY={Y}", Y), ("https://a.blob.core.windows.net/c?sig=%s&se=2026" % Y, Y),
+        (f"Ocp-Apim-Subscription-Key: {Y}", Y), (f"X-Functions-Key: {Y}", Y),
+    ],
+)
+def test_round_9_escaped_json_name_value_pairs_and_more_layouts_are_masked(run_log, text, core):
+    assert core not in run_log._clean_text(f"see {text} here", set())
+
+
+@pytest.mark.parametrize(
+    "text",
+    ['{"name":"replicas","value":"3"}', "name: LOG_LEVEL\n  value: debug-verbose", "--pw-file=/etc/x", "keyboard=qwertyuiop12", "<title>Release notes</title>"],
+)
+def test_round_9_lookalikes_are_kept(run_log, text):
+    assert run_log._clean_text(text, set()) == text
 
 
 # --- docs and wiring stay in sync -------------------------------------------------------------
