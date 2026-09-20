@@ -290,6 +290,7 @@ PW = "S3cret" + "Pw"
 AK = "abcdefgh" + "12345678"
 Z = "Xk9fLq2m" + "ZpT7vRw3"
 Q = "Zx9Qp2" + "Lm7Rt4"
+S = "Zk9qLw3x" + "PvAb12cd"
 HX = "a1b2c3d4e5f6" + "a7b8c9d0"
 WJ = "wJalrXUtnFEMI/K7MDENG" + "bPxRfiC"
 
@@ -2250,8 +2251,8 @@ def test_text_pattern_boundaries(run_log):
 
 
 def test_a_flag_prefix_longer_than_forty_characters_is_not_scanned(run_log):
-    long_flag = "--" + "a" * 41 + "-password"
-    short_flag = "--" + "a" * 40 + "-password"
+    long_flag = "--" + "a" * 45 + "-password"
+    short_flag = "--" + "a" * 30 + "-password"
     assert "hunter2hunter2" not in run_log._clean_text(f"{short_flag} hunter2hunter2", set())
     assert isinstance(run_log._clean_text(f"{long_flag} hunter2hunter2", set()), str)  # bounded work either way
 
@@ -2366,6 +2367,62 @@ def test_a_resume_after_a_resume_is_charged_like_any_gap(run_log, log_dir):
     _append(run_log, log_dir, event="run_resumed", ts="2026-01-15T10:20:00.000Z")
     _append(run_log, log_dir, event="run_resumed", ts="2026-01-15T10:40:00.000Z")  # the first resume then died: 20 minutes
     assert _budget(run_log, log_dir, now="2026-01-15T10:40:00.000Z")["consumed"]["elapsed_minutes"] == pytest.approx(39.0)
+
+def test_a_sessions_reported_run_time_cannot_reach_back_before_the_window(run_log, log_dir):
+    _start(run_log, log_dir, ts="2026-01-15T10:00:00.000Z")
+    _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z", data={"task_id": "T-1"})
+    _append(run_log, log_dir, event="builder_returned", actor="builder", ts="2026-01-15T10:11:00.000Z",
+            usage={"input_tokens": 10, "elapsed_seconds": 7200})  # claims two hours; only ten minutes of the task exist
+    verdict = _budget(run_log, log_dir, now="2026-01-15T10:11:00.000Z")
+    assert verdict["consumed"]["elapsed_minutes"] == pytest.approx(10.0) and verdict["exceeded"] == []
+
+@pytest.mark.parametrize("key", ["session_key", "sessionKey", "SESSION_KEY", "keybase", "secret_key_base", "db_pass", "pass", "prod_db_pass", "dbpass", "DBPASS"])
+def test_round_7_structured_credential_keys_are_masked(run_log, key):
+    assert run_log._sanitize({key: S}, set()) == {key: "[REDACTED]"}
+
+
+@pytest.mark.parametrize(
+    "text,core",
+    [
+        ("pass=" + "Zk9qLw3xPv", "Zk9qLw3xPv"), ("db_pass=" + "Tr0ub4dor&3xx", "Tr0ub4dor"), ("smtp_pass=" + "abcdEFGH12", "abcdEFGH12"),
+        ("PASS=" + "abcdEFGH", "abcdEFGH"), ('{"pass":"' + "abcd1234xyz" + '"}', "abcd1234xyz"), ("db_pass=my-db-pass-value", "my-db-pass-value"),
+        ("prod_db_pass=" + "Zk9qLw3xPv", "Zk9qLw3xPv"), ("dbpass=" + "Zk9qLw3xPv", "Zk9qLw3xPv"),
+        (f"--session-key {Q}", Q), (f"--keybase {Q}", Q), (f"--jwt {Q}x", Q), (f"ssh_key={Q}Vb8N", Q), (f"signing_key={Q}", Q),
+        (f"HMAC_KEY={Q}Vb", Q), (f"master_key={Q}", Q), (f"encryption_key={Q}", Q),
+    ],
+)
+def test_round_7_short_pass_values_and_more_key_names_are_masked_in_text(run_log, text, core):
+    assert core not in run_log._clean_text(f"see {text} here", set())
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["a two-pass approved", "re-auth needed", "multi-pass review", "ssh_key_path=/home/u/.ssh/id_rsa", "keyboard=qwertyuiop12", "review_pass=second-round-done"],
+)
+def test_round_7_ordinary_words_that_contain_credential_words_are_kept(run_log, text):
+    assert run_log._clean_text(text, set()) == text
+
+
+@pytest.mark.parametrize("key", ["_", "-", "..", "_-_"])
+def test_a_key_with_no_words_is_not_sensitive_and_does_not_raise(run_log, key):
+    assert run_log._key_strength(key) == 0
+    assert run_log._sanitize({key: 1}, set()) == {key: 1}
+
+
+@pytest.mark.parametrize(
+    "key,expected",
+    [("pass", True), ("db_pass", True), ("prod_db_pass", True), ("dbpass", True), ("review_pass", False), ("pass_number", False), ("bypass", False)],
+)
+def test_pass_keys_are_credential_named(run_log, key, expected):
+    assert run_log._credential_named(key) is expected
+
+
+def test_reading_the_budget_long_after_a_run_finished_charges_nothing_more(run_log, log_dir):
+    _start(run_log, log_dir, ts="2026-01-15T10:00:00.000Z")
+    _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z", data={"task_id": "T-1"})
+    _append(run_log, log_dir, event="run_completed", data={"outcome": "COMPLETE"}, ts="2026-01-15T10:11:00.000Z")
+    assert _budget(run_log, log_dir, now="2026-01-15T10:11:00.000Z")["consumed"]["elapsed_minutes"] == pytest.approx(10.0)
+    assert _budget(run_log, log_dir, now="2026-01-16T10:11:00.000Z")["consumed"]["elapsed_minutes"] == pytest.approx(10.0)
 
 
 # --- docs and wiring stay in sync -------------------------------------------------------------

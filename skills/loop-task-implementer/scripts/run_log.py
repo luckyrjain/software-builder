@@ -175,9 +175,18 @@ _KEY_WORD_PAIRS = frozenset(
     | {("session", "id"), ("session", "ids"), ("client", "secret"), ("client", "secrets"), ("database", "url")}
 )
 _PASS_PREFIXES = frozenset("db user admin root ssh smtp mysql redis ftp".split())
-_KEY_STEMS = ("password", "passwd", "passphrase", "credential", "apikey", "privatekey", "secretkey", "accesskey")
+
+
+def _is_pass_key(words: list[str]) -> bool:
+    """`pass`, `db_pass`, `prod_db_pass`, `dbpass`: a password, unlike `review_pass` or `pass_number`, which count."""
+    joined = "".join(words)
+    return joined == "pass" or (len(words) >= 2 and words[-1] == "pass" and words[-2] in _PASS_PREFIXES) or (
+        joined.endswith("pass") and joined[:-4] in _PASS_PREFIXES
+    )
+
+_KEY_STEMS = ("password", "passwd", "passphrase", "credential", "apikey", "privatekey", "secretkey", "accesskey", "sessionkey", "keybase")
 _CREDENTIAL_WORDS = (
-    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|(?<![A-Za-z0-9])pass|pwd|passphrases?|api[_-]?keys?|credentials?|creds|"
+    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|(?<![A-Za-z0-9])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|pwd|passphrases?|api[_-]?keys?|(?:ssh|signing|hmac|encryption|master)[_-]?keys?|credentials?|creds|"
     r"session[_-]?(?:ids?|keys?)|signature|auth(?:orization)?)(?-i:(?![a-z]|[A-Z](?![a-z])))"
 )
 _CAMEL_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
@@ -326,8 +335,8 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             redaction.RedactionPattern(
                 name="secretish_flag",
                 pattern=re.compile(
-                    r"(?i)(--?[a-z_-]{0,40}(?:password|passwd|pwd|pw|pass|passphrase|token|secret|api[_-]?key|secret[_-]?access[_-]?key|secret[_-]?key"
-                    r"|access[_-]?key|private[_-]?key|session[_-]?id|credentials?|auth)[ =])[^\s]{6,}"
+                    r"(?i)((?<![A-Za-z0-9])--?[a-z_-]{0,40}(?:password|passwd|pwd|pw|pass|passphrase|token|secret|api[_-]?key|secret[_-]?access[_-]?key|secret[_-]?key"
+                    r"|access[_-]?key|private[_-]?key|session[_-]?(?:id|key)|keybase|jwt|credentials?|auth)[ =])[^\s]{6,}"
                 ),
                 replacement=r"\1{marker}",
                 category="secret",
@@ -430,11 +439,13 @@ def _credential_named(key: str) -> bool:
     if not words:
         return False
     joined = "".join(words)
+    if _is_pass_key(words):
+        return True
     return (
         words[-1] in _STRONG_KEY_WORDS
         or words[-1] == "token"  # `api_token`, `authToken`, `token`: a token itself, unlike `tokens` (usually a count)
         or (words[-1] in {"key", "keys"} and any(pair in _KEY_WORD_PAIRS for pair in zip(words, words[1:])))
-        or joined.endswith(("secret", "secrets", "password", "apikey", "secretkey", "privatekey", "sessionkey"))
+        or joined.endswith(("secret", "secrets", "password", "apikey", "secretkey", "privatekey", "sessionkey", "keybase"))
     )
 
 
@@ -466,11 +477,13 @@ def _secret_shaped(value: str, key: str = "") -> bool:
 def _key_strength(key: str) -> int:
     """0 not sensitive, 1 weak (mask text values), 2 strong (mask any value)."""
     words = [word.lower() for word in _CAMEL_RE.findall(key)]
+    if not words:
+        return 0  # a key such as `_` or `-` has no words
     if any(word in _STRONG_KEY_WORDS for word in words) or any(pair in _KEY_WORD_PAIRS for pair in zip(words, words[1:])):
         return 2
     joined = "".join(words)  # `clientsecret`, `dbpassword`, `accesstoken`: one word to the splitter, two to a reader
-    if joined == "pass" or (words[-1] == "pass" and len(words) == 2 and words[0] in _PASS_PREFIXES):
-        return 2  # `pass`, `db_pass`; not `review_pass` or `pass_number`, which count things
+    if _is_pass_key(words):
+        return 2
     if any(stem in joined for stem in _KEY_STEMS) or joined.endswith(("secret", "secrets")):
         return 2
     if any(word in _WEAK_KEY_WORDS for word in words) or joined.endswith(("token", "auth")):
@@ -1224,6 +1237,8 @@ def _active_minutes(records: list[dict[str, Any]], now: datetime) -> float:
     spans: list[tuple[datetime, datetime]] = []
     for index, (begin, end) in enumerate(zip(moments, ends)):
         following = records[index + 1] if index + 1 < len(records) else None
+        if following is None and records[index]["event"] in PAUSE_EVENTS:
+            continue  # nothing has happened since the run finished: reading the budget later is not work
         if following is not None and following["event"] == "run_resumed" and records[index]["event"] in PAUSE_EVENTS:
             continue  # the wait after a completed run is a pause; after any other record it may be a crash
         spans.append((begin, min(max(end, begin), begin + cap)))
@@ -1317,8 +1332,9 @@ def check_budget(
 
 
 def derive_run_id(seeds: object) -> str:
-    """A deterministic run id from what identifies the task (repo, base, task id, or a plan execution
-    identity), so a resumed run finds its own log. Hashing means untrusted text never becomes a filename."""
+    """A deterministic run id from its seeds (repo, base, task id and the UTC start time, or a plan execution
+    identity and the start time): the same seeds give the same id, and the start time makes each start of a task
+    a new run. Hashing means untrusted text never becomes a filename."""
     if not isinstance(seeds, list) or not seeds or len(seeds) > 16:
         raise ValueError("run-id takes a JSON array of 1-16 strings on stdin")
     if not all(isinstance(item, str) and 0 < len(item) <= 4000 for item in seeds):

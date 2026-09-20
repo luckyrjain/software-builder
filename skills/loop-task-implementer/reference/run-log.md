@@ -24,7 +24,7 @@ symlink, and **not inside any git repository** (a home that is itself a repo nee
 Keep it unchanged for the whole run.
 
 `run_id` is derived, never invented, and kept in state (a resume uses the stored one; the UTC start time is a seed, so a task started again later is a new run):
-`run_log.py run-id` reads a JSON array of seed strings on stdin (`["<repo>","<base_branch>","<task_id>","<UTC start time>"]`, or
+`run_log.py run-id` reads a JSON array of seed strings on stdin (`["<repo>","<base_branch>","<task_id>","<UTC start time to the second>"]`, or
 a plan's execution identity plus the start time) and prints `run-` plus 16 hex digits.
 
 ## Record and events
@@ -96,7 +96,8 @@ continue without it, and the record says so.
 
 An append whose outcome you do not know (crash, timeout, closed pipe) is safe to **repeat exactly**, with the
 same `--expect-head`: if it was already committed, the script returns that record and writes nothing. Not
-`run_started` (no head) and not `--unanchored` (it would write a second record): for those, follow §20 step 1.
+`run_started` (no head) and not `--unanchored` (it would write a second record): for those, follow §20 step 1. Save the call
+and its head in `run_log.pending` before sending, so a crash before the receipt can be repeated whether or not it landed.
 
 ### Exit codes
 
