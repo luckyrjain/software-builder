@@ -291,6 +291,7 @@ AK = "abcdefgh" + "12345678"
 Z = "Xk9fLq2m" + "ZpT7vRw3"
 Q = "Zx9Qp2" + "Lm7Rt4"
 S = "Zk9qLw3x" + "PvAb12cd"
+W = "Xk9fQ2mZ" + "pL4vR8sT1wYb"
 HX = "a1b2c3d4e5f6" + "a7b8c9d0"
 WJ = "wJalrXUtnFEMI/K7MDENG" + "bPxRfiC"
 
@@ -2423,6 +2424,40 @@ def test_reading_the_budget_long_after_a_run_finished_charges_nothing_more(run_l
     _append(run_log, log_dir, event="run_completed", data={"outcome": "COMPLETE"}, ts="2026-01-15T10:11:00.000Z")
     assert _budget(run_log, log_dir, now="2026-01-15T10:11:00.000Z")["consumed"]["elapsed_minutes"] == pytest.approx(10.0)
     assert _budget(run_log, log_dir, now="2026-01-16T10:11:00.000Z")["consumed"]["elapsed_minutes"] == pytest.approx(10.0)
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"--db2-password {W}", f"--oauth2-token {W}", f"--s3-secret {W}", f"--x509-password {W}", f"--auth0-secret {W}",
+        f"--aws-s3-secret-key {W}", f"--cookie {W}", f"--dbpass {W}", f"--db-pass {W}", f"--pass {W}",
+        f"cookie={W}", f"session_cookie={W}", f"PHPSESSID={W}", f"sessid={W}", f"connect.sid={W}",
+        '{"private_key": "%s"}' % W, '{"accessKey": "%s"}' % W, "masterkey=my-app-key-value",
+    ],
+)
+def test_round_8_flags_with_digits_cookies_and_more_key_spellings_are_masked(run_log, text):
+    cleaned = run_log._clean_text(f"see {text} here", set())
+    assert W not in cleaned and "my-app-key-value" not in cleaned
+
+
+@pytest.mark.parametrize("text", ["--bypass enabled", "--compass north-east", "--surpass higher", "--twopass yes-please"])
+def test_round_8_flags_that_only_end_in_pass_are_kept(run_log, text):
+    assert run_log._clean_text(text, set()) == text
+
+
+@pytest.mark.parametrize("key", ["MASTERKEY", "sshkey", "hmackey", "signingkey", "encryptionkey", "SIGNINGKEY"])
+def test_round_8_fused_key_names_are_masked_in_structured_data(run_log, key):
+    assert run_log._sanitize({key: W}, set()) == {key: "[REDACTED]"}
+
+
+def test_a_matching_record_from_the_future_is_not_adopted_as_a_retry(run_log, log_dir):
+    _start(run_log, log_dir)
+    head = _head(run_log, log_dir)
+    future = run_log._fmt_ts(run_log._now() + timedelta(hours=20))
+    forged = _forge_record(run_log, seq=2, prev_hash=head, event="ci_polled", ts=future, actor="ci")
+    path = _path(run_log, log_dir)
+    path.write_text(path.read_text() + forged + "\n")
+    with pytest.raises(run_log.IntegrityError):
+        run_log.append_event(log_dir, RUN_ID, "ci_polled", "ci", expect_head=head)
 
 
 # --- docs and wiring stay in sync -------------------------------------------------------------

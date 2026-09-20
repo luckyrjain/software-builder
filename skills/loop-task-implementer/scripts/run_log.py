@@ -184,10 +184,11 @@ def _is_pass_key(words: list[str]) -> bool:
         joined.endswith("pass") and joined[:-4] in _PASS_PREFIXES
     )
 
-_KEY_STEMS = ("password", "passwd", "passphrase", "credential", "apikey", "privatekey", "secretkey", "accesskey", "sessionkey", "keybase")
+_KEY_STEMS = ("password", "passwd", "passphrase", "credential", "apikey", "privatekey", "secretkey", "accesskey", "sessionkey", "keybase",
+              "sshkey", "signingkey", "hmackey", "encryptionkey", "masterkey")
 _CREDENTIAL_WORDS = (
-    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|(?<![A-Za-z0-9])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|pwd|passphrases?|api[_-]?keys?|(?:ssh|signing|hmac|encryption|master)[_-]?keys?|credentials?|creds|"
-    r"session[_-]?(?:ids?|keys?)|signature|auth(?:orization)?)(?-i:(?![a-z]|[A-Z](?![a-z])))"
+    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|(?<![A-Za-z0-9])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|pwd|passphrases?|api[_-]?keys?|(?:ssh|signing|hmac|encryption|master|private|access)[_-]?keys?|cookies?|connect\.sid|credentials?|creds|"
+    r"sess(?:ion)?[_-]?(?:ids?|keys?)|signature|auth(?:orization)?)(?-i:(?![a-z]|[A-Z](?![a-z])))"
 )
 _CAMEL_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
 
@@ -335,7 +336,7 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             redaction.RedactionPattern(
                 name="secretish_flag",
                 pattern=re.compile(
-                    r"(?i)((?<![A-Za-z0-9])--?[a-z_-]{0,40}(?:password|passwd|pwd|pw|pass|passphrase|token|secret|api[_-]?key|secret[_-]?access[_-]?key|secret[_-]?key"
+                    r"(?i)((?<![A-Za-z0-9])--?[a-z0-9_-]{0,40}(?:password|passwd|pwd|pw|(?<![a-z])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|cookies?|passphrase|token|secret|api[_-]?key|secret[_-]?access[_-]?key|secret[_-]?key"
                     r"|access[_-]?key|private[_-]?key|session[_-]?(?:id|key)|keybase|jwt|credentials?|auth)[ =])[^\s]{6,}"
                 ),
                 replacement=r"\1{marker}",
@@ -445,7 +446,8 @@ def _credential_named(key: str) -> bool:
         words[-1] in _STRONG_KEY_WORDS
         or words[-1] == "token"  # `api_token`, `authToken`, `token`: a token itself, unlike `tokens` (usually a count)
         or (words[-1] in {"key", "keys"} and any(pair in _KEY_WORD_PAIRS for pair in zip(words, words[1:])))
-        or joined.endswith(("secret", "secrets", "password", "apikey", "secretkey", "privatekey", "sessionkey", "keybase"))
+        or joined.endswith(("secret", "secrets", "password", "apikey", "secretkey", "privatekey", "sessionkey", "keybase",
+                            "sshkey", "signingkey", "hmackey", "encryptionkey", "masterkey"))
     )
 
 
@@ -1075,6 +1077,7 @@ def append_event(
                 if (
                     last is not None
                     and _head_matches(last["prev_hash"], expect_head)
+                    and _parse_ts(last["ts"]) <= _now() + timedelta(seconds=CLOCK_SKEW_SECONDS)
                     and (last["event"], last["actor"], _without_script_keys(last["data"]), last["usage"])
                     == (event, actor, cleaned_data, cleaned_usage)
                 ):

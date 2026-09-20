@@ -54,5 +54,6 @@ prompts.
 | 46 | A finished (`COMPLETE`) task is run again in the same log | `run_resumed`; the budget window restarts after the completion by itself; an escalated task that is resumed keeps its window |
 | 47 | A first record was torn, or a wiped log left one stray byte, and state holds a head | `verify --expect-head` exits `1`, not `recoverable`: stop; **Wrong** to send `run_started` (that would erase the run). With no head and no progress, `run_started` again is right |
 | 48 | `task_selected` is sent without a `task_id`, or a start finds an existing log for its new `run_id`, or a log exists while no head is held (and it is not a lone `run_started`) | The script rejects the first (exit `2`); the others are integrity findings, **Wrong** to adopt the log with `--unanchored` |
+| 49 | `pending` holds a `run_completed` (or `run_resumed`) whose receipt was lost | Replay it with `pending.head`, then finish (step 5's `verify`, the report); **Wrong** to follow the replay with `run_resumed` (it would reopen a finished run and reset its budget window) |
 
 See also: [smoke-test.md](smoke-test.md) for the minimal-run checklist these rows support.

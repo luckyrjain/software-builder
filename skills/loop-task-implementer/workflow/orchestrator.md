@@ -733,7 +733,9 @@ from the previous receipt.
    - **`pending` set with a head** (the call was saved but its receipt never arrived): before `verify` and before any `run_resumed`,
      repeat it exactly with `pending.head`.
      If it had committed the script returns that record; if not, it appends it. Store the receipt's `chain_head`, clear
-     `pending`. Exit `1` here means the log holds something you did not write: stop.
+     `pending`. Exit `1` here means the log holds something you did not write: stop. If the replayed call was
+     `run_completed`, the run is finished: go to step 5's `verify` and the report; if it was `run_resumed`, do not send
+     another; otherwise continue below.
    - `verify` (add `--expect-head <held head>` if state holds one) and read its JSON:
      - exit `0`, or exit `1` with `"recoverable": true` (a torn tail), head held: `run_resumed --expect-head <it>` (no
        `--data-json`).

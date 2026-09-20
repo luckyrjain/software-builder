@@ -117,12 +117,13 @@ finished `COMPLETE` and is resumed to run again starts a new window after that c
 
 - **Tokens**: each record counts `total_tokens` if given, else `input_tokens + output_tokens`; reaching the
   cap counts as exceeding it.
-- **In short:** a task's window runs from its first `task_selected` (or after a completed run that is resumed); tokens
-  are summed over it; time is active time. **Time** is *active* time: each gap between records counts at most 30
-  minutes, and the wait before a `run_resumed` counts nothing, so a human decision, a resume the next day, or a
-  crash does not spend the budget (the work between the last record and a crash is not charged either, at most 30 minutes); a gap that ends at a `builder_`, `remediation_` or `review_returned`
-  record also counts the interval that session's reported `elapsed_seconds` says it ran (never less than the 30-minute gap), so a long real session is charged what it took (and parallel lenses
-  are not charged twice). A session that never returns is not visible here: §3's 30-minute session wait catches it.
+- **In short:** a task's window runs from its first `task_selected` (or right after a completed run that is resumed);
+  tokens are summed over it; time is *active* time. Each gap between records counts at most 30 minutes, except the
+  wait before a `run_resumed` that follows a `run_completed` (a person waited), which counts nothing. A crash therefore
+  costs at most 30 minutes per resume, and a crash loop still trips the cap. A `builder_`, `remediation_` or
+  `review_returned` record also counts the interval its reported `elapsed_seconds` says the session ran (never less
+  than the gap), so a long real session is charged what it took and parallel lenses are not charged twice. A session
+  that never returns is not visible here: §3's 30-minute session wait catches it.
   `wall_clock_minutes` is for information.
 - **Caps**: always pass the resolved `--max-tokens` and `--max-minutes` (defaults `2,000,000` and `180`; omitting
   a flag applies the default, so a caller's lower cap would be silently ignored). A cap is a positive number
@@ -135,7 +136,7 @@ finished `COMPLETE` and is resumed to run again starts a new window after that c
 ## Recovery and limits
 
 - A **torn final line** (killed mid-write, disk full) is repaired by the next append or `run_resumed`: the fragment
-  is cut and that record gets `recovered_bytes` and `recovered_sha256` (a torn write was never acknowledged, so
+  is cut and that record usually gets `recovered_bytes` and `recovered_sha256` (a crash between the cut and the write leaves no marker) (a torn write was never acknowledged, so
   nothing acknowledged is lost), including a torn first record (`run_started` with no head). A complete record missing only its
   newline is kept. A larger fragment (`verify` stops calling it recoverable at 48 KiB), or any other damage, is reported, not repaired.
 - `append` chains from the file's tail only (constant time in the run's length); `verify`, `summarize` and `budget`
