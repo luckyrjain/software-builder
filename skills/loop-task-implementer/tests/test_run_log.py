@@ -294,6 +294,7 @@ S = "Zk9qLw3x" + "PvAb12cd"
 W = "Xk9fQ2mZ" + "pL4vR8sT1wYb"
 U = "Summer20" + "24!Rocks"
 Y = "Xk9fQ2mZpL4vR8sT" + "1wYbHc3d"
+J = "eyJhbGciOiJIUzI1" + "NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0." + "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
 HX = "a1b2c3d4e5f6" + "a7b8c9d0"
 WJ = "wJalrXUtnFEMI/K7MDENG" + "bPxRfiC"
 
@@ -2551,6 +2552,16 @@ def test_round_11_masking_stops_at_the_value_it_belongs_to(run_log):
     assert U not in cleaned and "keepme12345" in cleaned
     flow = run_log._clean_text("{name: X_TOKEN, value: abcdefg}, {name: Y, value: ok}", set())
     assert "abcdefg" not in flow and "{name: Y, value: ok}" in flow
+
+@pytest.mark.parametrize("text", [f"session={J}", f"bearer={J}", J, "see https://x.example/a?key=" + Y])
+def test_round_11_a_bare_jwt_and_a_key_in_a_query_string_are_masked(run_log, text):
+    cleaned = run_log._clean_text(text, set())
+    assert "eyJhbGciOiJIUzI1" not in cleaned and Y not in cleaned
+
+
+@pytest.mark.parametrize("text", ["tests_run=12 key_count=3", "monkey=business", "?turkey=abcdefghij1234", "keyed=" + "abcdefghij" + "1234"])
+def test_round_11_words_that_only_contain_key_are_kept(run_log, text):
+    assert run_log._clean_text(text, set()) == text
 
 
 # --- docs and wiring stay in sync -------------------------------------------------------------

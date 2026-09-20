@@ -12,7 +12,7 @@ For earlier history, see the `## loop-task-implementer` section in the repositor
   or, when unmeasurable, that the token cap is not enforced. Pressure tests 23-25 and
   `tests/test_budget_defaults.py` cover the defaults.
 - Added an append-only, redacted, SHA-256 hash-chained run log (`scripts/run_log.py`, `reference/run-log.md`,
-  orchestrator section 20), written only by the Orchestrator and never shown to a Builder or Reviewer. Four rounds of
+  orchestrator section 20), written only by the Orchestrator and never shown to a Builder or Reviewer. Ten rounds of
   adversarial review (pentester, SRE, prompt engineer, code reviewer, architect) shaped the contract:
   - **Exit codes** `0` ok, `1` integrity failure, `2` bad input or cannot run, `3` budget cap reached.
   - **Tamper evidence**: strict canonical parsing; the first record is `run_started`; timestamps never go backwards;
@@ -49,7 +49,7 @@ For earlier history, see the `## loop-task-implementer` section in the repositor
     later is a new run.
   - Docs: section 20 step 1 covers every `verify` outcome (a new run only when there is no log and no held head; an
     existing log with no matching head is an integrity finding, apart from a lone `run_started`), a failing log appends nothing, the completion report carries
-    `Budgets:` and `Run log:` lines in `key=value` form that backlog-runner reads, and pressure tests 26-48,
+    `Budgets:` and `Run log:` lines in `key=value` form that backlog-runner reads, and pressure tests 26-49,
     `tests/test_run_log.py` and `tests/test_packaged_run_log.py` cover it.
 
 ## v1.4 — implementation-plan execution bridge (2026-08-26)

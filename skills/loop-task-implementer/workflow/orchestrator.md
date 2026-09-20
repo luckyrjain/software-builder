@@ -765,9 +765,9 @@ from the previous receipt.
    stop; session usage in its return record from the host (`usage_missing: true` on a receipt means none was recorded — say so; with no `orchestrator_usage` record, say the Orchestrator's own tokens were not counted).
 4. **Before every dispatch** (one check covers dispatches issued in the same step): `budget` with the resolved
    `--max-tokens`, `--max-minutes`, `--expect-head`. Exit `3`: `escalated` (`TOKEN_BUDGET`/`TIME_BUDGET`), stop per §3.
-   `1`: integrity failure — stop. `2`: a wrong call — fix it; a refused directory (not private, inside a repository) or any other failure to run is `LOG_UNAVAILABLE`: report it, append nothing, and never `chmod` a directory the run did not create. Append
-   `budget_checked` once when a cap is reached or `unmeasured`/`unlimited` first appears. Copy `consumed` into
-   `budgets.consumed`.
+   `1`: integrity failure — stop. `2`: a wrong call — fix it; otherwise `LOG_UNAVAILABLE` (report it, append nothing, and never
+   `chmod` a directory the run did not create). Copy `consumed` into `budgets.consumed`. (`budget_checked` is an optional note;
+   the report takes `unmeasured` and `unlimited` from the final `budget`.)
 5. **End.** `budget` once more (take `consumed`, `unmeasured`, `unlimited` for the report from it; if it exits `3`,
    say so, don't escalate again), append `run_completed` (`COMPLETE` only when merged; `HUMAN_ACTION_REQUIRED` for verified-ready-awaiting-merge or another human step; `ESCALATED`; `ABANDONED`),
    **then** `verify --expect-head <that receipt's chain_head>` and put its `chain_head` in `run_log.chain_head` and the report. A failed `verify` is a finding, not

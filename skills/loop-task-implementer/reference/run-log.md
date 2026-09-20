@@ -56,7 +56,7 @@ integers up to 10^10. A record with all-zero tokens counts as **no** usage.
 | `builder_returned` / `remediation_returned` / `review_returned` | a session returns; **carries its `usage`** | `head_commit`, `changed_file_count`, `finding_count` (counts, never verdict text) |
 | `orchestrator_usage` | after each Builder or Reviewer return: the tokens you used since your last such record (a delta), **only if the host reports them** (never a guess) | — (`usage`) |
 | `pr_opened`, `adjudicated`, `ci_polled`, `merge_attempted` | the action happens | ids and counts |
-| `budget_checked` | only when a check reports a cap reached, `unmeasured`, or `unlimited` | those lists |
+| `budget_checked` | optional note of a check's result (the script derives `unmeasured` and `unlimited` itself) | those lists |
 | `escalated` | a circuit breaker fires | `reason`, **required**, one of the codes below |
 | `run_completed` | the run ends in any state | `outcome`, **required**, one of the codes below |
 
@@ -92,7 +92,8 @@ escaped line cannot contain the delimiter line, so it cannot end the heredoc ear
 `append` prints a **receipt**: `seq`, `event`, `chain_head`, and `usage_missing: true` on a session or usage
 event that carried no token usage. Pass `chain_head` (or its first 16+ characters) as `--expect-head` next
 time. Every append after the first needs it. `--unanchored` (only with `run_resumed`) is the one way to
-continue without it, and the record says so.
+continue without it, and the record says so; `verify` counts such records as `unanchored_resumes`, and the report states the
+count.
 
 An append whose outcome you do not know (crash, timeout, closed pipe) is safe to **repeat exactly**, with the
 same `--expect-head`: if it was already committed, the script returns that record and writes nothing. Not
