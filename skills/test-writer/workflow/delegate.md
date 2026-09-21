@@ -52,7 +52,7 @@ handoff:
     run_tests: <unchanged, including explicit false>
     max_files_per_run: <unchanged, including explicit zero>
     deadline: <unchanged, including explicit null>
-    session_token_budget: <unchanged, including explicit null>
+    session_token_budget: <unchanged, including explicit null>   # null = no ceiling for the creators; the loop-task-implementer / backlog-runner defaults do not apply here
     output_dir: <unchanged, including explicit null>
     specialist_inputs: <unchanged optional specialist fields>
   evidence_refs: []

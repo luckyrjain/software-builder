@@ -99,7 +99,7 @@ Every rebuttal requires repository evidence. A finding contested twice without d
 
 ## Evidence priority
 
-In order: (1) required CI for the exact current head, (2) Orchestrator-run checks for the exact commit, (3) Reviewer-run checks for the exact commit, (4) Builder-reported checks. Never treat prose as the sole proof of correctness. The Orchestrator also keeps an append-only, redacted run log and checks token/elapsed budgets against it before each dispatch ([reference/run-log.md](reference/run-log.md)); Builder and Reviewer sessions never touch it. Required CI that is green for an older commit does not satisfy readiness.
+In order: (1) required CI for the exact current head, (2) Orchestrator-run checks for the exact commit, (3) Reviewer-run checks for the exact commit, (4) Builder-reported checks. Never treat prose as the sole proof of correctness. The Orchestrator also keeps an append-only, redacted run log and checks token and active-time budgets against it before each dispatch ([reference/run-log.md](reference/run-log.md)); Builder and Reviewer sessions never touch it. Required CI that is green for an older commit does not satisfy readiness.
 
 ## Circuit breakers
 

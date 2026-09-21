@@ -9,6 +9,9 @@ frontmatter should match the version of the latest entry below that names that f
 - `deadline` defaults to start + 8 hours and `session_token_budget` to `max_tasks_per_run` × 2,000,000
   estimated tokens; unset or `null` is no longer unbounded. `unlimited` opts out explicitly and the
   morning summary now carries a `Budgets` line stating the resolved values.
+- `consumed_tokens` is now defined as the sum of each task's `budget_consumed.estimated_tokens` from
+  loop-task-implementer's report (this skill does not read its run log); a task whose report lists `tokens` as
+  unmeasured contributes nothing measurable and the summary says so. `examples.md` shows the `Budgets` line.
 
 ## [1.0.0] — 2026-08-05
 

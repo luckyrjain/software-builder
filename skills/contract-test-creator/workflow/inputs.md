@@ -69,7 +69,7 @@ produces an actively misleading test, not just a missed one.
 | `run_tests` | `true` — set `false` only when this session has no way to execute the target repo's test command (or reach the Pact Broker); tests are still written, marked `UNVERIFIED` |
 | `max_files_per_run` | 20 — caps Select targets; overflow is always listed by name in the report, never dropped silently |
 | `deadline` | None — stop *starting* new targets at/after this wall-clock time; an in-flight target finishes |
-| `session_token_budget` | None — session-level token ceiling across the whole run |
+| `session_token_budget` | None — session-level token ceiling across the whole run. Unset means **no** ceiling here; the non-null defaults added for `loop-task-implementer` and `backlog-runner` do not apply to this skill |
 | `output_dir` | `repo_root` — where `CONTRACT_TEST_REPORT.md` is written |
 
 ## Normalization

@@ -26,3 +26,8 @@
 ec2da652d9d631043ee945794738b4dc4ae509a9:scripts/tests/test_shared_redaction.py:stripe-access-token:57
 ec2da652d9d631043ee945794738b4dc4ae509a9:scripts/tests/test_shared_redaction.py:generic-api-key:58
 ec2da652d9d631043ee945794738b4dc4ae509a9:scripts/tests/test_shared_redaction.py:stripe-access-token:58
+# skills/loop-task-implementer tests (PR #287): redaction fixtures for the run log carry made-up credential-shaped
+# strings ("curl -u admin:<made-up>", "token=<made-up>") that the script is tested to mask. The later commit
+# assembles them at run time; the introducing diffs stay in history. Reviewed: synthetic.
+62075ed59e13ef8cf525c8c344b7b2430cf3f6c0:skills/loop-task-implementer/tests/test_packaged_run_log.py:generic-api-key:39
+126edd64a7a63ec92680e0c42d1c1773fbb1e707:skills/loop-task-implementer/tests/test_run_log.py:curl-auth-user:312
