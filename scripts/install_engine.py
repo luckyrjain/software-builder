@@ -397,10 +397,14 @@ def held_lock(
     module's own normal operation: since acquisition is now atomic, it only matters against
     an externally-produced or corrupted lock directory (a manual `mkdir` at that path, a
     lock format from an older version, a directory whose files were partially removed by
-    something other than this module). A pid-less directory is waited on, not treated as
-    stale outright (the old bash lock made the same choice);
-    only a genuinely old one (age > stale_after, via the pid file's timestamp when present,
-    falling back to the lock directory's own mtime when unreadable) is treated as abandoned.
+    something other than this module). A pid-less directory that still has other contents is
+    waited on, not treated as stale outright (the old bash lock made the same choice); only a
+    genuinely old one (age > stale_after, via the pid file's timestamp when present, falling
+    back to the lock directory's own mtime when unreadable) is treated as abandoned. A pid-less
+    *empty* directory is different: this module only ever publishes a lock populated, so an
+    empty one is vacated (an interrupted release) and is removed with `rmdir` -- which cannot
+    take a populated lock -- and the acquire retried. That includes an empty directory somebody
+    else created at that path by hand.
 
     Residual, accepted risk: `_acquire_lock_dir()`'s temp directory (`.{skill}.lock.tmp.*`,
     created via `dest_root`-local `tempfile.mkdtemp`) can be orphaned if the process is

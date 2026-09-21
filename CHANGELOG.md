@@ -76,7 +76,7 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 ### Cosmetic follow-ups: unambiguous failure summary, `sb` outcome streams, Windows CI (2026-09-19)
 
 - `install.sh`'s failure summary joins the failed `skill -> destination` entries with `; ` instead of a
-  bare space, so an entry (or a path containing a space) can be told apart from its neighbours.
+  bare space, so an entry (or a path containing a space) can be told apart from its neighbours (unless an entry itself contains `;`).
 - `sb install`/`sb uninstall` present outcomes exactly as `install_engine.py`'s own CLI does: failures
   as `error: ...` and absences as `warning: ...` on stderr, dry-runs as `dry-run: ...` on stdout.
   Before, every outcome was printed bare on stdout, so a script grepping stderr for failures saw
