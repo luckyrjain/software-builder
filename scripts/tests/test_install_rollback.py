@@ -314,3 +314,39 @@ def test_failure_summary_entries_stay_separable_when_a_path_contains_spaces(tmp_
     assert (
         f"installed: 0, failed: 2 ({skills[0]} → {skills_dir}; {skills[1]} → {skills_dir})"
     ) in result.stderr
+
+
+def _run_install_sh(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["bash", str(ROOT / "scripts" / "install.sh"), *args],
+        cwd=ROOT,
+        env={
+            "HOME": str(home),
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PATH": f"{ROOT / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_an_unknown_option_is_a_usage_error_and_installs_nothing(tmp_path: Path) -> None:
+    """`--dryrun` (a typo) used to be treated as a skill name while the real skills were
+    written for real."""
+    home = tmp_path / "home"
+    result = _run_install_sh(home, "--agent", "cursor", "squad-map", "--dryrun")
+
+    assert result.returncode == 2
+    assert "unknown option '--dryrun'" in result.stderr
+    assert not (home / ".cursor").exists(), "nothing may be written when the command line is invalid"
+
+
+def test_the_equals_form_of_an_option_is_honoured(tmp_path: Path) -> None:
+    """`--agent=cursor` used to be ignored (the agent stayed `all`), writing to every host."""
+    home = tmp_path / "home"
+    result = _run_install_sh(home, "--agent=cursor", "--dry-run", "squad-map")
+
+    assert result.returncode == 0, result.stderr
+    assert "host=cursor" in result.stdout
+    assert "host=claude" not in result.stdout

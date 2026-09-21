@@ -52,15 +52,36 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   application code directly rather than through the Builder/Reviewer loop, so the ADR now names it as a documented
   exception instead of contradicting itself.
 
+### Round-4 review fixes: empty-lock race, SIGHUP, unknown options, leftover sweep (2026-09-21)
+
+- The empty-lock-directory reclaim added on 2026-09-19 (for Windows, whose `rename` will not replace a
+  directory) broke mutual exclusion: every release passes through an empty directory, so reclaiming by
+  rename became a hot path and could rename a lock a third party had just published (the six-process
+  test failed about 5 runs in 8). An empty lock directory is now removed with `rmdir`, which can only
+  ever remove an empty directory.
+- SIGHUP (closed terminal, dropped ssh session) is handled like SIGTERM in the engine and in
+  `install.sh`: it used to kill the process with 129 mid-install and strand a staging directory
+  holding a `SKILL.md`. An ignored SIGHUP (`nohup`) stays ignored.
+- An interrupted `uninstall`'s restore now runs with interrupts deferred; a second signal used to
+  interrupt it and leave the install in the hidden `.removing.*` directory.
+- `.{skill}.removing.*` and `.{skill}.staging.*` leftovers are swept, under the lock, on the next
+  install or uninstall of that skill (never on a dry run). `.backup.*` is deliberately never swept: after
+  a cut-short rollback it can hold the only copy of the user's previous install.
+- `install.sh` rejects an unknown option with exit 2 instead of treating it as a skill name
+  (`--dryrun` used to install the real skills for real), and understands `--opt=value`.
+- A bad `LOCK_WAIT_TIMEOUT_SECONDS`/`LOCK_STALE_SECONDS` value names the variable; `sb` tolerates a
+  stdout without `reconfigure`. An empty skill name is rejected with exit 1, not a usage error as an
+  earlier entry said.
+
 ### Cosmetic follow-ups: unambiguous failure summary, `sb` outcome streams, Windows CI (2026-09-19)
 
 - `install.sh`'s failure summary joins the failed `skill -> destination` entries with `; ` instead of a
-  bare space, so an entry (or a path containing a space) can be told apart from its neighbours.
+  bare space, so an entry (or a path containing a space) can be told apart from its neighbours (unless an entry itself contains `;`).
 - `sb install`/`sb uninstall` present outcomes exactly as `install_engine.py`'s own CLI does: failures
   as `error: ...` and absences as `warning: ...` on stderr, dry-runs as `dry-run: ...` on stdout.
   Before, every outcome was printed bare on stdout, so a script grepping stderr for failures saw
   nothing. `print_outcome` is now a public function of `install_engine`.
-- New `install-engine-windows` CI job runs the install engine's own tests on `windows-latest`, so the
+- New `install-engine-windows` CI job runs the install engine's tests and the `sb` snapshot and CLI suites on `windows-latest`, so the
   Windows-only branches (`is_pid_alive` via ctypes, SIGBREAK, directory-rename semantics) are executed
   at all. The pytest snapshot lock is skipped on Windows.
 

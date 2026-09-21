@@ -97,7 +97,9 @@ def _wait_until_staging(skills_dir: Path, proc: subprocess.Popen[str], timeout: 
     pytest.fail("install never reached staging")
 
 
-@pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGINT], ids=["SIGTERM", "SIGINT"])
+@pytest.mark.parametrize(
+    "sig", [signal.SIGTERM, signal.SIGINT, signal.SIGHUP], ids=["SIGTERM", "SIGINT", "SIGHUP"]
+)
 def test_signal_to_install_sh_alone_reaches_the_engine_and_rolls_back(
     tmp_path: Path, sig: signal.Signals
 ) -> None:

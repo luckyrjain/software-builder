@@ -171,6 +171,12 @@ it was scope discipline for the original porting task, not a standing constraint
     its handler used to read as a plain failure and the run carried on); a script-level trap
     gives a stop outside `run_engine` the same code. `sb install`/`uninstall` report an interrupted
     batch and exit 130 for SIGINT and SIGTERM.
+  - *Round-4 hardening.* The empty-lock removal added for Windows was first a rename-based reclaim, and
+    it broke mutual exclusion (every release passes through an empty directory, so the reclaim became a
+    hot path); it is now an `rmdir`, which cannot remove a populated lock. SIGHUP is a stop signal like
+    SIGTERM (engine and `install.sh`); an ignored one (`nohup`) is left ignored. The uninstall restore is
+    deferred. `.removing.*`/`.staging.*` leftovers are swept under the lock on the next run for that
+    skill; `.backup.*` never is, since it can hold the only copy of a previous install.
   - *Residual (round 3).* `_reclaim_stale_lock()` checks the identity of what it moved, but
     judging, moving and putting back is not one atomic step, so a third holder acquiring in that
     few-microsecond window is displaced. A signal in the couple of bytecodes between the lock
