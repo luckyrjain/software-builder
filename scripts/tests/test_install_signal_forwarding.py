@@ -401,3 +401,35 @@ def test_install_sh_waits_for_the_engine_to_finish_cleaning_up_before_it_exits(t
 
     assert proc.returncode == 130, (stdout, stderr)
     assert cleanup_finished_before_exit, "install.sh exited while the engine was still cleaning up"
+
+
+# install.sh cannot trap its own SIGKILL, so the engine it starts has to notice the death of its
+# parent itself -- but only when install.sh asked it to (a user backgrounding the engine directly
+# has not).
+_FAKE_PYTHON_RECORDS_PARENT_WATCH_ENV = """#!/usr/bin/env bash
+if [[ "$1" == *install_engine.py ]]; then
+  echo "${{INSTALL_ENGINE_EXIT_WITH_PARENT:-unset}}" >> "{log}"
+  exit 0
+fi
+exec "{real}" "$@"
+"""
+
+
+def test_install_sh_asks_the_engine_to_exit_with_its_parent(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "engine.env"
+    fake = bin_dir / "python3"
+    fake.write_text(_FAKE_PYTHON_RECORDS_PARENT_WATCH_ENV.format(real=sys.executable, log=log), encoding="utf-8")
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    env = {**os.environ, "HOME": str(home), "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    env.pop("INSTALL_ENGINE_EXIT_WITH_PARENT", None)
+    proc = _spawn(["bash", str(INSTALLER), "--agent", "cursor", SKILL], env)
+    try:
+        proc.communicate(timeout=60)
+    finally:
+        _reap(proc)
+
+    assert log.read_text(encoding="utf-8").split() == ["1"]

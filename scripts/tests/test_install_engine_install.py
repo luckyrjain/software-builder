@@ -500,3 +500,38 @@ def test_sigterm_while_removing_the_backup_after_a_successful_replace_still_remo
     assert fired
     assert list(dest_root.glob(".demo-skill.*")) == []
     assert (dest_root / "demo-skill" / "SKILL.md").exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="os.kill(pid, SIGTERM) bypasses Python's signal module on Windows")
+def test_a_second_signal_landing_as_the_rollback_starts_cannot_abandon_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, signal_sentinels: object
+) -> None:
+    """Between the first signal ending the work and the rollback's own deferral starting, the
+    process used to be back on the default disposition: a second signal in that gap killed it
+    with the staging directory (holding a SKILL.md) still on disk."""
+    repo = _minimal_repo(tmp_path)
+    dest_root = tmp_path / "dest"
+    seen_stage_dirs: list[Path] = []
+
+    def _first_signal(stage_dir: Path, **_kwargs: object) -> list[str]:
+        seen_stage_dirs.append(stage_dir)
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.sleep(1)
+        return []  # pragma: no cover
+
+    real_cleanup = install_engine._cleanup_failed_install
+
+    def cleanup_after_a_second_signal(*args: object, **kwargs: object) -> None:
+        os.kill(os.getpid(), signal.SIGTERM)  # lands exactly as the rollback begins
+        time.sleep(0.2)
+        real_cleanup(*args, **kwargs)
+
+    monkeypatch.setattr(install_engine, "validate_tree", _first_signal)
+    monkeypatch.setattr(install_engine, "_cleanup_failed_install", cleanup_after_a_second_signal)
+
+    with pytest.raises(SystemExit) as exc_info:
+        install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor")
+
+    assert exc_info.value.code == 130
+    assert seen_stage_dirs and not seen_stage_dirs[0].exists()
+    assert list(dest_root.glob(".demo-skill.*")) == []

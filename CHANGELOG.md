@@ -52,6 +52,28 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   application code directly rather than through the Builder/Reviewer loop, so the ADR now names it as a documented
   exception instead of contradicting itself.
 
+### Residual-risk fixes: self-healing after hard kills, closed signal gap, small nits (2026-09-21)
+
+- **The signal gap is closed.** `_sigterm_as_system_exit()` is now two-phase and also covers SIGINT: the
+  first stop signal raises (KeyboardInterrupt or SystemExit(130)), every later one is absorbed while the
+  block runs, and `install_skill()`'s cleanup handlers now live *inside* the block. Before, a second
+  signal landing between the work ending and the rollback's own deferral starting hit the default
+  disposition and killed the process with a staging directory (holding a `SKILL.md`) still on disk.
+- **Hard kills now self-heal on the next run** (under the lock, never on a dry run): an orphaned
+  `.{skill}.lock.tmp.*` older than 5 minutes is swept; a `.{skill}.backup.*` is restored when the
+  destination is absent (the user's previous install had been displaced and never put back) and
+  discarded only when the destination is a complete software-builder-owned install.
+- If `install.sh` itself is SIGKILLed, the engine it started now notices its parent died and rolls back
+  instead of running on unsupervised (`INSTALL_ENGINE_EXIT_WITH_PARENT=1`, set by `install.sh`; POSIX only,
+  opt-in so a directly backgrounded engine is unaffected).
+- `install.sh`'s failure summary prints one `  failed: <skill> -> <destination>` line per entry, so no
+  separator can be confused with one inside a name or path. An unknown `--agent` exits 2 (a usage error,
+  like `sb install --host bogus`), not 1.
+- `sb uninstall`'s summary counts skills that were not installed (`, not installed: N`).
+- `docs/github-ruleset-main.json` matched a `lint` check that no longer exists; it now lists the checks
+  the live ruleset requires (`lint-static`, `lint-suites`), so `make verify-github-ruleset` passes again.
+  `install-macos` and `install-engine-windows` stay advisory on purpose (documented there).
+
 ### Round-4 review fixes: empty-lock race, SIGHUP, unknown options, leftover sweep (2026-09-21)
 
 - The empty-lock-directory reclaim added on 2026-09-19 (for Windows, whose `rename` will not replace a

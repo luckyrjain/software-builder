@@ -49,6 +49,9 @@ from scripts.validate_references import validate_tree
 DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS = 30.0
 DEFAULT_LOCK_STALE_SECONDS = 300.0
 _LOCK_POLL_INTERVAL_SECONDS = 1.0
+_ORPHAN_LOCK_TMP_MIN_AGE_SECONDS = 300.0
+_EXIT_WITH_PARENT_ENV = "INSTALL_ENGINE_EXIT_WITH_PARENT"
+_PARENT_POLL_SECONDS = 0.5
 
 
 class LockTimeoutError(RuntimeError):
@@ -270,26 +273,43 @@ def _stop_signals() -> list[int]:
 
 @contextmanager
 def _sigterm_as_system_exit() -> Iterator[None]:
-    """Converts a graceful-terminate signal into a catchable SystemExit for the duration of
-    the block, so it reaches the same cleanup path SIGINT does. Python's
-    default disposition for that signal terminates the process immediately, bypassing
-    try/finally -- unlike SIGINT, which Python already converts to a catchable
-    KeyboardInterrupt -- so a supervisor kill or CI timeout would otherwise skip
-    install_skill()'s own (KeyboardInterrupt, SystemExit) cleanup handler entirely.
+    """Turns the first stop signal (SIGINT, SIGTERM, SIGHUP; SIGBREAK on Windows) into an
+    exception -- KeyboardInterrupt for SIGINT, SystemExit(130) for the rest -- so it reaches the
+    caller's cleanup handler. Python's default disposition for the terminate signals kills the
+    process at once, bypassing try/finally, so a supervisor kill or CI timeout would otherwise
+    skip install_skill()'s own cleanup entirely.
 
-    For the primary mutating work, where interrupting it partway *is* the point. For cleanup
-    that must instead run to completion, see `_defer_interrupts()`.
+    Two-phase on purpose: once the first signal has fired, every later one is *absorbed* for the
+    rest of the block, not raised. The block is meant to contain the caller's cleanup handler as
+    well as the work it guards, so a second, closely-timed signal can neither interrupt that
+    cleanup nor land in the gap between leaving the work and entering a separate deferral (the
+    handler stays installed the whole time; the process is already exiting 130). For cleanup that
+    runs after the block, see `_defer_interrupts()`.
     """
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    stopping = False
+
+    def _on_stop(signum: int, frame: object) -> None:
+        nonlocal stopping
+        if stopping:
+            return
+        stopping = True
+        if signum == signal.SIGINT:
+            raise KeyboardInterrupt
+        sys.exit(130)
+
     previous: dict[int, object] = {}
     try:
-        for sig in _stop_signals():
+        for sig in [signal.SIGINT, *_stop_signals()]:
             handler = signal.getsignal(sig)
             if handler == signal.SIG_IGN:
                 # An ignored signal (nohup, an async child of a non-interactive shell) is the
                 # caller's explicit choice; converting it into an abort would override that.
                 continue
             previous[sig] = handler
-            signal.signal(sig, lambda signum, frame: sys.exit(130))
+            signal.signal(sig, _on_stop)
         yield
     finally:
         for sig, handler in previous.items():
@@ -406,13 +426,10 @@ def held_lock(
     take a populated lock -- and the acquire retried. That includes an empty directory somebody
     else created at that path by hand.
 
-    Residual, accepted risk: `_acquire_lock_dir()`'s temp directory (`.{skill}.lock.tmp.*`,
-    created via `dest_root`-local `tempfile.mkdtemp`) can be orphaned if the process is
-    killed (SIGKILL, power loss -- nothing short of that; ordinary SIGTERM/SIGINT/exceptions
-    are all handled) between creating it and the rename that either publishes or discards it.
-    Nothing sweeps a stray `.tmp.*` directory later, the same accepted gap this module already
-    has for `install_skill()`'s `.{skill}.staging.*`/`.{skill}.backup.*` directories under an
-    equivalent hard-kill window (see docs/adr/0007-shared-install-engine.md).
+    A hard kill (SIGKILL, power loss) between `_acquire_lock_dir()`'s `mkdtemp` and its rename can
+    orphan a `.{skill}.lock.tmp.*` directory; the next install or uninstall of that skill sweeps
+    it once it is older than any acquire could be (`_sweep_leftovers`), the same way it sweeps
+    `.staging.*`/`.removing.*` and restores or discards `.backup.*` (`_recover_leftover_backups`).
 
     Also accepted: `_reclaim_stale_lock()` checks the identity of the directory it moved, but
     has no way to make judging, moving and (if it was not the stale one) putting back a single
@@ -481,21 +498,67 @@ def held_lock(
                 shutil.rmtree(lock_dir, ignore_errors=True)
 
 
+def _recover_leftover_backups(dest_root: Path, skill: str, skill_dest: Path) -> None:
+    """Undo what a hard kill (SIGKILL, power loss) left half-done, under the lock.
+
+    A `.{skill}.backup.*` directory is the previous install, moved aside while its replacement was
+    put in place. If the process died before the rollback or the final cleanup ran, either:
+    - the destination is absent -> the previous install was displaced and never restored: put it
+      back (otherwise the user's skill has silently vanished); or
+    - the destination is a complete software-builder-owned install -> the replacement finished
+      (`os.replace` is atomic) and the backup is just an old copy: delete it.
+    Anything else (an unowned or symlinked destination, an unreadable backup) is left alone --
+    a backup is never discarded unless the install it protects is demonstrably in place."""
+    prefix = f".{skill}.backup."
+    try:
+        entries = [e for e in os.scandir(dest_root) if e.name.startswith(prefix) and e.is_dir(follow_symlinks=False)]
+    except OSError:
+        return
+    for entry in entries:
+        previous = Path(entry.path) / "skill"
+        try:
+            if not skill_dest.exists() and not skill_dest.is_symlink():
+                if previous.is_dir():
+                    os.replace(previous, skill_dest)
+                    print(f"warning: restored the previous install of {skill} at {skill_dest} "
+                          "after an interrupted replacement", file=sys.stderr)
+                    shutil.rmtree(entry.path, ignore_errors=True)
+            elif classify_install_destination(skill_dest, skill_id=skill) == OWNERSHIP_SOFTWARE_BUILDER_OWNED:
+                shutil.rmtree(entry.path, ignore_errors=True)
+        except OSError:
+            continue
+
+
 def _sweep_leftovers(dest_root: Path, skill: str) -> None:
-    """Delete this skill's `.{skill}.removing.*` and `.{skill}.staging.*` directories. Called
+    """Delete this skill's `.{skill}.removing.*` and `.{skill}.staging.*` directories (and any
+    `.{skill}.lock.tmp.*` orphaned for over `_ORPHAN_LOCK_TMP_MIN_AGE_SECONDS`). Called
     with the lock held, so no other run can own one. Both are garbage by construction -- the
     skill was already uninstalled, or the staged copy never went live -- and were previously
     orphaned by a failed deletion or a hard kill and never swept. `.backup.*` is deliberately
-    NOT swept: after a rollback cut short it can hold the only copy of the user's previous
-    install. Matched by prefix, not glob, since a skill id may contain glob characters."""
+    NOT swept here: after a rollback cut short it can hold the only copy of the user's previous
+    install (see `_recover_leftover_backups`, which restores or discards it only when safe). Matched by prefix, not glob, since a skill id may contain glob characters."""
     prefixes = (f".{skill}.removing.", f".{skill}.staging.")
+    lock_tmp_prefix = f".{skill}.lock.tmp."
     try:
         entries = list(os.scandir(dest_root))
     except OSError:
         return
+    now = time.time()
     for entry in entries:
-        if entry.name.startswith(prefixes) and entry.is_dir(follow_symlinks=False):
+        if not entry.is_dir(follow_symlinks=False):
+            continue
+        if entry.name.startswith(prefixes):
             shutil.rmtree(entry.path, ignore_errors=True)
+        elif entry.name.startswith(lock_tmp_prefix):
+            # `_acquire_lock_dir()`'s temp directory exists for microseconds -- but it is made
+            # *before* the lock is held, so this sweep cannot know its owner; only one older than
+            # any plausible acquire is an orphan (a hard kill between mkdtemp and the rename).
+            try:
+                age = now - entry.stat(follow_symlinks=False).st_mtime
+            except OSError:
+                continue
+            if age > _ORPHAN_LOCK_TMP_MIN_AGE_SECONDS:
+                shutil.rmtree(entry.path, ignore_errors=True)
 
 
 _BLOCKING_OWNERSHIP_STATES = frozenset(
@@ -608,12 +671,13 @@ def install_skill(
         dest_root.mkdir(parents=True, exist_ok=True)
         with held_lock(dest_root, skill_id, wait_timeout=wait_timeout, stale_after=stale_after):
             _sweep_leftovers(dest_root, skill_id)
+            _recover_leftover_backups(dest_root, skill_id, skill_dest)
             stage_dir: Path | None = None
             backup_dir: Path | None = None
-            try:
-                # SIGTERM (a supervisor kill, CI timeout) must reach the same cleanup path as
-                # SIGINT/KeyboardInterrupt below -- Python has no built-in conversion for it.
-                with _sigterm_as_system_exit():
+            # SIGTERM (a supervisor kill, CI timeout) must reach the same cleanup path as
+            # SIGINT/KeyboardInterrupt below -- Python has no built-in conversion for it.
+            with _sigterm_as_system_exit():
+                try:
                     stage_dir = Path(tempfile.mkdtemp(dir=dest_root, prefix=f".{skill_id}.staging."))
                     package_skill(skill=skill_id, repo_root=repo_root, dest=stage_dir, host=host_label)
 
@@ -645,27 +709,27 @@ def install_skill(
 
                     os.replace(stage_dir, skill_dest)
                     stage_dir = None  # now living at skill_dest; nothing left to clean up on success
-            except (KeyboardInterrupt, SystemExit):
-                # An interrupt terminates the whole run (exit 130) rather than falling through
-                # to per-skill failure bookkeeping the way an ordinary validation failure does
-                # (which returns 1 and lets a multi-skill loop continue to the next skill).
-                # Re-raising after cleanup propagates it out through this `with held_lock(...)` block --
-                # whose own `finally` still releases the lock on the way out, same as any other
-                # exit path -- instead of being swallowed into a normal InstallOutcome that a
-                # future multi-skill caller could mistake for just one more failed skill.
-                try:
+                except (KeyboardInterrupt, SystemExit):
+                    # An interrupt terminates the whole run (exit 130) rather than falling through
+                    # to per-skill failure bookkeeping the way an ordinary validation failure does
+                    # (which returns 1 and lets a multi-skill loop continue to the next skill).
+                    # Re-raising after cleanup propagates it out through this `with held_lock(...)` block --
+                    # whose own `finally` still releases the lock on the way out, same as any other
+                    # exit path -- instead of being swallowed into a normal InstallOutcome that a
+                    # future multi-skill caller could mistake for just one more failed skill.
+                    try:
+                        _cleanup_failed_install(stage_dir, backup_dir, skill_dest)
+                    except Exception as cleanup_exc:
+                        # Best-effort: the interrupt is what must propagate. Letting an OSError
+                        # from a failed rollback escape here would reach the outer
+                        # `except (LockTimeoutError, OSError)`, turn into a "failed" outcome, and
+                        # let a multi-skill run carry on after being told to stop.
+                        print(f"warning: cleanup after interrupt failed: {cleanup_exc}", file=sys.stderr)
+                    raise
+                except Exception as exc:
                     _cleanup_failed_install(stage_dir, backup_dir, skill_dest)
-                except Exception as cleanup_exc:
-                    # Best-effort: the interrupt is what must propagate. Letting an OSError
-                    # from a failed rollback escape here would reach the outer
-                    # `except (LockTimeoutError, OSError)`, turn into a "failed" outcome, and
-                    # let a multi-skill run carry on after being told to stop.
-                    print(f"warning: cleanup after interrupt failed: {cleanup_exc}", file=sys.stderr)
-                raise
-            except Exception as exc:
-                _cleanup_failed_install(stage_dir, backup_dir, skill_dest)
-                message = str(exc) if str(exc) else f"{type(exc).__name__} during install"
-                return InstallOutcome(skill_id, skill_dest, "failed", message)
+                    message = str(exc) if str(exc) else f"{type(exc).__name__} during install"
+                    return InstallOutcome(skill_id, skill_dest, "failed", message)
 
             if backup_dir is not None:
                 with _defer_interrupts():
@@ -721,6 +785,7 @@ def uninstall_skill(
         with held_lock(dest_root, skill_id, wait_timeout=wait_timeout, stale_after=stale_after):
             if not dry_run:  # a dry run changes nothing
                 _sweep_leftovers(dest_root, skill_id)
+                _recover_leftover_backups(dest_root, skill_id, skill_dest)
             classification = classify_install_destination(skill_dest, skill_id=skill_id)
             if classification == OWNERSHIP_ABSENT:
                 return UninstallOutcome(skill_id, skill_dest, "absent", f"not installed: {skill_dest}")
@@ -823,6 +888,27 @@ def _lock_timing_from_env() -> tuple[float, float]:
     return wait_timeout, stale_after
 
 
+def _start_parent_watch(poll_seconds: float = _PARENT_POLL_SECONDS) -> None:
+    """Stop this process (SIGTERM to itself, so the normal rollback runs) once its parent has
+    died. `install.sh` runs the engine as a child; if bash is SIGKILLed the engine is reparented
+    to init and used to carry on to completion unsupervised, holding the lock. Opt-in
+    (`INSTALL_ENGINE_EXIT_WITH_PARENT=1`, which install.sh sets) because a user who backgrounds
+    the engine directly and closes their shell has not asked for it to be stopped. POSIX only:
+    Windows has no reparenting to detect."""
+    if sys.platform == "win32":
+        return
+    parent = os.getppid()
+
+    def _watch() -> None:
+        while True:
+            time.sleep(poll_seconds)
+            if os.getppid() != parent:
+                os.kill(os.getpid(), signal.SIGTERM)
+                return
+
+    threading.Thread(target=_watch, name="install-engine-parent-watch", daemon=True).start()
+
+
 def _cli_install(args: argparse.Namespace) -> int:
     wait_timeout, stale_after = _lock_timing_from_env()
     try:
@@ -895,6 +981,8 @@ def main(argv: list[str] | None = None) -> int:
     uninstall_parser.set_defaults(func=_cli_uninstall)
 
     args = parser.parse_args(argv)
+    if os.environ.get(_EXIT_WITH_PARENT_ENV) == "1":
+        _start_parent_watch()
     try:
         return args.func(args)
     except Exception as exc:

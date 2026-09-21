@@ -137,3 +137,25 @@ def test_run_batch_turns_a_terminate_signal_between_skills_into_exit_130(
         signal.signal(signal.SIGTERM, previous)
     assert code == 130
     assert "interrupted:" in capsys.readouterr().err
+
+
+def test_run_batch_summary_counts_skills_that_were_not_installed(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def operation(skill_id: str, dest_root: Path, host_label: str) -> _FakeOutcome:
+        status = "absent" if skill_id == "b" else "uninstalled"
+        return _FakeOutcome(skill_id, dest_root, status, f"{status} {skill_id}")
+
+    code = sb_main._run_batch(
+        ["a", "b", "c"],
+        [(Path("/dest"), "cursor")],
+        operation,
+        dry_run=False,
+        verb="uninstall",
+        past_tense="uninstalled",
+        success_status="uninstalled",
+        extra_ok_statuses=frozenset({"absent"}),
+    )
+
+    assert code == 0
+    assert "uninstalled: 2, failed: 0, not installed: 1" in capsys.readouterr().err
