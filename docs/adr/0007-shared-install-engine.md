@@ -186,6 +186,10 @@ it was scope discipline for the original porting task, not a standing constraint
     swept. A SIGKILLed `install.sh` no longer leaves the engine running: the engine polls its parent and
     stops itself (opt-in via `INSTALL_ENGINE_EXIT_WITH_PARENT`, set by `install.sh`). What remains is
     inherent: the process is gone until the next run cleans up, and the lock reclaim window below.
+  - *Data-safety fixes.* Leftover matching is exact (`.<skill>.<kind>.<8 mkdtemp chars>`), not by prefix, and
+    the backup recovery verifies the backup's manifest names the skill and restores the newest first;
+    the earlier prefix matching could delete or misplace a user's lookalike directory or a sibling skill's
+    working directories. `uninstall --dry-run` is fully read-only.
   - *Residual (round 3).* `_reclaim_stale_lock()` checks the identity of what it moved, but
     judging, moving and putting back is not one atomic step, so a third holder acquiring in that
     few-microsecond window is displaced. A signal in the couple of bytecodes between the lock
