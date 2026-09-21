@@ -124,8 +124,10 @@ jobs:
     # The install engine has Windows-specific branches (is_pid_alive via ctypes, SIGBREAK as the
     # terminate signal, directory-rename semantics) that ubuntu and macOS never execute. `sb` is
     # the Windows install path, so its snapshot build and CLI suites run here too. install.sh is
-    # exercised under Git Bash (the README supports it natively on macOS, Linux and WSL; this is
-    # the closest thing to a Windows-native run and catches path/CRLF/python3-lookup problems).
+    # deliberately not run: the README supports it on macOS, Linux and WSL only, and under Git
+    # Bash it does not work (Python's stdout uses CRLF, so `read`/`$(...)` results carry a stray \r
+    # and agent names stop matching; the engine prints Windows paths where the bash tests expect
+    # POSIX ones). WSL is Linux, which the ubuntu jobs exercise.
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -155,18 +157,3 @@ jobs:
       - name: sb CLI tests
         working-directory: cli
         run: python -m pytest -q -p no:cacheprovider tests
-
-      - name: install.sh under Git Bash
-        shell: bash
-        run: |
-          # install.sh calls `python3`; make sure one resolves to a working interpreter rather
-          # than assuming the runner image provides it (a WindowsApps alias stub would satisfy
-          # `command -v` but not run).
-          if ! python3 -c 'import sys' >/dev/null 2>&1; then
-            py_dir="$(dirname "$(command -v python)")"
-            cp "${py_dir}/python.exe" "${py_dir}/python3.exe"
-          fi
-          python -m pytest -q -p no:cacheprovider \
-            scripts/tests/test_install_legacy_golden.py \
-            scripts/tests/test_install_rollback.py \
-            scripts/tests/test_install_safety.py

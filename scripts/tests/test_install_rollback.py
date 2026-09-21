@@ -7,7 +7,6 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from scripts.tests.bash_exe import BASH
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -97,7 +96,7 @@ broken-skill:
     (dest / ".software-builder-manifest.json").write_text('{"skill": "broken-skill"}', encoding="utf-8")
 
     result = subprocess.run(
-        [BASH, str(repo / "scripts" / "install.sh"), "--agent", "cursor", "broken-skill"],
+        ["bash", str(repo / "scripts" / "install.sh"), "--agent", "cursor", "broken-skill"],
         cwd=repo,
         env={
             "HOME": str(home),
@@ -109,7 +108,7 @@ broken-skill:
             # system python3 that doesn't have this repo's dependencies (PyYAML)
             # installed, so install.sh fails with ModuleNotFoundError before
             # ever reaching the behavior under test.
-            "PATH": os.pathsep.join([str(ROOT / '.venv' / 'bin'), os.environ.get('PATH', '')]),
+            "PATH": f"{ROOT / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
         },
         capture_output=True,
         text=True,
@@ -137,7 +136,7 @@ def test_install_list_does_not_write_skills(tmp_path: Path) -> None:
     shutil.copytree(ROOT / "docs" / "skill-framework", repo / "docs" / "skill-framework")
 
     result = subprocess.run(
-        [BASH, str(repo / "scripts" / "install.sh"), "--list"],
+        ["bash", str(repo / "scripts" / "install.sh"), "--list"],
         cwd=repo,
         env={
             "HOME": str(home),
@@ -149,7 +148,7 @@ def test_install_list_does_not_write_skills(tmp_path: Path) -> None:
             # system python3 that doesn't have this repo's dependencies (PyYAML)
             # installed, so install.sh fails with ModuleNotFoundError before
             # ever reaching the behavior under test.
-            "PATH": os.pathsep.join([str(ROOT / '.venv' / 'bin'), os.environ.get('PATH', '')]),
+            "PATH": f"{ROOT / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
         },
         capture_output=True,
         text=True,
@@ -215,12 +214,12 @@ def test_multi_skill_run_continues_past_a_failure_and_reports_a_summary(tmp_path
     (blocked / "README.md").write_text("not ours", encoding="utf-8")
 
     result = subprocess.run(
-        [BASH, str(ROOT / "scripts" / "install.sh"), "--agent", "cursor", *skills],
+        ["bash", str(ROOT / "scripts" / "install.sh"), "--agent", "cursor", *skills],
         cwd=ROOT,
         env={
             "HOME": str(home),
             "PYTHONDONTWRITEBYTECODE": "1",
-            "PATH": os.pathsep.join([str(ROOT / '.venv' / 'bin'), os.environ.get('PATH', '')]),
+            "PATH": f"{ROOT / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
         },
         capture_output=True,
         text=True,
@@ -246,11 +245,11 @@ def test_multi_skill_uninstall_continues_past_a_failure_and_reports_a_summary(
     env = {
         "HOME": str(home),
         "PYTHONDONTWRITEBYTECODE": "1",
-        "PATH": os.pathsep.join([str(ROOT / '.venv' / 'bin'), os.environ.get('PATH', '')]),
+        "PATH": f"{ROOT / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
     }
 
     install = subprocess.run(
-        [BASH, str(ROOT / "scripts" / "install.sh"), "--agent", "cursor", *skills],
+        ["bash", str(ROOT / "scripts" / "install.sh"), "--agent", "cursor", *skills],
         cwd=ROOT,
         env=env,
         capture_output=True,
@@ -265,7 +264,7 @@ def test_multi_skill_uninstall_continues_past_a_failure_and_reports_a_summary(
 
     result = subprocess.run(
         [
-            BASH,
+            "bash",
             str(ROOT / "scripts" / "install.sh"),
             "--agent",
             "cursor",
@@ -298,12 +297,12 @@ def test_failure_summary_entries_stay_separable_when_a_path_contains_spaces(tmp_
         (blocked / "README.md").write_text("not ours", encoding="utf-8")
 
     result = subprocess.run(
-        [BASH, str(ROOT / "scripts" / "install.sh"), "--agent", "cursor", *skills],
+        ["bash", str(ROOT / "scripts" / "install.sh"), "--agent", "cursor", *skills],
         cwd=ROOT,
         env={
             "HOME": str(home),
             "PYTHONDONTWRITEBYTECODE": "1",
-            "PATH": os.pathsep.join([str(ROOT / '.venv' / 'bin'), os.environ.get('PATH', '')]),
+            "PATH": f"{ROOT / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
         },
         capture_output=True,
         text=True,

@@ -18,7 +18,6 @@ from pathlib import Path
 
 from scripts.install_support import registry_skill_ids
 from scripts.reference_utils import MANIFEST_NAME
-from scripts.tests.bash_exe import BASH
 
 ROOT = Path(__file__).resolve().parents[2]
 INSTALLER = ROOT / "scripts" / "install.sh"
@@ -26,9 +25,9 @@ INSTALLER = ROOT / "scripts" / "install.sh"
 
 def run_installer(*args: str, home: Path) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
-    env.update({"HOME": str(home), "PATH": os.pathsep.join([str(ROOT / '.venv' / 'bin'), env['PATH']])})
+    env.update({"HOME": str(home), "PATH": f"{ROOT / '.venv' / 'bin'}:{env['PATH']}"})
     return subprocess.run(
-        [BASH, str(INSTALLER), *args],
+        ["bash", str(INSTALLER), *args],
         cwd=ROOT,
         env=env,
         capture_output=True,
@@ -236,7 +235,7 @@ def test_legacy_install_aborts_loudly_when_destination_resolution_fails(tmp_path
     env = os.environ.copy()
     env.update({"HOME": str(home), "PYTHONPATH": str(repo)})
     result = subprocess.run(
-        [BASH, str(repo / "scripts" / "install.sh"), "--agent", "cursor", "pr-review"],
+        ["bash", str(repo / "scripts" / "install.sh"), "--agent", "cursor", "pr-review"],
         cwd=repo,
         env=env,
         capture_output=True,
