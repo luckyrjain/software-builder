@@ -3,10 +3,10 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-# A stop request (TERM, or INT where it is not already ignored) outside run_engine -- during a
+# A stop request (TERM or HUP, or INT where it is not already ignored) outside run_engine -- during a
 # read-only probe, or between skills -- exits 130 like one inside it, instead of dying with
 # bash's default 143 depending on which instant it landed.
-trap 'exit 130' TERM INT
+trap 'exit 130' TERM INT HUP
 
 run_python() {
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${REPO_ROOT}" python3 "$@"
@@ -23,7 +23,7 @@ run_engine() {
   local engine_pid="" status=0 interrupted=false
   # Installed before the engine starts so a signal in the gap can't orphan it; the flag makes
   # a signal that beats the launch still stop the run once the engine is up.
-  trap 'interrupted=true; if [[ -n "${engine_pid}" ]]; then kill -TERM "${engine_pid}" 2>/dev/null || true; fi' TERM INT
+  trap 'interrupted=true; if [[ -n "${engine_pid}" ]]; then kill -TERM "${engine_pid}" 2>/dev/null || true; fi' TERM INT HUP
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${REPO_ROOT}" python3 "$@" &
   engine_pid=$!
   if [[ "${interrupted}" == true ]]; then
@@ -39,7 +39,7 @@ run_engine() {
     sleep 0.05
   done
   if wait "${engine_pid}"; then status=0; else status=$?; fi
-  trap 'exit 130' TERM INT
+  trap 'exit 130' TERM INT HUP
   # A stop request must stop the run whatever the engine reported: it can finish cleanly first
   # (0), or die from the forwarded TERM before it installed its own handler (143) -- either
   # would otherwise read as an ordinary result, and the loop would carry on to the next skill.
@@ -123,9 +123,21 @@ while [[ $# -gt 0 ]]; do
     SKILLS+=("$2")
     shift 2
     ;;
+  --agent=* | --target-dir=* | --verify=* | --uninstall=*)
+    # `--opt=value` is split into `--opt value` and re-parsed; without this it fell through to
+    # the skill-name arm below and, e.g., `--agent=cursor` was silently ignored (installing to
+    # every host).
+    set -- "${1%%=*}" "${1#*=}" "${@:2}"
+    ;;
   -h | --help)
     usage
     exit 0
+    ;;
+  -*)
+    # An unknown option must not become a skill name: `--dryrun` used to be installed-around
+    # as a "skill" while the real skills were written for real.
+    echo "error: unknown option '$1' (see --help)" >&2
+    exit 2
     ;;
   *)
     SKILLS+=("$1")

@@ -133,6 +133,18 @@ def _is_empty_dir(path: Path) -> bool:
         return False
 
 
+def _remove_empty_dir(path: Path) -> bool:
+    """True if `path` was removed or is already gone; False if it could not be (in particular
+    when it is no longer empty)."""
+    try:
+        path.rmdir()
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
 def _parse_lock_pid(raw: str | None) -> int | None:
     try:
         return int(raw) if raw is not None else None
@@ -241,6 +253,21 @@ def _terminate_signal() -> int | None:
     return signal.SIGTERM
 
 
+def _stop_signals() -> list[int]:
+    """Every signal that means "stop": the graceful-terminate signal, plus SIGHUP on POSIX (a
+    closed terminal or dropped ssh session). Left at its default, SIGHUP killed the process
+    with 129 mid-install and stranded a staging directory holding a SKILL.md. Empty off the main
+    thread, where no handler can be installed."""
+    stop = []
+    terminate = _terminate_signal()
+    if terminate is not None:
+        stop.append(terminate)
+        hangup = getattr(signal, "SIGHUP", None)
+        if hangup is not None:
+            stop.append(hangup)
+    return stop
+
+
 @contextmanager
 def _sigterm_as_system_exit() -> Iterator[None]:
     """Converts a graceful-terminate signal into a catchable SystemExit for the duration of
@@ -253,26 +280,25 @@ def _sigterm_as_system_exit() -> Iterator[None]:
     For the primary mutating work, where interrupting it partway *is* the point. For cleanup
     that must instead run to completion, see `_defer_interrupts()`.
     """
-    sig = _terminate_signal()
-    if sig is None:
-        yield
-        return
-    previous_handler = signal.getsignal(sig)
-    if previous_handler == signal.SIG_IGN:
-        # An ignored signal (nohup, an async child of a non-interactive shell) is the
-        # caller's explicit choice; converting it into an abort would override that.
-        yield
-        return
+    previous: dict[int, object] = {}
     try:
-        signal.signal(sig, lambda signum, frame: sys.exit(130))
+        for sig in _stop_signals():
+            handler = signal.getsignal(sig)
+            if handler == signal.SIG_IGN:
+                # An ignored signal (nohup, an async child of a non-interactive shell) is the
+                # caller's explicit choice; converting it into an abort would override that.
+                continue
+            previous[sig] = handler
+            signal.signal(sig, lambda signum, frame: sys.exit(130))
         yield
     finally:
-        # getsignal() returns None when the previous handler was installed outside Python's
-        # signal module (e.g. by native/embedding-host code) -- there's no handler value to
-        # hand back to signal.signal() in that case, and passing None raises TypeError, which
-        # would mask whatever exception is already propagating through here.
-        if previous_handler is not None:
-            signal.signal(sig, previous_handler)
+        for sig, handler in previous.items():
+            # getsignal() returns None when the previous handler was installed outside Python's
+            # signal module (e.g. by native/embedding-host code) -- there's no handler value to
+            # hand back to signal.signal() in that case, and passing None raises TypeError,
+            # which would mask whatever exception is already propagating through here.
+            if handler is not None:
+                signal.signal(sig, handler)  # type: ignore[arg-type]
 
 
 @contextmanager
@@ -301,10 +327,7 @@ def _defer_interrupts() -> Iterator[None]:
     if threading.current_thread() is not threading.main_thread():
         yield
         return
-    sigs = [signal.SIGINT]
-    terminate = _terminate_signal()
-    if terminate is not None:
-        sigs.append(terminate)
+    sigs = [signal.SIGINT, *_stop_signals()]
     received = False
     failure: BaseException | None = None
 
@@ -409,8 +432,12 @@ def held_lock(
                     # A lock is only ever published fully populated, so an empty directory is a
                     # vacated one (an interrupted release). POSIX's rename absorbs it on the next
                     # acquire; Windows' refuses to rename onto any existing directory, so it
-                    # would otherwise be waited on until it aged out.
-                    is_stale = True
+                    # would otherwise be waited on until it aged out. `rmdir`, not a reclaim
+                    # rename: it can only ever remove an EMPTY directory, so it cannot take a
+                    # live lock a third party has just published there (a rename-based reclaim
+                    # of a directory every release passes through made exactly that race hot).
+                    if _remove_empty_dir(lock_dir):
+                        continue
                 if not is_stale:
                     age = _parse_lock_age(identity[1])
                     if age is None:
@@ -448,6 +475,23 @@ def held_lock(
             # reclaimed by the next waiter -- but there's no reason to leave one behind.)
             with _defer_interrupts():
                 shutil.rmtree(lock_dir, ignore_errors=True)
+
+
+def _sweep_leftovers(dest_root: Path, skill: str) -> None:
+    """Delete this skill's `.{skill}.removing.*` and `.{skill}.staging.*` directories. Called
+    with the lock held, so no other run can own one. Both are garbage by construction -- the
+    skill was already uninstalled, or the staged copy never went live -- and were previously
+    orphaned by a failed deletion or a hard kill and never swept. `.backup.*` is deliberately
+    NOT swept: after a rollback cut short it can hold the only copy of the user's previous
+    install. Matched by prefix, not glob, since a skill id may contain glob characters."""
+    prefixes = (f".{skill}.removing.", f".{skill}.staging.")
+    try:
+        entries = list(os.scandir(dest_root))
+    except OSError:
+        return
+    for entry in entries:
+        if entry.name.startswith(prefixes) and entry.is_dir(follow_symlinks=False):
+            shutil.rmtree(entry.path, ignore_errors=True)
 
 
 _BLOCKING_OWNERSHIP_STATES = frozenset(
@@ -559,6 +603,7 @@ def install_skill(
     try:
         dest_root.mkdir(parents=True, exist_ok=True)
         with held_lock(dest_root, skill_id, wait_timeout=wait_timeout, stale_after=stale_after):
+            _sweep_leftovers(dest_root, skill_id)
             stage_dir: Path | None = None
             backup_dir: Path | None = None
             try:
@@ -670,6 +715,8 @@ def uninstall_skill(
     try:
         dest_root.mkdir(parents=True, exist_ok=True)
         with held_lock(dest_root, skill_id, wait_timeout=wait_timeout, stale_after=stale_after):
+            if not dry_run:  # a dry run changes nothing
+                _sweep_leftovers(dest_root, skill_id)
             classification = classify_install_destination(skill_dest, skill_id=skill_id)
             if classification == OWNERSHIP_ABSENT:
                 return UninstallOutcome(skill_id, skill_dest, "absent", f"not installed: {skill_dest}")
@@ -693,9 +740,12 @@ def uninstall_skill(
                         os.replace(skill_dest, removing_dir / "skill")
                     except BaseException:
                         if removing_dir is not None:
-                            if (removing_dir / "skill").exists() and not skill_dest.exists():
-                                os.replace(removing_dir / "skill", skill_dest)
-                            shutil.rmtree(removing_dir, ignore_errors=True)
+                            # Deferred: a second signal here would otherwise interrupt the
+                            # restore itself and strand the install in the hidden directory.
+                            with _defer_interrupts():
+                                if (removing_dir / "skill").exists() and not skill_dest.exists():
+                                    os.replace(removing_dir / "skill", skill_dest)
+                                shutil.rmtree(removing_dir, ignore_errors=True)
                         raise
                 # The skill is gone from its destination; finishing the deletion of what was
                 # moved aside must not be abandoned by a second signal (nothing sweeps it).
@@ -746,7 +796,12 @@ def _env_float(name: str, default: float) -> float:
     # `${VAR:-default}` semantics, which the old bash lock used for these two env vars), rather
     # than failing float() with an empty string.
     value = os.environ.get(name, "")
-    return float(value) if value else default
+    if not value:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        raise ValueError(f"{name} must be a number, got {value!r}") from None
 
 
 def _lock_timing_from_env() -> tuple[float, float]:

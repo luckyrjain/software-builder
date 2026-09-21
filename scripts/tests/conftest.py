@@ -88,10 +88,17 @@ def signal_sentinels():
     def _sigint_reached_default(signum, frame):
         raise AssertionError("SIGINT reached the default disposition -- protection missing")
 
+    def _sighup_reached_default(signum, frame):
+        raise AssertionError("SIGHUP reached the default disposition -- protection missing")
+
     previous_int = signal.signal(signal.SIGINT, _sigint_reached_default)
     previous_term = signal.signal(signal.SIGTERM, _sigterm_reached_default)
+    hangup = getattr(signal, "SIGHUP", None)
+    previous_hup = signal.signal(hangup, _sighup_reached_default) if hangup is not None else None
     try:
         yield _sigint_reached_default, _sigterm_reached_default
     finally:
         signal.signal(signal.SIGINT, previous_int)
         signal.signal(signal.SIGTERM, previous_term)
+        if hangup is not None:
+            signal.signal(hangup, previous_hup)

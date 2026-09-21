@@ -121,11 +121,8 @@ def test_empty_leftover_lock_dir_is_claimed_immediately_via_atomic_rename(
     with held_lock(tmp_path, "demo-skill", wait_timeout=20.0):
         elapsed = time.monotonic() - start
     assert elapsed < 2.0  # claimed immediately, not waited on
-    if sys.platform == "win32":
-        # Windows refuses to rename onto an existing directory, so the empty one is reclaimed.
-        assert reclaim_calls == [lock_dir]
-    else:
-        assert reclaim_calls == []  # no reclaim needed -- the rename absorbed it directly
+    # POSIX absorbs it in the rename; Windows removes it with rmdir. Neither is a reclaim rename.
+    assert reclaim_calls == []
 
 
 def test_acquire_lock_dir_treats_a_resolved_rename_conflict_as_contention_not_a_crash(
