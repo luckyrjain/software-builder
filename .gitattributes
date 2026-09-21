@@ -7,3 +7,14 @@
 # the rest of contracts:). Marking the whole file generated would hide genuine hand-edits from review.
 scripts/registry/composition_runtime.yaml linguist-generated=true
 scripts/registry/composition_contracts.yaml linguist-generated=true
+
+# Checked out with LF on every platform. On Windows the default (autocrlf) would give scripts/install.sh
+# CRLF line endings, which bash rejects (`set: pipefail: invalid option name`), and would change the bytes
+# hashed by the install manifests and golden comparisons.
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.txt text eol=lf

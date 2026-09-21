@@ -51,8 +51,8 @@ def _open_lock_fd() -> int:
 @pytest.fixture(scope="session", autouse=True)
 def _build_snapshot() -> None:
     if sys.platform == "win32":
-        # No flock (or O_NOFOLLOW) on Windows, and no other suite runs alongside this one there
-        # to serialize against.
+        # No flock (or O_NOFOLLOW) on Windows; the Windows CI job runs its pytest steps one after
+        # another, so no other suite runs alongside this one there.
         build_snapshot(ROOT)
         yield
         return

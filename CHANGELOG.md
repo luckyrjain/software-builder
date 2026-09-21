@@ -60,7 +60,7 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   as `error: ...` and absences as `warning: ...` on stderr, dry-runs as `dry-run: ...` on stdout.
   Before, every outcome was printed bare on stdout, so a script grepping stderr for failures saw
   nothing. `print_outcome` is now a public function of `install_engine`.
-- New `install-engine-windows` CI job runs the install engine's own tests on `windows-latest`, so the
+- New `install-engine-windows` CI job runs the install engine's, the `sb` snapshot and CLI, and (under Git Bash) the `install.sh` tests on `windows-latest`, so the
   Windows-only branches (`is_pid_alive` via ctypes, SIGBREAK, directory-rename semantics) are executed
   at all. The pytest snapshot lock is skipped on Windows.
 

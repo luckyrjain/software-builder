@@ -53,8 +53,8 @@ def _open_lock_fd() -> int:
 @pytest.fixture(autouse=True)
 def _serialize_against_repository_root_mutation(request: pytest.FixtureRequest):
     if sys.platform == "win32":
-        # No flock (or O_NOFOLLOW) here, and the suites that rebuild cli/sb's snapshot are not
-        # run on Windows; the Windows CI job only exercises the install engine's own tests.
+        # No flock (or O_NOFOLLOW) on Windows. The Windows CI job runs its pytest steps one after
+        # another (no xdist, no `make -j`), so there is nothing concurrent to serialize against.
         yield
         return
     exclusive = request.node.get_closest_marker("mutates_repository_root") is not None

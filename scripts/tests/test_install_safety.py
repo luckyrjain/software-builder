@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from scripts.tests.bash_exe import BASH
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -11,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_install_rejects_path_traversal_skill_name(tmp_path: Path) -> None:
     env = {"HOME": str(tmp_path / "home")}
     result = subprocess.run(
-        ["bash", str(ROOT / "scripts" / "install.sh"), "--agent", "cursor", "../pr-review"],
+        [BASH, str(ROOT / "scripts" / "install.sh"), "--agent", "cursor", "../pr-review"],
         cwd=ROOT,
         env=env,
         capture_output=True,

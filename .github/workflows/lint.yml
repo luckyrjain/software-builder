@@ -159,9 +159,10 @@ jobs:
       - name: install.sh under Git Bash
         shell: bash
         run: |
-          # install.sh calls `python3`; make sure one resolves to the interpreter setup-python
-          # installed rather than assuming the runner image provides it.
-          if ! command -v python3 >/dev/null 2>&1; then
+          # install.sh calls `python3`; make sure one resolves to a working interpreter rather
+          # than assuming the runner image provides it (a WindowsApps alias stub would satisfy
+          # `command -v` but not run).
+          if ! python3 -c 'import sys' >/dev/null 2>&1; then
             py_dir="$(dirname "$(command -v python)")"
             cp "${py_dir}/python.exe" "${py_dir}/python3.exe"
           fi
