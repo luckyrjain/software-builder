@@ -140,9 +140,9 @@ ACTORS = ("orchestrator", "builder", "reviewer", "ci", "human", "system")
 OUTCOMES = ("COMPLETE", "ESCALATED", "HUMAN_ACTION_REQUIRED", "ABANDONED")
 
 _USAGE_INT_FIELDS = ("input_tokens", "output_tokens", "total_tokens")
-# Events whose record is where a session's token usage is supposed to appear.
-PAUSE_EVENTS = ("run_completed",)
+PAUSE_EVENTS = ("run_completed",)  # a wait after one of these before a `run_resumed` is a pause, not work
 SESSION_RETURNS = ("builder_returned", "review_returned", "remediation_returned")
+# Events whose record is where a session's token usage is supposed to appear.
 USAGE_EVENTS = ("builder_returned", "review_returned", "remediation_returned", "orchestrator_usage")
 REASON_CODES = (
     "DIRTY_REVIEW_LIMIT", "FIX_ATTEMPT_LIMIT", "CONTESTED_TWICE", "SIZE_HARD_STOP", "FINGERPRINT_ALTERNATION",
@@ -195,7 +195,7 @@ _SHIELD_EQ = "\x00\x02"  # stands for the `=` of PWD=/path
 _SHIELD_ENV_RE = re.compile(r"(?<![A-Za-z0-9_;])((?:OLD)?PWD)=(?=/)")  # not after `;`: an ODBC PWD=/... is a password
 # GitHub Actions workflow commands carry a secret after `::`, which the shield below would hide from the patterns
 _WORKFLOW_CMD_RE = re.compile(
-    r"(?i)(::add-mask::|::set-secret::|##\[add-mask\]|::set-output\s+name=[A-Za-z0-9_.-]{0,64}(?:token|secret|password|passwd|key|pass|credential)[A-Za-z0-9_.-]{0,64}::)(\S{4,})"
+    r"(?i)(::add-mask::|::set-secret::|##\[add-mask\]|::set-output\s+name=[A-Za-z0-9_.-]{0,64}(?<![A-Za-z])(?:token|secret|password|passwd|pass|key|credential)s?(?![A-Za-z])[A-Za-z0-9_.-]{0,64}::)(\S{4,})"
 )
 _CAMEL_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
 
@@ -343,20 +343,6 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
                 category="secret",
             ),
             redaction.RedactionPattern(
-                # `password::hunter2hunter2` (the `::` is shielded as _SHIELD_SCOPE): a Rust-style path
-                # (`token::tests::x`) has no digits, a secret usually does
-                name="secretish_scope",
-                pattern=re.compile(
-                    r"(?i)\b(?P<key>[A-Za-z0-9_.-]{0,64}" + _CREDENTIAL_WORDS + r"[A-Za-z0-9_.-]{0,64})(?P<sep>\x00\x01)"
-                    r"(?P<value>[A-Za-z0-9+/_=-]{8,})"
-                ),
-                replacement=lambda m, marker: (
-                    f"{m.group('key')}{m.group('sep')}{marker}"
-                    if re.search(r"\d", m.group("value")) and re.search(r"[A-Za-z]", m.group("value")) else None
-                ),
-                category="secret",
-            ),
-            redaction.RedactionPattern(
                 name="secretish_name_value",
                 pattern=re.compile(
                     r'(?i)(?P<head>(?<!\\)\\*["\']?(?:parameter)?(?:name|key)\\*["\']?[ \t]*[:=][ \t]*\\*["\']?[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS
@@ -407,7 +393,10 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             ),
         )
         # Ours run first: the shared `Bearer <chars>=*` pattern would otherwise eat an `api_token=` (or
-        # `AccountKey=`) prefix and leave the value behind.
+        # `AccountKey=`) prefix and leave the value behind. Order inside `extras` matters in two places: token
+        # shapes come before the generic key/value patterns, and `pem_private_key_open` (whose `[\s\S]*` takes the
+        # rest of the text) is meant to swallow everything after a key block. `_clean_text` shields `::` and
+        # `PWD=/path` from all of these (and handles workflow commands before the shield).
         _PATTERNS = (
             *extras,
             *redaction.LOG_PATTERNS,
@@ -765,7 +754,7 @@ def _refuse_repository(directory: Path) -> None:
     chain.extend(chain[0].parents)
     for ancestor in chain:
         if _is_repo_root(ancestor):
-            raise ValueError(f"the run log directory must be outside any git repository (found one at {ancestor})")
+            raise ValueError(f"the run log directory must be outside any git repository (found one at {ancestor}); report LOG_UNAVAILABLE, or ask the caller for a `log_dir`")
     known = [repo for repo in (_enclosing_repo(Path.cwd().resolve()),) if repo is not None]
     known += [Path(value) for value in (os.environ.get("GIT_DIR"), os.environ.get("GIT_WORK_TREE")) if value]
     if os.environ.get("GIT_DIR") and not os.environ.get("GIT_WORK_TREE"):
@@ -830,7 +819,7 @@ def _private_dir(directory: Path) -> None:
     if info.st_mode & 0o077:
         # Not ours to chmod: a directory that already exists (a home directory, a shared folder) may hold other
         # things, and tightening it would change who can reach them. Only directories this call created are 0700.
-        raise OSError(f"the log directory is accessible to others; do not change its permissions (report LOG_UNAVAILABLE, unless you picked this directory yourself and no record exists yet): {directory}")
+        raise OSError(f"the log directory is accessible to others; do not change its permissions; report LOG_UNAVAILABLE, or ask the caller for a private `log_dir`: {directory}")
     try:
         is_home = os.path.samefile(directory, _home_dir())
     except OSError:  # an account whose home directory was never created cannot be the log directory

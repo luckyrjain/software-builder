@@ -43,7 +43,10 @@ For earlier history, see the `## loop-task-implementer` section in the repositor
     masked; kebab-case, ALL_CAPS and path identifiers under a merely credential-flavoured key are kept), and text
     under a credential-worded key is always replaced, so log such facts as codes under another name. Many token
     families, `Authorization: <scheme>`, URL userinfo, CLI password flags (digits and prefixes allowed), cookies, session
-    ids, JSON quoted for a shell, Kubernetes name/value pairs, XML elements, and `aws`/`npm`/netrc layouts are covered. Not done, by
+    ids, JSON quoted for a shell, Kubernetes and CloudFormation name/value pairs, XML elements, GitHub Actions workflow
+    commands, and `aws`/`npm`/netrc/`gh secret set`/`cargo login` layouts are covered. `::` scopes (pytest, Rust, C++ ids)
+    and `PWD=/path` are hidden from the shared patterns while they run and restored afterwards, so those ordinary values
+    survive; a maintainer changing a pattern must keep that shield in mind. Not done, by
     design: replacing the stack with a per-event allowlist, and a queue-start log-writability preflight.
   - New `run-id` subcommand derives a deterministic id from task seeds; the UTC start time is a seed, so a task started again
     later is a new run.

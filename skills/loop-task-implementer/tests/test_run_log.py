@@ -2702,7 +2702,7 @@ def test_round_14_actions_output_uid_gid_pairs_and_pypi_branch_names_are_kept(ru
     assert run_log._clean_text(text, set()) == text
 
 @pytest.mark.parametrize(
-    "text,core", [("password::hunter2hunter2", "hunter2hunter2"), ("token::abcdefgh12345678", "abcdefgh12345678"), ("x::" + AWSID, AWSID), ("::Bearer " + L, L)]
+    "text,core", [("x::" + AWSID, AWSID), ("::Bearer " + L, L), ("a::sk-" + L, L)]
 )
 def test_round_14_a_double_colon_before_a_secret_does_not_hide_it(run_log, text, core):
     assert core not in run_log._clean_text(text, set())
@@ -2711,6 +2711,22 @@ def test_round_14_a_double_colon_before_a_secret_does_not_hide_it(run_log, text,
 def test_round_14_a_double_colon_path_that_starts_with_a_credential_word_is_kept(run_log):
     for text in ("token::tests::test_expired_token", "auth::token::tests::x", "crate::auth::refresh_tokens"):
         assert run_log._clean_text(text, set()) == text
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "tests/test_auth.py::test_login_2fa", "tests/test_token.py::test_sha256_digest", "tests/test_oauth2.py::test_oauth2_flow",
+        "AuthService::Validate2FA", "auth::handlers_v2", "::set-output name=passed::true", "::set-output name=bypass::true",
+        "::set-output name=monkey::yes-please",
+    ],
+)
+def test_round_15_scoped_test_ids_with_digits_and_ordinary_set_output_names_are_kept(run_log, text):
+    assert run_log._clean_text(text, set()) == text
+
+
+@pytest.mark.parametrize("name", ["token", "db_password", "api-key", "secret", "credentials"])
+def test_round_15_set_output_with_a_credential_name_is_masked(run_log, name):
+    assert N not in run_log._clean_text(f"::set-output name={name}::{N}", set())
 
 
 # --- docs and wiring stay in sync -------------------------------------------------------------

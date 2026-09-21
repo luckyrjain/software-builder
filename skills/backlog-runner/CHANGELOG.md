@@ -11,7 +11,8 @@ frontmatter should match the version of the latest entry below that names that f
   morning summary now carries a `Budgets` line stating the resolved values.
 - `consumed_tokens` is now defined as the sum of each task's `estimated_tokens` from loop-task-implementer's
   report (the completion `Budgets:` line or an escalation's `budget_consumed`; this skill does not read its run log);
-  a task whose report lists `tokens` as unmeasured is a lower bound and the summary says so. `examples.md` shows the `Budgets` line.
+  a task whose report lists `tokens` as unmeasured, `orchestrator_tokens` as `not_counted`, or `Budgets: unavailable` is a lower
+  bound and the summary says so. `examples.md` shows the `Budgets` line.
 
 ## [1.0.0] — 2026-08-05
 
