@@ -5,7 +5,7 @@ A structured, redacted, tamper-evident record of what the Orchestrator did, writ
 source for the token and time budgets in [state-schema.yaml](state-schema.yaml).
 
 **Only the Orchestrator reads or writes it** (a Reviewer that saw it would see prior verdicts), recording Builder and
-Reviewer activity on their behalf (`actor`). Only `run_id` and `chain_head` ever go into a package, PR body or report.
+Reviewer activity on their behalf (`actor`). Only `run_id`, `chain_head` and the unanchored-resume count ever go into a package, PR body or report.
 
 ## What it protects against
 

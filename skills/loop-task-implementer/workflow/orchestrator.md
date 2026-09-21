@@ -776,4 +776,4 @@ from the previous receipt.
    something to repair.
 
 Never give the log, its directory or path to a Builder or Reviewer, or put them in a package, PR body or report
-(`run_id` and `chain_head` only). If `run_log.py` cannot run, say so, append nothing and stop rather than continue unlogged.
+(`run_id`, `chain_head` and the unanchored-resume count only). If `run_log.py` cannot run, say so, append nothing and stop rather than continue unlogged.

@@ -296,6 +296,8 @@ U = "Summer20" + "24!Rocks"
 Y = "Xk9fQ2mZpL4vR8sT" + "1wYbHc3d"
 L = "Xk9fQ2mZpL4vR8sT" + "1wYbHc3dEf5gH7iJ9k"
 M = "s3cr3tPassw0rd" + "Value9"
+AWSID = "AKIA" + "IOSFODNN7EXAMPLQ"
+N = "Zk3Qx9Lm2Vb7" + "Rt5Wp8Ns"
 J = "eyJhbGciOiJIUzI1" + "NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0." + "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
 HX = "a1b2c3d4e5f6" + "a7b8c9d0"
 WJ = "wJalrXUtnFEMI/K7MDENG" + "bPxRfiC"
@@ -2665,6 +2667,50 @@ def test_round_13_a_password_named_pwd_is_still_masked_and_the_shield_does_not_l
     assert "hunter2hunter2" not in run_log._clean_text("PWD=hunter2hunter2", set())
     assert "\x00" not in run_log._clean_text("PWD=/a/b auth::x token=" + M, set())
     assert M not in run_log._clean_text("token=abc::" + M, set())
+
+@pytest.mark.parametrize("text", ["--- PASS: TestParse/valid_input (0.00s)", "--- PASS: TestFoo/case#01", "--- PASS: TestX/sub", "--- PASS: TestX/a1"])
+def test_round_14_go_subtest_names_are_kept(run_log, text):
+    assert run_log._clean_text(text, set()) == text
+
+
+def test_round_14_the_shield_does_not_hide_an_anchored_token_and_leaves_nul_data_alone(run_log):
+    assert AWSID not in run_log._clean_text("::" + AWSID, set())
+    assert run_log._clean_text("a\x00S::b\x00Ec", set()) == "a\x00S::b\x00Ec"
+    assert "\x00" not in run_log._clean_text("crate::auth::x PWD=/a/b", set())
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "::add-mask::" + N, "::set-output name=token::" + N, "##[add-mask]" + N, "::set-secret::" + N,
+        "UID=sa;PWD=/" + N + ";", "https://api.telegram.org/bot123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw/getMe",
+        ".dockerconfigjson: eyJhdXRocyI6" + N, "pypi-AgEIcHlwaS5vcmc" + N + "abcdef",
+    ],
+)
+def test_round_14_workflow_commands_odbc_pwd_telegram_dockerconfig_and_pypi_tokens_are_masked(run_log, text):
+    cleaned = run_log._clean_text(text, set())
+    assert N not in cleaned and "AAHdqTcvCH1vGW" not in cleaned and "eyJhdXRocyI6" not in cleaned and "AgEIcHlwaS5vcmc" not in cleaned
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "::set-output name=result::success-ok", "::error::something failed", "::group::Run tests", "docker run -u 1000:1000 img",
+        "docker run --user 0:0 img", "feature/pypi-trusted-publishing-oidc-migration", "PWD=/home/runner",
+    ],
+)
+def test_round_14_actions_output_uid_gid_pairs_and_pypi_branch_names_are_kept(run_log, text):
+    assert run_log._clean_text(text, set()) == text
+
+@pytest.mark.parametrize(
+    "text,core", [("password::hunter2hunter2", "hunter2hunter2"), ("token::abcdefgh12345678", "abcdefgh12345678"), ("x::" + AWSID, AWSID), ("::Bearer " + L, L)]
+)
+def test_round_14_a_double_colon_before_a_secret_does_not_hide_it(run_log, text, core):
+    assert core not in run_log._clean_text(text, set())
+
+
+def test_round_14_a_double_colon_path_that_starts_with_a_credential_word_is_kept(run_log):
+    for text in ("token::tests::test_expired_token", "auth::token::tests::x", "crate::auth::refresh_tokens"):
+        assert run_log._clean_text(text, set()) == text
 
 
 # --- docs and wiring stay in sync -------------------------------------------------------------

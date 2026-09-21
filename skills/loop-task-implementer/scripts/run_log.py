@@ -187,12 +187,16 @@ def _is_pass_key(words: list[str]) -> bool:
 _KEY_STEMS = ("password", "passwd", "passphrase", "credential", "apikey", "privatekey", "secretkey", "accesskey", "sessionkey", "keybase", "clientkeydata",
               "sshkey", "signingkey", "hmackey", "encryptionkey", "masterkey")
 _CREDENTIAL_WORDS = (
-    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|(?<![A-Za-z0-9])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|pwd|passphrases?|api[_-]?keys?|(?:ssh|signing|hmac|encryption|master|private|access|app|license|subscription|functions|account)[_-]?keys?|(?-i:primaryKey|secondaryKey)|client[_-]?key[_-]?data|(?<![A-Za-z0-9])pat|cookies?|connect\.sid|passcode|psk|(?<![A-Za-z0-9])pw|(?<=[?&])(?:sig|key)|credentials?|creds|"
+    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|docker[_-]?config[_-]?json|(?<![A-Za-z0-9])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|pwd|passphrases?|api[_-]?keys?|(?:ssh|signing|hmac|encryption|master|private|access|app|license|subscription|functions|account)[_-]?keys?|(?-i:primaryKey|secondaryKey)|client[_-]?key[_-]?data|(?<![A-Za-z0-9])pat|cookies?|connect\.sid|passcode|psk|(?<![A-Za-z0-9])pw|(?<=[?&])(?:sig|key)|credentials?|creds|"
     r"sess(?:ion)?[_-]?(?:ids?|keys?)|signature|auth(?:orization)?)(?-i:(?![a-z]|[A-Z](?![a-z])))"
 )
-_SHIELD_SCOPE = "\x00S"  # stands for `::` while the patterns run (no pattern can treat it as a separator)
-_SHIELD_EQ = "\x00E"  # stands for the `=` of PWD=/path
-_SHIELD_ENV_RE = re.compile(r"(?<![A-Za-z0-9_])((?:OLD)?PWD)=(?=/)")
+_SHIELD_SCOPE = "\x00\x01"  # stands for `::` while the patterns run (no pattern can treat it as a separator)
+_SHIELD_EQ = "\x00\x02"  # stands for the `=` of PWD=/path
+_SHIELD_ENV_RE = re.compile(r"(?<![A-Za-z0-9_;])((?:OLD)?PWD)=(?=/)")  # not after `;`: an ODBC PWD=/... is a password
+# GitHub Actions workflow commands carry a secret after `::`, which the shield below would hide from the patterns
+_WORKFLOW_CMD_RE = re.compile(
+    r"(?i)(::add-mask::|::set-secret::|##\[add-mask\]|::set-output\s+name=[A-Za-z0-9_.-]{0,64}(?:token|secret|password|passwd|key|pass|credential)[A-Za-z0-9_.-]{0,64}::)(\S{4,})"
+)
 _CAMEL_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
 
 MAX_REDACT_INPUT_CHARS = 8000  # bound the regex work; a longer string is refused, never half-redacted
@@ -292,8 +296,8 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             ),
             redaction.RedactionPattern(
                 name="cli_user_flag",
-                pattern=re.compile(r"(?i)(\s-(?:u[ =]?|-user[ =]))[^\s:]+:\S+"),
-                replacement=r"\1{marker}",
+                pattern=re.compile(r"(?i)(\s-(?:u[ =]?|-user[ =]))([^\s:]+:\S+)"),
+                replacement=lambda m, marker: None if re.fullmatch(r"\d+:\d+", m.group(2)) else f"{m.group(1)}{marker}",  # docker -u 1000:1000
                 category="secret",
             ),
             token("azure_account_key", r"AccountKey=[A-Za-z0-9+/=]{20,}", "secret"),
@@ -302,7 +306,8 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             token("atlassian_token", r"ATATT[A-Za-z0-9_=-]{20,}"),
             token("sendgrid_key", r"SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}"),
             token("shopify_token", r"shp(?:at|ca|pa)_[0-9a-f]{32}"),
-            token("pypi_token", r"pypi-[A-Za-z0-9_-]{30,}"),
+            token("pypi_token", r"(?<![A-Za-z0-9/_.-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{20,}"),
+            token("telegram_bot_token", r"(?<![A-Za-z0-9])bot\d{6,}:[A-Za-z0-9_-]{30,}"),
             token("stripe_webhook_secret", r"whsec_[A-Za-z0-9]{24,}"),
             token("groq_key", r"gsk_[A-Za-z0-9]{40,}"),
             token("xai_key", r"xai-[A-Za-z0-9]{40,}"),
@@ -334,6 +339,20 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
                 ),
                 replacement=lambda m, marker: (
                     f"{m.group('head')}{marker}{m.group('tail')}" if _secret_shaped(m.group("value"), m.group("key")) else None
+                ),
+                category="secret",
+            ),
+            redaction.RedactionPattern(
+                # `password::hunter2hunter2` (the `::` is shielded as _SHIELD_SCOPE): a Rust-style path
+                # (`token::tests::x`) has no digits, a secret usually does
+                name="secretish_scope",
+                pattern=re.compile(
+                    r"(?i)\b(?P<key>[A-Za-z0-9_.-]{0,64}" + _CREDENTIAL_WORDS + r"[A-Za-z0-9_.-]{0,64})(?P<sep>\x00\x01)"
+                    r"(?P<value>[A-Za-z0-9+/_=-]{8,})"
+                ),
+                replacement=lambda m, marker: (
+                    f"{m.group('key')}{m.group('sep')}{marker}"
+                    if re.search(r"\d", m.group("value")) and re.search(r"[A-Za-z]", m.group("value")) else None
                 ),
                 category="secret",
             ),
@@ -403,11 +422,16 @@ def _clean_text(text: str, hits: set[str]) -> str:
         raise ValueError(f"a string longer than {MAX_REDACT_INPUT_CHARS} characters; log identifiers and counts, not content")
     redaction = _redaction_runtime()
     # Shield what only looks like `key: value` to the shared patterns: `::` scopes and the PWD/OLDPWD variables.
-    shielded = _SHIELD_ENV_RE.sub(lambda m: f"{m.group(1)}{_SHIELD_EQ}", text.replace("::", _SHIELD_SCOPE))
+    # (A string that already holds a NUL is left alone, so the restore cannot change caller data.)
+    if "\x00" not in text and _WORKFLOW_CMD_RE.search(text):
+        text = _WORKFLOW_CMD_RE.sub(lambda m: f"{m.group(1)}{redaction.DEFAULT_MARKER}", text)
+        hits.add("workflow_command")
+    shielded = text if "\x00" in text else _SHIELD_ENV_RE.sub(lambda m: f"{m.group(1)}{_SHIELD_EQ}", text.replace("::", _SHIELD_SCOPE))
     redacted, found = redaction.redact(
         shielded, patterns=_patterns(redaction), marker=redaction.DEFAULT_MARKER, passes=1
     )
-    redacted = redacted.replace(_SHIELD_SCOPE, "::").replace(_SHIELD_EQ, "=")
+    if shielded is not text:
+        redacted = redacted.replace(_SHIELD_SCOPE, "::").replace(_SHIELD_EQ, "=")
     hits.update(hit.name for hit in found)
     # A later shared pattern can re-match the marker one of ours just wrote and leave its closing bracket behind.
     redacted = re.sub(re.escape(redaction.DEFAULT_MARKER) + r"\]+", redaction.DEFAULT_MARKER, redacted)
@@ -504,7 +528,7 @@ def _secret_shaped(value: str, key: str = "") -> bool:
         return False  # a URL without userinfo, a path, a number
     if re.fullmatch(r"/[\w.@%~-]+(?:/[\w.@%~-]+)+/?", value):
         return False  # an absolute path: at least two segments and none of the characters base64 adds (+ =)
-    if key.lower() == "pass" and re.fullmatch(r"(?:Test|Benchmark|Example|Fuzz)\w*", value):
+    if key.lower() == "pass" and re.fullmatch(r"(?:Test|Benchmark|Example|Fuzz)[\w/#.-]*", value):
         return False  # Go test output: `--- PASS: TestGetUser`
     if re.match(r"\d+:", value) and not _credential_named(key):
         return False  # `auth.js:1024:13`, `password.py:3:import os`: a line number after a file name
@@ -806,7 +830,7 @@ def _private_dir(directory: Path) -> None:
     if info.st_mode & 0o077:
         # Not ours to chmod: a directory that already exists (a home directory, a shared folder) may hold other
         # things, and tightening it would change who can reach them. Only directories this call created are 0700.
-        raise OSError(f"the log directory is accessible to others; choose another absolute directory and do not change this one's permissions: {directory}")
+        raise OSError(f"the log directory is accessible to others; do not change its permissions (report LOG_UNAVAILABLE, unless you picked this directory yourself and no record exists yet): {directory}")
     try:
         is_home = os.path.samefile(directory, _home_dir())
     except OSError:  # an account whose home directory was never created cannot be the log directory
