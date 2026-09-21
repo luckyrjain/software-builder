@@ -200,8 +200,10 @@ def main(argv: list[str] | None = None) -> int:
     # matching install.sh's own historical text byte-for-byte); Python's print() is
     # locale-aware and can raise UnicodeEncodeError under a restrictive locale (LC_ALL=C),
     # crashing after a successful install and getting it reported as failed.
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    for stream in (sys.stdout, sys.stderr):
+        # A caller may have swapped in a stream without it (e.g. an io.StringIO).
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
     parser = argparse.ArgumentParser(prog="sb")
     parser.add_argument(

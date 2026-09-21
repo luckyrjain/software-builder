@@ -84,10 +84,16 @@ def test_two_holders_are_never_inside_the_critical_section_together(tmp_path: Pa
         for _ in range(6)
     ]
     collisions = 0
-    for proc in procs:
-        out, _ = proc.communicate(timeout=120)
-        assert proc.returncode == 0
-        collisions += int(out.strip())
+    try:
+        for proc in procs:
+            out, _ = proc.communicate(timeout=120)
+            assert proc.returncode == 0
+            collisions += int(out.strip())
+    finally:
+        for proc in procs:  # a timeout must not leave hammer processes spinning
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=10)
     assert collisions == 0
 
 
@@ -374,12 +380,12 @@ def test_an_empty_skill_name_is_rejected(tmp_path: Path) -> None:
     assert not (tmp_path / ".lock").exists()
 
 
-def test_an_empty_lock_directory_is_reclaimed_when_the_rename_will_not_absorb_it(
+def test_an_empty_lock_directory_is_removed_when_the_rename_will_not_absorb_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Windows refuses to rename onto any existing directory (POSIX silently replaces an empty
     one), so an empty leftover lock -- an interrupted release -- used to be waited on until it
-    aged out. A lock is only ever published populated, so an empty one is vacated: reclaim it.
+    aged out. A lock is only ever published populated, so an empty one is vacated: remove it.
     Forced here by making the first acquire fail the way Windows' rename does."""
     lock_dir = tmp_path / ".demo-skill.lock"
     lock_dir.mkdir()
@@ -394,8 +400,95 @@ def test_an_empty_lock_directory_is_reclaimed_when_the_rename_will_not_absorb_it
     monkeypatch.setattr(install_engine, "_acquire_lock_dir", acquire_refused_once)
     sleeps: list[float] = []
     monkeypatch.setattr(install_engine.time, "sleep", sleeps.append)
+    reclaims: list[object] = []
+    monkeypatch.setattr(install_engine, "_reclaim_stale_lock", lambda *a, **k: reclaims.append(a) or True)
 
     with held_lock(tmp_path, "demo-skill", wait_timeout=5.0):
         assert (lock_dir / "pid").exists()
     assert calls == 2
-    assert sleeps == []  # reclaimed and retried straight away, not waited on
+    assert sleeps == []  # removed and retried straight away, not waited on
+    assert reclaims == []  # a rename-based reclaim could take a live lock; rmdir cannot
+
+
+def test_removing_an_empty_lock_dir_can_never_take_a_populated_one(tmp_path: Path) -> None:
+    lock_dir = _seed_lock(tmp_path, "s", pid=str(os.getpid()), acquired_at=str(time.time()))
+    assert install_engine._remove_empty_dir(lock_dir) is False
+    assert (lock_dir / "pid").exists()
+
+
+def test_a_bad_lock_timing_value_names_the_variable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LOCK_WAIT_TIMEOUT_SECONDS", "abc")
+    with pytest.raises(ValueError, match="LOCK_WAIT_TIMEOUT_SECONDS must be a number, got 'abc'"):
+        _lock_timing_from_env()
+
+
+@posix_only
+def test_a_second_sigterm_during_the_uninstall_restore_does_not_strand_the_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, signal_sentinels: object
+) -> None:
+    """The restore that undoes a half-done uninstall used to run with the conversion handler
+    still active, so a second signal interrupted it and left the install in the hidden
+    `.removing.*` directory."""
+    _, dest_root, skill_dest = _installed_skill(tmp_path)
+    real_replace = os.replace
+    calls = 0
+
+    def replace_signalling_twice(src: object, dst: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:  # the move aside: complete it, then interrupt
+            real_replace(src, dst)
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.2)
+        elif calls == 2:  # the restore: a second signal lands right before it runs
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.2)
+            real_replace(src, dst)
+        else:
+            real_replace(src, dst)
+
+    monkeypatch.setattr(install_engine.os, "replace", replace_signalling_twice)
+    with pytest.raises(SystemExit) as exc_info:
+        uninstall_skill("demo-skill", dest_root=dest_root)
+
+    assert exc_info.value.code == 130
+    assert (skill_dest / "SKILL.md").exists()
+    assert list(dest_root.glob(".demo-skill.removing.*")) == []
+
+
+def test_leftover_removing_and_staging_dirs_are_swept_but_backups_never_are(tmp_path: Path) -> None:
+    repo, dest_root, skill_dest = _installed_skill(tmp_path)
+    removing = dest_root / ".demo-skill.removing.abc"
+    staging = dest_root / ".demo-skill.staging.abc"
+    backup = dest_root / ".demo-skill.backup.abc"
+    other = dest_root / ".other-skill.removing.abc"
+    for leftover in (removing, staging, backup, other):
+        (leftover / "skill").mkdir(parents=True)
+        (leftover / "skill" / "SKILL.md").write_text("x", encoding="utf-8")
+
+    assert install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor").status == "installed"
+
+    assert not removing.exists() and not staging.exists()
+    assert backup.exists(), "a backup can hold the only copy of a previous install"
+    assert other.exists(), "only this skill's leftovers"
+
+
+def test_uninstall_sweeps_leftovers_even_when_the_skill_is_already_absent(tmp_path: Path) -> None:
+    dest_root = tmp_path / "dest"
+    leftover = dest_root / ".demo-skill.removing.abc" / "skill"
+    leftover.mkdir(parents=True)
+    (leftover / "SKILL.md").write_text("x", encoding="utf-8")
+
+    outcome = uninstall_skill("demo-skill", dest_root=dest_root)
+
+    assert outcome.status == "absent"
+    assert not (dest_root / ".demo-skill.removing.abc").exists()
+
+
+def test_a_dry_run_uninstall_sweeps_nothing(tmp_path: Path) -> None:
+    _, dest_root, _ = _installed_skill(tmp_path)
+    leftover = dest_root / ".demo-skill.removing.abc"
+    leftover.mkdir()
+
+    assert uninstall_skill("demo-skill", dest_root=dest_root, dry_run=True).status == "dry_run"
+    assert leftover.exists()
