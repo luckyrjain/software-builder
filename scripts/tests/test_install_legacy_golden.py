@@ -94,7 +94,7 @@ def test_legacy_verify_missing_path_fails_independently_of_home(tmp_path: Path) 
 
 def test_legacy_unknown_agent_fails_in_stderr(tmp_path: Path) -> None:
     result = run_installer("--agent", "unknown-agent", home=tmp_path / "home")
-    assert result.returncode != 0
+    assert result.returncode == 2  # a usage error, like `sb install --host bogus`
     assert "unknown --agent" in result.stderr
 
 

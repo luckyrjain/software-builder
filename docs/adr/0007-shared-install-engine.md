@@ -177,6 +177,15 @@ it was scope discipline for the original porting task, not a standing constraint
     SIGTERM (engine and `install.sh`); an ignored one (`nohup`) is left ignored. The uninstall restore is
     deferred. `.removing.*`/`.staging.*` leftovers are swept under the lock on the next run for that
     skill; `.backup.*` never is, since it can hold the only copy of a previous install.
+  - *Residual-risk fixes.* `_sigterm_as_system_exit()` became two-phase (first stop signal raises, later
+    ones are absorbed) and now also covers SIGINT, with `install_skill()`'s cleanup inside the block, so
+    there is no longer a gap between the work ending and the rollback's deferral starting. Hard kills
+    (SIGKILL, power loss) now self-heal on the next install/uninstall of the skill: orphaned lock temp
+    directories older than 5 minutes are swept, a `.backup.*` is restored when the destination is absent
+    and discarded only when the destination is a complete owned install, `.removing.*`/`.staging.*` are
+    swept. A SIGKILLed `install.sh` no longer leaves the engine running: the engine polls its parent and
+    stops itself (opt-in via `INSTALL_ENGINE_EXIT_WITH_PARENT`, set by `install.sh`). What remains is
+    inherent: the process is gone until the next run cleans up, and the lock reclaim window below.
   - *Residual (round 3).* `_reclaim_stale_lock()` checks the identity of what it moved, but
     judging, moving and putting back is not one atomic step, so a third holder acquiring in that
     few-microsecond window is displaced. A signal in the couple of bytecodes between the lock
