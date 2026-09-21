@@ -104,7 +104,7 @@ def _run_batch(
     only in the engine call, the success-status label, and install's extra shadow-warning
     hook (now `on_success`).
     """
-    succeeded = failed = dry_run_count = 0
+    succeeded = failed = dry_run_count = absent_count = 0
     try:
         # The engine converts a terminate signal only while it is doing the work of one
         # install; between skills (and while printing) it would kill the process with the raw
@@ -120,6 +120,8 @@ def _run_batch(
                         succeeded += 1
                     elif outcome.status == "dry_run":
                         dry_run_count += 1
+                    elif outcome.status == "absent":
+                        absent_count += 1
                     elif outcome.status not in extra_ok_statuses:
                         # Fail loud, not silently-undercount: install_engine.py's own CLI presentation
                         # (_PRESENTATION) enumerates the same status values independently -- a status
@@ -138,7 +140,10 @@ def _run_batch(
         if dry_run:
             print(f"would {verb}: {dry_run_count}, failed: {failed}", file=sys.stderr)
         else:
-            print(f"{past_tense}: {succeeded}, failed: {failed}", file=sys.stderr)
+            # A skill that was not installed is neither a success nor a failure of this run;
+            # without its own count the line read as if nothing had been asked for.
+            not_installed = f", not installed: {absent_count}" if absent_count else ""
+            print(f"{past_tense}: {succeeded}, failed: {failed}{not_installed}", file=sys.stderr)
     return 1 if failed else 0
 
 

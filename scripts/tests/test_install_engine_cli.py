@@ -165,7 +165,7 @@ def test_sigterm_as_system_exit_skips_restore_when_previous_handler_was_none(
     with install_engine._sigterm_as_system_exit():
         pass
 
-    assert len(calls) == len(install_engine._stop_signals())  # registrations only; the restore was skipped
+    assert len(calls) == len(install_engine._stop_signals()) + 1  # SIGINT + stops: registrations only; no restore
 
 
 # --- _terminate_signal / _defer_interrupts ---------------------------------------------------
@@ -444,3 +444,38 @@ def test_an_ignored_sighup_stays_ignored(signal_sentinels: object) -> None:
         assert signal.getsignal(signal.SIGHUP) == signal.SIG_IGN
     with install_engine._defer_interrupts():
         assert signal.getsignal(signal.SIGHUP) == signal.SIG_IGN
+
+
+@posix_only
+def test_the_second_stop_signal_is_absorbed_while_the_first_is_being_handled(signal_sentinels: object) -> None:
+    """Once the first signal has fired, later ones must not raise: the caller's cleanup handler
+    runs inside the block and has to finish."""
+    cleanup_finished = False
+    with pytest.raises(SystemExit) as exc_info:
+        with install_engine._sigterm_as_system_exit():
+            try:
+                os.kill(os.getpid(), signal.SIGTERM)
+                time.sleep(0.2)
+            except SystemExit:
+                os.kill(os.getpid(), signal.SIGTERM)  # a second signal, during the "cleanup"
+                time.sleep(0.2)
+                cleanup_finished = True
+                raise
+    assert exc_info.value.code == 130
+    assert cleanup_finished
+
+
+@posix_only
+def test_sigint_is_a_keyboard_interrupt_first_and_absorbed_after(signal_sentinels: object) -> None:
+    cleanup_finished = False
+    with pytest.raises(KeyboardInterrupt):
+        with install_engine._sigterm_as_system_exit():
+            try:
+                os.kill(os.getpid(), signal.SIGINT)
+                time.sleep(0.2)
+            except KeyboardInterrupt:
+                os.kill(os.getpid(), signal.SIGINT)
+                time.sleep(0.2)
+                cleanup_finished = True
+                raise
+    assert cleanup_finished

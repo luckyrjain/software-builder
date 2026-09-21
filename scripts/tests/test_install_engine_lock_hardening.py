@@ -456,21 +456,67 @@ def test_a_second_sigterm_during_the_uninstall_restore_does_not_strand_the_insta
     assert list(dest_root.glob(".demo-skill.removing.*")) == []
 
 
-def test_leftover_removing_and_staging_dirs_are_swept_but_backups_never_are(tmp_path: Path) -> None:
+def test_leftover_removing_and_staging_dirs_are_swept_on_the_next_run(tmp_path: Path) -> None:
     repo, dest_root, skill_dest = _installed_skill(tmp_path)
     removing = dest_root / ".demo-skill.removing.abc"
     staging = dest_root / ".demo-skill.staging.abc"
-    backup = dest_root / ".demo-skill.backup.abc"
     other = dest_root / ".other-skill.removing.abc"
-    for leftover in (removing, staging, backup, other):
+    for leftover in (removing, staging, other):
         (leftover / "skill").mkdir(parents=True)
         (leftover / "skill" / "SKILL.md").write_text("x", encoding="utf-8")
 
     assert install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor").status == "installed"
 
     assert not removing.exists() and not staging.exists()
-    assert backup.exists(), "a backup can hold the only copy of a previous install"
     assert other.exists(), "only this skill's leftovers"
+
+
+def test_a_previous_install_displaced_by_a_hard_kill_is_restored_on_the_next_run(tmp_path: Path) -> None:
+    """SIGKILL or power loss between moving the old install aside and finishing the replacement
+    leaves the skill only inside `.{skill}.backup.*`, nothing at the destination."""
+    repo, dest_root, skill_dest = _installed_skill(tmp_path)
+    backup = dest_root / ".demo-skill.backup.abc"
+    backup.mkdir()
+    os.replace(skill_dest, backup / "skill")  # what the killed run left behind
+    assert not skill_dest.exists()
+
+    outcome = uninstall_skill("demo-skill", dest_root=dest_root, dry_run=True)  # a dry run restores nothing
+    assert outcome.status == "absent" and not skill_dest.exists()
+
+    outcome = uninstall_skill("demo-skill", dest_root=dest_root)  # restores it, then removes it
+    assert outcome.status == "uninstalled"
+    assert list(dest_root.glob(".demo-skill.backup.*")) == []
+
+
+def test_a_displaced_install_is_put_back_by_an_install_that_then_replaces_it(tmp_path: Path) -> None:
+    repo, dest_root, skill_dest = _installed_skill(tmp_path)
+    backup = dest_root / ".demo-skill.backup.abc"
+    backup.mkdir()
+    os.replace(skill_dest, backup / "skill")
+
+    assert install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor").status == "installed"
+
+    assert (skill_dest / "SKILL.md").exists()
+    assert list(dest_root.glob(".demo-skill.backup.*")) == []
+
+
+def test_a_backup_is_dropped_only_when_the_install_it_protects_is_in_place(tmp_path: Path) -> None:
+    repo, dest_root, skill_dest = _installed_skill(tmp_path)
+    stale_backup = dest_root / ".demo-skill.backup.old"
+    (stale_backup / "skill").mkdir(parents=True)
+    (stale_backup / "skill" / "SKILL.md").write_text("old", encoding="utf-8")
+
+    install_engine._recover_leftover_backups(dest_root, "demo-skill", skill_dest)
+    assert not stale_backup.exists(), "the replacement is complete and owned: the backup is an old copy"
+
+    # An unowned directory at the destination proves nothing about the backup: keep it.
+    unowned_dest = dest_root / "other"
+    unowned_dest.mkdir()
+    (unowned_dest / "README").write_text("not ours", encoding="utf-8")
+    kept = dest_root / ".other.backup.x"
+    (kept / "skill").mkdir(parents=True)
+    install_engine._recover_leftover_backups(dest_root, "other", unowned_dest)
+    assert kept.exists()
 
 
 def test_uninstall_sweeps_leftovers_even_when_the_skill_is_already_absent(tmp_path: Path) -> None:
@@ -492,3 +538,56 @@ def test_a_dry_run_uninstall_sweeps_nothing(tmp_path: Path) -> None:
 
     assert uninstall_skill("demo-skill", dest_root=dest_root, dry_run=True).status == "dry_run"
     assert leftover.exists()
+
+
+def test_an_old_orphaned_lock_temp_dir_is_swept_but_a_fresh_one_is_not(tmp_path: Path) -> None:
+    """`_acquire_lock_dir()`'s temp dir exists for microseconds, so a fresh one may belong to a
+    live acquire; only one older than any acquire could be is an orphan of a hard kill."""
+    dest_root = tmp_path / "dest"
+    old = dest_root / ".demo-skill.lock.tmp.old"
+    fresh = dest_root / ".demo-skill.lock.tmp.fresh"
+    other = dest_root / ".other-skill.lock.tmp.old"
+    for d in (old, fresh, other):
+        d.mkdir(parents=True)
+    ancient = time.time() - 2 * install_engine._ORPHAN_LOCK_TMP_MIN_AGE_SECONDS
+    os.utime(old, (ancient, ancient))
+    os.utime(other, (ancient, ancient))
+
+    assert uninstall_skill("demo-skill", dest_root=dest_root).status == "absent"
+
+    assert not old.exists()
+    assert fresh.exists()
+    assert other.exists(), "only this skill's leftovers"
+
+
+@posix_only
+def test_the_engine_stops_when_its_parent_is_killed(tmp_path: Path) -> None:
+    """install.sh being SIGKILLed cannot be trapped; the engine it started used to be orphaned
+    and run on, holding the lock. With the opt-in parent watch it terminates itself."""
+    child_code = (
+        "import sys, time; sys.path.insert(0, %r);"
+        "from scripts import install_engine;"
+        "install_engine._start_parent_watch(0.05);"
+        "print('ready', flush=True); time.sleep(60)" % str(ROOT)
+    )
+    middle_code = (
+        "import subprocess, sys, time;"
+        "p = subprocess.Popen([sys.executable, '-c', %r], stdout=subprocess.PIPE, text=True);"
+        "p.stdout.readline();"
+        "print(p.pid, flush=True); time.sleep(60)" % child_code
+    )
+    middle = subprocess.Popen([sys.executable, "-c", middle_code], stdout=subprocess.PIPE, text=True)
+    child_pid = 0
+    try:
+        child_pid = int(middle.stdout.readline())
+        middle.kill()  # SIGKILL: nothing can trap it
+        middle.wait(timeout=10)
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline and install_engine.is_pid_alive(child_pid):
+            time.sleep(0.05)
+        assert not install_engine.is_pid_alive(child_pid), "the orphaned engine kept running"
+    finally:
+        if child_pid and install_engine.is_pid_alive(child_pid):
+            os.kill(child_pid, signal.SIGKILL)
+        if middle.poll() is None:
+            middle.kill()

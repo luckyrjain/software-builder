@@ -288,7 +288,7 @@ def test_multi_skill_uninstall_continues_past_a_failure_and_reports_a_summary(
 
 def test_failure_summary_entries_stay_separable_when_a_path_contains_spaces(tmp_path: Path) -> None:
     """The summary used to join failed entries with a bare space, so with a space in a path
-    (or two failures) the list could not be split back into its entries."""
+    (or a `;`) a joined list could not be split back into its entries."""
     home = tmp_path / "my home"
     skills = ("squad-map", "new-hire-guide")
     for skill in skills:
@@ -311,9 +311,11 @@ def test_failure_summary_entries_stay_separable_when_a_path_contains_spaces(tmp_
 
     assert result.returncode != 0
     skills_dir = home / ".cursor" / "skills"
-    assert (
-        f"installed: 0, failed: 2 ({skills[0]} → {skills_dir}; {skills[1]} → {skills_dir})"
-    ) in result.stderr
+    lines = result.stderr.splitlines()
+    assert "installed: 0, failed: 2" in lines
+    # One entry per line: a path with spaces (or a `;`) can never blur two entries together.
+    assert f"  failed: {skills[0]} → {skills_dir}" in lines
+    assert f"  failed: {skills[1]} → {skills_dir}" in lines
 
 
 def _run_install_sh(home: Path, *args: str) -> subprocess.CompletedProcess[str]:

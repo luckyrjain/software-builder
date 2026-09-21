@@ -24,7 +24,9 @@ run_engine() {
   # Installed before the engine starts so a signal in the gap can't orphan it; the flag makes
   # a signal that beats the launch still stop the run once the engine is up.
   trap 'interrupted=true; if [[ -n "${engine_pid}" ]]; then kill -TERM "${engine_pid}" 2>/dev/null || true; fi' TERM INT HUP
-  PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${REPO_ROOT}" python3 "$@" &
+  # INSTALL_ENGINE_EXIT_WITH_PARENT: if this script is SIGKILLed (which cannot be trapped) the
+  # engine must notice and roll back rather than carry on orphaned, holding the lock.
+  INSTALL_ENGINE_EXIT_WITH_PARENT=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${REPO_ROOT}" python3 "$@" &
   engine_pid=$!
   if [[ "${interrupted}" == true ]]; then
     kill -TERM "${engine_pid}" 2>/dev/null || true
@@ -174,7 +176,8 @@ validate_agent_selector() {
     fi
   done <<< "${selectors}"
   echo "error: unknown --agent '${AGENT}' (expected $(printf '%s' "${selectors}" | tr '\n' '|'))" >&2
-  return 1
+  # 2, like every other usage error here (and `sb install --host bogus`); 1 stays "ran and failed".
+  return 2
 }
 
 # --target-dir <repo> → project-local skills dir(s).
@@ -316,13 +319,13 @@ report_run_summary() {
   if ((${#failed[@]} == 0)); then
     return 0
   fi
-  # Joined with "; ", not the default space: a skill name or destination path containing a space
-  # made the space-joined list impossible to split back into its entries.
-  local failed_list="" entry
+  # One entry per line, not one joined list: whatever separator a joined list uses can also
+  # appear inside a skill name or a destination path, and then the entries cannot be told apart.
+  echo "${verb}: ${succeeded}, failed: ${#failed[@]}" >&2
+  local entry
   for entry in "${failed[@]}"; do
-    failed_list+="${failed_list:+; }${entry}"
+    echo "  failed: ${entry}" >&2
   done
-  echo "${verb}: ${succeeded}, failed: ${#failed[@]} (${failed_list})" >&2
   return 1
 }
 
@@ -334,7 +337,7 @@ if [[ "${MODE}" == "uninstall" ]]; then
   for skill in "${SKILLS[@]}"; do
     validate_skill_name_format "${skill}" || exit 1
   done
-  validate_agent_selector || exit 1
+  validate_agent_selector || exit $?
   # Command substitution (not < <(resolve_targets) process substitution): a process
   # substitution's internal failure only kills that subshell, not this script -- with
   # set -e/-o pipefail unable to see it, install.sh would silently do nothing and still exit
@@ -380,7 +383,7 @@ for skill in "${SKILLS[@]}"; do
   validate_skill_name_format "${skill}" || exit 1
 done
 
-validate_agent_selector || exit 1
+validate_agent_selector || exit $?
 
 # See the matching comment in the uninstall branch above for why this is a command
 # substitution, not < <(resolve_targets).

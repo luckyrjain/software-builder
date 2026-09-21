@@ -27,18 +27,19 @@
       "parameters": {
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": true,
-        "required_status_checks": [{ "context": "lint" }]
+        "required_status_checks": [{ "context": "lint-static" }, { "context": "lint-suites" }]
       }
     }
   ],
   "_documentation": {
     "purpose": "Canonical solo-maintainer ruleset for luckyrjain/software-builder main.",
-    "required_check_context": "lint",
-    "required_check_source": ".github/workflows/lint.yml job id lint",
+    "required_check_contexts": ["lint-static", "lint-suites"],
+    "required_check_source": ".github/workflows/lint.yml job ids lint-static and lint-suites",
+    "advisory_checks": "install-macos and install-engine-windows run on every PR but are deliberately NOT required: they depend on macOS/Windows hosted runners, and with strict_required_status_checks_policy a runner outage or a flaky platform test would block every merge. Failures there are still visible on the PR; promote one to required by adding its job id to required_status_checks here and applying the ruleset.",
     "solo_maintainer_notes": [
       "Do not require PR approvals — authors cannot self-approve.",
       "Do not require CODEOWNER review until a second reviewer exists.",
-      "Keep required status check lint so CI protects main without human review."
+      "Keep the required status checks (lint-static, lint-suites) so CI protects main without human review."
     ],
     "apply_via": "Settings → Rules → Rulesets → main, or gh api PUT (repo admin token).",
     "verify_via": "make verify-github-ruleset (requires gh auth with repo read access)"

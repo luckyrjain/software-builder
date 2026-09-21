@@ -17,12 +17,24 @@ from check_github_ruleset import (  # noqa: E402
 )
 
 
-def test_expected_ruleset_has_lint_status_check() -> None:
+def test_expected_ruleset_requires_the_lint_jobs() -> None:
     expected = load_expected()
     rule = rule_by_type(expected["rules"], "required_status_checks")
     assert rule is not None
     contexts = [item["context"] for item in rule["parameters"]["required_status_checks"]]
-    assert contexts == ["lint"]
+    assert contexts == ["lint-static", "lint-suites"]
+
+
+def test_every_required_status_check_is_a_real_workflow_job() -> None:
+    """The doc once required a `lint` check after that job had been split into lint-static and
+    lint-suites, so `make verify-github-ruleset` failed until someone noticed."""
+    import yaml
+
+    workflow = yaml.safe_load((Path(__file__).resolve().parents[2] / ".github" / "workflows" / "lint.yml").read_text(encoding="utf-8"))
+    rule = rule_by_type(load_expected()["rules"], "required_status_checks")
+    assert rule is not None
+    for item in rule["parameters"]["required_status_checks"]:
+        assert item["context"] in workflow["jobs"], f"{item['context']} is not a job in lint.yml"
 
 
 def test_check_status_checks_detects_missing_rule() -> None:
