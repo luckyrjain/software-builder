@@ -169,7 +169,7 @@ _WEAK_KEY_WORDS = frozenset({"token", "auth"})  # a text value is masked; a numb
 _KEY_WORD_PAIRS = frozenset(
     {
         (a, b)
-        for a in ("api", "private", "access", "secret", "signing", "master", "ssh", "encryption", "hmac", "auth", "primary", "secondary")
+        for a in ("api", "private", "access", "secret", "signing", "master", "ssh", "encryption", "hmac", "auth")
         for b in ("key", "keys")
     }
     | {("session", "id"), ("session", "ids"), ("client", "secret"), ("client", "secrets"), ("database", "url")}
@@ -187,9 +187,12 @@ def _is_pass_key(words: list[str]) -> bool:
 _KEY_STEMS = ("password", "passwd", "passphrase", "credential", "apikey", "privatekey", "secretkey", "accesskey", "sessionkey", "keybase", "clientkeydata",
               "sshkey", "signingkey", "hmackey", "encryptionkey", "masterkey")
 _CREDENTIAL_WORDS = (
-    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|(?<![A-Za-z0-9])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|pwd|passphrases?|api[_-]?keys?|(?:ssh|signing|hmac|encryption|master|private|access|app|license|subscription|functions|account|primary|secondary)[_-]?keys?|client[_-]?key[_-]?data|(?<![A-Za-z0-9])pat|cookies?|connect\.sid|passcode|psk|(?<![A-Za-z0-9])pw|(?<=[?&])(?:sig|key)|credentials?|creds|"
+    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|(?<![A-Za-z0-9])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|pwd|passphrases?|api[_-]?keys?|(?:ssh|signing|hmac|encryption|master|private|access|app|license|subscription|functions|account)[_-]?keys?|(?-i:primaryKey|secondaryKey)|client[_-]?key[_-]?data|(?<![A-Za-z0-9])pat|cookies?|connect\.sid|passcode|psk|(?<![A-Za-z0-9])pw|(?<=[?&])(?:sig|key)|credentials?|creds|"
     r"sess(?:ion)?[_-]?(?:ids?|keys?)|signature|auth(?:orization)?)(?-i:(?![a-z]|[A-Z](?![a-z])))"
 )
+_SHIELD_SCOPE = "\x00S"  # stands for `::` while the patterns run (no pattern can treat it as a separator)
+_SHIELD_EQ = "\x00E"  # stands for the `=` of PWD=/path
+_SHIELD_ENV_RE = re.compile(r"(?<![A-Za-z0-9_])((?:OLD)?PWD)=(?=/)")
 _CAMEL_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
 
 MAX_REDACT_INPUT_CHARS = 8000  # bound the regex work; a longer string is refused, never half-redacted
@@ -310,7 +313,7 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             token("slack_webhook", r"https://hooks\.slack\.com/services/[A-Za-z0-9/]{20,}"),
             token("discord_webhook", r"discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]{20,}"),
             token("azure_sas_signature", r"SharedAccessSignature\s+[^\s]{20,}", "secret"),
-            token("pem_private_key_open", r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*", "secret"),
+            token("pem_private_key_open", r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*", "secret"),
             redaction.RedactionPattern(
                 name="secretish_kv",
                 pattern=re.compile(
@@ -337,8 +340,8 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             redaction.RedactionPattern(
                 name="secretish_name_value",
                 pattern=re.compile(
-                    r'(?i)(?P<head>(?<!\\)\\*["\']?name\\*["\']?[ \t]*[:=][ \t]*\\*["\']?[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS
-                    + r'[A-Za-z0-9_.-]{0,64}\\*["\']?[\s,]*\\*["\']?value\\*["\']?[ \t]*[:=][ \t]*\\*(?P<q>["\'])?)'
+                    r'(?i)(?P<head>(?<!\\)\\*["\']?(?:parameter)?(?:name|key)\\*["\']?[ \t]*[:=][ \t]*\\*["\']?[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS
+                    + r'[A-Za-z0-9_.-]{0,64}\\*["\']?[\s,]*\\*["\']?(?:parameter)?value\\*["\']?[ \t]*[:=][ \t]*\\*(?P<q>["\'])?)'
                     r'(?P<value>(?(q)(?:(?!(?P=q))[^\r\n\\]){6,}|[^\r\n,}]{6,}))'
                 ),
                 replacement=lambda m, marker: f"{m.group('head')}{marker}",
@@ -359,9 +362,18 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
                 category="secret",
             ),
             redaction.RedactionPattern(
+                name="secretish_command",
+                pattern=re.compile(
+                    r"(?i)(\bgh\s+secret\s+set\s+\S+\s+(?:--body|-b)[ =]|\bput-parameter\b[^\n]{0,200}?--value[ =]"
+                    r"|-Dsonar\.(?:login|token|password)=|\bcargo\s+login\s+|\bconfig\s+set\s+--secret\s+\S+\s+)\S{4,}"
+                ),
+                replacement=r"\1{marker}",
+                category="secret",
+            ),
+            redaction.RedactionPattern(
                 name="secretish_flag",
                 pattern=re.compile(
-                    r"(?i)((?<![A-Za-z0-9])--?[a-z0-9_-]{0,40}(?:password|passwd|pwd|pw|(?<![a-z])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|cookies?|passphrase|token|secret|api[_-]?key|secret[_-]?access[_-]?key|secret[_-]?key"
+                    r"(?i)((?<![A-Za-z0-9])--?[a-z0-9_-]{0,40}(?:password|passwd|pwd|pw|(?<![a-z])pass|(?<![a-z])pat|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|cookies?|passphrase|token|secret|api[_-]?key|secret[_-]?access[_-]?key|secret[_-]?key"
                     r"|access[_-]?key|private[_-]?key|session[_-]?(?:id|key)|keybase|jwt|credentials?|auth"
                     r"|(?:encryption|signing|master|hmac|auth|account)[_-]?key|authkey|secret[_-]?(?:string|id|value)|storepass|keypass|passcode|psk)[ =])[^\s]{6,}"
                 ),
@@ -390,9 +402,12 @@ def _clean_text(text: str, hits: set[str]) -> str:
         # Cutting before redacting can leave half a secret; identifiers and counts are short, so refuse.
         raise ValueError(f"a string longer than {MAX_REDACT_INPUT_CHARS} characters; log identifiers and counts, not content")
     redaction = _redaction_runtime()
+    # Shield what only looks like `key: value` to the shared patterns: `::` scopes and the PWD/OLDPWD variables.
+    shielded = _SHIELD_ENV_RE.sub(lambda m: f"{m.group(1)}{_SHIELD_EQ}", text.replace("::", _SHIELD_SCOPE))
     redacted, found = redaction.redact(
-        text, patterns=_patterns(redaction), marker=redaction.DEFAULT_MARKER, passes=1
+        shielded, patterns=_patterns(redaction), marker=redaction.DEFAULT_MARKER, passes=1
     )
+    redacted = redacted.replace(_SHIELD_SCOPE, "::").replace(_SHIELD_EQ, "=")
     hits.update(hit.name for hit in found)
     # A later shared pattern can re-match the marker one of ours just wrote and leave its closing bracket behind.
     redacted = re.sub(re.escape(redaction.DEFAULT_MARKER) + r"\]+", redaction.DEFAULT_MARKER, redacted)
@@ -466,7 +481,7 @@ def _credential_named(key: str) -> bool:
     if not words:
         return False
     joined = "".join(words)
-    if _is_pass_key(words):
+    if _is_pass_key(words) or re.fullmatch(r"(?:primary|secondary)key", key, re.I):
         return True
     return (
         words[-1] in _STRONG_KEY_WORDS
@@ -489,6 +504,10 @@ def _secret_shaped(value: str, key: str = "") -> bool:
         return False  # a URL without userinfo, a path, a number
     if re.fullmatch(r"/[\w.@%~-]+(?:/[\w.@%~-]+)+/?", value):
         return False  # an absolute path: at least two segments and none of the characters base64 adds (+ =)
+    if key.lower() == "pass" and re.fullmatch(r"(?:Test|Benchmark|Example|Fuzz)\w*", value):
+        return False  # Go test output: `--- PASS: TestGetUser`
+    if re.match(r"\d+:", value) and not _credential_named(key):
+        return False  # `auth.js:1024:13`, `password.py:3:import os`: a line number after a file name
     if "/" in value and re.fullmatch(r"[\w./-]+:[\w.-]+", value) and not _credential_named(key):
         return False  # an image reference (`registry/name:tag`) under a key that only mentions a credential word
     if not re.fullmatch(r"[A-Za-z0-9+/_=.~-]+", value):
@@ -516,8 +535,8 @@ def _key_strength(key: str) -> int:
     if any(word in _STRONG_KEY_WORDS for word in words) or any(pair in _KEY_WORD_PAIRS for pair in zip(words, words[1:])):
         return 2
     joined = "".join(words)  # `clientsecret`, `dbpassword`, `accesstoken`: one word to the splitter, two to a reader
-    if _is_pass_key(words):
-        return 2
+    if _is_pass_key(words) or re.fullmatch(r"(?:primary|secondary)key", key, re.I):
+        return 2  # `primaryKey` (Azure), not the database term `primary_key`
     if any(stem in joined for stem in _KEY_STEMS) or joined.endswith(("secret", "secrets")):
         return 2
     if any(word in _WEAK_KEY_WORDS for word in words) or joined.endswith(("token", "auth")):
@@ -545,7 +564,7 @@ def _validate_usage(usage: object) -> dict[str, int | float]:
             raise ValueError(f"usage.{key} must be a number")
         if key in _USAGE_INT_FIELDS and not isinstance(value, int):
             raise ValueError(f"usage.{key} must be an integer")
-        if not math.isfinite(value) or value < 0 or value > _USAGE_MAX[key]:
+        if value < 0 or value > _USAGE_MAX[key] or not math.isfinite(value):  # range first: isfinite raises on a huge int
             raise ValueError(f"usage.{key} must be finite, non-negative, and at most {_USAGE_MAX[key]}")
         cleaned[key] = value
     if "total_tokens" in cleaned and cleaned["total_tokens"] < cleaned.get("input_tokens", 0) + cleaned.get("output_tokens", 0):
@@ -787,7 +806,7 @@ def _private_dir(directory: Path) -> None:
     if info.st_mode & 0o077:
         # Not ours to chmod: a directory that already exists (a home directory, a shared folder) may hold other
         # things, and tightening it would change who can reach them. Only directories this call created are 0700.
-        raise OSError(f"the log directory is accessible to others; make it 0700 yourself or choose another: {directory}")
+        raise OSError(f"the log directory is accessible to others; choose another absolute directory and do not change this one's permissions: {directory}")
     try:
         is_home = os.path.samefile(directory, _home_dir())
     except OSError:  # an account whose home directory was never created cannot be the log directory
@@ -1123,7 +1142,7 @@ def append_event(
                 ahead = (tail.ts - now).total_seconds()
                 if ahead > FORGED_CLOCK_SECONDS:
                     raise IntegrityError("the last record is timestamped far in the future; a forged log")
-                raise ValueError(f"the clock is {int(ahead)}s behind the log's last record; wait, or fix the clock")
+                raise ValueError(f"the clock is {int(ahead)}s behind the log's last record; append nothing and report LOG_UNAVAILABLE")
             moment = given_ts or now
             if tail.ts is not None:
                 if given_ts is not None and given_ts < tail.ts:

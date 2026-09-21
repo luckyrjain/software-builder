@@ -700,13 +700,13 @@ third_party_changes:
   - actor:
     commit:
     detected_at:
-budget_consumed:
+budget_consumed:   # or `unavailable` when the log failed
   elapsed_minutes:
   estimated_tokens:
   unlimited_budgets: []   # budgets the caller explicitly set to `unlimited`; empty when defaults or caps applied
   unmeasured_budgets: []  # `tokens` when no usage was recorded, so the token cap was not enforced
   orchestrator_tokens:    # `counted` (an `orchestrator_usage` record after every Builder or Reviewer return) | `not_counted`
-run_log:
+run_log:   # or `LOG_UNAVAILABLE` / `INTEGRITY_FAILURE` when the log failed
   run_id:
   chain_head:   # from the final `run_log.py verify`; lets a later reader detect a rewritten log
   unanchored_resumes:   # from that `verify`

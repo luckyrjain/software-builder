@@ -91,8 +91,8 @@ fix_attempts:
 rebuttal_log:
 authoritative_checks:
 lifecycle_validation_errors:
-budget_consumed:  # elapsed_minutes (active), estimated_tokens, unlimited_budgets (caller set `unlimited`), unmeasured_budgets (`tokens` if no usage was recorded), orchestrator_tokens (`counted` | `not_counted`)
-run_log:  # run_id, chain_head and unanchored_resumes only (from the final `run_log.py verify`; see reference/run-log.md)
+budget_consumed:  # `unavailable` when the log failed; else elapsed_minutes (active), estimated_tokens, unlimited_budgets (caller set `unlimited`), unmeasured_budgets (`tokens` if no usage was recorded), orchestrator_tokens (`counted` | `not_counted`)
+run_log:  # `LOG_UNAVAILABLE` / `INTEGRITY_FAILURE` when the log failed; else run_id, chain_head and unanchored_resumes only (from the final `run_log.py verify`; see reference/run-log.md)
 escalation_reason:
 required_human_decision:
 required_access:

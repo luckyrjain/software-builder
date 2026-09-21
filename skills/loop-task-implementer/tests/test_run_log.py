@@ -295,6 +295,7 @@ W = "Xk9fQ2mZ" + "pL4vR8sT1wYb"
 U = "Summer20" + "24!Rocks"
 Y = "Xk9fQ2mZpL4vR8sT" + "1wYbHc3d"
 L = "Xk9fQ2mZpL4vR8sT" + "1wYbHc3dEf5gH7iJ9k"
+M = "s3cr3tPassw0rd" + "Value9"
 J = "eyJhbGciOiJIUzI1" + "NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0." + "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
 HX = "a1b2c3d4e5f6" + "a7b8c9d0"
 WJ = "wJalrXUtnFEMI/K7MDENG" + "bPxRfiC"
@@ -2605,6 +2606,65 @@ def test_round_12_pat_client_key_data_azure_keys_and_versioned_passwords_are_mas
 @pytest.mark.parametrize("key", ["PAT", "ADO_PAT", "primaryKey", "secondaryKey", "client-key-data", "client_key_data"])
 def test_round_12_structured_pat_and_azure_key_names_are_masked(run_log, key):
     assert run_log._sanitize({key: L}, set()) == {key: "[REDACTED]"}
+
+@pytest.mark.parametrize(
+    "text", ["at login (/app/src/auth.js:1024:13)", "src/password.py:3:import os", "token.go:1234:45: undefined", "secrets.ts:10245:13"]
+)
+def test_round_13_file_line_column_references_under_a_credential_named_file_are_kept(run_log, text):
+    assert run_log._clean_text(text, set()) == text
+
+
+def test_round_13_a_line_number_style_value_is_still_masked_under_a_credential_key(run_log):
+    for text in ("password=1234:5678abcd", "token: 12:abcdefgh", "api_key:1234:abcdefgh"):
+        assert "abcdefgh" not in run_log._clean_text(text, set()) and "5678abcd" not in run_log._clean_text(text, set())
+
+
+def test_round_13_a_huge_integer_in_usage_is_a_validation_error_not_an_overflow(run_log, log_dir):
+    with pytest.raises(ValueError):
+        run_log._validate_usage({"input_tokens": 10**400})
+    _start(run_log, log_dir)
+    forged = _forge_record(run_log, seq=2, prev_hash=_head(run_log, log_dir), event="builder_returned", ts="2026-01-15T10:01:00.000Z",
+                           actor="builder", usage={"input_tokens": 10**400})
+    path = _path(run_log, log_dir)
+    path.write_text(path.read_text() + forged + "\n")
+    result = run_log.verify_log(log_dir, RUN_ID)  # an integrity report (exit 1 on the CLI), not an OverflowError
+    assert not result.ok and any("usage" in error for error in result.errors)
+    assert _cli("verify", *_common(log_dir)).returncode == 1
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "aws cloudformation create-stack --parameters ParameterKey=DBPassword,ParameterValue=" + M,
+        '{"ParameterKey":"DBPassword","ParameterValue":"%s"}' % M, '{"Key":"DB_PASSWORD","Value":"%s"}' % M,
+        "--environment Key=DB_PASSWORD,Value=" + M, "gh secret set X --body " + M, "gh secret set X -b " + M,
+        "aws ssm put-parameter --name x --type SecureString --value " + M, "-Dsonar.login=" + M, "cargo login " + M,
+        "pulumi config set --secret dbPassword " + M, "primaryKey: " + M,
+    ],
+)
+def test_round_13_cloudformation_pairs_and_secret_setting_commands_are_masked(run_log, text):
+    assert M not in run_log._clean_text(text, set())
+
+
+def test_round_13_a_pgp_private_key_block_is_masked(run_log):
+    assert "AbCdEf" not in run_log._clean_text("-----BEGIN PGP PRIVATE KEY BLOCK-----\nAbCdEf123456\n-----END PGP PRIVATE KEY BLOCK-----", set())
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "--- PASS: TestGetUser (0.00s)", "=== RUN TestX", "PWD=/home/runner/work/r/r", "OLDPWD=/Users/x",
+        "test auth::token::tests::test_expired_token ... ok", "use crate::auth::secret::SecretStore;",
+        "test password::hash::tests::verifies ... ok", "primary_key=customer_id", "gh secret list", "cargo login",
+    ],
+)
+def test_round_13_test_output_env_dumps_and_rust_paths_are_kept(run_log, text):
+    assert run_log._clean_text(text, set()) == text
+
+
+def test_round_13_a_password_named_pwd_is_still_masked_and_the_shield_does_not_leak(run_log):
+    assert "hunter2hunter2" not in run_log._clean_text("PWD=hunter2hunter2", set())
+    assert "\x00" not in run_log._clean_text("PWD=/a/b auth::x token=" + M, set())
+    assert M not in run_log._clean_text("token=abc::" + M, set())
 
 
 # --- docs and wiring stay in sync -------------------------------------------------------------

@@ -35,7 +35,7 @@ Builder/Reviewer/PR logic here — see the [design spec](../../../docs/superpowe
      continues to the next independent ticket.
    - Update `consumed_tokens` in the session state by adding the task's `estimated_tokens`, read by the same key from
      the completion report's `Budgets:` line or the escalation report's `budget_consumed` (it does not read that skill's
-     run log). If that report's `unmeasured_budgets` contains `tokens`, or `orchestrator_tokens` is `not_counted`, or the report says `Budgets: unavailable` (a run whose log failed), the figure is a lower bound: say so in the summary and do
+     run log). If that report's `unmeasured_budgets` contains `tokens`, or `orchestrator_tokens` is `not_counted`, or the report says `Budgets: unavailable` or `budget_consumed: unavailable` (a run whose log failed), the figure is a lower bound: say so in the summary and do
      not treat `session_token_budget` as fully enforced for that task.
 
 3. **After each ticket completes**, re-check the session-level stop conditions
