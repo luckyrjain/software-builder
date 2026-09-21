@@ -165,7 +165,7 @@ def test_sigterm_as_system_exit_skips_restore_when_previous_handler_was_none(
     with install_engine._sigterm_as_system_exit():
         pass
 
-    assert len(calls) == 1  # only the registration call; the restore was correctly skipped
+    assert len(calls) == len(install_engine._stop_signals())  # registrations only; the restore was skipped
 
 
 # --- _terminate_signal / _defer_interrupts ---------------------------------------------------
@@ -271,7 +271,7 @@ def test_defer_interrupts_falls_back_to_defaults_when_previous_handler_was_none(
         pass
 
     restores = calls[len(calls) // 2 :]
-    assert {sig for sig, _ in restores} == {signal.SIGINT, install_engine._terminate_signal()}
+    assert {sig for sig, _ in restores} == {signal.SIGINT, *install_engine._stop_signals()}
     for sig, handler in restores:
         assert handler is not None
         expected = signal.default_int_handler if sig == signal.SIGINT else signal.SIG_DFL
@@ -399,3 +399,48 @@ def test_a_failed_cleanup_superseded_by_a_deferred_signal_is_still_reported(
             raise OSError(28, "No space left on device")
     assert exc_info.value.code == 130
     assert "cleanup failed while handling an interrupt" in capsys.readouterr().err
+
+
+def test_stop_signals_include_sighup_on_posix_and_nothing_off_the_main_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    if sys.platform != "win32":
+        assert set(install_engine._stop_signals()) == {signal.SIGTERM, signal.SIGHUP}
+    result: list[list[int]] = []
+    worker = threading.Thread(target=lambda: result.append(install_engine._stop_signals()))
+    worker.start()
+    worker.join()
+    assert result == [[]]
+
+
+@posix_only
+def test_sighup_is_converted_like_sigterm_and_restored(signal_sentinels: object) -> None:
+    before = signal.getsignal(signal.SIGHUP)
+    with pytest.raises(SystemExit) as exc_info:
+        with install_engine._sigterm_as_system_exit():
+            os.kill(os.getpid(), signal.SIGHUP)
+            time.sleep(0.2)
+    assert exc_info.value.code == 130
+    assert signal.getsignal(signal.SIGHUP) == before
+
+
+@posix_only
+def test_sighup_is_deferred_during_cleanup(signal_sentinels: object) -> None:
+    completed = False
+    with pytest.raises(SystemExit) as exc_info:
+        with install_engine._defer_interrupts():
+            os.kill(os.getpid(), signal.SIGHUP)
+            time.sleep(0.2)
+            completed = True
+    assert exc_info.value.code == 130
+    assert completed
+
+
+@posix_only
+def test_an_ignored_sighup_stays_ignored(signal_sentinels: object) -> None:
+    """`nohup` sets SIGHUP to ignored on purpose; deferral must not turn it into an abort."""
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    with install_engine._sigterm_as_system_exit():
+        assert signal.getsignal(signal.SIGHUP) == signal.SIG_IGN
+    with install_engine._defer_interrupts():
+        assert signal.getsignal(signal.SIGHUP) == signal.SIG_IGN
