@@ -38,7 +38,8 @@ in [reference/state-schema.yaml](reference/state-schema.yaml) exactly. `HUMAN_AC
 
 **Human action required:** <exact action, or "none">
 **Budgets:** `estimated_tokens=<digits only> elapsed_minutes=<n> unlimited_budgets=<none | tokens | elapsed_minutes | both> unmeasured_budgets=<none | tokens> orchestrator_tokens=<counted | not_counted>`
-**Run log:** `<run_id>`, chain head `<chain_head>`, unanchored resumes `<n from verify>`
+**Run log:** `<run_id>`, chain head `<chain_head>`, unanchored resumes `<n from verify>` — or, when the log failed,
+`LOG_UNAVAILABLE` / `INTEGRITY_FAILURE` with `Budgets: unavailable`
 ```
 
 A `Lifecycle gate: PASS` means `validate_loop_lifecycle.py --state ...` exited `0` for the freshly rebuilt current identity/requirements and current repository gates. It does **not** grant merge authority. Conversely, do not render a stale lens, a mismatched review/evidence generation, stale third-party check, old-head CI, or exception bound to another review identity/generation as current merely because the task was previously READY.

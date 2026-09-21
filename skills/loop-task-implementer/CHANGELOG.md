@@ -12,7 +12,7 @@ For earlier history, see the `## loop-task-implementer` section in the repositor
   or, when unmeasurable, that the token cap is not enforced. Pressure tests 23-25 and
   `tests/test_budget_defaults.py` cover the defaults.
 - Added an append-only, redacted, SHA-256 hash-chained run log (`scripts/run_log.py`, `reference/run-log.md`,
-  orchestrator section 20), written only by the Orchestrator and never shown to a Builder or Reviewer. Ten rounds of
+  orchestrator section 20), written only by the Orchestrator and never shown to a Builder or Reviewer. Repeated
   adversarial review (pentester, SRE, prompt engineer, code reviewer, architect) shaped the contract:
   - **Exit codes** `0` ok, `1` integrity failure, `2` bad input or cannot run, `3` budget cap reached.
   - **Tamper evidence**: strict canonical parsing; the first record is `run_started`; timestamps never go backwards;

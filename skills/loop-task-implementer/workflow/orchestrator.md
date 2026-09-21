@@ -734,8 +734,10 @@ from the previous receipt.
    - **`pending` set with a head** (the call was saved but its receipt never arrived; a `run_started` has no head, so skip
      this for it): before `verify` and before any `run_resumed`, repeat it exactly with `pending.head`.
      If it had committed the script returns that record; if not, it appends it. Store the receipt's `chain_head`, clear
-     `pending`. Exit `1` here means the log holds something you did not write: stop. Exit `2` means the script refused
-     the call and wrote nothing: correct it, save the corrected call as the new `pending`, send it. If the replayed call was
+     `pending`. Exit `1` here means the log holds something you did not write: stop. Exit `2` from a call the script
+     refused as wrong (a bad reason code, out of sequence) wrote nothing: correct it, save the corrected call as the new
+     `pending`, send it; any other exit `2` (lock timeout, unwritable or refused directory, clock behind the log, Python
+     older than 3.10) is `LOG_UNAVAILABLE`: report it, append nothing. If the replayed call was
      `run_completed`, the run is finished: do step 5's `budget` read and `verify`, then the report; if it was `run_resumed`, do not
      send another; otherwise continue below.
    - `verify` (add `--expect-head <held head>` if state holds one) and read its JSON:

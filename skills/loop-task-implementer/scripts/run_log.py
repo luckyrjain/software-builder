@@ -163,13 +163,13 @@ _SENSITIVE_MARKER = "[REDACTED]"
 _STRONG_KEY_WORDS = frozenset(
     "password passwords passwd pwd pw passcode passphrase passphrases secret secrets apikey apikeys credential "
     "credentials creds authorization cookie cookies privatekey privatekeys jwt bearer accesskey accesskeys secretkey "
-    "secretkeys sessionid sessionids dsn".split()
+    "secretkeys sessionid sessionids dsn pat".split()
 )
 _WEAK_KEY_WORDS = frozenset({"token", "auth"})  # a text value is masked; a number under them is a count
 _KEY_WORD_PAIRS = frozenset(
     {
         (a, b)
-        for a in ("api", "private", "access", "secret", "signing", "master", "ssh", "encryption", "hmac", "auth")
+        for a in ("api", "private", "access", "secret", "signing", "master", "ssh", "encryption", "hmac", "auth", "primary", "secondary")
         for b in ("key", "keys")
     }
     | {("session", "id"), ("session", "ids"), ("client", "secret"), ("client", "secrets"), ("database", "url")}
@@ -184,10 +184,10 @@ def _is_pass_key(words: list[str]) -> bool:
         joined.endswith("pass") and joined[:-4] in _PASS_PREFIXES
     )
 
-_KEY_STEMS = ("password", "passwd", "passphrase", "credential", "apikey", "privatekey", "secretkey", "accesskey", "sessionkey", "keybase",
+_KEY_STEMS = ("password", "passwd", "passphrase", "credential", "apikey", "privatekey", "secretkey", "accesskey", "sessionkey", "keybase", "clientkeydata",
               "sshkey", "signingkey", "hmackey", "encryptionkey", "masterkey")
 _CREDENTIAL_WORDS = (
-    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|(?<![A-Za-z0-9])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|pwd|passphrases?|api[_-]?keys?|(?:ssh|signing|hmac|encryption|master|private|access|app|license|subscription|functions|account)[_-]?keys?|cookies?|connect\.sid|passcode|psk|(?<![A-Za-z0-9])pw|(?<=[?&])(?:sig|key)|credentials?|creds|"
+    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|(?<![A-Za-z0-9])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|pwd|passphrases?|api[_-]?keys?|(?:ssh|signing|hmac|encryption|master|private|access|app|license|subscription|functions|account|primary|secondary)[_-]?keys?|client[_-]?key[_-]?data|(?<![A-Za-z0-9])pat|cookies?|connect\.sid|passcode|psk|(?<![A-Za-z0-9])pw|(?<=[?&])(?:sig|key)|credentials?|creds|"
     r"sess(?:ion)?[_-]?(?:ids?|keys?)|signature|auth(?:orization)?)(?-i:(?![a-z]|[A-Z](?![a-z])))"
 )
 _CAMEL_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
@@ -315,7 +315,7 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
                 name="secretish_kv",
                 pattern=re.compile(
                     r"(?i)\b(?P<key>[A-Za-z0-9_.-]{0,64}" + _CREDENTIAL_WORDS + r"[A-Za-z0-9_.-]{0,64})"
-                    r"(?P<sep>\s*[:=]\s*)[\"']?(?!unlimited\b)"
+                    r"(?P<sep>\s*(?:=|:(?!:))\s*)[\"']?(?!unlimited\b)"  # `::` is a path separator (pytest ids, Rust), not `key: value`
                     r"(?P<value>[^\s\"',;&?]{8,})"
                 ),
                 replacement=lambda m, marker: (
@@ -489,6 +489,8 @@ def _secret_shaped(value: str, key: str = "") -> bool:
         return False  # a URL without userinfo, a path, a number
     if re.fullmatch(r"/[\w.@%~-]+(?:/[\w.@%~-]+)+/?", value):
         return False  # an absolute path: at least two segments and none of the characters base64 adds (+ =)
+    if "/" in value and re.fullmatch(r"[\w./-]+:[\w.-]+", value) and not _credential_named(key):
+        return False  # an image reference (`registry/name:tag`) under a key that only mentions a credential word
     if not re.fullmatch(r"[A-Za-z0-9+/_=.~-]+", value):
         return True  # punctuation is what human-chosen passwords are made of
     if len(value) < 12 and not (len(value) >= 8 and _credential_named(key)):
@@ -499,6 +501,8 @@ def _secret_shaped(value: str, key: str = "") -> bool:
         return True  # a long segment that mixes letters and digits looks random, not like a word
     if _credential_named(key):
         return True  # `secret_key=my-app-secret-value`: a phrase or a word chain is a credential here
+    if re.fullmatch(r"v?\d+(?:\.\d+){1,3}(?:[-+.][A-Za-z0-9.]+)*", value):
+        return False  # a version or an image tag (`auth-service:1.2.3-alpine`)
     if re.fullmatch(r"[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)+", value) or re.fullmatch(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+", value):
         return False
     return True
@@ -1095,8 +1099,8 @@ def append_event(
             if expect_head is None:
                 if tail.seq > 0 and not unanchored:
                     raise ValueError(
-                        "append needs --expect-head (the chain_head from your previous receipt); to resume without "
-                        "one, use run_resumed with --unanchored"
+                        "append needs --expect-head (the chain_head from your previous receipt); a run_resumed "
+                        "--unanchored is only for a person who has inspected the log (see the run-log reference)"
                     )
             elif tail.seq == 0:
                 raise IntegrityError("a head was supplied but the log is missing, empty, or was wiped")

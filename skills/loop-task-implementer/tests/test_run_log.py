@@ -294,6 +294,7 @@ S = "Zk9qLw3x" + "PvAb12cd"
 W = "Xk9fQ2mZ" + "pL4vR8sT1wYb"
 U = "Summer20" + "24!Rocks"
 Y = "Xk9fQ2mZpL4vR8sT" + "1wYbHc3d"
+L = "Xk9fQ2mZpL4vR8sT" + "1wYbHc3dEf5gH7iJ9k"
 J = "eyJhbGciOiJIUzI1" + "NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0." + "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
 HX = "a1b2c3d4e5f6" + "a7b8c9d0"
 WJ = "wJalrXUtnFEMI/K7MDENG" + "bPxRfiC"
@@ -2562,6 +2563,48 @@ def test_round_11_a_bare_jwt_and_a_key_in_a_query_string_are_masked(run_log, tex
 @pytest.mark.parametrize("text", ["tests_run=12 key_count=3", "monkey=business", "?turkey=abcdefghij1234", "keyed=" + "abcdefghij" + "1234"])
 def test_round_11_words_that_only_contain_key_are_kept(run_log, text):
     assert run_log._clean_text(text, set()) == text
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "tests/test_auth.py::test_login_expired", "tests/test_password_reset.py::test_expired",
+        "tests/test_tokens.py::TestRefresh::test_ok", "crate::auth::refresh_tokens", "FAILED tests/test_secrets.py::test_rotation_window",
+    ],
+)
+def test_round_12_test_ids_and_module_paths_with_a_credential_word_are_kept(run_log, text):
+    assert run_log._clean_text(text, set()) == text
+
+
+def test_round_12_a_single_colon_or_equals_still_separates_a_key_from_its_value(run_log):
+    for text in (f"token: {Y}", f"token={Y}", f"api_key:{Y}"):
+        assert Y not in run_log._clean_text(text, set())
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "image: ghcr.io/o/auth-service:1.2.3-alpine", "kubectl set image deploy/x token-refresher=reg/x/token-refresher:1.2.3-hotfix",
+        "token-service:2026.09.21-" + "abcdef0", "path=/usr/bin/x", "pattern=abcdefgh1234", "patch=abcdefghijkl", "token=v1.2.3",
+    ],
+)
+def test_round_12_image_tags_versions_and_pat_lookalikes_are_kept(run_log, text):
+    assert run_log._clean_text(text, set()) == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "ADO_PAT=" + L, "GH_PAT=" + L[:40], "pat: " + L, '{"pat": "%s"}' % L, "client-key-data: " + L,
+        '{"primaryKey": "%s", "secondaryKey": "%s"}' % (L, L), "password=1.2.3-" + "abcdefgh", "token=reg/x/y:abcdefghij",
+    ],
+)
+def test_round_12_pat_client_key_data_azure_keys_and_versioned_passwords_are_masked(run_log, text):
+    cleaned = run_log._clean_text(text, set())
+    assert L not in cleaned and L[:40] not in cleaned and "abcdefgh" not in cleaned.replace("[REDACTED]", "")
+
+
+@pytest.mark.parametrize("key", ["PAT", "ADO_PAT", "primaryKey", "secondaryKey", "client-key-data", "client_key_data"])
+def test_round_12_structured_pat_and_azure_key_names_are_masked(run_log, key):
+    assert run_log._sanitize({key: L}, set()) == {key: "[REDACTED]"}
 
 
 # --- docs and wiring stay in sync -------------------------------------------------------------
