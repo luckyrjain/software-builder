@@ -141,7 +141,7 @@ ceiling; this skill's own caps are the two `max_task_*` inputs above.)
 
 The run log (orchestrator §20) needs **Python 3.10 or newer** on a POSIX host (the default macOS `python3` 3.9
 does not qualify; the repository supports 3.12+), and a writable directory outside every git repository —
-`~/.software-builder/runs` by default, or an explicit `--log-dir`. In a sandbox that blocks writes there, grant
+`~/.software-builder/runs` by default, or the `log_dir` input (passed on as `--log-dir`). In a sandbox that blocks writes there, grant
 that directory or choose another; otherwise every run stops at exit `2`.
 
 ## Framework
