@@ -190,8 +190,9 @@ _CREDENTIAL_WORDS = (
     r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|docker[_-]?config[_-]?json|(?<![A-Za-z0-9])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|pwd|passphrases?|api[_-]?keys?|(?:ssh|signing|hmac|encryption|master|private|access|app|license|subscription|functions|account)[_-]?keys?|(?-i:primaryKey|secondaryKey)|client[_-]?key[_-]?data|(?<![A-Za-z0-9])pat|cookies?|connect\.sid|passcode|psk|(?<![A-Za-z0-9])pw|(?<=[?&])(?:sig|key)|credentials?|creds|"
     r"sess(?:ion)?[_-]?(?:ids?|keys?)|signature|auth(?:orization)?)(?-i:(?![a-z]|[A-Z](?![a-z])))"
 )
-_SHIELD_SCOPE = "\x00\x01"  # stands for `::` while the patterns run (no pattern can treat it as a separator)
-_SHIELD_EQ = "\x00\x02"  # stands for the `=` of PWD=/path
+# What stands for `::` and for the `=` of PWD=/path while the patterns run: non-word characters, so that no `\b` or
+# lookbehind is defeated and no pattern can read them as a separator; the first pair that the text does not contain.
+_SHIELDS = (("\x00\x01", "\x00\x02"), ("\ue000\ue001", "\ue000\ue002"), ("\ue010\ue011", "\ue010\ue012"))
 _SHIELD_ENV_RE = re.compile(r"(?<![A-Za-z0-9_;])((?:OLD)?PWD)=(?=/)")  # not after `;`: an ODBC PWD=/... is a password
 # GitHub Actions workflow commands carry a secret after `::`, which the shield below would hide from the patterns
 _WORKFLOW_CMD_RE = re.compile(
@@ -323,7 +324,7 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
                 name="secretish_kv",
                 pattern=re.compile(
                     r"(?i)\b(?P<key>[A-Za-z0-9_.-]{0,64}" + _CREDENTIAL_WORDS + r"[A-Za-z0-9_.-]{0,64})"
-                    r"(?P<sep>\s*(?:=|:(?!:))\s*)[\"']?(?!unlimited\b)"  # `::` is a path separator (pytest ids, Rust), not `key: value`
+                    r"(?P<sep>[ \t]*(?:=|:(?!:))[ \t]*)[\"']?(?![{\[])(?!unlimited\b)"  # `::` is a path separator (pytest ids, Rust), not `key: value`; a value stays on its line and is not a map/list
                     r"(?P<value>[^\s\"',;&?]{8,})"
                 ),
                 replacement=lambda m, marker: (
@@ -376,6 +377,14 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
                 category="secret",
             ),
             redaction.RedactionPattern(
+                name="secretish_dockerfile",
+                pattern=re.compile(
+                    r"(?im)^([ \t]*(?:ENV|ARG)[ \t]+[A-Za-z0-9_.-]{0,64}" + _CREDENTIAL_WORDS + r"[A-Za-z0-9_.-]{0,64}[ \t]+)\S{8,}"
+                ),
+                replacement=r"\1{marker}",
+                category="secret",
+            ),
+            redaction.RedactionPattern(
                 name="secretish_flag",
                 pattern=re.compile(
                     r"(?i)((?<![A-Za-z0-9])--?[a-z0-9_-]{0,40}(?:password|passwd|pwd|pw|(?<![a-z])pass|(?<![a-z])pat|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|cookies?|passphrase|token|secret|api[_-]?key|secret[_-]?access[_-]?key|secret[_-]?key"
@@ -411,16 +420,17 @@ def _clean_text(text: str, hits: set[str]) -> str:
         raise ValueError(f"a string longer than {MAX_REDACT_INPUT_CHARS} characters; log identifiers and counts, not content")
     redaction = _redaction_runtime()
     # Shield what only looks like `key: value` to the shared patterns: `::` scopes and the PWD/OLDPWD variables.
-    # (A string that already holds a NUL is left alone, so the restore cannot change caller data.)
-    if "\x00" not in text and _WORKFLOW_CMD_RE.search(text):
+    if _WORKFLOW_CMD_RE.search(text):
         text = _WORKFLOW_CMD_RE.sub(lambda m: f"{m.group(1)}{redaction.DEFAULT_MARKER}", text)
         hits.add("workflow_command")
-    shielded = text if "\x00" in text else _SHIELD_ENV_RE.sub(lambda m: f"{m.group(1)}{_SHIELD_EQ}", text.replace("::", _SHIELD_SCOPE))
+    shield = next((pair for pair in _SHIELDS if not any(ch in text for ch in pair[0] + pair[1])), None)  # None: text uses them all
+    scope, eq = shield if shield else ("", "")
+    shielded = _SHIELD_ENV_RE.sub(lambda m: f"{m.group(1)}{eq}", text.replace("::", scope)) if shield else text
     redacted, found = redaction.redact(
         shielded, patterns=_patterns(redaction), marker=redaction.DEFAULT_MARKER, passes=1
     )
-    if shielded is not text:
-        redacted = redacted.replace(_SHIELD_SCOPE, "::").replace(_SHIELD_EQ, "=")
+    if shield:
+        redacted = redacted.replace(scope, "::").replace(eq, "=")
     hits.update(hit.name for hit in found)
     # A later shared pattern can re-match the marker one of ours just wrote and leave its closing bracket behind.
     redacted = re.sub(re.escape(redaction.DEFAULT_MARKER) + r"\]+", redaction.DEFAULT_MARKER, redacted)

@@ -298,6 +298,7 @@ L = "Xk9fQ2mZpL4vR8sT" + "1wYbHc3dEf5gH7iJ9k"
 M = "s3cr3tPassw0rd" + "Value9"
 AWSID = "AKIA" + "IOSFODNN7EXAMPLQ"
 N = "Zk3Qx9Lm2Vb7" + "Rt5Wp8Ns"
+QW = "Zx9Qw7Lm2Kp4" + "Rt8VbN3c"
 J = "eyJhbGciOiJIUzI1" + "NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0." + "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
 HX = "a1b2c3d4e5f6" + "a7b8c9d0"
 WJ = "wJalrXUtnFEMI/K7MDENG" + "bPxRfiC"
@@ -2727,6 +2728,22 @@ def test_round_15_scoped_test_ids_with_digits_and_ordinary_set_output_names_are_
 @pytest.mark.parametrize("name", ["token", "db_password", "api-key", "secret", "credentials"])
 def test_round_15_set_output_with_a_credential_name_is_masked(run_log, name):
     assert N not in run_log._clean_text(f"::set-output name={name}::{N}", set())
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "credentials:\n  password: " + QW, "auth:\n  db_password: " + QW, "registry:\n  auth:\n    password: " + QW,
+        "secrets: {password: %s}" % QW, "credentials:\r\n  password: " + QW, "\x00::add-mask::" + QW,
+        "ENV DB_PASSWORD " + QW, "ARG GITHUB_TOKEN " + QW, " ::add-mask::" + QW,
+    ],
+)
+def test_round_15_nested_yaml_keys_dockerfile_env_and_text_that_uses_the_shield_characters_do_not_leak(run_log, text):
+    assert QW not in run_log._clean_text(text, set())
+
+
+@pytest.mark.parametrize("text", ["ENV NODE_ENV production-build", "a\x00\x01::b PWD=/x", "a::b PWD=/x", "tests/test_auth.py::test_login_2fa"])
+def test_round_15_ordinary_dockerfile_lines_and_shield_lookalikes_come_back_unchanged(run_log, text):
+    assert run_log._clean_text(text, set()) == text
 
 
 # --- docs and wiring stay in sync -------------------------------------------------------------
