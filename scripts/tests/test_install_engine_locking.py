@@ -110,7 +110,7 @@ def test_the_lock_is_released_the_moment_the_holder_is_killed(tmp_path: Path) ->
 
 def test_two_holders_are_never_inside_the_critical_section_together(tmp_path: Path) -> None:
     """The old directory-based design's reclaim logic could, under the right race, let two
-    processes believe they both held the lock; an OS advisory lock has no such window by
+    processes believe they both held the lock; the OS's own lock has no such window by
     construction, but this stays as a regression guard."""
     import subprocess
     import textwrap
@@ -168,6 +168,62 @@ def test_a_directory_format_lock_from_before_the_flock_rewrite_is_cleared_and_re
 
     with held_lock(tmp_path, "demo-skill", wait_timeout=5.0):
         pass
+    assert lock_path.is_file()
+
+
+def test_concurrent_migration_of_the_same_leftover_directory_lock_is_safe(tmp_path: Path) -> None:
+    """The single-process migration test above never exercises the actual race: several
+    processes discovering the same leftover directory-format lock at once, each clearing it
+    (`shutil.rmtree(..., ignore_errors=True)`) and racing to create the replacement file. None
+    of that may crash, corrupt the lock, or let two of them believe they hold it together."""
+    import subprocess
+    import textwrap
+
+    root = Path(__file__).resolve().parents[2]
+    lock_path = install_engine._lock_path_for(tmp_path, "demo-skill")
+    lock_path.mkdir()
+    (lock_path / "pid").write_text("12345", encoding="utf-8")
+    (lock_path / "acquired_at").write_text("0", encoding="utf-8")
+
+    code = textwrap.dedent(
+        f"""
+        import os, sys, time
+        from pathlib import Path
+        sys.path.insert(0, {str(root)!r})
+        from scripts.install_engine import held_lock
+
+        dest = Path({str(tmp_path)!r})
+        marker = os.path.join(dest, "in-critical-section")
+        collisions = 0
+        for _ in range(10):
+            with held_lock(dest, "demo-skill", wait_timeout=60.0):
+                try:
+                    fd = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                except FileExistsError:
+                    collisions += 1
+                else:
+                    os.close(fd)
+                    time.sleep(0.001)
+                    os.unlink(marker)
+        print(collisions)
+        """
+    )
+    procs = [
+        subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
+        for _ in range(6)
+    ]
+    collisions = 0
+    try:
+        for proc in procs:
+            out, _ = proc.communicate(timeout=120)
+            assert proc.returncode == 0
+            collisions += int(out.strip())
+    finally:
+        for proc in procs:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=10)
+    assert collisions == 0
     assert lock_path.is_file()
 
 
