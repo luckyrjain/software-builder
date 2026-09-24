@@ -116,9 +116,18 @@ def _unlock(fd: int) -> None:
 
 def _write_holder_pid(fd: int) -> None:
     """Diagnostics only: never read back to decide anything, only to name a holder in a
-    LockTimeoutError message. A failure here must not fail the acquisition itself."""
+    LockTimeoutError message. A failure here must not fail the acquisition itself.
+
+    Seeks to 0 explicitly rather than assuming the caller left the position there: on Windows,
+    `msvcrt.locking()` (the immediately-preceding `_try_lock()` call, on success) advances the
+    file position past the byte it locked, so a write right after it without an explicit seek
+    landed one byte in -- confirmed on Windows CI, where the resulting pid text (offset by a
+    leading NUL from the truncate-then-write gap) failed to decode into anything `_read_holder_
+    pid()` recognised, and the diagnostic silently fell back to "unknown" instead of the truth.
+    """
     try:
         os.ftruncate(fd, 0)
+        os.lseek(fd, 0, os.SEEK_SET)
         os.write(fd, str(os.getpid()).encode("ascii"))
     except OSError:
         pass
