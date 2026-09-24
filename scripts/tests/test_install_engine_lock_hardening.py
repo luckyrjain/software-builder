@@ -743,3 +743,87 @@ def test_the_engine_stops_immediately_if_the_parent_died_before_startup_finished
     finally:
         install_engine_module.os.kill = orig_kill
     assert stopped == [True]
+
+
+def test_a_genuine_backup_is_kept_when_the_destination_is_present_but_unowned(tmp_path: Path) -> None:
+    """The destination being *present* only proves the backup is an old copy when what's there is
+    demonstrably this skill's own replacement install -- an unowned directory at the destination
+    (someone else's files, a half-finished unrelated write) proves nothing either way, so the
+    backup -- the only copy of the user's previous install -- must be kept, not discarded."""
+    _, dest_root, skill_dest = _installed_skill(tmp_path)
+    genuine = _backup_of_the_installed_skill(dest_root, skill_dest, "genuine1", "v1")
+    shutil.rmtree(skill_dest)
+    skill_dest.mkdir()
+    (skill_dest / "not-a-manifest.txt").write_text("unrelated", encoding="utf-8")
+
+    install_engine._recover_leftover_backups(dest_root, "demo-skill", skill_dest)
+
+    assert genuine.exists(), "an unowned destination must not cause the backup to be discarded"
+    assert (skill_dest / "not-a-manifest.txt").exists(), "the unowned destination itself is untouched"
+
+
+@posix_only
+def test_a_third_signal_during_the_uninstall_restore_still_forces_the_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, signal_sentinels: object
+) -> None:
+    """The restore-after-a-failed-move step runs under its own `_defer_interrupts()`, nested
+    inside the outer `_sigterm_as_system_exit()` the whole uninstall runs under. The outer layer
+    absorbs everything after its first signal with no way out -- `_defer_interrupts()`'s own
+    3rd-signal force-quit is what gives a hung restore (a stuck filesystem, an uninterruptible
+    rmtree) an escape hatch. Losing that wrapper silently removes the only escape for this step."""
+    _, dest_root, skill_dest = _installed_skill(tmp_path)
+    real_replace = os.replace
+    calls = 0
+
+    def replace_then_hang_then_signal_three_times(src: object, dst: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            real_replace(src, dst)  # the move-aside succeeds
+            os.kill(os.getpid(), signal.SIGTERM)  # triggers the except-BaseException restore path
+            time.sleep(0.2)
+        else:
+            for _ in range(3):  # the restore itself is "stuck": only repeated signals end it
+                os.kill(os.getpid(), signal.SIGTERM)
+                time.sleep(0.1)
+            pytest.fail("os._exit should have ended the process before this point")  # pragma: no cover
+
+    exit_calls: list[int] = []
+    monkeypatch.setattr(
+        install_engine.os,
+        "_exit",
+        lambda code: (exit_calls.append(code), (_ for _ in ()).throw(SystemExit(code)))[-1],
+    )
+    monkeypatch.setattr(install_engine.os, "replace", replace_then_hang_then_signal_three_times)
+    with pytest.raises(SystemExit) as exc_info:
+        uninstall_skill("demo-skill", dest_root=dest_root)
+    assert exit_calls == [130], "the force-quit escape must still fire during this step"
+    assert exc_info.value.code == 130
+
+
+@posix_only
+def test_a_signal_during_the_leftover_sweep_still_exits_cleanly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, signal_sentinels: object
+) -> None:
+    """`_sweep_leftovers`/`_recover_leftover_backups` run after `held_lock`'s own conversion has
+    exited and before the primary work's -- unprotected, a signal there hits the default
+    disposition (a raw 143/-15) instead of the engine's clean 130."""
+    repo, dest_root, skill_dest = _installed_skill(tmp_path)
+
+    def sweep_then_signal(dest_root: Path, skill: str) -> None:
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.sleep(0.2)
+
+    monkeypatch.setattr(install_engine, "_sweep_leftovers", sweep_then_signal)
+    with pytest.raises(SystemExit) as exc_info:
+        install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor")
+    assert exc_info.value.code == 130
+
+    def sweep_then_signal_uninstall(dest_root: Path, skill: str) -> None:
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.sleep(0.2)
+
+    monkeypatch.setattr(install_engine, "_sweep_leftovers", sweep_then_signal_uninstall)
+    with pytest.raises(SystemExit) as exc_info:
+        uninstall_skill("demo-skill", dest_root=dest_root)
+    assert exc_info.value.code == 130
