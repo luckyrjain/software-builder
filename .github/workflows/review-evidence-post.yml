@@ -88,9 +88,29 @@ concurrency:
 jobs:
   review-evidence-post:
     name: review-evidence-post
+    # LENS-B-5 (PR #298 follow-up): skip specifically -- and only -- when the triggering
+    # review-evidence.yml run was cancelled outright (the common case is a rapid second push
+    # cancelling the first push's run via that workflow's own `concurrency: cancel-in-progress`
+    # group). Without this, a cancelled run still spun up a full job here -- checkout, pip
+    # install, re-analyze -- for a stale trigger instead of a clean no-op: wasted CI minutes and
+    # log noise on every rapid-push PR, no correctness or security impact either way.
+    #
+    # Do NOT broaden this to a bare `conclusion == 'success'` gate. That was the literal design's
+    # original condition, and it was removed (along with the old Jobs-API check this job used to
+    # make, scoped to the now-deleted review-evidence-analyze job's conclusion) because the
+    # triggering run's own aggregate conclusion is `failure` on almost every legitimate push:
+    # review-evidence-check, a sibling job in that same run, is *expected* to fail until a real
+    # approval lands -- that's the whole point of the async chain this job completes. A
+    # `== 'success'` gate here would filter out essentially every real trigger and permanently
+    # deadlock the mechanism -- the exact class of bug round-3 finding 1 (see the design doc's
+    # Revision history) already fixed once. `cancelled` is the one conclusion that can never
+    # legitimately need this job to run, so it's the only one skipped; every other conclusion
+    # (`failure`, `success`, `timed_out`, etc.) flows through to the classification step below
+    # exactly as it does today.
     if: >-
       github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.conclusion != 'cancelled'
     runs-on: ubuntu-latest
     permissions:
       contents: read
