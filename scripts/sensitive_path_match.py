@@ -2,10 +2,11 @@
 """Shared sensitive-path matcher for the F1 review-evidence gate (Track B).
 
 The one place `docs/sensitive-paths.yaml` (globs + content-pattern supplement) is matched
-against a PR's changed files and diff text. Both `scripts/check_review_evidence.py` and the
-`review-evidence-analyze` CI job (see `.github/workflows/review-evidence.yml`) import this
-module so "is this PR sensitive" is never independently re-derived in two places and cannot
-drift out of sync -- see the design doc's Components table, `sensitive_path_match` row.
+against a PR's changed files and diff text. `scripts/check_review_evidence.py` imports this
+module for both its `check` (review-evidence-check CI job) and `analyze` (invoked directly by
+the review-evidence-post CI job -- see `.github/workflows/review-evidence-post.yml`) subcommands,
+so "is this PR sensitive" is never independently re-derived in two places and cannot drift out of
+sync -- see the design doc's Components table, `sensitive_path_match` row.
 
 Fail-closed by construction: `load_sensitive_path_list` raises `SensitivePathListError` (a
 `ValueError` subclass) on anything missing, malformed, or empty, rather than returning a spec

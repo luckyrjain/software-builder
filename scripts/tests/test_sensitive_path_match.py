@@ -42,13 +42,18 @@ def test_real_sensitive_path_list_loads_cleanly() -> None:
 
 
 def test_real_sensitive_path_list_self_protects_its_own_enforcement_files() -> None:
-    """The design's self-protection rule: the list's own file, and the enforcement mechanism's
-    own files, must all be permanent members of `globs`."""
+    """The design's self-protection rule (stated three times in the design doc: Components, Data
+    model, and Failure strategy tables): the list's own file, and all six of the enforcement
+    mechanism's own files, must be permanent members of `globs`. PR #298 remediation (LENS-B-2):
+    scripts/check_sensitive_path_bypass.py was missing from the shipped list, and this test was
+    originally written to match that omission (asserting only 5 of the 6 required files) instead
+    of catching it -- it now asserts all 6, and would have failed before the fix landed."""
     spec = load_sensitive_path_list()
     for expected in (
         "docs/sensitive-paths.yaml",
         "scripts/sensitive_path_match.py",
         "scripts/check_review_evidence.py",
+        "scripts/check_sensitive_path_bypass.py",
         ".github/workflows/review-evidence.yml",
         ".github/workflows/review-evidence-post.yml",
     ):

@@ -53,6 +53,98 @@ def test_check_run_succeeded_false_empty() -> None:
     assert not csp.check_run_succeeded([], "review-evidence-check")
 
 
+# --- fetch_check_runs_for_merged_pr: the LENS-B-1 squash-merge-SHA regression ------------------
+
+
+def test_fetch_check_runs_for_merged_pr_queries_head_sha_not_only_merge_sha(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The core PR #298 remediation regression (LENS-B-1): this repo is squash-only, so a merged
+    PR's `mergeCommit.oid` is a brand-new SHA distinct from `headRefOid`, the SHA
+    `review-evidence-check`/`-post` actually ran against -- GitHub's Checks API never copies
+    check-runs onto the new squash-merge commit. A fixture where check-runs exist *only* against
+    `headRefOid`, and querying `mergeCommit.oid` returns nothing, must still be found -- the
+    original implementation (querying `mergeCommit.oid` alone) would have returned `[]` here and
+    silently reported a false bypass."""
+    calls: list[str] = []
+
+    def _fake_fetch_check_runs(repo: str, sha: str) -> list[dict[str, Any]]:
+        calls.append(sha)
+        if sha == "head_sha_only":
+            return [check_run("review-evidence-check", "success")]
+        return []  # the merge commit SHA has no check-runs recorded against it at all
+
+    monkeypatch.setattr(csp, "fetch_check_runs", _fake_fetch_check_runs)
+
+    check_runs = csp.fetch_check_runs_for_merged_pr(
+        "o/r", head_sha="head_sha_only", merge_sha="merge_sha_distinct",
+    )
+
+    assert csp.check_run_succeeded(check_runs, "review-evidence-check")
+    # Both SHAs were queried (defense-in-depth), not just the merge commit.
+    assert set(calls) == {"head_sha_only", "merge_sha_distinct"}
+
+
+def test_fetch_check_runs_for_merged_pr_skips_merge_sha_query_when_equal_to_head_sha(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(csp, "fetch_check_runs", lambda repo, sha: calls.append(sha) or [])
+
+    csp.fetch_check_runs_for_merged_pr("o/r", head_sha="same_sha", merge_sha="same_sha")
+
+    assert calls == ["same_sha"]
+
+
+def test_fetch_check_runs_for_merged_pr_handles_missing_merge_sha(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(csp, "fetch_check_runs", lambda repo, sha: calls.append(sha) or [])
+
+    csp.fetch_check_runs_for_merged_pr("o/r", head_sha="head_only", merge_sha=None)
+
+    assert calls == ["head_only"]
+
+
+def test_run_end_to_end_finds_check_run_on_head_sha_when_merge_sha_differs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """End-to-end version of the same regression through `_run`: a merged, sensitive PR whose
+    `review-evidence-check` run only exists against its `headRefOid` (never its `mergeCommit.oid`,
+    which is what a squash merge always produces) must NOT be reported as a bypass."""
+    spec_path = tmp_path / "sensitive-paths.yaml"
+    spec_path.write_text("globs: [scripts/install_engine.py]\ncontent_patterns: ['\\\\bflock\\\\b']\n")
+
+    prs = [
+        {
+            "number": 104,
+            "mergedAt": "2026-01-01T00:00:00Z",
+            "mergeCommit": {"oid": "squash_merge_sha_104"},
+            "headRefOid": "pr_head_sha_104",
+            "files": [{"path": "scripts/install_engine.py"}],
+        },
+    ]
+    monkeypatch.setattr(csp, "fetch_merged_prs", lambda repo, since_days: prs)
+    monkeypatch.setattr(csp.check_review_evidence, "fetch_pr_diff", lambda repo, pr: SENSITIVE_DIFF)
+
+    def _fake_fetch_check_runs(repo: str, sha: str) -> list[dict[str, Any]]:
+        # Check-runs exist only against the PR's head SHA -- never the squash-merge commit,
+        # matching GitHub's real behavior for a squash-only repo.
+        if sha == "pr_head_sha_104":
+            return [check_run("review-evidence-check", "success"), check_run("review-evidence-post", "success")]
+        return []
+
+    monkeypatch.setattr(csp, "fetch_check_runs", _fake_fetch_check_runs)
+
+    def _boom(*_a: Any, **_k: Any) -> None:
+        raise AssertionError("must not report a bypass -- review-evidence-check passed on the head SHA")
+
+    monkeypatch.setattr(csp, "ensure_bypass_issue", _boom)
+    monkeypatch.setattr(csp, "ensure_bot_health_issue", _boom)
+
+    rc = csp._run("o/r", since_days=8, sensitive_path_list=spec_path, dry_run=False)
+    assert rc == 0
+
+
 # --- classify_merged_pr: the core bypass decision -----------------------------------------------
 
 

@@ -2,12 +2,20 @@
 """Scheduled sensitive-path-bypass scanner for the F1 review-evidence gate (Track B).
 
 Lists PRs merged in the lookback window, classifies each with `scripts.sensitive_path_match`
-(the same shared matcher `check_review_evidence.py` and `review-evidence-analyze` use, so this
+(the same shared matcher `check_review_evidence.py`'s `check`/`analyze` subcommands use, so this
 scanner's notion of "sensitive" never drifts from the gate's own), and cross-checks every
-sensitive one against a passing `review-evidence-check` run on its merge commit. A sensitive PR
-that merged without one almost certainly went through the GitHub ruleset's bypass-actor path --
-this turns that from "check the audit log if you remember" into a loud, automatic tracking
-issue (design doc: docs/superpowers/specs/2026-09-24-f1-review-evidence-gate-design.md,
+sensitive one against a passing `review-evidence-check` run on its **head SHA** (`headRefOid`) --
+not its merge commit. This repo is squash-only (`docs/github-ruleset-main.json`'s
+`allowed_merge_methods: ["squash"]`), so a merge commit is always a brand-new SHA distinct from
+the head SHA `review-evidence-check`/`-post` actually ran against, and GitHub's Checks API never
+copies check-runs onto it -- querying the merge commit alone (PR #298's originally shipped
+behavior, LENS-B-1) returns no check-runs at all for essentially every merged PR, producing a
+false bypass finding on every run. `fetch_check_runs_for_merged_pr` queries the head SHA first
+and the merge commit SHA too, as defense-in-depth, when it differs from the head SHA. A sensitive
+PR that merged without a passing check on either almost certainly went through the GitHub
+ruleset's bypass-actor path -- this turns that from "check the audit log if you remember" into a
+loud, automatic tracking issue (design doc:
+docs/superpowers/specs/2026-09-24-f1-review-evidence-gate-design.md,
 `check_sensitive_path_bypass.py` row and Failure-strategy table).
 
 Also implements architecture review Condition 2 (a cheap credential-health signal): if the scan
@@ -48,7 +56,16 @@ BOT_HEALTH_MARKER = "[sensitive-path-bypass][bot-credential-health]"
 
 
 def fetch_merged_prs(repo: str, since_days: int) -> list[dict[str, Any]]:
-    """Return merged PRs (number, mergedAt, mergeCommit, files) merged in the last `since_days`."""
+    """Return merged PRs (number, mergedAt, mergeCommit, headRefOid, files) merged in the last
+    `since_days`.
+
+    `headRefOid` (the PR's head SHA -- where `review-evidence-check`/`-post` actually ran) is
+    fetched alongside `mergeCommit` (the PR's squash-merge commit on the base branch) because
+    this repo is squash-only (`docs/github-ruleset-main.json`'s `allowed_merge_methods:
+    ["squash"]`): a squash merge produces a brand-new commit SHA distinct from the head SHA, and
+    GitHub's Checks API never copies check-runs from the head SHA onto that new commit (PR #298
+    remediation, LENS-B-1).
+    """
     cutoff = (datetime.now(timezone.utc) - timedelta(days=since_days)).strftime("%Y-%m-%d")
     stdout = check_review_evidence.run_gh(
         [
@@ -61,7 +78,7 @@ def fetch_merged_prs(repo: str, since_days: int) -> list[dict[str, Any]]:
             "--search",
             f"merged:>={cutoff}",
             "--json",
-            "number,mergedAt,mergeCommit,files",
+            "number,mergedAt,mergeCommit,headRefOid,files",
             "--limit",
             "200",
         ],
@@ -94,6 +111,23 @@ def check_run_succeeded(check_runs: list[dict[str, Any]], name: str) -> bool:
     return any(run.get("name") == name and run.get("conclusion") == "success" for run in check_runs)
 
 
+def fetch_check_runs_for_merged_pr(repo: str, *, head_sha: str | None, merge_sha: str | None) -> list[dict[str, Any]]:
+    """Return every check-run recorded against a merged PR, queried by its head SHA (primary --
+    this repo is squash-only, and `review-evidence-check`/`-post` only ever ran against the PR's
+    head SHA, never the squash-merge commit; see `fetch_merged_prs`'s docstring) and, as
+    defense-in-depth for a repo that might allow other merge strategies, its merge commit SHA too
+    when that differs from the head SHA (PR #298 remediation, LENS-B-1: the original
+    implementation queried `mergeCommit.oid` only, which returns no check-runs at all for a
+    squash-merged PR -- silently reporting a false bypass on every merged sensitive-path PR).
+    """
+    check_runs: list[dict[str, Any]] = []
+    if head_sha:
+        check_runs.extend(fetch_check_runs(repo, head_sha))
+    if merge_sha and merge_sha != head_sha:
+        check_runs.extend(fetch_check_runs(repo, merge_sha))
+    return check_runs
+
+
 def classify_merged_pr(
     pr: dict[str, Any],
     *,
@@ -104,7 +138,9 @@ def classify_merged_pr(
     """Pure decision for one merged PR, given its already-fetched diff text and check runs.
 
     Returns (sensitivity result, bypass record or None). A bypass record is produced only when
-    the PR is sensitive AND has no successful `review-evidence-check` run on its merge commit.
+    the PR is sensitive AND has no successful `review-evidence-check` run in `check_runs`
+    (queried by the caller against the PR's head SHA and, as defense-in-depth, its merge commit
+    SHA -- see `fetch_check_runs_for_merged_pr`).
     """
     files = [f.get("path") for f in pr.get("files", []) if isinstance(f, dict) and f.get("path")]
     result = sensitive_path_match.classify(diff_text, spec, changed_paths=files)
@@ -220,11 +256,12 @@ def _run(repo: str, since_days: int, sensitive_path_list: Path, *, dry_run: bool
     for pr in prs:
         number = pr.get("number")
         merge_sha = (pr.get("mergeCommit") or {}).get("oid")
-        if number is None or not merge_sha:
+        head_sha = pr.get("headRefOid")
+        if number is None or (not merge_sha and not head_sha):
             continue
 
         diff_text = check_review_evidence.fetch_pr_diff(repo, number)
-        check_runs = fetch_check_runs(repo, merge_sha)
+        check_runs = fetch_check_runs_for_merged_pr(repo, head_sha=head_sha, merge_sha=merge_sha)
         result, record = classify_merged_pr(pr, spec=spec, diff_text=diff_text, check_runs=check_runs)
 
         if result.sensitive:

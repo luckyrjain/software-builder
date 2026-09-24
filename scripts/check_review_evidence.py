@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Enforce the F1 review-evidence gate for one PR (Track B).
 
-Two subcommands, one per CI job in `.github/workflows/review-evidence.yml`:
+Two subcommands:
 
 `check` (the default -- `--pr <n>` alone means `check --pr <n>`, matching the design doc's
-`scripts/check_review_evidence.py --pr <n>` CLI contract): `review-evidence-check`'s own logic.
-Fetches the PR's current head SHA and full diff text via `gh` (never a repository checkout --
-see docs/superpowers/specs/2026-09-24-f1-review-evidence-gate-design.md, APIs table), classifies
+`scripts/check_review_evidence.py --pr <n>` CLI contract): `review-evidence-check`'s own logic
+(the CI job of that name, in `.github/workflows/review-evidence.yml`). Fetches the PR's current
+head SHA and full diff text via `gh` (never a repository checkout -- see
+docs/superpowers/specs/2026-09-24-f1-review-evidence-gate-design.md, APIs table), classifies
 the PR as sensitive-or-not via `scripts.sensitive_path_match`, and, if sensitive, requires the
 GitHub Reviews API to show the *most recent* review per `user.login`, at the current head SHA,
 as `APPROVED` from a login other than the PR author.
@@ -17,12 +18,17 @@ Exit codes for `check` (design doc, `check_review_evidence.py` row):
     2 -- cannot determine (API error, malformed/empty sensitive-path list) -- fail closed, never
          treated as "nothing is sensitive"
 
-`analyze`: `review-evidence-analyze`'s own logic. Classifies the same way, and for a sensitive
-PR writes a verdict artifact for `review-evidence-post` to consume. Kept in this module rather
-than a new file to respect this change's fixed file list; the read/write security separation
-the design requires between the two components is enforced by each CI job's own `permissions:`
-block (this file never runs under a job holding `pull-requests: write`), not by a file boundary.
-Phase 0 ships no real review pass -- see `build_verdict`'s `TODO(condition-1)`.
+`analyze`: classifies the same way, and for a sensitive PR writes a verdict artifact. Invoked
+directly by the `review-evidence-post` job in `.github/workflows/review-evidence-post.yml` --
+**not** by a separate `pull_request`-triggered job. An earlier revision had a standalone
+`review-evidence-analyze` CI job run this and hand its artifact to `review-evidence-post` across
+a `workflow_run` boundary; that was a trust-boundary bypass (PR #298 remediation, LENS-A-1): a
+`pull_request`-triggered job's own step definitions are resolved from the PR's own branch, so a
+same-repo PR could forge the "classify" step itself. `review-evidence-post` now calls this
+subcommand itself, from a checkout it can prove is base-branch-pinned (see that workflow file's
+header comment for the full reasoning) -- so nothing this subcommand's *caller* computed on a
+PR branch is ever trusted, only what this subcommand computes against the base-pinned code that
+is running it. Phase 0 ships no real review pass -- see `build_verdict`'s `TODO(condition-1)`.
 
 The PR diff text both subcommands read is untrusted, third-party content (any PR author can
 write it) -- it is parsed here purely as data (glob/regex matching over its text), never
@@ -210,11 +216,11 @@ def build_verdict(
     diff_text: str,
     pr_number: int,
 ) -> dict[str, Any] | None:
-    """review-evidence-analyze's own decision: classify, then produce a verdict for a sensitive
+    """The `analyze` subcommand's own decision: classify, then produce a verdict for a sensitive
     PR. Returns None for a non-sensitive PR (nothing to write -- analyze does nothing further,
     per the design doc's Components table).
 
-    TODO(condition-1): the design's Open Questions leave "what review-evidence-analyze's
+    TODO(condition-1): the design's Open Questions leave "what the analyze subcommand's
     underlying review pass actually is" unresolved -- this repo's own pr-review/code-review
     skill, or a narrower purpose-built check (the design's own lean for v1, since it also
     sidesteps the prompt-injection risk architecture review Condition 1 names). Whichever is
@@ -233,7 +239,7 @@ def build_verdict(
         "matched_globs": list(result.matched_globs),
         "matched_content_patterns": list(result.matched_content_patterns),
         "reason": (
-            "review-evidence-analyze's underlying review pass is not yet implemented "
+            "the analyze subcommand's underlying review pass is not yet implemented "
             "(architecture review Condition 1; design doc Open Questions). Phase 0 fails "
             "closed rather than inventing a verdict."
         ),
@@ -241,7 +247,7 @@ def build_verdict(
 
 
 def run_analyze(*, repo: str, pr_number: int, sensitive_path_list: Path, out_path: Path) -> int:
-    """review-evidence-analyze's own logic: never writes anything back to GitHub or the repo
+    """The `analyze` subcommand's own logic: never writes anything back to GitHub or the repo
     itself (design doc, Components table) -- only ever writes the local verdict artifact file
     the caller then hands to `actions/upload-artifact`.
     """
@@ -281,7 +287,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="path to docs/sensitive-paths.yaml",
     )
 
-    analyze_parser = subparsers.add_parser("analyze", help="review-evidence-analyze: classify sensitivity and write a verdict artifact")
+    analyze_parser = subparsers.add_parser("analyze", help="classify sensitivity and write a verdict artifact (invoked by review-evidence-post)")
     analyze_parser.add_argument("--pr", type=int, required=True, help="pull request number")
     analyze_parser.add_argument("--repo", default=DEFAULT_REPO, help="owner/repo (default: $GITHUB_REPOSITORY or luckyrjain/software-builder)")
     analyze_parser.add_argument(

@@ -1,9 +1,9 @@
 # Sensitive-path list for the F1 review-evidence gate (Track B).
 #
-# Read by scripts/sensitive_path_match.py, the single shared module both
-# scripts/check_review_evidence.py and the review-evidence-analyze CI job (see
-# .github/workflows/review-evidence.yml) use to decide "does this PR need review evidence" --
-# so the two never independently re-derive that answer and drift out of sync (design doc,
+# Read by scripts/sensitive_path_match.py, the single shared module scripts/check_review_evidence.py
+# uses (for both its `check` and `analyze` subcommands -- see .github/workflows/review-evidence.yml
+# and .github/workflows/review-evidence-post.yml) to decide "does this PR need review evidence" --
+# so no consumer independently re-derives that answer and drifts out of sync (design doc,
 # Components: sensitive_path_match).
 #
 # Design source: docs/superpowers/specs/2026-09-24-f1-review-evidence-gate-design.md
@@ -16,9 +16,14 @@
 #
 # Self-protection: this file's own path, and the enforcement mechanism's own files
 # (scripts/sensitive_path_match.py, scripts/check_review_evidence.py,
-# .github/workflows/review-evidence.yml), are permanent members of `globs` below -- so editing
-# any of them is itself a sensitive-path change requiring evidence, closing the "a PR could
-# weaken the check's own logic unnoticed" gap the design's round-2 revision fixed.
+# scripts/check_sensitive_path_bypass.py, .github/workflows/review-evidence.yml,
+# .github/workflows/review-evidence-post.yml), are permanent members of `globs` below -- so
+# editing any of them is itself a sensitive-path change requiring evidence, closing the "a PR
+# could weaken the check's own logic unnoticed" gap the design's round-2 revision fixed. The
+# design doc states this three times (Components, Data model, Failure strategy tables) as a
+# four-file, then five-file (once review-evidence-post.yml split out) set; check_sensitive_path_
+# bypass.py was omitted from the first shipped version of this file (PR #298 remediation,
+# LENS-B-2) -- restored here to match the design's stated invariant.
 
 globs:
   # Track B's actual protected surface (design doc, Rollout Phase 0 + Problem statement): the
@@ -52,13 +57,14 @@ globs:
   - docs/sensitive-paths.yaml
   - scripts/sensitive_path_match.py
   - scripts/check_review_evidence.py
+  - scripts/check_sensitive_path_bypass.py
   - .github/workflows/review-evidence.yml
   - .github/workflows/review-evidence-post.yml
 
 content_patterns:
   # Concurrency-primitive / crash-recovery keywords, matched against the *full diff text*
-  # (`gh pr diff`'s patch body -- see scripts/check_review_evidence.py and
-  # review-evidence-analyze) so a rename or split out of a listed glob can't silently evade the
+  # (`gh pr diff`'s patch body -- see scripts/check_review_evidence.py's `check` and `analyze`
+  # subcommands) so a rename or split out of a listed glob can't silently evade the
   # gate (design doc, Failure strategy: "Rename/split evades the glob list"; "Mitigated, not
   # eliminated"). Grounded in the actual primitives scripts/install_engine.py, run_log.py, and
   # idempotency_store.py use today (confirmed by direct grep of those three files on
