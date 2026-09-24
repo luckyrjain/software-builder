@@ -479,3 +479,16 @@ def test_sigint_is_a_keyboard_interrupt_first_and_absorbed_after(signal_sentinel
                 cleanup_finished = True
                 raise
     assert cleanup_finished
+
+
+@posix_only
+def test_a_third_signal_calls_os_exit_with_130(monkeypatch: pytest.MonkeyPatch, signal_sentinels: object) -> None:
+    calls: list[int] = []
+    monkeypatch.setattr(install_engine.os, "_exit", lambda code: (calls.append(code), (_ for _ in ()).throw(SystemExit(code)))[-1])
+    with pytest.raises(SystemExit) as exc_info:
+        with install_engine._defer_interrupts():
+            for _ in range(3):
+                os.kill(os.getpid(), signal.SIGTERM)
+                time.sleep(0.1)
+    assert calls == [130]
+    assert exc_info.value.code == 130

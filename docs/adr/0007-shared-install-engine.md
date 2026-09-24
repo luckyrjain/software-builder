@@ -186,6 +186,12 @@ it was scope discipline for the original porting task, not a standing constraint
     swept. A SIGKILLed `install.sh` no longer leaves the engine running: the engine polls its parent and
     stops itself (opt-in via `INSTALL_ENGINE_EXIT_WITH_PARENT`, set by `install.sh`). What remains is
     inherent: the process is gone until the next run cleans up, and the lock reclaim window below.
+  - *Remaining signal gaps closed.* Sweep/recovery now run under their own `_sigterm_as_system_exit()`
+    (they used to be unprotected between the lock's conversion exiting and the primary work's starting).
+    A third repeated interrupt forces `os._exit(130)`, the only way out of a cleanup stuck on an
+    uninterruptible syscall; the next run's self-healing repairs whatever that abandons. The parent watch
+    is given `install.sh`'s pid explicitly instead of reading its own late, so a kill during the engine's
+    own startup is caught too.
   - *Data-safety fixes.* Leftover matching is exact (`.<skill>.<kind>.<8 mkdtemp chars>`), not by prefix, and
     the backup recovery verifies the backup's manifest names the skill and restores the newest first;
     the earlier prefix matching could delete or misplace a user's lookalike directory or a sibling skill's

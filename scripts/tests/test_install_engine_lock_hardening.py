@@ -664,9 +664,9 @@ def test_the_engine_stops_when_its_parent_is_killed(tmp_path: Path) -> None:
     """install.sh being SIGKILLed cannot be trapped; the engine it started used to be orphaned
     and run on, holding the lock. With the opt-in parent watch it terminates itself."""
     child_code = (
-        "import sys, time; sys.path.insert(0, %r);"
+        "import os, sys, time; sys.path.insert(0, %r);"
         "from scripts import install_engine;"
-        "install_engine._start_parent_watch(0.05);"
+        "install_engine._start_parent_watch(os.getppid(), 0.05);"
         "print('ready', flush=True); time.sleep(60)" % str(ROOT)
     )
     middle_code = (
@@ -717,3 +717,29 @@ def test_an_acquire_whose_temp_dir_was_swept_meanwhile_loses_the_round_instead_o
 
     assert _acquire_lock_dir(tmp_path, tmp_path / ".demo-skill.lock") is False
     assert list(tmp_path.glob(".demo-skill.lock*")) == []
+
+
+@posix_only
+def test_the_engine_stops_immediately_if_the_parent_died_before_startup_finished(tmp_path: Path) -> None:
+    """A kill landing while the engine is still starting up (importing, before it would have
+    taken a late os.getppid() snapshot) must be caught too, not just one after startup -- the
+    watch is given the expected parent pid up front rather than reading it late."""
+    import scripts.install_engine as install_engine_module
+
+    stopped = []
+    monkeypatch_pid = os.getpid() + 999999  # never this process's real parent
+    real_kill = os.kill
+
+    def fake_kill(pid: int, sig: int) -> None:
+        if pid == os.getpid() and sig == signal.SIGTERM:
+            stopped.append(True)
+            return  # don't actually signal this test process
+        real_kill(pid, sig)
+
+    orig_kill = install_engine_module.os.kill
+    install_engine_module.os.kill = fake_kill
+    try:
+        install_engine_module._start_parent_watch(monkeypatch_pid, poll_seconds=10.0)
+    finally:
+        install_engine_module.os.kill = orig_kill
+    assert stopped == [True]

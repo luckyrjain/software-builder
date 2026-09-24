@@ -51,8 +51,9 @@ DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS = 30.0
 DEFAULT_LOCK_STALE_SECONDS = 300.0
 _LOCK_POLL_INTERVAL_SECONDS = 1.0
 _ORPHAN_LOCK_TMP_MIN_AGE_SECONDS = 300.0
-_EXIT_WITH_PARENT_ENV = "INSTALL_ENGINE_EXIT_WITH_PARENT"
+_EXIT_WITH_PARENT_ENV = "INSTALL_ENGINE_EXIT_WITH_PARENT"  # holds the expected parent pid
 _PARENT_POLL_SECONDS = 0.5
+_FORCE_QUIT_SIGNAL_COUNT = 3
 
 
 class LockTimeoutError(RuntimeError):
@@ -353,10 +354,19 @@ def _defer_interrupts() -> Iterator[None]:
     sigs = [signal.SIGINT, *_stop_signals()]
     received = False
     failure: BaseException | None = None
+    signal_count = 0
 
     def _record(signum: int, frame: object) -> None:
-        nonlocal received
+        nonlocal received, signal_count
         received = True
+        signal_count += 1
+        if signal_count >= _FORCE_QUIT_SIGNAL_COUNT:
+            # An uninterruptible cleanup (a hung rmtree, a stalled NFS mount) has no other exit:
+            # bypassing every try/finally is the point, on the user's third explicit request to
+            # stop. A hard kill from here is safe: _sweep_leftovers()/_recover_leftover_backups()
+            # repair whatever this leaves on the next run, same as any other hard kill.
+            print("warning: repeated interrupt -- forcing exit without finishing cleanup", file=sys.stderr)
+            os._exit(130)
 
     previous: dict[int, object] = {}
     try:
@@ -704,8 +714,13 @@ def install_skill(
     try:
         dest_root.mkdir(parents=True, exist_ok=True)
         with held_lock(dest_root, skill_id, wait_timeout=wait_timeout, stale_after=stale_after):
-            _sweep_leftovers(dest_root, skill_id)
-            _recover_leftover_backups(dest_root, skill_id, skill_dest)
+            # Unprotected otherwise: a signal landing here (after the lock's own conversion has
+            # exited, before the primary work's) hit the default disposition instead of the
+            # engine's clean exit 130. Both calls are safe to interrupt and retry -- the next run
+            # repairs whatever they leave, same as any other hard kill.
+            with _sigterm_as_system_exit():
+                _sweep_leftovers(dest_root, skill_id)
+                _recover_leftover_backups(dest_root, skill_id, skill_dest)
             stage_dir: Path | None = None
             backup_dir: Path | None = None
             # SIGTERM (a supervisor kill, CI timeout) must reach the same cleanup path as
@@ -828,8 +843,9 @@ def uninstall_skill(
 
         dest_root.mkdir(parents=True, exist_ok=True)
         with held_lock(dest_root, skill_id, wait_timeout=wait_timeout, stale_after=stale_after):
-            _sweep_leftovers(dest_root, skill_id)
-            _recover_leftover_backups(dest_root, skill_id, skill_dest)
+            with _sigterm_as_system_exit():
+                _sweep_leftovers(dest_root, skill_id)
+                _recover_leftover_backups(dest_root, skill_id, skill_dest)
             classification = classify_install_destination(skill_dest, skill_id=skill_id)
             if classification == OWNERSHIP_ABSENT:
                 return UninstallOutcome(skill_id, skill_dest, "absent", f"not installed: {skill_dest}")
@@ -929,22 +945,34 @@ def _lock_timing_from_env() -> tuple[float, float]:
     return wait_timeout, stale_after
 
 
-def _start_parent_watch(poll_seconds: float = _PARENT_POLL_SECONDS) -> None:
-    """Stop this process (SIGTERM to itself, so the normal rollback runs) once its parent has
-    died. `install.sh` runs the engine as a child; if bash is SIGKILLed the engine is reparented
-    to init and used to carry on to completion unsupervised, holding the lock. Opt-in
-    (`INSTALL_ENGINE_EXIT_WITH_PARENT=1`, which install.sh sets) because a user who backgrounds
-    the engine directly and closes their shell has not asked for it to be stopped. POSIX only:
-    Windows has no reparenting to detect."""
+def _start_parent_watch(expected_parent: int, poll_seconds: float = _PARENT_POLL_SECONDS) -> None:
+    """Stop this process (SIGTERM to itself, so the normal rollback runs) once it is no longer a
+    child of `expected_parent`. `install.sh` runs the engine as a child; if bash is SIGKILLed the
+    engine is reparented to init and used to carry on to completion unsupervised, holding the
+    lock. `expected_parent` is `install.sh`'s own pid, passed by it (`INSTALL_ENGINE_EXIT_WITH_
+    PARENT=$$`) rather than read from `os.getppid()` here: reading it here would only catch a
+    kill *after* this process finished starting up, missing one landing during interpreter
+    start-up and imports (already reparented to init by the time a late snapshot ran) -- the
+    caller's own pid is known before the child even exists, so the check covers the whole
+    lifetime. Checked once immediately (a kill that raced the fork itself) and then on the poll.
+    Opt-in because a user who backgrounds the engine directly and closes their shell has not
+    asked for it to be stopped. POSIX only: Windows has no reparenting to detect."""
     if sys.platform == "win32":
         return
-    parent = os.getppid()
+
+    def _stop_if_orphaned() -> bool:
+        if os.getppid() != expected_parent:
+            os.kill(os.getpid(), signal.SIGTERM)
+            return True
+        return False
+
+    if _stop_if_orphaned():
+        return
 
     def _watch() -> None:
         while True:
             time.sleep(poll_seconds)
-            if os.getppid() != parent:
-                os.kill(os.getpid(), signal.SIGTERM)
+            if _stop_if_orphaned():
                 return
 
     threading.Thread(target=_watch, name="install-engine-parent-watch", daemon=True).start()
@@ -1022,8 +1050,12 @@ def main(argv: list[str] | None = None) -> int:
     uninstall_parser.set_defaults(func=_cli_uninstall)
 
     args = parser.parse_args(argv)
-    if os.environ.get(_EXIT_WITH_PARENT_ENV) == "1":
-        _start_parent_watch()
+    expected_parent_raw = os.environ.get(_EXIT_WITH_PARENT_ENV)
+    if expected_parent_raw:
+        try:
+            _start_parent_watch(int(expected_parent_raw))
+        except ValueError:
+            pass  # malformed env value: not this process's job to fail the run over
     try:
         return args.func(args)
     except Exception as exc:

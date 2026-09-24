@@ -52,6 +52,23 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   application code directly rather than through the Builder/Reviewer loop, so the ADR now names it as a documented
   exception instead of contradicting itself.
 
+### Close the remaining signal gaps: unprotected window, unkillable cleanup, late parent-watch (2026-09-21)
+
+Found by a second adversarial review of the #293 signal handling:
+
+- The sweep and backup-recovery calls in `install_skill`/`uninstall_skill` ran between the lock's own
+  interrupt conversion exiting and the primary work's starting -- a signal landing there hit the default
+  disposition (raw 143/-15) instead of the engine's clean 130. Both calls are safe to interrupt and retry,
+  so they now run under their own `_sigterm_as_system_exit()`.
+- A hung or uninterruptible cleanup (an NFS stall, a stuck rmtree) left no way to stop short of SIGKILL,
+  because `_defer_interrupts()` silently absorbs every repeat after the first. A third explicit interrupt
+  now forces `os._exit(130)`, bypassing whatever is stuck; the next run's sweep and recovery repair
+  whatever that leaves, the same as any other hard kill.
+- `_start_parent_watch()` read `os.getppid()` after the interpreter had already started and imported, so a
+  kill landing during that window (the engine already reparented to init by then) was missed.
+  `install.sh` now passes its own pid explicitly (`INSTALL_ENGINE_EXIT_WITH_PARENT="$$"`), and the watch
+  checks it immediately as well as on the poll.
+
 ### Data-safety fixes for the leftover sweeps and backup recovery (2026-09-21)
 
 Found by an adversarial review of the self-healing added earlier the same day:
