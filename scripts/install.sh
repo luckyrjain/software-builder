@@ -25,8 +25,11 @@ run_engine() {
   # a signal that beats the launch still stop the run once the engine is up.
   trap 'interrupted=true; if [[ -n "${engine_pid}" ]]; then kill -TERM "${engine_pid}" 2>/dev/null || true; fi' TERM INT HUP
   # INSTALL_ENGINE_EXIT_WITH_PARENT: if this script is SIGKILLed (which cannot be trapped) the
-  # engine must notice and roll back rather than carry on orphaned, holding the lock.
-  INSTALL_ENGINE_EXIT_WITH_PARENT=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${REPO_ROOT}" python3 "$@" &
+  # engine must notice and roll back rather than carry on orphaned, holding the lock. Set to
+  # this shell's own pid ($$), not just "1" -- the engine checks it against its *own* ppid at
+  # startup, so a kill landing before the engine finishes importing (already reparented to init
+  # by the time it would have taken a late snapshot) is caught too, not just one after.
+  INSTALL_ENGINE_EXIT_WITH_PARENT="$$" PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="${REPO_ROOT}" python3 "$@" &
   engine_pid=$!
   if [[ "${interrupted}" == true ]]; then
     kill -TERM "${engine_pid}" 2>/dev/null || true

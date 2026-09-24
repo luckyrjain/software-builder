@@ -22,6 +22,7 @@ import argparse
 import errno
 import math
 import os
+import re
 import shutil
 import signal
 import sys
@@ -50,8 +51,9 @@ DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS = 30.0
 DEFAULT_LOCK_STALE_SECONDS = 300.0
 _LOCK_POLL_INTERVAL_SECONDS = 1.0
 _ORPHAN_LOCK_TMP_MIN_AGE_SECONDS = 300.0
-_EXIT_WITH_PARENT_ENV = "INSTALL_ENGINE_EXIT_WITH_PARENT"
+_EXIT_WITH_PARENT_ENV = "INSTALL_ENGINE_EXIT_WITH_PARENT"  # holds the expected parent pid
 _PARENT_POLL_SECONDS = 0.5
+_FORCE_QUIT_SIGNAL_COUNT = 3
 
 
 class LockTimeoutError(RuntimeError):
@@ -165,7 +167,9 @@ def _parse_lock_age(raw: str | None) -> float | None:
     return time.time() - acquired_at
 
 
-_RENAME_DESTINATION_TAKEN = frozenset({errno.ENOTEMPTY, errno.EEXIST})
+# ENOENT: the temp directory was swept (a clock far ahead of the filesystem's made a live one look
+# orphaned) -- the acquire lost, not failed, and retries.
+_RENAME_DESTINATION_TAKEN = frozenset({errno.ENOTEMPTY, errno.EEXIST, errno.ENOENT})
 
 
 def _acquire_lock_dir(dest_root: Path, lock_dir: Path) -> bool:
@@ -350,10 +354,19 @@ def _defer_interrupts() -> Iterator[None]:
     sigs = [signal.SIGINT, *_stop_signals()]
     received = False
     failure: BaseException | None = None
+    signal_count = 0
 
     def _record(signum: int, frame: object) -> None:
-        nonlocal received
+        nonlocal received, signal_count
         received = True
+        signal_count += 1
+        if signal_count >= _FORCE_QUIT_SIGNAL_COUNT:
+            # An uninterruptible cleanup (a hung rmtree, a stalled NFS mount) has no other exit:
+            # bypassing every try/finally is the point, on the user's third explicit request to
+            # stop. A hard kill from here is safe: _sweep_leftovers()/_recover_leftover_backups()
+            # repair whatever this leaves on the next run, same as any other hard kill.
+            print("warning: repeated interrupt -- forcing exit without finishing cleanup", file=sys.stderr)
+            os._exit(130)
 
     previous: dict[int, object] = {}
     try:
@@ -498,31 +511,63 @@ def held_lock(
                 shutil.rmtree(lock_dir, ignore_errors=True)
 
 
+# tempfile.mkdtemp() appends exactly 8 characters from this alphabet. Matching *exactly* that, not
+# just the prefix, is what keeps one skill's cleanup off another skill's directories: with a prefix
+# match, skill `x` swept `.x.staging.y.staging.q1` (the working directory of a skill called
+# `x.staging.y`) and treated a user's own `.x.backup.mine` as a backup of `x`.
+_MKDTEMP_SUFFIX = r"[a-z0-9_]{8}"
+
+
+def _leftover_entries(dest_root: Path, skill: str, kind: str) -> list[os.DirEntry[str]]:
+    """This skill's own `.{skill}.{kind}.<mkdtemp suffix>` directories in dest_root (real
+    directories only: a symlink is never followed or matched)."""
+    pattern = re.compile(re.escape(f".{skill}.{kind}.") + _MKDTEMP_SUFFIX)
+    try:
+        return [
+            e for e in os.scandir(dest_root) if pattern.fullmatch(e.name) and e.is_dir(follow_symlinks=False)
+        ]
+    except OSError:
+        return []
+
+
 def _recover_leftover_backups(dest_root: Path, skill: str, skill_dest: Path) -> None:
     """Undo what a hard kill (SIGKILL, power loss) left half-done, under the lock.
 
     A `.{skill}.backup.*` directory is the previous install, moved aside while its replacement was
     put in place. If the process died before the rollback or the final cleanup ran, either:
-    - the destination is absent -> the previous install was displaced and never restored: put it
-      back (otherwise the user's skill has silently vanished); or
+    - the destination is absent -> the previous install was displaced and never restored: put the
+      NEWEST backup back (otherwise the user's skill has silently vanished), then discard the older
+      ones; or
     - the destination is a complete software-builder-owned install -> the replacement finished
-      (`os.replace` is atomic) and the backup is just an old copy: delete it.
-    Anything else (an unowned or symlinked destination, an unreadable backup) is left alone --
-    a backup is never discarded unless the install it protects is demonstrably in place."""
-    prefix = f".{skill}.backup."
-    try:
-        entries = [e for e in os.scandir(dest_root) if e.name.startswith(prefix) and e.is_dir(follow_symlinks=False)]
-    except OSError:
+      (`os.replace` is atomic) and the backups are just old copies: delete them.
+    A backup is only ever moved or deleted if its `skill/` really is an install of *this* skill (its
+    manifest names it), and never discarded unless the install it protects is demonstrably in
+    place; anything else (an unowned or symlinked destination, a lookalike directory) is left."""
+    entries = _leftover_entries(dest_root, skill, "backup")
+    if not entries:
         return
+    # Newest first: scandir order is arbitrary, and restoring an older backup while deleting the
+    # newer one would silently roll the user back a version.
+    def _mtime(entry: os.DirEntry[str]) -> float:
+        try:
+            return entry.stat(follow_symlinks=False).st_mtime
+        except OSError:
+            return 0.0
+
+    entries.sort(key=_mtime, reverse=True)
     for entry in entries:
         previous = Path(entry.path) / "skill"
         try:
+            if classify_install_destination(previous, skill_id=skill) != OWNERSHIP_SOFTWARE_BUILDER_OWNED:
+                continue  # not demonstrably a previous install of this skill: not ours to touch
             if not skill_dest.exists() and not skill_dest.is_symlink():
-                if previous.is_dir():
-                    os.replace(previous, skill_dest)
-                    print(f"warning: restored the previous install of {skill} at {skill_dest} "
-                          "after an interrupted replacement", file=sys.stderr)
-                    shutil.rmtree(entry.path, ignore_errors=True)
+                os.replace(previous, skill_dest)
+                print(
+                    f"warning: restored the previous install of {skill} at {skill_dest} "
+                    "after an interrupted replacement",
+                    file=sys.stderr,
+                )
+                shutil.rmtree(entry.path, ignore_errors=True)
             elif classify_install_destination(skill_dest, skill_id=skill) == OWNERSHIP_SOFTWARE_BUILDER_OWNED:
                 shutil.rmtree(entry.path, ignore_errors=True)
         except OSError:
@@ -530,35 +575,34 @@ def _recover_leftover_backups(dest_root: Path, skill: str, skill_dest: Path) -> 
 
 
 def _sweep_leftovers(dest_root: Path, skill: str) -> None:
-    """Delete this skill's `.{skill}.removing.*` and `.{skill}.staging.*` directories (and any
-    `.{skill}.lock.tmp.*` orphaned for over `_ORPHAN_LOCK_TMP_MIN_AGE_SECONDS`). Called
-    with the lock held, so no other run can own one. Both are garbage by construction -- the
-    skill was already uninstalled, or the staged copy never went live -- and were previously
-    orphaned by a failed deletion or a hard kill and never swept. `.backup.*` is deliberately
-    NOT swept here: after a rollback cut short it can hold the only copy of the user's previous
-    install (see `_recover_leftover_backups`, which restores or discards it only when safe). Matched by prefix, not glob, since a skill id may contain glob characters."""
-    prefixes = (f".{skill}.removing.", f".{skill}.staging.")
-    lock_tmp_prefix = f".{skill}.lock.tmp."
-    try:
-        entries = list(os.scandir(dest_root))
-    except OSError:
-        return
-    now = time.time()
-    for entry in entries:
-        if not entry.is_dir(follow_symlinks=False):
+    """Delete this skill's `.{skill}.removing.<suffix>` and `.{skill}.staging.<suffix>` directories
+    (and any `.{skill}.lock.tmp.<suffix>` orphaned for over `_ORPHAN_LOCK_TMP_MIN_AGE_SECONDS`).
+    Called with the lock held, so no other run of this skill can own one. They are garbage by
+    construction -- the skill was already uninstalled, or the staged copy never went live -- and
+    used to be orphaned by a failed deletion or a hard kill and never swept. A `.removing.*` is
+    only deleted if it holds nothing but the `skill` entry the uninstall moved into it. `.backup.*`
+    is NOT swept here: after a rollback cut short it can hold the only copy of the user's previous
+    install (see `_recover_leftover_backups`, which restores or discards it only when safe)."""
+    for entry in _leftover_entries(dest_root, skill, "removing"):
+        try:
+            contents = os.listdir(entry.path)
+        except OSError:
             continue
-        if entry.name.startswith(prefixes):
+        if set(contents) <= {"skill"}:
             shutil.rmtree(entry.path, ignore_errors=True)
-        elif entry.name.startswith(lock_tmp_prefix):
-            # `_acquire_lock_dir()`'s temp directory exists for microseconds -- but it is made
-            # *before* the lock is held, so this sweep cannot know its owner; only one older than
-            # any plausible acquire is an orphan (a hard kill between mkdtemp and the rename).
-            try:
-                age = now - entry.stat(follow_symlinks=False).st_mtime
-            except OSError:
-                continue
-            if age > _ORPHAN_LOCK_TMP_MIN_AGE_SECONDS:
-                shutil.rmtree(entry.path, ignore_errors=True)
+    for entry in _leftover_entries(dest_root, skill, "staging"):
+        shutil.rmtree(entry.path, ignore_errors=True)
+    now = time.time()
+    for entry in _leftover_entries(dest_root, skill, "lock.tmp"):
+        # `_acquire_lock_dir()`'s temp directory exists for microseconds -- but it is made
+        # *before* the lock is held, so this sweep cannot know its owner; only one older than
+        # any plausible acquire is an orphan (a hard kill between mkdtemp and the rename).
+        try:
+            age = now - entry.stat(follow_symlinks=False).st_mtime
+        except OSError:
+            continue
+        if age > _ORPHAN_LOCK_TMP_MIN_AGE_SECONDS:
+            shutil.rmtree(entry.path, ignore_errors=True)
 
 
 _BLOCKING_OWNERSHIP_STATES = frozenset(
@@ -670,8 +714,13 @@ def install_skill(
     try:
         dest_root.mkdir(parents=True, exist_ok=True)
         with held_lock(dest_root, skill_id, wait_timeout=wait_timeout, stale_after=stale_after):
-            _sweep_leftovers(dest_root, skill_id)
-            _recover_leftover_backups(dest_root, skill_id, skill_dest)
+            # Unprotected otherwise: a signal landing here (after the lock's own conversion has
+            # exited, before the primary work's) hit the default disposition instead of the
+            # engine's clean exit 130. Both calls are safe to interrupt and retry -- the next run
+            # repairs whatever they leave, same as any other hard kill.
+            with _sigterm_as_system_exit():
+                _sweep_leftovers(dest_root, skill_id)
+                _recover_leftover_backups(dest_root, skill_id, skill_dest)
             stage_dir: Path | None = None
             backup_dir: Path | None = None
             # SIGTERM (a supervisor kill, CI timeout) must reach the same cleanup path as
@@ -781,9 +830,20 @@ def uninstall_skill(
 
     skill_dest = dest_root / skill_id
     try:
+        if dry_run:
+            # Read-only, so no dest_root creation and no lock (install's dry run returns before
+            # its lock too): a dry run must not touch the disk at all.
+            classification = classify_install_destination(skill_dest, skill_id=skill_id)
+            if classification == OWNERSHIP_ABSENT:
+                return UninstallOutcome(skill_id, skill_dest, "absent", f"not installed: {skill_dest}")
+            if classification in _BLOCKING_OWNERSHIP_STATES:
+                message = _UNINSTALL_BLOCK_MESSAGES[classification].format(dest=skill_dest)
+                return UninstallOutcome(skill_id, skill_dest, "failed", message)
+            return UninstallOutcome(skill_id, skill_dest, "dry_run", f"would remove {skill_dest}")
+
         dest_root.mkdir(parents=True, exist_ok=True)
         with held_lock(dest_root, skill_id, wait_timeout=wait_timeout, stale_after=stale_after):
-            if not dry_run:  # a dry run changes nothing
+            with _sigterm_as_system_exit():
                 _sweep_leftovers(dest_root, skill_id)
                 _recover_leftover_backups(dest_root, skill_id, skill_dest)
             classification = classify_install_destination(skill_dest, skill_id=skill_id)
@@ -792,9 +852,6 @@ def uninstall_skill(
             if classification in _BLOCKING_OWNERSHIP_STATES:
                 message = _UNINSTALL_BLOCK_MESSAGES[classification].format(dest=skill_dest)
                 return UninstallOutcome(skill_id, skill_dest, "failed", message)
-
-            if dry_run:
-                return UninstallOutcome(skill_id, skill_dest, "dry_run", f"would remove {skill_dest}")
 
             removing_dir: Path | None = None
             try:
@@ -888,22 +945,34 @@ def _lock_timing_from_env() -> tuple[float, float]:
     return wait_timeout, stale_after
 
 
-def _start_parent_watch(poll_seconds: float = _PARENT_POLL_SECONDS) -> None:
-    """Stop this process (SIGTERM to itself, so the normal rollback runs) once its parent has
-    died. `install.sh` runs the engine as a child; if bash is SIGKILLed the engine is reparented
-    to init and used to carry on to completion unsupervised, holding the lock. Opt-in
-    (`INSTALL_ENGINE_EXIT_WITH_PARENT=1`, which install.sh sets) because a user who backgrounds
-    the engine directly and closes their shell has not asked for it to be stopped. POSIX only:
-    Windows has no reparenting to detect."""
+def _start_parent_watch(expected_parent: int, poll_seconds: float = _PARENT_POLL_SECONDS) -> None:
+    """Stop this process (SIGTERM to itself, so the normal rollback runs) once it is no longer a
+    child of `expected_parent`. `install.sh` runs the engine as a child; if bash is SIGKILLed the
+    engine is reparented to init and used to carry on to completion unsupervised, holding the
+    lock. `expected_parent` is `install.sh`'s own pid, passed by it (`INSTALL_ENGINE_EXIT_WITH_
+    PARENT=$$`) rather than read from `os.getppid()` here: reading it here would only catch a
+    kill *after* this process finished starting up, missing one landing during interpreter
+    start-up and imports (already reparented to init by the time a late snapshot ran) -- the
+    caller's own pid is known before the child even exists, so the check covers the whole
+    lifetime. Checked once immediately (a kill that raced the fork itself) and then on the poll.
+    Opt-in because a user who backgrounds the engine directly and closes their shell has not
+    asked for it to be stopped. POSIX only: Windows has no reparenting to detect."""
     if sys.platform == "win32":
         return
-    parent = os.getppid()
+
+    def _stop_if_orphaned() -> bool:
+        if os.getppid() != expected_parent:
+            os.kill(os.getpid(), signal.SIGTERM)
+            return True
+        return False
+
+    if _stop_if_orphaned():
+        return
 
     def _watch() -> None:
         while True:
             time.sleep(poll_seconds)
-            if os.getppid() != parent:
-                os.kill(os.getpid(), signal.SIGTERM)
+            if _stop_if_orphaned():
                 return
 
     threading.Thread(target=_watch, name="install-engine-parent-watch", daemon=True).start()
@@ -981,8 +1050,12 @@ def main(argv: list[str] | None = None) -> int:
     uninstall_parser.set_defaults(func=_cli_uninstall)
 
     args = parser.parse_args(argv)
-    if os.environ.get(_EXIT_WITH_PARENT_ENV) == "1":
-        _start_parent_watch()
+    expected_parent_raw = os.environ.get(_EXIT_WITH_PARENT_ENV)
+    if expected_parent_raw:
+        try:
+            _start_parent_watch(int(expected_parent_raw))
+        except ValueError:
+            pass  # malformed env value: not this process's job to fail the run over
     try:
         return args.func(args)
     except Exception as exc:

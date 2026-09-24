@@ -52,6 +52,39 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   application code directly rather than through the Builder/Reviewer loop, so the ADR now names it as a documented
   exception instead of contradicting itself.
 
+### Close the remaining signal gaps: unprotected window, unkillable cleanup, late parent-watch (2026-09-21)
+
+Found by a second adversarial review of the #293 signal handling:
+
+- The sweep and backup-recovery calls in `install_skill`/`uninstall_skill` ran between the lock's own
+  interrupt conversion exiting and the primary work's starting -- a signal landing there hit the default
+  disposition (raw 143/-15) instead of the engine's clean 130. Both calls are safe to interrupt and retry,
+  so they now run under their own `_sigterm_as_system_exit()`.
+- A hung or uninterruptible cleanup (an NFS stall, a stuck rmtree) left no way to stop short of SIGKILL,
+  because `_defer_interrupts()` silently absorbs every repeat after the first. A third explicit interrupt
+  now forces `os._exit(130)`, bypassing whatever is stuck; the next run's sweep and recovery repair
+  whatever that leaves, the same as any other hard kill.
+- `_start_parent_watch()` read `os.getppid()` after the interpreter had already started and imported, so a
+  kill landing during that window (the engine already reparented to init by then) was missed.
+  `install.sh` now passes its own pid explicitly (`INSTALL_ENGINE_EXIT_WITH_PARENT="$$"`), and the watch
+  checks it immediately as well as on the poll.
+
+### Data-safety fixes for the leftover sweeps and backup recovery (2026-09-21)
+
+Found by an adversarial review of the self-healing added earlier the same day:
+
+- The sweeps matched sibling directories by name *prefix*, so a user's own `.<skill>.staging.notes` or
+  `.<skill>.removing.old` was deleted, a `.<skill>.backup.mine/skill` was moved in as the install (later
+  installs then failed as "unowned"), and a skill called `x.staging.y` had its live working directories and
+  lock swept by skill `x`. They now match exactly `.<skill>.<kind>.` plus the 8 characters `mkdtemp`
+  appends, a backup is only touched if its `skill/` is really an install of that skill (its manifest names
+  it), and a `.removing.*` is only deleted if it holds nothing but the moved `skill` entry.
+- With several leftover backups the *newest* is restored (the arbitrary `scandir` order could restore an
+  older one and delete the newer as "an old copy").
+- A lock temp directory swept while its acquire was mid-flight (a clock ahead of the filesystem's) now
+  loses the round and retries instead of failing the install (`ENOENT` on the rename).
+- `uninstall --dry-run` no longer creates the destination root or takes the lock; it touches nothing.
+
 ### Residual-risk fixes: self-healing after hard kills, closed signal gap, small nits (2026-09-21)
 
 - **The signal gap is closed.** `_sigterm_as_system_exit()` is now two-phase and also covers SIGINT: the

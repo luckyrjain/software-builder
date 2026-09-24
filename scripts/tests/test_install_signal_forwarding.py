@@ -432,4 +432,6 @@ def test_install_sh_asks_the_engine_to_exit_with_its_parent(tmp_path: Path) -> N
     finally:
         _reap(proc)
 
-    assert log.read_text(encoding="utf-8").split() == ["1"]
+    # install.sh's own pid ($$), not a placeholder: a kill landing while the engine is still
+    # starting up needs the expected parent known up front, not read late from os.getppid().
+    assert log.read_text(encoding="utf-8").split() == [str(proc.pid)]

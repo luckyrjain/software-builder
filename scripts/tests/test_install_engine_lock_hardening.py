@@ -8,6 +8,7 @@ from __future__ import annotations
 import contextlib
 import io
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -456,14 +457,30 @@ def test_a_second_sigterm_during_the_uninstall_restore_does_not_strand_the_insta
     assert list(dest_root.glob(".demo-skill.removing.*")) == []
 
 
+_SUFFIX = "abcd1234"  # what tempfile.mkdtemp appends: 8 characters of [a-z0-9_]
+
+
+def _leftover(dest_root: Path, skill: str, kind: str, suffix: str = _SUFFIX) -> Path:
+    path = dest_root / f".{skill}.{kind}.{suffix}"
+    path.mkdir(parents=True)
+    return path
+
+
+def _backup_of_the_installed_skill(dest_root: Path, skill_dest: Path, suffix: str, version: str) -> Path:
+    """A `.demo-skill.backup.<suffix>` holding a genuine (manifest-bearing) copy of the install."""
+    backup = _leftover(dest_root, "demo-skill", "backup", suffix)
+    shutil.copytree(skill_dest, backup / "skill")
+    (backup / "skill" / "VERSION").write_text(version, encoding="utf-8")
+    return backup
+
+
 def test_leftover_removing_and_staging_dirs_are_swept_on_the_next_run(tmp_path: Path) -> None:
     repo, dest_root, skill_dest = _installed_skill(tmp_path)
-    removing = dest_root / ".demo-skill.removing.abc"
-    staging = dest_root / ".demo-skill.staging.abc"
-    other = dest_root / ".other-skill.removing.abc"
-    for leftover in (removing, staging, other):
-        (leftover / "skill").mkdir(parents=True)
-        (leftover / "skill" / "SKILL.md").write_text("x", encoding="utf-8")
+    removing = _leftover(dest_root, "demo-skill", "removing")
+    (removing / "skill").mkdir()
+    (removing / "skill" / "SKILL.md").write_text("x", encoding="utf-8")
+    staging = _leftover(dest_root, "demo-skill", "staging")
+    other = _leftover(dest_root, "other-skill", "removing")
 
     assert install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor").status == "installed"
 
@@ -471,12 +488,56 @@ def test_leftover_removing_and_staging_dirs_are_swept_on_the_next_run(tmp_path: 
     assert other.exists(), "only this skill's leftovers"
 
 
+def test_directories_that_merely_look_like_leftovers_are_never_touched(tmp_path: Path) -> None:
+    """Sweeps matched by name prefix, so a user's own `.demo-skill.staging.notes` was deleted and
+    `.demo-skill.backup.mine/skill` was moved in as the install. Only the exact
+    `.<skill>.<kind>.<8 mkdtemp characters>` shape is ours."""
+    repo, dest_root, skill_dest = _installed_skill(tmp_path)
+    lookalikes = [
+        _leftover(dest_root, "demo-skill", "staging", "notes"),
+        _leftover(dest_root, "demo-skill", "removing", "old"),
+        _leftover(dest_root, "demo-skill", "backup", "mine"),
+        _leftover(dest_root, "demo-skill", "staging", "abcd1234.extra"),
+        _leftover(dest_root, "demo-skill", "lock.tmp", "keepme"),
+    ]
+    for d in lookalikes:
+        (d / "skill").mkdir()
+        (d / "skill" / "user-file").write_text("precious", encoding="utf-8")
+
+    assert install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor").status == "installed"
+    assert uninstall_skill("demo-skill", dest_root=dest_root).status == "uninstalled"
+    # ...and again with the skill absent, when a matching backup would be "restored".
+    assert uninstall_skill("demo-skill", dest_root=dest_root).status == "absent"
+
+    for d in lookalikes:
+        assert (d / "skill" / "user-file").read_text(encoding="utf-8") == "precious", d.name
+    assert not (dest_root / "demo-skill").exists()
+
+
+def test_a_skill_whose_id_extends_another_ids_prefix_is_not_swept(tmp_path: Path) -> None:
+    """Skill `x` must not sweep the working directories of a skill called `x.staging.y`
+    (`.x.staging.y.staging.q1abcdef`), nor its lock, nor treat its installed directory as a backup."""
+    dest_root = tmp_path / "dest"
+    dest_root.mkdir()
+    sibling_staging = dest_root / ".x.staging.y.staging.q1abcdef"
+    sibling_lock = dest_root / ".x.staging.y.lock"
+    sibling_backup = dest_root / ".x.backup.z.backup.q1abcdef"
+    for d in (sibling_staging, sibling_lock, sibling_backup):
+        d.mkdir()
+        (d / "keep").write_text("live", encoding="utf-8")
+
+    install_engine._sweep_leftovers(dest_root, "x")
+    install_engine._recover_leftover_backups(dest_root, "x", dest_root / "x")
+
+    for d in (sibling_staging, sibling_lock, sibling_backup):
+        assert (d / "keep").exists(), d.name
+
+
 def test_a_previous_install_displaced_by_a_hard_kill_is_restored_on_the_next_run(tmp_path: Path) -> None:
     """SIGKILL or power loss between moving the old install aside and finishing the replacement
     leaves the skill only inside `.{skill}.backup.*`, nothing at the destination."""
     repo, dest_root, skill_dest = _installed_skill(tmp_path)
-    backup = dest_root / ".demo-skill.backup.abc"
-    backup.mkdir()
+    backup = _leftover(dest_root, "demo-skill", "backup")
     os.replace(skill_dest, backup / "skill")  # what the killed run left behind
     assert not skill_dest.exists()
 
@@ -490,8 +551,7 @@ def test_a_previous_install_displaced_by_a_hard_kill_is_restored_on_the_next_run
 
 def test_a_displaced_install_is_put_back_by_an_install_that_then_replaces_it(tmp_path: Path) -> None:
     repo, dest_root, skill_dest = _installed_skill(tmp_path)
-    backup = dest_root / ".demo-skill.backup.abc"
-    backup.mkdir()
+    backup = _leftover(dest_root, "demo-skill", "backup")
     os.replace(skill_dest, backup / "skill")
 
     assert install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor").status == "installed"
@@ -500,35 +560,74 @@ def test_a_displaced_install_is_put_back_by_an_install_that_then_replaces_it(tmp
     assert list(dest_root.glob(".demo-skill.backup.*")) == []
 
 
-def test_a_backup_is_dropped_only_when_the_install_it_protects_is_in_place(tmp_path: Path) -> None:
+def test_with_two_leftover_backups_the_newest_is_the_one_restored(tmp_path: Path) -> None:
+    """scandir order is arbitrary; restoring the older backup and then deleting the newer one as
+    "an old copy" would silently roll the user back a version."""
     repo, dest_root, skill_dest = _installed_skill(tmp_path)
-    stale_backup = dest_root / ".demo-skill.backup.old"
-    (stale_backup / "skill").mkdir(parents=True)
-    (stale_backup / "skill" / "SKILL.md").write_text("old", encoding="utf-8")
+    older = _backup_of_the_installed_skill(dest_root, skill_dest, "zzzzzzzz", "v1")  # sorts LAST by name
+    newer = _backup_of_the_installed_skill(dest_root, skill_dest, "aaaaaaaa", "v2")  # sorts FIRST by name
+    now = time.time()
+    os.utime(older, (now - 100, now - 100))
+    os.utime(newer, (now - 10, now - 10))
+    shutil.rmtree(skill_dest)
 
     install_engine._recover_leftover_backups(dest_root, "demo-skill", skill_dest)
-    assert not stale_backup.exists(), "the replacement is complete and owned: the backup is an old copy"
+
+    assert (skill_dest / "VERSION").read_text(encoding="utf-8") == "v2"
+    assert list(dest_root.glob(".demo-skill.backup.*")) == []
+
+
+def test_a_backup_is_dropped_only_when_the_install_it_protects_is_in_place(tmp_path: Path) -> None:
+    repo, dest_root, skill_dest = _installed_skill(tmp_path)
+    stale = _backup_of_the_installed_skill(dest_root, skill_dest, "olddddd1", "old")
+
+    install_engine._recover_leftover_backups(dest_root, "demo-skill", skill_dest)
+    assert not stale.exists(), "the replacement is complete and owned: the backup is an old copy"
 
     # An unowned directory at the destination proves nothing about the backup: keep it.
     unowned_dest = dest_root / "other"
     unowned_dest.mkdir()
     (unowned_dest / "README").write_text("not ours", encoding="utf-8")
-    kept = dest_root / ".other.backup.x"
-    (kept / "skill").mkdir(parents=True)
+    kept = _leftover(dest_root, "other", "backup", "keptdddd")
+    shutil.copytree(skill_dest, kept / "skill")
     install_engine._recover_leftover_backups(dest_root, "other", unowned_dest)
     assert kept.exists()
 
 
+def test_a_backup_that_is_not_an_install_of_this_skill_is_left_alone(tmp_path: Path) -> None:
+    _, dest_root, skill_dest = _installed_skill(tmp_path)
+    shutil.rmtree(skill_dest)
+    foreign = _leftover(dest_root, "demo-skill", "backup")
+    (foreign / "skill").mkdir()
+    (foreign / "skill" / "notes.txt").write_text("not a skill", encoding="utf-8")
+
+    install_engine._recover_leftover_backups(dest_root, "demo-skill", skill_dest)
+
+    assert not skill_dest.exists(), "a directory with no manifest must not be installed as the skill"
+    assert (foreign / "skill" / "notes.txt").exists()
+
+
 def test_uninstall_sweeps_leftovers_even_when_the_skill_is_already_absent(tmp_path: Path) -> None:
     dest_root = tmp_path / "dest"
-    leftover = dest_root / ".demo-skill.removing.abc" / "skill"
-    leftover.mkdir(parents=True)
-    (leftover / "SKILL.md").write_text("x", encoding="utf-8")
+    leftover = _leftover(dest_root, "demo-skill", "removing") if dest_root.mkdir() is None else None
+    (leftover / "skill").mkdir()
+    (leftover / "skill" / "SKILL.md").write_text("x", encoding="utf-8")
 
     outcome = uninstall_skill("demo-skill", dest_root=dest_root)
 
     assert outcome.status == "absent"
-    assert not (dest_root / ".demo-skill.removing.abc").exists()
+    assert not leftover.exists()
+
+
+def test_a_removing_directory_holding_more_than_the_moved_skill_is_left_alone(tmp_path: Path) -> None:
+    dest_root = tmp_path / "dest"
+    dest_root.mkdir()
+    odd = _leftover(dest_root, "demo-skill", "removing")
+    (odd / "notes").write_text("user data", encoding="utf-8")
+
+    uninstall_skill("demo-skill", dest_root=dest_root)
+
+    assert (odd / "notes").exists()
 
 
 def test_a_dry_run_uninstall_sweeps_nothing(tmp_path: Path) -> None:
@@ -544,9 +643,9 @@ def test_an_old_orphaned_lock_temp_dir_is_swept_but_a_fresh_one_is_not(tmp_path:
     """`_acquire_lock_dir()`'s temp dir exists for microseconds, so a fresh one may belong to a
     live acquire; only one older than any acquire could be is an orphan of a hard kill."""
     dest_root = tmp_path / "dest"
-    old = dest_root / ".demo-skill.lock.tmp.old"
-    fresh = dest_root / ".demo-skill.lock.tmp.fresh"
-    other = dest_root / ".other-skill.lock.tmp.old"
+    old = dest_root / ".demo-skill.lock.tmp.oldddddd"
+    fresh = dest_root / ".demo-skill.lock.tmp.freshhhh"
+    other = dest_root / ".other-skill.lock.tmp.oldddddd"
     for d in (old, fresh, other):
         d.mkdir(parents=True)
     ancient = time.time() - 2 * install_engine._ORPHAN_LOCK_TMP_MIN_AGE_SECONDS
@@ -565,9 +664,9 @@ def test_the_engine_stops_when_its_parent_is_killed(tmp_path: Path) -> None:
     """install.sh being SIGKILLed cannot be trapped; the engine it started used to be orphaned
     and run on, holding the lock. With the opt-in parent watch it terminates itself."""
     child_code = (
-        "import sys, time; sys.path.insert(0, %r);"
+        "import os, sys, time; sys.path.insert(0, %r);"
         "from scripts import install_engine;"
-        "install_engine._start_parent_watch(0.05);"
+        "install_engine._start_parent_watch(os.getppid(), 0.05);"
         "print('ready', flush=True); time.sleep(60)" % str(ROOT)
     )
     middle_code = (
@@ -591,3 +690,140 @@ def test_the_engine_stops_when_its_parent_is_killed(tmp_path: Path) -> None:
             os.kill(child_pid, signal.SIGKILL)
         if middle.poll() is None:
             middle.kill()
+
+
+def test_a_dry_run_uninstall_creates_nothing_not_even_the_destination_root(tmp_path: Path) -> None:
+    dest_root = tmp_path / "never-created"
+
+    outcome = uninstall_skill("demo-skill", dest_root=dest_root, dry_run=True)
+
+    assert outcome.status == "absent"
+    assert not dest_root.exists()
+
+
+def test_an_acquire_whose_temp_dir_was_swept_meanwhile_loses_the_round_instead_of_failing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A clock far ahead of the filesystem's can make a *live* lock temp dir look orphaned, so a
+    concurrent sweep removes it; the acquire's rename then fails ENOENT. That is a lost round to
+    retry, not an error to report."""
+    real_rename = os.rename
+
+    def rename_after_a_sweep(src: object, dst: object) -> None:
+        shutil.rmtree(src)  # the sweep, landing between mkdtemp and the rename
+        real_rename(src, dst)
+
+    monkeypatch.setattr(install_engine.os, "rename", rename_after_a_sweep)
+
+    assert _acquire_lock_dir(tmp_path, tmp_path / ".demo-skill.lock") is False
+    assert list(tmp_path.glob(".demo-skill.lock*")) == []
+
+
+@posix_only
+def test_the_engine_stops_immediately_if_the_parent_died_before_startup_finished(tmp_path: Path) -> None:
+    """A kill landing while the engine is still starting up (importing, before it would have
+    taken a late os.getppid() snapshot) must be caught too, not just one after startup -- the
+    watch is given the expected parent pid up front rather than reading it late."""
+    import scripts.install_engine as install_engine_module
+
+    stopped = []
+    monkeypatch_pid = os.getpid() + 999999  # never this process's real parent
+    real_kill = os.kill
+
+    def fake_kill(pid: int, sig: int) -> None:
+        if pid == os.getpid() and sig == signal.SIGTERM:
+            stopped.append(True)
+            return  # don't actually signal this test process
+        real_kill(pid, sig)
+
+    orig_kill = install_engine_module.os.kill
+    install_engine_module.os.kill = fake_kill
+    try:
+        install_engine_module._start_parent_watch(monkeypatch_pid, poll_seconds=10.0)
+    finally:
+        install_engine_module.os.kill = orig_kill
+    assert stopped == [True]
+
+
+def test_a_genuine_backup_is_kept_when_the_destination_is_present_but_unowned(tmp_path: Path) -> None:
+    """The destination being *present* only proves the backup is an old copy when what's there is
+    demonstrably this skill's own replacement install -- an unowned directory at the destination
+    (someone else's files, a half-finished unrelated write) proves nothing either way, so the
+    backup -- the only copy of the user's previous install -- must be kept, not discarded."""
+    _, dest_root, skill_dest = _installed_skill(tmp_path)
+    genuine = _backup_of_the_installed_skill(dest_root, skill_dest, "genuine1", "v1")
+    shutil.rmtree(skill_dest)
+    skill_dest.mkdir()
+    (skill_dest / "not-a-manifest.txt").write_text("unrelated", encoding="utf-8")
+
+    install_engine._recover_leftover_backups(dest_root, "demo-skill", skill_dest)
+
+    assert genuine.exists(), "an unowned destination must not cause the backup to be discarded"
+    assert (skill_dest / "not-a-manifest.txt").exists(), "the unowned destination itself is untouched"
+
+
+@posix_only
+def test_a_third_signal_during_the_uninstall_restore_still_forces_the_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, signal_sentinels: object
+) -> None:
+    """The restore-after-a-failed-move step runs under its own `_defer_interrupts()`, nested
+    inside the outer `_sigterm_as_system_exit()` the whole uninstall runs under. The outer layer
+    absorbs everything after its first signal with no way out -- `_defer_interrupts()`'s own
+    3rd-signal force-quit is what gives a hung restore (a stuck filesystem, an uninterruptible
+    rmtree) an escape hatch. Losing that wrapper silently removes the only escape for this step."""
+    _, dest_root, skill_dest = _installed_skill(tmp_path)
+    real_replace = os.replace
+    calls = 0
+
+    def replace_then_hang_then_signal_three_times(src: object, dst: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            real_replace(src, dst)  # the move-aside succeeds
+            os.kill(os.getpid(), signal.SIGTERM)  # triggers the except-BaseException restore path
+            time.sleep(0.2)
+        else:
+            for _ in range(3):  # the restore itself is "stuck": only repeated signals end it
+                os.kill(os.getpid(), signal.SIGTERM)
+                time.sleep(0.1)
+            pytest.fail("os._exit should have ended the process before this point")  # pragma: no cover
+
+    exit_calls: list[int] = []
+    monkeypatch.setattr(
+        install_engine.os,
+        "_exit",
+        lambda code: (exit_calls.append(code), (_ for _ in ()).throw(SystemExit(code)))[-1],
+    )
+    monkeypatch.setattr(install_engine.os, "replace", replace_then_hang_then_signal_three_times)
+    with pytest.raises(SystemExit) as exc_info:
+        uninstall_skill("demo-skill", dest_root=dest_root)
+    assert exit_calls == [130], "the force-quit escape must still fire during this step"
+    assert exc_info.value.code == 130
+
+
+@posix_only
+def test_a_signal_during_the_leftover_sweep_still_exits_cleanly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, signal_sentinels: object
+) -> None:
+    """`_sweep_leftovers`/`_recover_leftover_backups` run after `held_lock`'s own conversion has
+    exited and before the primary work's -- unprotected, a signal there hits the default
+    disposition (a raw 143/-15) instead of the engine's clean 130."""
+    repo, dest_root, skill_dest = _installed_skill(tmp_path)
+
+    def sweep_then_signal(dest_root: Path, skill: str) -> None:
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.sleep(0.2)
+
+    monkeypatch.setattr(install_engine, "_sweep_leftovers", sweep_then_signal)
+    with pytest.raises(SystemExit) as exc_info:
+        install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor")
+    assert exc_info.value.code == 130
+
+    def sweep_then_signal_uninstall(dest_root: Path, skill: str) -> None:
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.sleep(0.2)
+
+    monkeypatch.setattr(install_engine, "_sweep_leftovers", sweep_then_signal_uninstall)
+    with pytest.raises(SystemExit) as exc_info:
+        uninstall_skill("demo-skill", dest_root=dest_root)
+    assert exc_info.value.code == 130
