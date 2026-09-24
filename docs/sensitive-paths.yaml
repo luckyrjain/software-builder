@@ -1,0 +1,74 @@
+# Sensitive-path list for the F1 review-evidence gate (Track B).
+#
+# Read by scripts/sensitive_path_match.py, the single shared module both
+# scripts/check_review_evidence.py and the review-evidence-analyze CI job (see
+# .github/workflows/review-evidence.yml) use to decide "does this PR need review evidence" --
+# so the two never independently re-derive that answer and drift out of sync (design doc,
+# Components: sensitive_path_match).
+#
+# Design source: docs/superpowers/specs/2026-09-24-f1-review-evidence-gate-design.md
+# (Data model: SensitivePathList; Rollout, Phase 0).
+#
+# Format: exactly two keys, `globs` and `content_patterns` -- both required, and both must be
+# non-empty lists of strings (a malformed or empty file is treated as "cannot determine", never
+# silently as "nothing is sensitive"; see the Failure-strategy row in the design doc and
+# scripts/sensitive_path_match.py's loader).
+#
+# Self-protection: this file's own path, and the enforcement mechanism's own files
+# (scripts/sensitive_path_match.py, scripts/check_review_evidence.py,
+# .github/workflows/review-evidence.yml), are permanent members of `globs` below -- so editing
+# any of them is itself a sensitive-path change requiring evidence, closing the "a PR could
+# weaken the check's own logic unnoticed" gap the design's round-2 revision fixed.
+
+globs:
+  # Track B's actual protected surface (design doc, Rollout Phase 0 + Problem statement): the
+  # install-engine lock/signal rewrite (PRs #285, #288-290, #292, #293, #295-297) that shipped a
+  # regression (#289) caught only by later ad hoc review, plus run_log.py's own crash-safety
+  # machinery, plus the matching crash-safety gap gap-reanalysis finding F4 flagged in
+  # pr-gatekeeper's idempotency store.
+  - scripts/install_engine.py
+  - skills/loop-task-implementer/scripts/run_log.py
+  - skills/pr-gatekeeper/scripts/idempotency_store.py
+
+  # Forward-looking coverage for any *future* skill's own lock/signal/idempotency script, so a
+  # newly added one is covered the day it lands, without a list edit. Confirmed by running
+  #   find skills -path '*/scripts/*' \( -iname '*lock*' -o -iname '*signal*' -o -iname '*idempotency*' \)
+  # on 2026-09-24: skills/pr-gatekeeper/scripts/idempotency_store.py (already listed above by
+  # literal path) is the only current match -- these three globs exist for the next one, per
+  # the change-impact report's own `unknowns` note not to leave this as only a live pattern with
+  # nothing grounding it against today's tree.
+  - "skills/*/scripts/*lock*"
+  - "skills/*/scripts/*signal*"
+  - "skills/*/scripts/*idempotency*"
+
+  # Self-protection (design doc, Components: sensitive-path-list; Failure strategy: "the
+  # sensitive-path-list, or the enforcement mechanism itself, is edited to remove or weaken
+  # coverage"). These four files ARE the enforcement mechanism -- any edit to them is itself a
+  # sensitive-path change requiring evidence.
+  - docs/sensitive-paths.yaml
+  - scripts/sensitive_path_match.py
+  - scripts/check_review_evidence.py
+  - .github/workflows/review-evidence.yml
+
+content_patterns:
+  # Concurrency-primitive / crash-recovery keywords, matched against the *full diff text*
+  # (`gh pr diff`'s patch body -- see scripts/check_review_evidence.py and
+  # review-evidence-analyze) so a rename or split out of a listed glob can't silently evade the
+  # gate (design doc, Failure strategy: "Rename/split evades the glob list"; "Mitigated, not
+  # eliminated"). Grounded in the actual primitives scripts/install_engine.py, run_log.py, and
+  # idempotency_store.py use today (confirmed by direct grep of those three files on
+  # 2026-09-24), not guessed keywords.
+  - "\\bflock\\("
+  - "\\bfcntl\\."
+  - "\\bLOCK_EX\\b"
+  - "\\bLOCK_NB\\b"
+  - "\\bLOCK_SH\\b"
+  - "\\bLOCK_UN\\b"
+  - "\\bsignal\\.signal\\("
+  - "\\bSIGTERM\\b"
+  - "\\bSIGINT\\b"
+  - "\\bSIGHUP\\b"
+  - "\\bexpect_head\\b"
+  - "\\bchain_head\\b"
+  - "\\bidempotency[_-]key\\b"
+  - "\\bidempotency_store\\b"
