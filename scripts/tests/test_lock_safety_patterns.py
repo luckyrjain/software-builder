@@ -121,6 +121,106 @@ def test_lock_without_tryfinally_scoped_to_added_lines_only() -> None:
     assert violations == []
 
 
+# --- lock-without-tryfinally: function/lambda scope boundary (LENS-A-1) ------------------------
+
+_LOCK_LAMBDA_IN_OUTER_TRYFINALLY = """\
+import fcntl
+
+
+def outer(fd, executor):
+    try:
+        executor.submit(lambda: fcntl.flock(fd, fcntl.LOCK_EX))
+    finally:
+        cleanup()
+"""
+
+_LOCK_THREAD_WORKER_IN_OUTER_TRYFINALLY = """\
+import fcntl
+import threading
+
+
+def start_worker(fd):
+    try:
+        def worker():
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            process(fd)
+        t = threading.Thread(target=worker)
+        t.start()
+    finally:
+        release_other_resource()
+"""
+
+_LOCK_NESTED_FUNCTION_WITH_OWN_TRYFINALLY = """\
+import fcntl
+
+
+def outer(fd):
+    def worker():
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    worker()
+"""
+
+
+def test_lock_without_tryfinally_lambda_in_outer_tryfinally_still_flagged() -> None:
+    """A lock call inside a lambda passed to `executor.submit` runs on the executor's own
+    schedule, possibly after the outer try/finally (which merely contains the lambda's
+    *definition*) has already exited -- the outer `finally` is not a real release guarantee and
+    must not suppress the violation (LENS-A-1)."""
+    source = _LOCK_LAMBDA_IN_OUTER_TRYFINALLY
+    violations = lsp.check({"f.py": source}, {"f.py": _all_lines(source)})
+    assert len(violations) == 1
+    assert violations[0].rule == lsp.RULE_LOCK_WITHOUT_TRYFINALLY
+    assert violations[0].line == 6
+
+
+def test_lock_without_tryfinally_thread_worker_in_outer_tryfinally_still_flagged() -> None:
+    """Same false negative, via a nested `worker()` function definition run on a separate thread
+    rather than a lambda -- the lock call's own function scope (`worker`) has no try/finally of
+    its own, so it must be flagged regardless of `start_worker`'s outer try/finally (LENS-A-1)."""
+    source = _LOCK_THREAD_WORKER_IN_OUTER_TRYFINALLY
+    violations = lsp.check({"f.py": source}, {"f.py": _all_lines(source)})
+    assert len(violations) == 1
+    assert violations[0].rule == lsp.RULE_LOCK_WITHOUT_TRYFINALLY
+    assert violations[0].line == 8
+
+
+def test_lock_without_tryfinally_nested_function_with_own_tryfinally_not_flagged() -> None:
+    """The legitimate case: a lock call inside a nested function that itself has its own
+    enclosing try/finally, at the *same* function scope as the call, must still be recognized as
+    protected -- the fix is "protection must be in the same function scope as the call", not
+    "any nested function is always unprotected" (LENS-A-1)."""
+    source = _LOCK_NESTED_FUNCTION_WITH_OWN_TRYFINALLY
+    violations = lsp.check({"f.py": source}, {"f.py": _all_lines(source)})
+    assert violations == []
+
+
+# --- lock-without-tryfinally: keyword fd/handle argument (LENS-A-2) ----------------------------
+
+_LOCK_KEYWORD_FD_VIOLATING = """\
+def acquire_lock(fd, operation):
+    pass
+
+
+def acquire(fd):
+    acquire_lock(fd=fd, operation=1)
+    return fd
+"""
+
+
+def test_lock_without_tryfinally_keyword_fd_argument_flagged() -> None:
+    """`_has_fd_like_argument` must also inspect keyword arguments, not just positional ones --
+    a lock-acquisition-shaped call whose fd is passed as `fd=fd` is just as real a bypass as the
+    already-flagged positional form (LENS-A-2)."""
+    source = _LOCK_KEYWORD_FD_VIOLATING
+    violations = lsp.check({"f.py": source}, {"f.py": _all_lines(source)})
+    assert len(violations) == 1
+    assert violations[0].rule == lsp.RULE_LOCK_WITHOUT_TRYFINALLY
+    assert violations[0].line == 6
+
+
 # --- bare-except-added -------------------------------------------------------------------------
 
 _EXCEPT_CLEAN = """\

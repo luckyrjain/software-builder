@@ -78,18 +78,30 @@ def _build_parents(tree: ast.AST) -> dict[ast.AST, ast.AST]:
 
 
 def _has_ancestor_try_finally(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
-    """True iff any ancestor of `node` (at any nesting depth) is a `try` with a non-empty
-    `finally` body.
+    """True iff an ancestor of `node`, *within `node`'s own function scope*, is a `try` with a
+    non-empty `finally` body.
 
-    Deliberately checks *every* ancestor, not just the nearest enclosing `try` -- a release call
-    (e.g. `_unlock(fd)`) sitting inside its own inner `try/except` (no `finally` of its own) but
-    nested *within* an outer `try/finally` (as `held_lock()` itself does) is still guarded: the
-    outer `finally` is what guarantees this code path runs. Requiring the *nearest* `try` alone
-    to carry the `finally` would false-positive on exactly this codebase's own clean pattern.
+    Deliberately checks *every* ancestor up to (but never past) the nearest enclosing
+    `FunctionDef`/`AsyncFunctionDef`/`Lambda` boundary, not just the nearest enclosing `try` -- a
+    release call (e.g. `_unlock(fd)`) sitting inside its own inner `try/except` (no `finally` of
+    its own) but nested *within* an outer `try/finally` in the *same* function (as `held_lock()`
+    itself does) is still guarded: the outer `finally` is what guarantees this code path runs.
+    Requiring the *nearest* `try` alone to carry the `finally` would false-positive on exactly
+    this codebase's own clean pattern.
+
+    The walk stops the instant it reaches a `FunctionDef`/`AsyncFunctionDef`/`Lambda` ancestor --
+    i.e. the moment it would leave `node`'s own lexical function scope -- and reports unprotected
+    from there, even if an *outer* function happens to have its own enclosing `try/finally`. A
+    lock call made from inside a callback, lambda, or thread-worker function runs on that
+    function's own schedule (e.g. after `executor.submit`, or on another thread), possibly long
+    after an outer `try/finally` that merely *contains the definition* of that function has
+    already exited -- so that outer `finally` provides no real release guarantee for it.
     """
     current = node
     while current in parents:
         current = parents[current]
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            return False
         if isinstance(current, ast.Try) and current.finalbody:
             return True
     return False
@@ -106,8 +118,18 @@ def _name_tokens(node: ast.AST) -> set[str]:
     return set()
 
 
+def _keyword_tokens(kw: ast.keyword) -> set[str]:
+    """Best-effort lowercase, underscore-split tokens naming a keyword argument -- both the
+    keyword's own name (`fd=...`) and its value expression (`handle=some_fd`), the same
+    token-matching approach `_name_tokens` uses for positional arguments."""
+    name_tokens = set(kw.arg.lower().split("_")) if kw.arg else set()
+    return name_tokens | _name_tokens(kw.value)
+
+
 def _has_fd_like_argument(call: ast.Call) -> bool:
-    return any(_name_tokens(arg) & _FD_ARG_TOKENS for arg in call.args)
+    if any(_name_tokens(arg) & _FD_ARG_TOKENS for arg in call.args):
+        return True
+    return any(_keyword_tokens(kw) & _FD_ARG_TOKENS for kw in call.keywords)
 
 
 def _call_name(call: ast.Call) -> str | None:
