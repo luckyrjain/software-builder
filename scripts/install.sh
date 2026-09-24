@@ -58,8 +58,8 @@ run_engine() {
 # staging, backup, atomic replace, rollback-on-failure -- to scripts/install_engine.py's CLI,
 # the single implementation of that state machine also used in-process by `sb install`/
 # `sb uninstall` (cli/sb/__main__.py). install.sh no longer holds its own lock or performs its
-# own staging; LOCK_WAIT_TIMEOUT_SECONDS/LOCK_STALE_SECONDS, if set in the environment, are
-# read directly by install_engine.py, not by this script. See docs/adr/0007-shared-install-engine.md.
+# own staging; LOCK_WAIT_TIMEOUT_SECONDS, if set in the environment, is read directly by
+# install_engine.py, not by this script. See docs/adr/0007-shared-install-engine.md.
 
 AGENT="all"
 TARGET_DIR=""

@@ -43,6 +43,28 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
+### The install lock is now the OS's own advisory file lock, not a directory this module reclaimed itself (2026-09-24)
+
+- `held_lock()` (`scripts/install_engine.py`, used in-process by `sb install`/`sb uninstall` and via
+  `install.sh`'s subprocess call) is rewritten around `flock()` on POSIX and `msvcrt.locking()` on
+  Windows, replacing the directory-based lock this module previously built atomically (a temp
+  directory + rename) and reclaimed by guessing at PID liveness and wall-clock age. The OS releases
+  the lock the instant the holding process is gone, by any means -- a clean exit, an uncaught
+  exception, `SIGKILL`, power loss -- so there is no stale-lock state left for this module to
+  observe, reclaim, or misjudge the identity of. This closes ADR 0007's last documented residual
+  risk: the microseconds-wide window where a reclaim judging a lock stale could race a third
+  holder's own legitimate acquisition. `is_pid_alive()`, `_acquire_lock_dir()`,
+  `_reclaim_stale_lock()`, and the `.{skill}.lock.tmp.*` orphan sweep are deleted, not hardened.
+- `held_lock()` no longer takes a `stale_after` parameter, `install_skill()`/`uninstall_skill()` no
+  longer accept one either, and the `LOCK_STALE_SECONDS` environment variable is no longer read
+  (setting it now does nothing). `LOCK_WAIT_TIMEOUT_SECONDS` is unchanged.
+- A lock directory left by a version of this module before this rewrite is detected and cleared on
+  next use -- nothing ever held an OS-level lock on it under either scheme, so this is always safe.
+- New, accepted tradeoff: `flock()` is unreliable over some NFS client/server combinations
+  (notably NFSv3 without a running lock daemon), where it can silently no-op. Judged acceptable for
+  a single-machine, ordinarily-local-disk install target; see `docs/OPERATIONS.md`'s "Stale install
+  lock" entry, rewritten for this design, for the manual-recovery path if it's hit.
+
 ### ADR 0008: production code is written only by `repository-write` executor skills (2026-09-18, corrected 2026-09-19)
 
 - New [ADR 0008](docs/adr/0008-production-code-write-authority.md) records the write-authority policy

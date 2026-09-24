@@ -6,10 +6,9 @@ stage_dir -> skill_dest mv (a losing mv nests the source inside the winner's dir
 overwriting it), and a companion finding showed the pre-replace backup was made with a bare
 `mktemp -d` (system tmp, e.g. /tmp) instead of inside dest_root, so a cross-filesystem mv could
 leave neither the old nor the new install intact under a hard kill. This file exercises the fix:
-a per-(skill, dest_root) directory lock (atomically claimed -- see
-scripts/install_engine.py's _acquire_lock_dir()) serializing install_skill/uninstall_skill's
-mutating section, with PID-liveness and wall-clock-age staleness recovery, plus the backup
-directory now living on the same filesystem as the destination.
+a per-(skill, dest_root) lock -- the operating system's own advisory file lock, see
+scripts/install_engine.py's held_lock() -- serializing install_skill/uninstall_skill's mutating
+section, plus the backup directory now living on the same filesystem as the destination.
 """
 
 from __future__ import annotations
@@ -18,6 +17,9 @@ import os
 import subprocess
 import time
 from pathlib import Path
+
+from scripts.install_engine import _lock_path_for
+from scripts.tests.install_lock_test_helpers import spawn_lock_holder
 
 ROOT = Path(__file__).resolve().parents[2]
 INSTALLER = ROOT / "scripts" / "install.sh"
@@ -42,59 +44,13 @@ def run_installer(*args: str, home: Path, **env_overrides: str) -> subprocess.Co
     )
 
 
-def _lock_dir(home: Path) -> Path:
-    return home / ".cursor" / "skills" / f".{SKILL}.lock"
-
-
-def test_stale_lock_from_a_dead_pid_is_reclaimed_immediately(tmp_path: Path) -> None:
-    home = tmp_path / "home"
-    lock_dir = _lock_dir(home)
-    lock_dir.mkdir(parents=True)
-    # A PID essentially guaranteed not to be a live process on any real machine (PIDs wrap well
-    # below this) -- exercises the kill -0-based staleness path, not the age-based fallback.
-    (lock_dir / "pid").write_text("999999999\n", encoding="utf-8")
-    (lock_dir / "acquired_at").write_text(str(int(time.time())), encoding="utf-8")
-
-    started = time.monotonic()
-    result = run_installer(
-        "--agent", "cursor", SKILL, home=home, LOCK_WAIT_TIMEOUT_SECONDS="20",
-    )
-    elapsed = time.monotonic() - started
-
-    assert result.returncode == 0, result.stderr
-    assert elapsed < 10, "should reclaim a dead-pid lock immediately, not wait out the timeout"
-    assert (home / ".cursor" / "skills" / SKILL / "SKILL.md").is_file()
-
-
-def test_stale_lock_past_the_age_threshold_is_reclaimed_even_with_a_live_pid(tmp_path: Path) -> None:
-    home = tmp_path / "home"
-    lock_dir = _lock_dir(home)
-    lock_dir.mkdir(parents=True)
-    # This test process's own PID is alive (kill -0 succeeds), so only the wall-clock-age
-    # fallback -- not PID liveness -- can explain a reclaim here.
-    (lock_dir / "pid").write_text(f"{os.getpid()}\n", encoding="utf-8")
-    (lock_dir / "acquired_at").write_text(str(int(time.time()) - 1000), encoding="utf-8")
-
-    started = time.monotonic()
-    result = run_installer(
-        "--agent", "cursor", SKILL, home=home,
-        LOCK_WAIT_TIMEOUT_SECONDS="20", LOCK_STALE_SECONDS="300",
-    )
-    elapsed = time.monotonic() - started
-
-    assert result.returncode == 0, result.stderr
-    assert elapsed < 10, "should reclaim an aged-out lock immediately, not wait out the timeout"
-
-
 def test_live_held_lock_times_out_with_a_clear_error(tmp_path: Path) -> None:
     home = tmp_path / "home"
-    lock_dir = _lock_dir(home)
-    lock_dir.mkdir(parents=True)
-    holder = subprocess.Popen(["sleep", "30"])
+    skills_dir = home / ".cursor" / "skills"
+    skills_dir.mkdir(parents=True)
+    lock_path = _lock_path_for(skills_dir, SKILL)
+    holder = spawn_lock_holder(lock_path)
     try:
-        (lock_dir / "pid").write_text(f"{holder.pid}\n", encoding="utf-8")
-        (lock_dir / "acquired_at").write_text(str(int(time.time())), encoding="utf-8")
-
         started = time.monotonic()
         result = run_installer(
             "--agent", "cursor", SKILL, home=home, LOCK_WAIT_TIMEOUT_SECONDS="2",
@@ -105,7 +61,7 @@ def test_live_held_lock_times_out_with_a_clear_error(tmp_path: Path) -> None:
         assert "timed out waiting for lock" in result.stderr
         assert str(holder.pid) in result.stderr
         assert 2 <= elapsed < 15
-        assert not (home / ".cursor" / "skills" / SKILL / "SKILL.md").is_file()
+        assert not (skills_dir / SKILL / "SKILL.md").is_file()
     finally:
         holder.kill()
         holder.wait()
@@ -173,25 +129,3 @@ def test_reinstall_backup_survives_a_missing_system_tmp_dir(tmp_path: Path) -> N
     assert (dest / "SKILL.md").is_file()
 
 
-def test_stale_lock_reclaim_renames_before_removing(tmp_path: Path) -> None:
-    """Reclaim must not be "check, rm -rf, mkdir": two waiters that read the same dead PID could
-    both remove the lock directory, with the loser's rm -rf deleting the winner's freshly created
-    live lock and both then entering the section the lock serializes. Renaming first makes the
-    reclaim atomic -- only the winner of the mv removes anything -- and leaves no `.stale.<pid>`
-    directory behind. install.sh itself no longer implements this -- it delegates locking to
-    scripts/install_engine.py's held_lock(), the single implementation both it and `sb install`
-    use -- so the rename-before-remove discipline is asserted there instead."""
-    engine = (ROOT / "scripts" / "install_engine.py").read_text(encoding="utf-8")
-    assert "os.rename(lock_dir, stale_dir)" in engine
-
-    home = tmp_path / "home"
-    lock_dir = _lock_dir(home)
-    lock_dir.mkdir(parents=True)
-    (lock_dir / "pid").write_text("999999999\n", encoding="utf-8")
-    (lock_dir / "acquired_at").write_text(str(int(time.time())), encoding="utf-8")
-
-    result = run_installer("--agent", "cursor", SKILL, home=home, LOCK_WAIT_TIMEOUT_SECONDS="20")
-
-    assert result.returncode == 0, result.stderr
-    leftovers = list((home / ".cursor" / "skills").glob(f".{SKILL}.lock.stale.*"))
-    assert leftovers == []

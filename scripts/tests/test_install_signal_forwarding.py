@@ -115,7 +115,10 @@ def test_signal_to_install_sh_alone_reaches_the_engine_and_rolls_back(
     # Long enough for an orphaned engine (the old behavior) to have finished the 4s-slow install.
     time.sleep(6)
     assert not (skills_dir / SKILL).exists(), "an orphaned engine completed the install"
-    assert list(skills_dir.glob(f".{SKILL}.*")) == [], "staging/backup/lock directories left behind"
+    # The lock is a persistent file now (an OS advisory lock needs no cleanup); everything
+    # staging/backup/removing-shaped must still be gone.
+    leftovers = [p for p in skills_dir.glob(f".{SKILL}.*") if p.name != f".{SKILL}.lock"]
+    assert leftovers == [], "staging/backup directories left behind"
 
 
 # An engine that finishes cleanly (exit 0) as the stop request lands: the run must still stop, and

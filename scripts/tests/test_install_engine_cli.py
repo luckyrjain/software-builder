@@ -18,7 +18,6 @@ import pytest
 
 from scripts import install_engine
 from scripts.install_engine import (
-    DEFAULT_LOCK_STALE_SECONDS,
     DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS,
     InstallOutcome,
     UninstallOutcome,
@@ -48,18 +47,17 @@ def test_env_float_parses_a_real_value(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_env_float_raises_on_a_non_empty_non_numeric_value(monkeypatch: pytest.MonkeyPatch) -> None:
     """Unlike the empty-string case, a genuinely garbled value (not unset, not empty) is not
-    silently defaulted -- bash's own `((age > LOCK_STALE_SECONDS))` would fail on it too, just
-    with a different error shape. This is only indirectly covered by the main()-level
-    catch-all test below; this asserts _env_float's own behavior directly."""
+    silently defaulted -- it should fail loud, not run with a value nobody set on purpose. This
+    is only indirectly covered by the main()-level catch-all test below; this asserts
+    _env_float's own behavior directly."""
     monkeypatch.setenv("LOCK_WAIT_TIMEOUT_SECONDS", "not-a-number")
     with pytest.raises(ValueError):
         _env_float("LOCK_WAIT_TIMEOUT_SECONDS", 30.0)
 
 
-def test_lock_timing_from_env_uses_defaults_when_both_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_lock_timing_from_env_uses_defaults_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LOCK_WAIT_TIMEOUT_SECONDS", raising=False)
-    monkeypatch.delenv("LOCK_STALE_SECONDS", raising=False)
-    assert _lock_timing_from_env() == (DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS, DEFAULT_LOCK_STALE_SECONDS)
+    assert _lock_timing_from_env() == DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS
 
 
 def test_cli_install_returns_130_when_install_skill_raises_system_exit(
@@ -232,7 +230,15 @@ def test_held_lock_works_and_releases_from_a_worker_thread(tmp_path: Path) -> No
     worker.start()
     worker.join()
     assert errors == []
-    assert not (tmp_path / ".demo-skill.lock").exists()
+    # The lock file itself is left behind on purpose (it's just an OS lock target, not state to
+    # clean up) -- released means re-acquirable, not gone.
+    lock_path = tmp_path / ".demo-skill.lock"
+    assert lock_path.is_file()
+    fd = os.open(lock_path, os.O_RDWR)
+    try:
+        assert install_engine._try_lock(fd)
+    finally:
+        os.close(fd)
 
 
 def test_defer_interrupts_restores_both_handlers_on_exit(signal_sentinels: object) -> None:

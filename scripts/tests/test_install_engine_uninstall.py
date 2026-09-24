@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 import os
 import signal
-import subprocess
 import sys
 import time
 from contextlib import contextmanager
@@ -17,6 +16,7 @@ import pytest
 
 import scripts.install_engine as install_engine
 from scripts.install_engine import uninstall_skill
+from scripts.tests.install_lock_test_helpers import spawn_lock_holder
 
 
 def _owned_install(dest_root: Path, skill_id: str) -> Path:
@@ -128,7 +128,7 @@ def test_sigterm_during_rmtree_exits_130(tmp_path: Path, monkeypatch: pytest.Mon
         assert exc_info.value.code == 130
         # The deletion is deferred, not abandoned: it ran to completion before the exit.
         assert not dest.exists()
-        assert list(dest_root.glob(".demo-skill.*")) == []
+        assert [p for p in dest_root.glob(".demo-skill.*") if p.name != ".demo-skill.lock"] == []
         assert signal.getsignal(signal.SIGTERM) == original_handler
     finally:
         signal.signal(signal.SIGTERM, original_handler)
@@ -171,7 +171,7 @@ def test_uninstall_live_held_lock_yields_a_failed_outcome_instead_of_raising(
 ) -> None:
     """A concurrent/stuck lock must surface as UninstallOutcome(status="failed"), not an
     unhandled LockTimeoutError -- mirrors test_install_engine_locking.py's
-    test_live_held_lock_times_out_with_a_clear_error's real-subprocess-holder technique (and
+    test_a_live_held_lock_times_out_with_a_clear_error's real-subprocess-holder technique (and
     install_skill's own matching test in test_install_engine_install.py), through
     uninstall_skill() itself so a multi-skill `sb uninstall` run can keep going instead of
     crashing mid-run. uninstall_skill() doesn't expose held_lock's wait_timeout, so it's
@@ -188,20 +188,16 @@ def test_uninstall_live_held_lock_yields_a_failed_outcome_instead_of_raising(
     dest_root = tmp_path / "dest"
     dest = _owned_install(dest_root, "demo-skill")
 
-    holder = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    lock_path = install_engine._lock_path_for(dest_root, "demo-skill")
+    holder = spawn_lock_holder(lock_path)
     try:
-        lock_dir = dest_root / ".demo-skill.lock"
-        lock_dir.mkdir()
-        (lock_dir / "pid").write_text(str(holder.pid), encoding="utf-8")
-        (lock_dir / "acquired_at").write_text(str(time.time()), encoding="utf-8")
-
         outcome = uninstall_skill("demo-skill", dest_root=dest_root)
 
         assert outcome.status == "failed"
         assert "timed out waiting for lock" in outcome.message
         assert dest.exists()
     finally:
-        holder.terminate()
+        holder.kill()
         holder.wait(timeout=5)
 
 

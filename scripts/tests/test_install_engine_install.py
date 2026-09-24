@@ -17,6 +17,7 @@ import pytest
 
 from scripts import install_engine
 from scripts.install_engine import install_skill
+from scripts.tests.install_lock_test_helpers import spawn_lock_holder
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -131,7 +132,6 @@ def test_validation_failure_restores_previous_install_unchanged(tmp_path: Path) 
     # no leftover staging/backup directories
     assert not list(dest_root.glob(".demo-skill.staging.*"))
     assert not list(dest_root.glob(".demo-skill.backup.*"))
-    assert not list(dest_root.glob(".demo-skill.lock*"))
 
 
 def test_reinstall_backup_survives_a_missing_system_tmp_dir(
@@ -183,11 +183,10 @@ def test_keyboard_interrupt_during_staging_propagates_after_cleanup(
         install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor")
 
     assert seen_stage_dirs, "validate_tree was never reached"
-    # cleanup ran before propagating: the staging dir is gone, nothing landed at the
-    # destination, and held_lock's own finally released the lock.
+    # cleanup ran before propagating: the staging dir is gone and nothing landed at the
+    # destination (the lock itself is a persistent file now, released but not deleted).
     assert not seen_stage_dirs[0].exists()
     assert not (dest_root / "demo-skill").exists()
-    assert not list(dest_root.glob(".demo-skill.lock*"))
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="os.kill(pid, SIGTERM) bypasses Python's signal module on Windows")
@@ -223,7 +222,6 @@ def test_sigterm_during_staging_runs_cleanup_and_exits_130(
         assert seen_stage_dirs, "validate_tree was never reached"
         assert not seen_stage_dirs[0].exists()
         assert not (dest_root / "demo-skill").exists()
-        assert not list(dest_root.glob(".demo-skill.lock*"))
         # the handler installed for the duration of the staged section must be restored
         assert signal.getsignal(signal.SIGTERM) == original_handler
     finally:
@@ -235,7 +233,7 @@ def test_live_held_lock_yields_a_failed_outcome_instead_of_raising(
 ) -> None:
     """A concurrent/stuck lock must surface as InstallOutcome(status="failed"), not an
     unhandled LockTimeoutError -- mirrors test_install_engine_locking.py's
-    test_live_held_lock_times_out_with_a_clear_error's real-subprocess-holder technique, but
+    test_a_live_held_lock_times_out_with_a_clear_error's real-subprocess-holder technique, but
     through install_skill() itself so a multi-skill `sb install` run can keep going instead of
     crashing mid-run. install_skill() doesn't expose held_lock's wait_timeout, so it's shortened
     here by wrapping the module-level held_lock the same way other tests in this file patch
@@ -253,13 +251,9 @@ def test_live_held_lock_yields_a_failed_outcome_instead_of_raising(
     dest_root = tmp_path / "dest"
     dest_root.mkdir()
 
-    holder = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    lock_path = install_engine._lock_path_for(dest_root, "demo-skill")
+    holder = spawn_lock_holder(lock_path)
     try:
-        lock_dir = dest_root / ".demo-skill.lock"
-        lock_dir.mkdir()
-        (lock_dir / "pid").write_text(str(holder.pid), encoding="utf-8")
-        (lock_dir / "acquired_at").write_text(str(time.time()), encoding="utf-8")
-
         outcome = install_skill(
             "demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor"
         )
@@ -267,7 +261,7 @@ def test_live_held_lock_yields_a_failed_outcome_instead_of_raising(
         assert outcome.status == "failed"
         assert "timed out waiting for lock" in outcome.message
     finally:
-        holder.terminate()
+        holder.kill()
         holder.wait(timeout=5)
 
 
@@ -467,7 +461,6 @@ def test_sigterm_during_the_backup_failure_cleanup_leaves_the_existing_install_i
     assert (existing / "SKILL.md").read_text(encoding="utf-8") == "# Previous good install\n"
     assert not list(dest_root.glob(".demo-skill.staging.*"))
     assert not list(dest_root.glob(".demo-skill.backup.*"))
-    assert not list(dest_root.glob(".demo-skill.lock*"))
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="os.kill(pid, SIGTERM) bypasses Python's signal module on Windows")
@@ -498,7 +491,9 @@ def test_sigterm_while_removing_the_backup_after_a_successful_replace_still_remo
 
     assert exc_info.value.code == 130
     assert fired
-    assert list(dest_root.glob(".demo-skill.*")) == []
+    # The lock is a persistent file now, not a directory this design deletes after use --
+    # everything else (staging, backup, removing) must still be gone.
+    assert [p for p in dest_root.glob(".demo-skill.*") if p.name != ".demo-skill.lock"] == []
     assert (dest_root / "demo-skill" / "SKILL.md").exists()
 
 
@@ -534,4 +529,4 @@ def test_a_second_signal_landing_as_the_rollback_starts_cannot_abandon_it(
 
     assert exc_info.value.code == 130
     assert seen_stage_dirs and not seen_stage_dirs[0].exists()
-    assert list(dest_root.glob(".demo-skill.*")) == []
+    assert [p for p in dest_root.glob(".demo-skill.*") if p.name != ".demo-skill.lock"] == []
