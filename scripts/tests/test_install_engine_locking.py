@@ -41,6 +41,56 @@ def test_a_live_held_lock_times_out_with_a_clear_error(tmp_path: Path) -> None:
         holder.wait(timeout=5)
 
 
+_HELD_LOCK_HOLDER_CODE = """
+import sys, time
+from pathlib import Path
+sys.path.insert(0, {root!r})
+from scripts.install_engine import held_lock
+
+with held_lock(Path({dest!r}), "demo-skill", wait_timeout=30.0):
+    print("locked", flush=True)
+    time.sleep(30)
+"""
+
+
+def test_a_lock_held_via_held_lock_itself_identifies_its_pid_in_the_timeout_message(tmp_path: Path) -> None:
+    """The test above's holder writes its pid through the shared helper's own direct
+    `_write_holder_pid` call, bypassing `held_lock()` entirely -- this exercises `held_lock()`'s
+    own write, on the path every real caller actually takes."""
+    import subprocess
+
+    from scripts.tests.install_lock_test_helpers import ROOT
+
+    code = _HELD_LOCK_HOLDER_CODE.format(root=str(ROOT), dest=str(tmp_path))
+    holder = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout is not None
+        assert holder.stdout.readline().strip() == "locked"
+        with pytest.raises(LockTimeoutError, match=f"held by pid {holder.pid}"):
+            with held_lock(tmp_path, "demo-skill", wait_timeout=2.0):
+                pass  # pragma: no cover
+    finally:
+        holder.kill()
+        holder.wait(timeout=5)
+
+
+def test_a_zero_wait_timeout_times_out_immediately_against_a_live_lock(tmp_path: Path) -> None:
+    """`waited >= wait_timeout` must be checked before the first sleep, not after -- an off-by-
+    one (`>` instead of `>=`) would make a wait_timeout=0 caller wait out one full poll
+    interval before giving up, instead of failing on the very first check."""
+    lock_path = install_engine._lock_path_for(tmp_path, "demo-skill")
+    holder = spawn_lock_holder(lock_path)
+    try:
+        start = time.monotonic()
+        with pytest.raises(LockTimeoutError):
+            with held_lock(tmp_path, "demo-skill", wait_timeout=0.0):
+                pass  # pragma: no cover
+        assert time.monotonic() - start < 0.5
+    finally:
+        holder.kill()
+        holder.wait(timeout=5)
+
+
 def test_the_lock_is_released_the_moment_the_holder_is_killed(tmp_path: Path) -> None:
     """The whole point of moving to an OS advisory lock: nothing this module does is needed to
     free it after a hard kill -- the kernel does it as part of tearing down the process."""

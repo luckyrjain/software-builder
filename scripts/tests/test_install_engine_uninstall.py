@@ -9,7 +9,6 @@ import os
 import signal
 import sys
 import time
-from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -109,10 +108,9 @@ def test_sigterm_during_rmtree_exits_130(tmp_path: Path, monkeypatch: pytest.Mon
     fired = False
 
     def _send_sigterm_once(path: object, *args: object, **kwargs: object) -> None:
-        # shutil.rmtree is patched process-wide, not just for this call -- held_lock()'s own
-        # `finally` also calls it (to remove the lock directory) once this unwinds, and that
-        # second call must not fire the signal again with the handler already restored.
-        # The skill is renamed aside first, so the deletion runs on the `.removing.*` copy.
+        # shutil.rmtree is patched process-wide -- only the deletion of the moved-aside
+        # `.removing.*` copy should trip this, not any other rmtree call this test's setup or
+        # teardown might make.
         nonlocal fired
         if not fired and ".removing." in str(path):
             fired = True
@@ -166,32 +164,21 @@ def test_uninstall_rejects_a_skill_id_with_a_path_separator(tmp_path: Path) -> N
     assert not (tmp_path / "escape").exists()  # nothing touched outside dest_root
 
 
-def test_uninstall_live_held_lock_yields_a_failed_outcome_instead_of_raising(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_uninstall_live_held_lock_yields_a_failed_outcome_instead_of_raising(tmp_path: Path) -> None:
     """A concurrent/stuck lock must surface as UninstallOutcome(status="failed"), not an
     unhandled LockTimeoutError -- mirrors test_install_engine_locking.py's
     test_a_live_held_lock_times_out_with_a_clear_error's real-subprocess-holder technique (and
     install_skill's own matching test in test_install_engine_install.py), through
     uninstall_skill() itself so a multi-skill `sb uninstall` run can keep going instead of
-    crashing mid-run. uninstall_skill() doesn't expose held_lock's wait_timeout, so it's
-    shortened here by wrapping the module-level held_lock."""
-    real_held_lock = install_engine.held_lock
-
-    @contextmanager
-    def _short_wait_held_lock(dest_root: Path, skill_id: str, **_kwargs: object):
-        with real_held_lock(dest_root, skill_id, wait_timeout=2.0):
-            yield
-
-    monkeypatch.setattr(install_engine, "held_lock", _short_wait_held_lock)
-
+    crashing mid-run. Calls uninstall_skill()'s own `wait_timeout` parameter directly -- it
+    forwards straight to held_lock()."""
     dest_root = tmp_path / "dest"
     dest = _owned_install(dest_root, "demo-skill")
 
     lock_path = install_engine._lock_path_for(dest_root, "demo-skill")
     holder = spawn_lock_holder(lock_path)
     try:
-        outcome = uninstall_skill("demo-skill", dest_root=dest_root)
+        outcome = uninstall_skill("demo-skill", dest_root=dest_root, wait_timeout=2.0)
 
         assert outcome.status == "failed"
         assert "timed out waiting for lock" in outcome.message
@@ -201,6 +188,39 @@ def test_uninstall_live_held_lock_yields_a_failed_outcome_instead_of_raising(
         holder.wait(timeout=5)
 
 
+def test_two_different_skills_at_the_same_dest_root_do_not_block_each_other(tmp_path: Path) -> None:
+    """The lock is keyed on (dest_root, skill); holding skill A's lock must never make skill
+    B's uninstall wait."""
+    dest_root = tmp_path / "dest"
+    _owned_install(dest_root, "demo-skill")
+
+    other_lock = install_engine._lock_path_for(dest_root, "some-other-skill")
+    holder = spawn_lock_holder(other_lock)
+    try:
+        start = time.monotonic()
+        outcome = uninstall_skill("demo-skill", dest_root=dest_root, wait_timeout=10.0)
+        elapsed = time.monotonic() - start
+        assert outcome.status == "uninstalled"
+        assert elapsed < 2.0
+    finally:
+        holder.kill()
+        holder.wait(timeout=5)
+
+
+def test_a_preexisting_lock_file_with_garbage_content_is_still_acquired_normally(tmp_path: Path) -> None:
+    """The lock file is deliberately left behind after every run -- a pre-existing, non-empty
+    file at that path is the common case, not the exception; acquiring must not care what
+    bytes are already there."""
+    dest_root = tmp_path / "dest"
+    _owned_install(dest_root, "demo-skill")
+    lock_path = install_engine._lock_path_for(dest_root, "demo-skill")
+    lock_path.write_bytes(b"\xff\xfe not a pid, not utf-8, no trailing newline")
+
+    outcome = uninstall_skill("demo-skill", dest_root=dest_root)
+
+    assert outcome.status == "uninstalled"
+
+
 def test_uninstall_reports_failure_when_rmtree_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     dest_root = tmp_path / "dest"
     dest = _owned_install(dest_root, "demo-skill")
@@ -208,8 +228,7 @@ def test_uninstall_reports_failure_when_rmtree_raises(tmp_path: Path, monkeypatc
 
     def _boom(path: Path, *args: object, **kwargs: object) -> None:
         # Only the deletion of the skill itself (moved aside to `.removing.*` first) should
-        # fail; held_lock's own lock-directory cleanup (a separate shutil.rmtree call) must
-        # still work normally.
+        # fail.
         if ".removing." in str(path):
             raise OSError("permission denied")
         real_rmtree(path, *args, **kwargs)

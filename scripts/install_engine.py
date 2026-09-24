@@ -313,17 +313,28 @@ def held_lock(
     holder acquiring in the microseconds between a reclaim judging a lock stale and moving it
     aside): there is no reclaim step left to race.
 
+    `flock()` is scoped to the *open file description*, not the process: a second, nested
+    `held_lock()` call for the same (dest_root, skill) from the same process (or from a second
+    thread in it) does not self-deadlock silently or succeed by mistake -- it blocks like any
+    other contender, for up to `wait_timeout`, and then raises `LockTimeoutError` naming this
+    process's own pid as the holder. Not expected in normal use (nothing in this module calls
+    `held_lock()` reentrantly), but worth knowing if you're debugging a hang.
+
     Known, accepted tradeoff: `flock()` is unreliable over NFS -- some client/server
     combinations (particularly NFSv3 without a running lock daemon) silently no-op it, so two
     hosts sharing an NFS-mounted home directory could both believe they hold the lock. Accepted
     for a single-machine, ordinarily-local-disk install target; see ADR 0007.
 
-    Releasing is just closing `fd` (`_unlock()` plus `os.close()`) -- fast, and not meaningfully
+    Releasing is just closing `fd` (`_unlock()` plus `os.close()`) -- not meaningfully
     interruptible partway the way the previous design's directory removal was, so unlike that
-    design this needs no `_defer_interrupts()` around it: even a signal landing mid-release
-    leaves nothing worse than a closed-on-process-exit fd, and the OS's own lock release
-    guarantee already covers a harder kill than any signal this process could still be running
-    to handle.
+    design this needs no `_defer_interrupts()` around it for signal safety: even a signal
+    landing mid-release leaves nothing worse than a closed-on-process-exit fd, and the OS's own
+    lock release guarantee already covers a harder kill than any signal this process could
+    still be running to handle. `os.close()` can still *raise* on a slow filesystem (it is one
+    of the syscalls PEP 475 deliberately excludes from automatic EINTR retry, since retrying a
+    close risks closing an unrelated fd number reused in the meantime) -- caught below rather
+    than left to escape as a raw, unhandled exception, since there is nothing more to do about
+    a failed close of a lock file: the fd (and whatever lock it held) is gone either way.
     """
     lock_path = _lock_path_for(dest_root, skill)
     fd = _open_lock_file(lock_path)
@@ -343,8 +354,11 @@ def held_lock(
             _write_holder_pid(fd)
         yield
     finally:
-        _unlock(fd)
-        os.close(fd)
+        try:
+            _unlock(fd)
+            os.close(fd)
+        except OSError:
+            pass
 
 
 

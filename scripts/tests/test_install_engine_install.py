@@ -10,7 +10,6 @@ import signal
 import subprocess
 import sys
 import time
-from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -228,25 +227,14 @@ def test_sigterm_during_staging_runs_cleanup_and_exits_130(
         signal.signal(signal.SIGTERM, original_handler)
 
 
-def test_live_held_lock_yields_a_failed_outcome_instead_of_raising(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_live_held_lock_yields_a_failed_outcome_instead_of_raising(tmp_path: Path) -> None:
     """A concurrent/stuck lock must surface as InstallOutcome(status="failed"), not an
     unhandled LockTimeoutError -- mirrors test_install_engine_locking.py's
     test_a_live_held_lock_times_out_with_a_clear_error's real-subprocess-holder technique, but
     through install_skill() itself so a multi-skill `sb install` run can keep going instead of
-    crashing mid-run. install_skill() doesn't expose held_lock's wait_timeout, so it's shortened
-    here by wrapping the module-level held_lock the same way other tests in this file patch
-    install_engine's module globals (e.g. the KeyboardInterrupt test's validate_tree patch)."""
-    real_held_lock = install_engine.held_lock
-
-    @contextmanager
-    def _short_wait_held_lock(dest_root: Path, skill_id: str, **_kwargs: object):
-        with real_held_lock(dest_root, skill_id, wait_timeout=2.0):
-            yield
-
-    monkeypatch.setattr(install_engine, "held_lock", _short_wait_held_lock)
-
+    crashing mid-run. Calls install_skill()'s own `wait_timeout` parameter directly -- it
+    forwards straight to held_lock(), so there is no need to shorten the wait by monkeypatching
+    anything."""
     repo = _minimal_repo(tmp_path)
     dest_root = tmp_path / "dest"
     dest_root.mkdir()
@@ -255,7 +243,7 @@ def test_live_held_lock_yields_a_failed_outcome_instead_of_raising(
     holder = spawn_lock_holder(lock_path)
     try:
         outcome = install_skill(
-            "demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor"
+            "demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor", wait_timeout=2.0
         )
 
         assert outcome.status == "failed"
@@ -263,6 +251,43 @@ def test_live_held_lock_yields_a_failed_outcome_instead_of_raising(
     finally:
         holder.kill()
         holder.wait(timeout=5)
+
+
+def test_two_different_skills_at_the_same_dest_root_do_not_block_each_other(tmp_path: Path) -> None:
+    """The lock is keyed on (dest_root, skill); holding skill A's lock must never make skill
+    B's install wait."""
+    repo = _minimal_repo(tmp_path)
+    dest_root = tmp_path / "dest"
+    dest_root.mkdir()
+
+    other_lock = install_engine._lock_path_for(dest_root, "some-other-skill")
+    holder = spawn_lock_holder(other_lock)
+    try:
+        start = time.monotonic()
+        outcome = install_skill(
+            "demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor", wait_timeout=10.0
+        )
+        elapsed = time.monotonic() - start
+        assert outcome.status == "installed"
+        assert elapsed < 2.0
+    finally:
+        holder.kill()
+        holder.wait(timeout=5)
+
+
+def test_a_preexisting_lock_file_with_garbage_content_is_still_acquired_normally(tmp_path: Path) -> None:
+    """The lock file is deliberately left behind after every run -- a pre-existing, non-empty
+    file at that path (from this or an earlier version, or truncated mid-write) is the common
+    case, not the exception; acquiring must not care what bytes are already there."""
+    repo = _minimal_repo(tmp_path)
+    dest_root = tmp_path / "dest"
+    dest_root.mkdir()
+    lock_path = install_engine._lock_path_for(dest_root, "demo-skill")
+    lock_path.write_bytes(b"\xff\xfe not a pid, not utf-8, no trailing newline")
+
+    outcome = install_skill("demo-skill", repo_root=repo, dest_root=dest_root, host_label="cursor")
+
+    assert outcome.status == "installed"
 
 
 def test_symlinked_destination_is_refused(tmp_path: Path) -> None:
