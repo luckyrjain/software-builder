@@ -110,7 +110,7 @@ def test_the_lock_is_released_the_moment_the_holder_is_killed(tmp_path: Path) ->
 
 def test_two_holders_are_never_inside_the_critical_section_together(tmp_path: Path) -> None:
     """The old directory-based design's reclaim logic could, under the right race, let two
-    processes believe they both held the lock; an OS advisory lock has no such window by
+    processes believe they both held the lock; the OS's own lock has no such window by
     construction, but this stays as a regression guard."""
     import subprocess
     import textwrap
@@ -168,6 +168,62 @@ def test_a_directory_format_lock_from_before_the_flock_rewrite_is_cleared_and_re
 
     with held_lock(tmp_path, "demo-skill", wait_timeout=5.0):
         pass
+    assert lock_path.is_file()
+
+
+def test_concurrent_migration_of_the_same_leftover_directory_lock_is_safe(tmp_path: Path) -> None:
+    """The single-process migration test above never exercises the actual race: several
+    processes discovering the same leftover directory-format lock at once, each clearing it
+    (`shutil.rmtree(..., ignore_errors=True)`) and racing to create the replacement file. None
+    of that may crash, corrupt the lock, or let two of them believe they hold it together."""
+    import subprocess
+    import textwrap
+
+    root = Path(__file__).resolve().parents[2]
+    lock_path = install_engine._lock_path_for(tmp_path, "demo-skill")
+    lock_path.mkdir()
+    (lock_path / "pid").write_text("12345", encoding="utf-8")
+    (lock_path / "acquired_at").write_text("0", encoding="utf-8")
+
+    code = textwrap.dedent(
+        f"""
+        import os, sys, time
+        from pathlib import Path
+        sys.path.insert(0, {str(root)!r})
+        from scripts.install_engine import held_lock
+
+        dest = Path({str(tmp_path)!r})
+        marker = os.path.join(dest, "in-critical-section")
+        collisions = 0
+        for _ in range(10):
+            with held_lock(dest, "demo-skill", wait_timeout=60.0):
+                try:
+                    fd = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                except FileExistsError:
+                    collisions += 1
+                else:
+                    os.close(fd)
+                    time.sleep(0.001)
+                    os.unlink(marker)
+        print(collisions)
+        """
+    )
+    procs = [
+        subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
+        for _ in range(6)
+    ]
+    collisions = 0
+    try:
+        for proc in procs:
+            out, _ = proc.communicate(timeout=120)
+            assert proc.returncode == 0
+            collisions += int(out.strip())
+    finally:
+        for proc in procs:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=10)
+    assert collisions == 0
     assert lock_path.is_file()
 
 
@@ -239,3 +295,46 @@ def test_pid_diagnostics_are_written_and_read_outside_the_locked_byte(tmp_path: 
         assert install_engine._read_holder_pid(fd) == str(os.getpid())
     finally:
         os.close(fd)
+
+
+def test_write_holder_pid_leaves_no_trailing_garbage_from_a_longer_previous_write(tmp_path: Path) -> None:
+    """A shorter pid overwriting a longer one (a 5-digit holder replaced by a 3-digit one, or
+    any stale content pre-dating the very first write to a reused lock file) must not leave the
+    old, longer content's trailing bytes readable after it -- `_write_holder_pid()`'s
+    `os.ftruncate(fd, 0)` exists specifically to prevent this."""
+    lock_path = install_engine._lock_path_for(tmp_path, "demo-skill")
+    fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        os.lseek(fd, install_engine._PID_TEXT_OFFSET, os.SEEK_SET)
+        os.write(fd, b"999999999999999")  # much longer than any real pid written next
+
+        install_engine._write_holder_pid(fd)
+
+        assert install_engine._read_holder_pid(fd) == str(os.getpid())
+    finally:
+        os.close(fd)
+
+
+def test_a_failure_releasing_the_lock_does_not_escape_held_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`os.close()` is one of the syscalls PEP 475 deliberately excludes from automatic EINTR
+    retry; a failure there (or in `_unlock()`) must not surface as a raw exception out of
+    `held_lock()` -- there is nothing more to do about a failed close of a lock file, and the
+    caller's own successful work must not be reported as a failure because of it."""
+    real_close = os.close
+    closed = []
+
+    def failing_close(fd: int) -> None:
+        closed.append(fd)
+        raise OSError("simulated: close failed")
+
+    monkeypatch.setattr(install_engine.os, "close", failing_close)
+    try:
+        with held_lock(tmp_path, "demo-skill", wait_timeout=5.0):
+            pass  # the body itself succeeds; only the release fails
+    finally:
+        monkeypatch.undo()
+        if closed:
+            real_close(closed[0])  # avoid leaking the fd from this test itself
+    assert closed, "the mutation should have reached os.close"

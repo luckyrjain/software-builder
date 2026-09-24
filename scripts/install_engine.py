@@ -87,13 +87,14 @@ _PID_TEXT_OFFSET = 1
 
 
 def _try_lock(fd: int) -> bool:
-    """Attempt to claim the OS's own advisory lock on `fd` without blocking. True on success.
+    """Attempt to claim the OS's own lock on `fd` without blocking. True on success.
 
-    POSIX: `flock(LOCK_EX | LOCK_NB)` -- held for as long as `fd` (or any dup of it) stays
-    open, and released by the kernel the instant every such fd is gone, including on a crash:
-    it is not a file on disk with content to interpret, so there is nothing to reclaim, age, or
-    misjudge the identity of. Windows: `msvcrt.locking()` on a one-byte region of the same file,
-    the closest stdlib equivalent -- released the same way, by handle closure or process exit.
+    POSIX: `flock(LOCK_EX | LOCK_NB)` -- advisory, held for as long as `fd` (or any dup of it)
+    stays open, and released by the kernel the instant every such fd is gone, including on a
+    crash: it is not a file on disk with content to interpret, so there is nothing to reclaim,
+    age, or misjudge the identity of. Windows: `msvcrt.locking()` on a one-byte region of the
+    same file -- mandatory, not advisory (see `_PID_TEXT_OFFSET`'s comment), but released the
+    same way, by handle closure or process exit.
     """
     if sys.platform == "win32":
         try:
@@ -310,8 +311,9 @@ def held_lock(
     wait_timeout: float = DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS,
 ) -> Iterator[None]:
     """Hold an exclusive, cross-process lock on (dest_root, skill) for the duration of the
-    `with` block, via the operating system's own advisory file lock rather than a lock file or
-    directory this module tracks the identity, age, or liveness of itself (see `_try_lock()`).
+    `with` block, via the operating system's own file lock (POSIX `flock()`, advisory; Windows
+    `msvcrt.locking()`, mandatory -- see `_try_lock()`) rather than a lock file or directory
+    this module tracks the identity, age, or liveness of itself.
 
     The OS releases the lock the moment the holding process is gone, by any means -- a clean
     return, an uncaught exception, SIGKILL, power loss to the machine underneath a remote

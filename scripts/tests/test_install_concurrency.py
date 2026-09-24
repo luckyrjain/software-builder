@@ -6,7 +6,7 @@ stage_dir -> skill_dest mv (a losing mv nests the source inside the winner's dir
 overwriting it), and a companion finding showed the pre-replace backup was made with a bare
 `mktemp -d` (system tmp, e.g. /tmp) instead of inside dest_root, so a cross-filesystem mv could
 leave neither the old nor the new install intact under a hard kill. This file exercises the fix:
-a per-(skill, dest_root) lock -- the operating system's own advisory file lock, see
+a per-(skill, dest_root) lock -- the operating system's own file lock, see
 scripts/install_engine.py's held_lock() -- serializing install_skill/uninstall_skill's mutating
 section, plus the backup directory now living on the same filesystem as the destination.
 """

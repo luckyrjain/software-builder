@@ -178,11 +178,16 @@ def test_uninstall_live_held_lock_yields_a_failed_outcome_instead_of_raising(tmp
     lock_path = install_engine._lock_path_for(dest_root, "demo-skill")
     holder = spawn_lock_holder(lock_path)
     try:
+        start = time.monotonic()
         outcome = uninstall_skill("demo-skill", dest_root=dest_root, wait_timeout=2.0)
+        elapsed = time.monotonic() - start
 
         assert outcome.status == "failed"
         assert "timed out waiting for lock" in outcome.message
         assert dest.exists()
+        # A silent fallback to the 30s default (e.g. someone stops forwarding wait_timeout)
+        # would still pass every other assertion here, just 15x slower.
+        assert elapsed < 10.0
     finally:
         holder.kill()
         holder.wait(timeout=5)

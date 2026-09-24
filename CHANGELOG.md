@@ -43,7 +43,7 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
 
 ## Platform
 
-### The install lock is now the OS's own advisory file lock, not a directory this module reclaimed itself (2026-09-24)
+### The install lock is now the OS's own file lock, not a directory this module reclaimed itself (2026-09-24)
 
 - `held_lock()` (`scripts/install_engine.py`, used in-process by `sb install`/`sb uninstall` and via
   `install.sh`'s subprocess call) is rewritten around `flock()` on POSIX and `msvcrt.locking()` on
@@ -64,6 +64,11 @@ Human-readable overviews: each skill's `README.md` and [docs/README.md](docs/REA
   (notably NFSv3 without a running lock daemon), where it can silently no-op. Judged acceptable for
   a single-machine, ordinarily-local-disk install target; see `docs/OPERATIONS.md`'s "Stale install
   lock" entry, rewritten for this design, for the manual-recovery path if it's hit.
+- Windows' `msvcrt.locking()` turned out not to be a drop-in equivalent of POSIX `flock()`: it is
+  *mandatory*, not advisory, so it blocks every other handle from *reading* the locked byte range,
+  not just writing it. The lock stays on byte 0 (never read or written as data); the holder-pid
+  diagnostic text lives at `_PID_TEXT_OFFSET` (byte 1 onward, outside the locked range) so a waiter
+  can read it on every platform -- that offset should not be "simplified" back to 0.
 
 ### ADR 0008: production code is written only by `repository-write` executor skills (2026-09-18, corrected 2026-09-19)
 
