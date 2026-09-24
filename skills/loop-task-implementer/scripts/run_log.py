@@ -140,13 +140,14 @@ ACTORS = ("orchestrator", "builder", "reviewer", "ci", "human", "system")
 OUTCOMES = ("COMPLETE", "ESCALATED", "HUMAN_ACTION_REQUIRED", "ABANDONED")
 
 _USAGE_INT_FIELDS = ("input_tokens", "output_tokens", "total_tokens")
-# Events whose record is where a session's token usage is supposed to appear.
+PAUSE_EVENTS = ("run_completed",)  # a wait after one of these before a `run_resumed` is a pause, not work
 SESSION_RETURNS = ("builder_returned", "review_returned", "remediation_returned")
+# Events whose record is where a session's token usage is supposed to appear.
 USAGE_EVENTS = ("builder_returned", "review_returned", "remediation_returned", "orchestrator_usage")
 REASON_CODES = (
     "DIRTY_REVIEW_LIMIT", "FIX_ATTEMPT_LIMIT", "CONTESTED_TWICE", "SIZE_HARD_STOP", "FINGERPRINT_ALTERNATION",
     "SCOPE_EXCEEDED", "MISSING_DECISION", "THIRD_PARTY_CHANGE", "CI_UNDIAGNOSABLE", "SESSION_TIMEOUT",
-    "TOKEN_BUDGET", "TIME_BUDGET", "INTEGRITY_FAILURE", "LOG_UNAVAILABLE", "OTHER",
+    "TOKEN_BUDGET", "TIME_BUDGET", "OTHER",
 )
 _USAGE_FLOAT_FIELDS = ("elapsed_seconds", "cost_usd")
 _USAGE_MAX = {
@@ -160,9 +161,9 @@ _SENSITIVE_MARKER = "[REDACTED]"
 # A key is judged by its WORDS (split on separators and camelCase), not by substrings: `passed`, `bypass`,
 # `compass` and `max_tokens` are not secrets, `password`, `apiKey` and `DB_SECRET` are.
 _STRONG_KEY_WORDS = frozenset(
-    "password passwords passwd pwd pw pass passcode passphrase passphrases secret secrets apikey apikeys credential "
+    "password passwords passwd pwd pw passcode passphrase passphrases secret secrets apikey apikeys credential "
     "credentials creds authorization cookie cookies privatekey privatekeys jwt bearer accesskey accesskeys secretkey "
-    "secretkeys sessionid sessionids dsn".split()
+    "secretkeys sessionid sessionids dsn pat".split()
 )
 _WEAK_KEY_WORDS = frozenset({"token", "auth"})  # a text value is masked; a number under them is a count
 _KEY_WORD_PAIRS = frozenset(
@@ -173,10 +174,29 @@ _KEY_WORD_PAIRS = frozenset(
     }
     | {("session", "id"), ("session", "ids"), ("client", "secret"), ("client", "secrets"), ("database", "url")}
 )
-_KEY_STEMS = ("password", "passwd", "passphrase", "credential", "apikey", "privatekey", "secretkey", "accesskey")
+_PASS_PREFIXES = frozenset("db user admin root ssh smtp mysql redis ftp".split())
+
+
+def _is_pass_key(words: list[str]) -> bool:
+    """`pass`, `db_pass`, `prod_db_pass`, `dbpass`: a password, unlike `review_pass` or `pass_number`, which count."""
+    joined = "".join(words)
+    return joined == "pass" or (len(words) >= 2 and words[-1] == "pass" and words[-2] in _PASS_PREFIXES) or (
+        joined.endswith("pass") and joined[:-4] in _PASS_PREFIXES
+    )
+
+_KEY_STEMS = ("password", "passwd", "passphrase", "credential", "apikey", "privatekey", "secretkey", "accesskey", "sessionkey", "keybase", "clientkeydata",
+              "sshkey", "signingkey", "hmackey", "encryptionkey", "masterkey")
 _CREDENTIAL_WORDS = (
-    r"(?:secrets?|token|passw(?:or)?ds?|(?<=[_.-])pass|pwd|passphrases?|api[_-]?keys?|credentials?|creds|"
-    r"session[_-]?ids?|signature|auth(?:orization)?)(?-i:(?![a-z]))"
+    r"(?:(?:secret|token|passw(?:or)?d)(?:s|keys?|keybase|accesskey|values?|strings?|hash(?:es)?|salt)?|docker[_-]?config[_-]?json|(?<![A-Za-z0-9])pass|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|pwd|passphrases?|api[_-]?keys?|(?:ssh|signing|hmac|encryption|master|private|access|app|license|subscription|functions|account)[_-]?keys?|(?-i:primaryKey|secondaryKey)|client[_-]?key[_-]?data|(?<![A-Za-z0-9])pat|cookies?|connect\.sid|passcode|psk|(?<![A-Za-z0-9])pw|(?<=[?&])(?:sig|key)|credentials?|creds|"
+    r"sess(?:ion)?[_-]?(?:ids?|keys?)|signature|auth(?:orization)?)(?-i:(?![a-z]|[A-Z](?![a-z])))"
+)
+# What stands for `::` and for the `=` of PWD=/path while the patterns run: non-word characters, so that no `\b` or
+# lookbehind is defeated and no pattern can read them as a separator; the first pair that the text does not contain.
+_SHIELDS = (("\x00\x01", "\x00\x02"), ("\ue000\ue001", "\ue000\ue002"), ("\ue010\ue011", "\ue010\ue012"))
+_SHIELD_ENV_RE = re.compile(r"(?<![A-Za-z0-9_;])((?:OLD)?PWD)=(?=/)")  # not after `;`: an ODBC PWD=/... is a password
+# GitHub Actions workflow commands carry a secret after `::`, which the shield below would hide from the patterns
+_WORKFLOW_CMD_RE = re.compile(
+    r"(?i)(::add-mask::|::set-secret::|##\[add-mask\]|::set-output\s+name=[A-Za-z0-9_.-]{0,64}(?<![A-Za-z])(?:token|secret|password|passwd|pass|key|credential)s?(?![A-Za-z])[A-Za-z0-9_.-]{0,64}::)(\S{4,})"
 )
 _CAMEL_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
 
@@ -207,7 +227,8 @@ class VerifyResult(NamedTuple):
     errors: list[str]
     last_event: str | None = None
     recoverable: bool = False  # the only problem is a torn final line that the next append repairs
-    ahead_by: int = 0  # the log is intact and this many records beyond the head that was supplied
+    unanchored_resumes: int = 0  # `run_resumed` records that continued without a held head
+    ahead_by: int = 0  # diagnostic: the log is intact and holds this many records after the head that was supplied
 
 
 class _Tail(NamedTuple):
@@ -265,6 +286,7 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
                 category="secret",
             ),
             token("huggingface_token", r"hf_[A-Za-z0-9]{30,}"),
+            token("jwt_any", r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),
             token("digitalocean_token", r"dop_v1_[a-f0-9]{40,}"),
             token("sentry_token", r"sntrys_[A-Za-z0-9+/=_-]{30,}"),
             redaction.RedactionPattern(
@@ -275,8 +297,8 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             ),
             redaction.RedactionPattern(
                 name="cli_user_flag",
-                pattern=re.compile(r"(?i)(\s-(?:u[ =]?|-user[ =]))[^\s:]+:\S+"),
-                replacement=r"\1{marker}",
+                pattern=re.compile(r"(?i)(\s-(?:u[ =]?|-user[ =]))([^\s:]+:\S+)"),
+                replacement=lambda m, marker: None if re.fullmatch(r"\d+:\d+", m.group(2)) else f"{m.group(1)}{marker}",  # docker -u 1000:1000
                 category="secret",
             ),
             token("azure_account_key", r"AccountKey=[A-Za-z0-9+/=]{20,}", "secret"),
@@ -285,7 +307,8 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             token("atlassian_token", r"ATATT[A-Za-z0-9_=-]{20,}"),
             token("sendgrid_key", r"SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}"),
             token("shopify_token", r"shp(?:at|ca|pa)_[0-9a-f]{32}"),
-            token("pypi_token", r"pypi-[A-Za-z0-9_-]{30,}"),
+            token("pypi_token", r"(?<![A-Za-z0-9/_.-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{20,}"),
+            token("telegram_bot_token", r"(?<![A-Za-z0-9])bot\d{6,}:[A-Za-z0-9_-]{30,}"),
             token("stripe_webhook_secret", r"whsec_[A-Za-z0-9]{24,}"),
             token("groq_key", r"gsk_[A-Za-z0-9]{40,}"),
             token("xai_key", r"xai-[A-Za-z0-9]{40,}"),
@@ -296,13 +319,13 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             token("slack_webhook", r"https://hooks\.slack\.com/services/[A-Za-z0-9/]{20,}"),
             token("discord_webhook", r"discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]{20,}"),
             token("azure_sas_signature", r"SharedAccessSignature\s+[^\s]{20,}", "secret"),
-            token("pem_private_key_open", r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*", "secret"),
+            token("pem_private_key_open", r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*", "secret"),
             redaction.RedactionPattern(
                 name="secretish_kv",
                 pattern=re.compile(
                     r"(?i)\b(?P<key>[A-Za-z0-9_.-]{0,64}" + _CREDENTIAL_WORDS + r"[A-Za-z0-9_.-]{0,64})"
-                    r"(?P<sep>\s*[:=]\s*)[\"']?(?!unlimited\b)"
-                    r"(?P<value>[^\s\"',;]{8,})"
+                    r"(?P<sep>[ \t]*(?:=|:(?!:))[ \t]*)[\"']?(?![{\[])(?!unlimited\b)"  # `::` is a path separator (pytest ids, Rust), not `key: value`; a value stays on its line and is not a map/list
+                    r"(?P<value>[^\s\"',;&?]{8,})"
                 ),
                 replacement=lambda m, marker: (
                     f"{m.group('key')}{m.group('sep')}{marker}" if _secret_shaped(m.group("value"), m.group("key")) else None
@@ -312,8 +335,8 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             redaction.RedactionPattern(
                 name="secretish_json",
                 pattern=re.compile(
-                    r'(?i)(?P<head>["\'](?P<key>[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS + r'[A-Za-z0-9_.-]{0,64})["\']\s*:\s*["\'])'
-                    r'(?P<value>[^"\']{8,})(?P<tail>["\'])'
+                    r'(?i)(?P<head>(?<!\\)(?P<e>\\+)?["\'](?P<key>[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS + r'[A-Za-z0-9_.-]{0,64})\\*["\']\s*:\s*\\*(?P<q>["\']))'
+                    r'(?P<value>(?:(?(e)(?!(?P=q))[^\\]|(?:\\.|(?!(?P=q))[^\\]))){8,})(?P<tail>\\*(?P=q))'
                 ),
                 replacement=lambda m, marker: (
                     f"{m.group('head')}{marker}{m.group('tail')}" if _secret_shaped(m.group("value"), m.group("key")) else None
@@ -321,9 +344,52 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
                 category="secret",
             ),
             redaction.RedactionPattern(
+                name="secretish_name_value",
+                pattern=re.compile(
+                    r'(?i)(?P<head>(?<!\\)\\*["\']?(?:parameter)?(?:name|key)\\*["\']?[ \t]*[:=][ \t]*\\*["\']?[A-Za-z0-9_.-]{0,64}' + _CREDENTIAL_WORDS
+                    + r'[A-Za-z0-9_.-]{0,64}\\*["\']?[\s,]*\\*["\']?(?:parameter)?value\\*["\']?[ \t]*[:=][ \t]*\\*(?P<q>["\'])?)'
+                    r'(?P<value>(?(q)(?:(?!(?P=q))[^\r\n\\]){6,}|[^\r\n,}]{6,}))'
+                ),
+                replacement=lambda m, marker: f"{m.group('head')}{marker}",
+                category="secret",
+            ),
+            redaction.RedactionPattern(
+                name="secretish_xml",
+                pattern=re.compile(r"(?i)(<[A-Za-z0-9_.-]{0,64}" + _CREDENTIAL_WORDS + r"[A-Za-z0-9_.-]{0,64}>)([^<\s]{6,})(</)"),
+                replacement=r"\1{marker}\3",
+                category="secret",
+            ),
+            redaction.RedactionPattern(
+                name="secretish_spaced",
+                pattern=re.compile(
+                    r"(?i)(\b(?:aws_)?(?:secret_access_key|session_token)\s+|\b_auth(?:token)?\s+|\blogin\s+\S+\s+password\s+)\S{8,}"
+                ),
+                replacement=r"\1{marker}",
+                category="secret",
+            ),
+            redaction.RedactionPattern(
+                name="secretish_command",
+                pattern=re.compile(
+                    r"(?i)(\bgh\s+secret\s+set\s+\S+\s+(?:--body|-b)[ =]|\bput-parameter\b[^\n]{0,200}?--value[ =]"
+                    r"|-Dsonar\.(?:login|token|password)=|\bcargo\s+login\s+|\bconfig\s+set\s+--secret\s+\S+\s+)\S{4,}"
+                ),
+                replacement=r"\1{marker}",
+                category="secret",
+            ),
+            redaction.RedactionPattern(
+                name="secretish_dockerfile",
+                pattern=re.compile(
+                    r"(?im)^([ \t]*(?:ENV|ARG)[ \t]+[A-Za-z0-9_.-]{0,64}" + _CREDENTIAL_WORDS + r"[A-Za-z0-9_.-]{0,64}[ \t]+)\S{8,}"
+                ),
+                replacement=r"\1{marker}",
+                category="secret",
+            ),
+            redaction.RedactionPattern(
                 name="secretish_flag",
                 pattern=re.compile(
-                    r"(?i)(--?[a-z-]{0,40}(?:password|passwd|pwd|passphrase|token|secret|api-key|secret-access-key|access-key)[ =])[^\s]{6,}"
+                    r"(?i)((?<![A-Za-z0-9])--?[a-z0-9_-]{0,40}(?:password|passwd|pwd|pw|(?<![a-z])pass|(?<![a-z])pat|(?:db|user|admin|root|ssh|smtp|mysql|redis|ftp)pass|cookies?|passphrase|token|secret|api[_-]?key|secret[_-]?access[_-]?key|secret[_-]?key"
+                    r"|access[_-]?key|private[_-]?key|session[_-]?(?:id|key)|keybase|jwt|credentials?|auth"
+                    r"|(?:encryption|signing|master|hmac|auth|account)[_-]?key|authkey|secret[_-]?(?:string|id|value)|storepass|keypass|passcode|psk)[ =])[^\s]{6,}"
                 ),
                 replacement=r"\1{marker}",
                 category="secret",
@@ -336,7 +402,10 @@ def _patterns(redaction: ModuleType) -> tuple[Any, ...]:
             ),
         )
         # Ours run first: the shared `Bearer <chars>=*` pattern would otherwise eat an `api_token=` (or
-        # `AccountKey=`) prefix and leave the value behind.
+        # `AccountKey=`) prefix and leave the value behind. Order inside `extras` matters in two places: token
+        # shapes come before the generic key/value patterns, and `pem_private_key_open` (whose `[\s\S]*` takes the
+        # rest of the text) is meant to swallow everything after a key block. `_clean_text` shields `::` and
+        # `PWD=/path` from all of these (and handles workflow commands before the shield).
         _PATTERNS = (
             *extras,
             *redaction.LOG_PATTERNS,
@@ -350,9 +419,18 @@ def _clean_text(text: str, hits: set[str]) -> str:
         # Cutting before redacting can leave half a secret; identifiers and counts are short, so refuse.
         raise ValueError(f"a string longer than {MAX_REDACT_INPUT_CHARS} characters; log identifiers and counts, not content")
     redaction = _redaction_runtime()
+    # Shield what only looks like `key: value` to the shared patterns: `::` scopes and the PWD/OLDPWD variables.
+    if _WORKFLOW_CMD_RE.search(text):
+        text = _WORKFLOW_CMD_RE.sub(lambda m: f"{m.group(1)}{redaction.DEFAULT_MARKER}", text)
+        hits.add("workflow_command")
+    shield = next((pair for pair in _SHIELDS if not any(ch in text for ch in pair[0] + pair[1])), None)  # None: text uses them all
+    scope, eq = shield if shield else ("", "")
+    shielded = _SHIELD_ENV_RE.sub(lambda m: f"{m.group(1)}{eq}", text.replace("::", scope)) if shield else text
     redacted, found = redaction.redact(
-        text, patterns=_patterns(redaction), marker=redaction.DEFAULT_MARKER, passes=1
+        shielded, patterns=_patterns(redaction), marker=redaction.DEFAULT_MARKER, passes=1
     )
+    if shield:
+        redacted = redacted.replace(scope, "::").replace(eq, "=")
     hits.update(hit.name for hit in found)
     # A later shared pattern can re-match the marker one of ours just wrote and leave its closing bracket behind.
     redacted = re.sub(re.escape(redaction.DEFAULT_MARKER) + r"\]+", redaction.DEFAULT_MARKER, redacted)
@@ -369,6 +447,11 @@ def _sanitize(value: Any, hits: set[str], depth: int = 0, key: str | None = None
     if value is None or isinstance(value, bool):
         return value
     strength = _key_strength(key) if key is not None else 0
+    if (
+        key is not None and isinstance(value, str) and re.search(r"(?i)tokens$", key)
+        and re.fullmatch(r"[A-Za-z0-9+/_=.~-]{12,}", value) and _secret_shaped(value, key)
+    ):
+        strength = 1  # `tokens` is usually a count, but a random-looking string under it is a credential
     counted = isinstance(value, (int, float)) and _is_count_key(key or "")
     if (strength == 2 and not counted) or (strength == 1 and not isinstance(value, (int, float))):
         hits.add("sensitive_key")
@@ -378,7 +461,7 @@ def _sanitize(value: Any, hits: set[str], depth: int = 0, key: str | None = None
     if isinstance(value, str):
         return _clean_text(value, hits)
     if isinstance(value, list):
-        return [_sanitize(item, hits, depth + 1) for item in value]
+        return [_sanitize(item, hits, depth + 1, key=key if key and re.search(r"(?i)tokens$", key) else None) for item in value]
     if isinstance(value, dict):
         cleaned: dict[str, Any] = {}
         for name, item in value.items():
@@ -421,10 +504,14 @@ def _credential_named(key: str) -> bool:
     if not words:
         return False
     joined = "".join(words)
+    if _is_pass_key(words) or re.fullmatch(r"(?:primary|secondary)key", key, re.I):
+        return True
     return (
         words[-1] in _STRONG_KEY_WORDS
-        or words[-1] in {"key", "keys", "token", "tokens"} and any(pair in _KEY_WORD_PAIRS for pair in zip(words, words[1:]))
-        or joined.endswith(("secret", "secrets", "password", "apikey", "secretkey", "privatekey"))
+        or words[-1] == "token"  # `api_token`, `authToken`, `token`: a token itself, unlike `tokens` (usually a count)
+        or (words[-1] in {"key", "keys"} and any(pair in _KEY_WORD_PAIRS for pair in zip(words, words[1:])))
+        or joined.endswith(("secret", "secrets", "password", "apikey", "secretkey", "privatekey", "sessionkey", "keybase",
+                            "sshkey", "signingkey", "hmackey", "encryptionkey", "masterkey"))
     )
 
 
@@ -436,11 +523,19 @@ def _secret_shaped(value: str, key: str = "") -> bool:
     almost never shaped like that. Human-chosen passwords and random keys are both masked."""
     if re.fullmatch(r"\d{4}-\d\d-\d\d(?:[T ]\d\d(?::\d\d(?::\d\d(?:\.\d+)?)?)?(?:Z|[+-]\d\d:?\d\d)?)?", value):
         return False  # a date or timestamp
-    if re.match(r"(?i)https?://[^\s@]*$", value) or value.startswith(("/", "./", "../", "~/")) or value.isdigit():
+    if re.match(r"(?i)https?://[^\s@]*$", value) or value.startswith(("./", "../", "~/")) or value.isdigit():
         return False  # a URL without userinfo, a path, a number
+    if re.fullmatch(r"/[\w.@%~-]+(?:/[\w.@%~-]+)+/?", value):
+        return False  # an absolute path: at least two segments and none of the characters base64 adds (+ =)
+    if key.lower() == "pass" and re.fullmatch(r"(?:Test|Benchmark|Example|Fuzz)[\w/#.-]*", value):
+        return False  # Go test output: `--- PASS: TestGetUser`
+    if re.match(r"\d+:", value) and not _credential_named(key):
+        return False  # `auth.js:1024:13`, `password.py:3:import os`: a line number after a file name
+    if "/" in value and re.fullmatch(r"[\w./-]+:[\w.-]+", value) and not _credential_named(key):
+        return False  # an image reference (`registry/name:tag`) under a key that only mentions a credential word
     if not re.fullmatch(r"[A-Za-z0-9+/_=.~-]+", value):
         return True  # punctuation is what human-chosen passwords are made of
-    if len(value) < 12:
+    if len(value) < 12 and not (len(value) >= 8 and _credential_named(key)):
         return False
     if re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", value):
         return True  # a UUID under a credential key is a session or API identifier
@@ -448,6 +543,8 @@ def _secret_shaped(value: str, key: str = "") -> bool:
         return True  # a long segment that mixes letters and digits looks random, not like a word
     if _credential_named(key):
         return True  # `secret_key=my-app-secret-value`: a phrase or a word chain is a credential here
+    if re.fullmatch(r"v?\d+(?:\.\d+){1,3}(?:[-+.][A-Za-z0-9.]+)*", value):
+        return False  # a version or an image tag (`auth-service:1.2.3-alpine`)
     if re.fullmatch(r"[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)+", value) or re.fullmatch(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+", value):
         return False
     return True
@@ -456,9 +553,13 @@ def _secret_shaped(value: str, key: str = "") -> bool:
 def _key_strength(key: str) -> int:
     """0 not sensitive, 1 weak (mask text values), 2 strong (mask any value)."""
     words = [word.lower() for word in _CAMEL_RE.findall(key)]
+    if not words:
+        return 0  # a key such as `_` or `-` has no words
     if any(word in _STRONG_KEY_WORDS for word in words) or any(pair in _KEY_WORD_PAIRS for pair in zip(words, words[1:])):
         return 2
     joined = "".join(words)  # `clientsecret`, `dbpassword`, `accesstoken`: one word to the splitter, two to a reader
+    if _is_pass_key(words) or re.fullmatch(r"(?:primary|secondary)key", key, re.I):
+        return 2  # `primaryKey` (Azure), not the database term `primary_key`
     if any(stem in joined for stem in _KEY_STEMS) or joined.endswith(("secret", "secrets")):
         return 2
     if any(word in _WEAK_KEY_WORDS for word in words) or joined.endswith(("token", "auth")):
@@ -486,7 +587,7 @@ def _validate_usage(usage: object) -> dict[str, int | float]:
             raise ValueError(f"usage.{key} must be a number")
         if key in _USAGE_INT_FIELDS and not isinstance(value, int):
             raise ValueError(f"usage.{key} must be an integer")
-        if not math.isfinite(value) or value < 0 or value > _USAGE_MAX[key]:
+        if value < 0 or value > _USAGE_MAX[key] or not math.isfinite(value):  # range first: isfinite raises on a huge int
             raise ValueError(f"usage.{key} must be finite, non-negative, and at most {_USAGE_MAX[key]}")
         cleaned[key] = value
     if "total_tokens" in cleaned and cleaned["total_tokens"] < cleaned.get("input_tokens", 0) + cleaned.get("output_tokens", 0):
@@ -663,7 +764,7 @@ def _refuse_repository(directory: Path) -> None:
     chain.extend(chain[0].parents)
     for ancestor in chain:
         if _is_repo_root(ancestor):
-            raise ValueError(f"the run log directory must be outside any git repository (found one at {ancestor})")
+            raise ValueError(f"the run log directory must be outside any git repository (found one at {ancestor}); report LOG_UNAVAILABLE, or ask the caller for a `log_dir`")
     known = [repo for repo in (_enclosing_repo(Path.cwd().resolve()),) if repo is not None]
     known += [Path(value) for value in (os.environ.get("GIT_DIR"), os.environ.get("GIT_WORK_TREE")) if value]
     if os.environ.get("GIT_DIR") and not os.environ.get("GIT_WORK_TREE"):
@@ -728,7 +829,7 @@ def _private_dir(directory: Path) -> None:
     if info.st_mode & 0o077:
         # Not ours to chmod: a directory that already exists (a home directory, a shared folder) may hold other
         # things, and tightening it would change who can reach them. Only directories this call created are 0700.
-        raise OSError(f"the log directory is accessible to others; make it 0700 yourself or choose another: {directory}")
+        raise OSError(f"the log directory is accessible to others; do not change its permissions; report LOG_UNAVAILABLE, or ask the caller for a private `log_dir`: {directory}")
     try:
         is_home = os.path.samefile(directory, _home_dir())
     except OSError:  # an account whose home directory was never created cannot be the log directory
@@ -885,6 +986,7 @@ def _full_check(raw: bytes, run_id: str) -> tuple[VerifyResult, list[dict[str, A
     result = VerifyResult(
         ok, len(records), head, errors or ([] if records else ["log is empty"]),
         records[-1]["event"] if records else None, recoverable,
+        sum(1 for record in records if record["data"].get("unanchored") is True),
     )
     return result, records
 
@@ -1039,8 +1141,8 @@ def append_event(
             if expect_head is None:
                 if tail.seq > 0 and not unanchored:
                     raise ValueError(
-                        "append needs --expect-head (the chain_head from your previous receipt); to resume without "
-                        "one, use run_resumed with --unanchored"
+                        "append needs --expect-head (the chain_head from your previous receipt); a run_resumed "
+                        "--unanchored is only for a person who has inspected the log (see the run-log reference)"
                     )
             elif tail.seq == 0:
                 raise IntegrityError("a head was supplied but the log is missing, empty, or was wiped")
@@ -1049,6 +1151,7 @@ def append_event(
                 if (
                     last is not None
                     and _head_matches(last["prev_hash"], expect_head)
+                    and _parse_ts(last["ts"]) <= _now() + timedelta(seconds=CLOCK_SKEW_SECONDS)
                     and (last["event"], last["actor"], _without_script_keys(last["data"]), last["usage"])
                     == (event, actor, cleaned_data, cleaned_usage)
                 ):
@@ -1062,7 +1165,7 @@ def append_event(
                 ahead = (tail.ts - now).total_seconds()
                 if ahead > FORGED_CLOCK_SECONDS:
                     raise IntegrityError("the last record is timestamped far in the future; a forged log")
-                raise ValueError(f"the clock is {int(ahead)}s behind the log's last record; wait, or fix the clock")
+                raise ValueError(f"the clock is {int(ahead)}s behind the log's last record; append nothing and report LOG_UNAVAILABLE")
             moment = given_ts or now
             if tail.ts is not None:
                 if given_ts is not None and given_ts < tail.ts:
@@ -1134,16 +1237,16 @@ def _checked(
             raise IntegrityError(f"a head was supplied but there is no usable log ({exc})") from exc
         raise
     result, records = _full_check(raw, run_id)
-    if result.ok and expect_head is not None and not _head_matches(result.head, expect_head):
+    if (result.ok or result.recoverable) and expect_head is not None and not _head_matches(result.head, expect_head):
         ahead = next(
             (len(records) - 1 - i for i, record in enumerate(records) if _head_matches(record["hash"], expect_head)), 0
         )
         note = (
-            f"the log is {ahead} records past the head from your last receipt (a receipt or state save was lost)"
+            f"the log has {ahead} record(s) after the head from your last receipt that you did not write or whose receipt was lost"
             if ahead
             else "the log's head does not match the head from your last receipt; it was truncated or replaced"
         )
-        result = result._replace(ok=False, errors=[note], ahead_by=ahead)
+        result = result._replace(ok=False, recoverable=False, errors=[note], ahead_by=ahead)
     return result, records
 
 
@@ -1198,49 +1301,57 @@ def summarize_log(
 
 
 def _active_minutes(records: list[dict[str, Any]], now: datetime) -> float:
-    """Time spent working. Each gap between consecutive records counts at most MAX_GAP_MINUTES, so a human
-    decision or an overnight pause does not spend the budget; a gap that ends at a record carrying the host's
-    `elapsed_seconds` for the session that just returned counts up to that duration instead, so a long real
-    session is charged what it took (and parallel sessions are not charged twice, since this is wall time)."""
+    """Time spent working, as the union of intervals. Each gap between consecutive records counts at most
+    MAX_GAP_MINUTES, so a human decision or an overnight pause does not spend the budget. The gap that ends at a
+    `run_resumed` counts nothing when the record before it is a `run_completed` (a person waited); after any
+    other record it may be a crash, and is charged like any other gap so a crash loop cannot
+    hide. A session's own return record (`builder_`, `remediation_` or `review_returned`) also counts the interval
+    its host-reported `elapsed_seconds` says it ran, ending at that record, so a long real session is charged what
+    it took whichever records were appended in the middle of it, and parallel sessions are not charged twice."""
     cap = timedelta(minutes=MAX_GAP_MINUTES)
     moments = [_parse_ts(record["ts"]) for record in records]
     ends = [*moments[1:], max(now, moments[-1])]
-    total = timedelta(0)
+    spans: list[tuple[datetime, datetime]] = []
     for index, (begin, end) in enumerate(zip(moments, ends)):
-        allowed = cap
-        if index + 1 < len(records) and records[index + 1]["event"] in SESSION_RETURNS:
-            allowed = max(cap, timedelta(seconds=float(records[index + 1]["usage"].get("elapsed_seconds", 0))))
-        total += min(max(end - begin, timedelta(0)), allowed)
+        following = records[index + 1] if index + 1 < len(records) else None
+        if following is None and records[index]["event"] in PAUSE_EVENTS:
+            continue  # nothing has happened since the run finished: reading the budget later is not work
+        if following is not None and following["event"] == "run_resumed" and records[index]["event"] in PAUSE_EVENTS:
+            continue  # the wait after a completed run is a pause; after any other record it may be a crash
+        spans.append((begin, min(max(end, begin), begin + cap)))
+        if following is not None and following["event"] in SESSION_RETURNS:
+            ran = timedelta(seconds=float(following["usage"].get("elapsed_seconds", 0)))
+            if ran > timedelta(0):
+                spans.append((max(end - ran, moments[0]), end))
+    total = timedelta(0)
+    reach: datetime | None = None
+    for begin, end in sorted(spans):
+        if reach is None or begin > reach:
+            total += end - begin
+            reach = end
+        elif end > reach:
+            total += end - reach
+            reach = end
     return total.total_seconds() / 60.0
 
 
 def _task_window_start(records: list[dict[str, Any]]) -> int:
     """Index where the current task's budget window begins: the first of the latest run of `task_selected`
-    records for the same task_id, so re-selecting it after a resume does not reset its budget (a task that
-    was COMPLETE and is then run again does get a new one)."""
+    records for the same task_id (re-selecting it after a resume does not reset its budget), or the start of the
+    log if there is none. A `COMPLETE` completion that is followed by more records ends the previous window: a
+    finished task that is resumed is a redo, with or without a new `task_selected`. A completion that is the last
+    record is the run finishing, not a reset, so the final budget read of a run still sees all of it."""
     starts = [i for i, record in enumerate(records) if record["event"] == "task_selected"]
-    if not starts:
-        return 0
-    start = starts[-1]
-    task_id = records[start]["data"].get("task_id")
+    start = starts[-1] if starts else 0
+    task_id = records[start]["data"].get("task_id") if starts else None
     for earlier in reversed(starts[:-1]):
         if task_id is None or records[earlier]["data"].get("task_id") != task_id:
             break
-        finished = any(
-            record["event"] == "run_completed" and record["data"].get("outcome") == "COMPLETE"
-            for record in records[earlier:start]
-        )
-        if finished:
-            break  # the task was completed and is being run again: a new window
         start = earlier
-    # A COMPLETE task that is resumed (without a fresh `task_selected`) is a redo: its window begins after the
-    # completion, unless the completion is the last record (the final budget read of a finished run).
-    completed = [
-        i for i, record in enumerate(records) if record["event"] == "run_completed" and record["data"].get("outcome") == "COMPLETE"
+    finished = [
+        i for i, record in enumerate(records[:-1]) if record["event"] == "run_completed" and record["data"].get("outcome") == "COMPLETE"
     ]
-    if completed and start < completed[-1] < len(records) - 1:
-        start = completed[-1] + 1
-    return start
+    return max(start, finished[-1] + 1) if finished else start
 
 
 def check_budget(
@@ -1298,8 +1409,9 @@ def check_budget(
 
 
 def derive_run_id(seeds: object) -> str:
-    """A deterministic run id from what identifies the task (repo, base, task id, or a plan execution
-    identity), so a resumed run finds its own log. Hashing means untrusted text never becomes a filename."""
+    """A deterministic run id from its seeds (repo, base, task id and the UTC start time, or a plan execution
+    identity and the start time): the same seeds give the same id, and the start time makes each start of a task
+    a new run. Hashing means untrusted text never becomes a filename."""
     if not isinstance(seeds, list) or not seeds or len(seeds) > 16:
         raise ValueError("run-id takes a JSON array of 1-16 strings on stdin")
     if not all(isinstance(item, str) and 0 < len(item) <= 4000 for item in seeds):
@@ -1449,7 +1561,8 @@ def _run(argv: list[str]) -> int:
             _emit({"ok": False, "no_log": True, "detail": _short(str(exc))})
             return EXIT_ERROR
         _emit({"ok": result.ok, "events": result.events, "chain_head": result.head, "last_event": result.last_event,
-               "recoverable": result.recoverable, "ahead_by": result.ahead_by, "error_count": len(result.errors), "errors": result.errors[:5]})
+               "recoverable": result.recoverable, "ahead_by": result.ahead_by,
+               "unanchored_resumes": result.unanchored_resumes, "error_count": len(result.errors), "errors": result.errors[:5]})
         return EXIT_OK if result.ok else EXIT_INTEGRITY
     if args.command == "summarize":
         _emit(summarize_log(log_dir, args.run_id, expect_head=args.expect_head))
