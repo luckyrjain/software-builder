@@ -221,6 +221,57 @@ def test_lock_without_tryfinally_keyword_fd_argument_flagged() -> None:
     assert violations[0].line == 6
 
 
+# --- lock-without-tryfinally: generator-expression scope boundary (LENS-A-3) -------------------
+
+_LOCK_GENEXP_IN_OUTER_TRYFINALLY = """\
+import fcntl
+
+
+def outer(fds):
+    try:
+        gen = (fcntl.flock(fd, fcntl.LOCK_EX) for fd in fds)
+    finally:
+        cleanup()
+    return list(gen)
+"""
+
+_LOCK_LISTCOMP_IN_OWN_TRYFINALLY_NOT_FLAGGED = """\
+import fcntl
+
+
+def acquire_all(fds):
+    try:
+        return [fcntl.flock(fd, fcntl.LOCK_EX) for fd in fds]
+    finally:
+        release_all(fds)
+"""
+
+
+def test_lock_without_tryfinally_genexp_in_outer_tryfinally_still_flagged() -> None:
+    """A lock call inside a generator expression executes lazily, on each `next()` -- here, only
+    once `list(gen)` iterates it after `outer`'s `try/finally` has already run `finally` and
+    exited. The outer `finally` provides no real release guarantee for it, the same as for a
+    lambda or thread-worker function scope, so `GeneratorExp` must be a scope boundary too
+    (LENS-A-3). Confirmed live: `cleanup()` runs before any `flock()` call, so the lock is
+    acquired with no protection whatsoever."""
+    source = _LOCK_GENEXP_IN_OUTER_TRYFINALLY
+    violations = lsp.check({"f.py": source}, {"f.py": _all_lines(source)})
+    assert len(violations) == 1
+    assert violations[0].rule == lsp.RULE_LOCK_WITHOUT_TRYFINALLY
+    assert violations[0].line == 6  # gen = (fcntl.flock(fd, ...) for fd in fds)
+
+
+def test_lock_without_tryfinally_listcomp_in_own_tryfinally_not_flagged() -> None:
+    """Regression guard for the eager-comprehension case the design note requires stay unchanged:
+    unlike a generator expression, a list comprehension's body executes eagerly, as part of
+    evaluating the single statement that contains it -- here, `fcntl.flock(...)` runs for every
+    `fd` while control is still inside the `try` block (before `finally` can run), so the
+    enclosing `try/finally` genuinely does protect it and this must not be flagged."""
+    source = _LOCK_LISTCOMP_IN_OWN_TRYFINALLY_NOT_FLAGGED
+    violations = lsp.check({"f.py": source}, {"f.py": _all_lines(source)})
+    assert violations == []
+
+
 # --- bare-except-added -------------------------------------------------------------------------
 
 _EXCEPT_CLEAN = """\

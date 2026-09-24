@@ -81,26 +81,43 @@ def _has_ancestor_try_finally(node: ast.AST, parents: dict[ast.AST, ast.AST]) ->
     """True iff an ancestor of `node`, *within `node`'s own function scope*, is a `try` with a
     non-empty `finally` body.
 
-    Deliberately checks *every* ancestor up to (but never past) the nearest enclosing
-    `FunctionDef`/`AsyncFunctionDef`/`Lambda` boundary, not just the nearest enclosing `try` -- a
-    release call (e.g. `_unlock(fd)`) sitting inside its own inner `try/except` (no `finally` of
-    its own) but nested *within* an outer `try/finally` in the *same* function (as `held_lock()`
-    itself does) is still guarded: the outer `finally` is what guarantees this code path runs.
-    Requiring the *nearest* `try` alone to carry the `finally` would false-positive on exactly
-    this codebase's own clean pattern.
+    Deliberately checks *every* ancestor up to (but never past) the nearest enclosing scope
+    boundary -- `FunctionDef`/`AsyncFunctionDef`/`Lambda`, or `GeneratorExp` -- not just the
+    nearest enclosing `try` -- a release call (e.g. `_unlock(fd)`) sitting inside its own inner
+    `try/except` (no `finally` of its own) but nested *within* an outer `try/finally` in the
+    *same* function (as `held_lock()` itself does) is still guarded: the outer `finally` is what
+    guarantees this code path runs. Requiring the *nearest* `try` alone to carry the `finally`
+    would false-positive on exactly this codebase's own clean pattern.
 
-    The walk stops the instant it reaches a `FunctionDef`/`AsyncFunctionDef`/`Lambda` ancestor --
-    i.e. the moment it would leave `node`'s own lexical function scope -- and reports unprotected
-    from there, even if an *outer* function happens to have its own enclosing `try/finally`. A
-    lock call made from inside a callback, lambda, or thread-worker function runs on that
-    function's own schedule (e.g. after `executor.submit`, or on another thread), possibly long
-    after an outer `try/finally` that merely *contains the definition* of that function has
-    already exited -- so that outer `finally` provides no real release guarantee for it.
+    The walk stops the instant it reaches one of those boundary ancestors -- i.e. the moment it
+    would leave `node`'s own lexical scope -- and reports unprotected from there, even if an
+    *outer* scope happens to have its own enclosing `try/finally`. A lock call made from inside a
+    callback, lambda, or thread-worker function runs on that function's own schedule (e.g. after
+    `executor.submit`, or on another thread), possibly long after an outer `try/finally` that
+    merely *contains the definition* of that function has already exited -- so that outer
+    `finally` provides no real release guarantee for it.
+
+    A generator expression is the same story even though it looks like an inline expression, not
+    a `def`: in Python 3, a `GeneratorExp`'s body executes lazily, on each call to `next()` --
+    typically well after the statement that defined it has finished, including after any
+    enclosing `try/finally` has already run its `finally` and exited. A lock call sitting in a
+    genexp's body is therefore not actually protected by an outer `try/finally` any more than one
+    inside a `def` would be, so `GeneratorExp` is a scope boundary here too.
+
+    `ListComp`/`SetComp`/`DictComp` are deliberately *not* in this boundary set, even though they
+    also get their own AST scope in Python 3: unlike a `GeneratorExp`, their body executes eagerly
+    -- as part of evaluating the single statement that contains them -- so a lock call inside one
+    of those genuinely does run before an enclosing `finally`, while control is still inside the
+    `try` block evaluating that statement (e.g. `return [flock(fd) for fd in fds]` inside a
+    `try:` calls `flock` for every `fd`, still within the `try`, before `finally` can run). Adding
+    them as boundaries would stop the walk at the comprehension and report this genuinely-
+    protected call as unprotected -- a new false positive on exactly the "already correctly
+    handled" case this rule must not regress.
     """
     current = node
     while current in parents:
         current = parents[current]
-        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.GeneratorExp)):
             return False
         if isinstance(current, ast.Try) and current.finalbody:
             return True
