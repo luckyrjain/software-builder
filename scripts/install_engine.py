@@ -19,7 +19,6 @@ instead of keeping its own bash port of the state machine.
 from __future__ import annotations
 
 import argparse
-import errno
 import math
 import os
 import re
@@ -29,11 +28,15 @@ import sys
 import tempfile
 import threading
 import time
-import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
 
 from scripts.install_support import registry_skill_ids
 from scripts.package_skill import _resolve_source_dir, package_skill, validate_skill_name
@@ -48,199 +51,96 @@ from scripts.reference_utils import (
 from scripts.validate_references import validate_tree
 
 DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS = 30.0
-DEFAULT_LOCK_STALE_SECONDS = 300.0
 _LOCK_POLL_INTERVAL_SECONDS = 1.0
-_ORPHAN_LOCK_TMP_MIN_AGE_SECONDS = 300.0
 _EXIT_WITH_PARENT_ENV = "INSTALL_ENGINE_EXIT_WITH_PARENT"  # holds the expected parent pid
 _PARENT_POLL_SECONDS = 0.5
 _FORCE_QUIT_SIGNAL_COUNT = 3
 
 
 class LockTimeoutError(RuntimeError):
-    """Raised when a live, non-stale lock on (dest_root, skill) is still held after the
-    configured wait timeout -- mirrors install.sh's own "timed out waiting for lock" error."""
+    """Raised when a live lock on (dest_root, skill) is still held after the configured wait
+    timeout -- mirrors install.sh's own historical "timed out waiting for lock" error."""
 
 
-def is_pid_alive(pid: int) -> bool:
-    """Best-effort process-liveness check.
-
-    POSIX: os.kill(pid, 0) sends no signal, just asks the kernel whether the PID exists and
-    is reachable -- ProcessLookupError means dead, PermissionError means alive (but owned by
-    someone else), any other OSError is treated as "cannot tell, assume dead"
-    (the same reading the old bash `kill -0` check gave).
-
-    Windows has no equivalent via os.kill: Python's os.kill on Windows only supports process
-    termination and CTRL_C/CTRL_BREAK events, not a signal-0 existence probe. This uses
-    ctypes to call the same OpenProcess/GetExitCodeProcess pair Windows' own process tools
-    use -- stdlib-only, no psutil dependency. This repository has no Windows CI runner, so
-    this branch is untested on real Windows; treat it as best-effort until it's exercised for
-    real, not as a verified-equal port of the POSIX branch above.
-    """
-    if pid <= 0 or (sys.platform == "win32" and pid > 0xFFFFFFFF):
-        # os.kill(0, 0) and os.kill(-1, 0) address a process *group*/every process and
-        # succeed, which would make a lock file holding "0" or "-1" look permanently live. On
-        # Windows a pid is a DWORD: anything larger cannot name a process, and ctypes would
-        # raise OverflowError converting it.
-        return False
-
-    if sys.platform == "win32":
-        import ctypes
-
-        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-        STILL_ACTIVE = 259
-        kernel32 = ctypes.windll.kernel32
-        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-        if not handle:
-            return False
-        try:
-            exit_code = ctypes.c_ulong()
-            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
-                return False
-            return exit_code.value == STILL_ACTIVE
-        finally:
-            kernel32.CloseHandle(handle)
-
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    except (OSError, OverflowError):
-        # OverflowError: a corrupted lock file holding an integer too large for a C int can't
-        # name a real process.
-        return False
-    return True
-
-
-def _lock_dir_for(dest_root: Path, skill: str) -> Path:
+def _lock_path_for(dest_root: Path, skill: str) -> Path:
     return dest_root / f".{skill}.lock"
 
 
-def _read_lock_identity(lock_dir: Path) -> tuple[str | None, str | None]:
-    """The raw (pid, acquired_at) text of a lock directory, None for whichever is unreadable.
-    Kept raw so a reclaim can later check the directory it moved is the very one it judged
-    stale, not a lock someone else acquired in between."""
-
-    def _read(name: str) -> str | None:
-        try:
-            return (lock_dir / name).read_text(encoding="utf-8").strip()
-        except OSError:
-            return None
-
-    return _read("pid"), _read("acquired_at")
+def _open_lock_file(lock_path: Path) -> int:
+    if lock_path.is_dir():
+        # A directory-format lock from a version of this module before it switched to an OS
+        # advisory lock (it held `pid`/`acquired_at` files, reclaimed by staleness guesswork --
+        # see docs/adr/0007-shared-install-engine.md). Nothing ever held an OS-level lock on
+        # that directory under either scheme, so a leftover one is always safe to clear and
+        # replace with the plain file this version locks at the same path.
+        shutil.rmtree(lock_path, ignore_errors=True)
+    return os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
 
 
-def _is_empty_dir(path: Path) -> bool:
-    try:
-        return not any(path.iterdir())
-    except OSError:
-        return False
+# The lock covers exactly byte 0. Windows' `msvcrt.locking()` is *mandatory*, not advisory --
+# unlike POSIX flock, it blocks every other handle from reading or writing that exact byte
+# range too, not just from also locking it (confirmed on Windows CI: `_read_holder_pid()`
+# reading byte 0 while another handle held it there came back empty every time). The pid
+# diagnostic text is written and read starting at `_PID_TEXT_OFFSET`, outside the locked byte,
+# so it stays visible to a waiter on every platform.
+_PID_TEXT_OFFSET = 1
 
 
-def _remove_empty_dir(path: Path) -> bool:
-    """True if `path` was removed or is already gone; False if it could not be (in particular
-    when it is no longer empty)."""
-    try:
-        path.rmdir()
-    except FileNotFoundError:
-        return True
-    except OSError:
-        return False
-    return True
+def _try_lock(fd: int) -> bool:
+    """Attempt to claim the OS's own advisory lock on `fd` without blocking. True on success.
 
-
-def _parse_lock_pid(raw: str | None) -> int | None:
-    try:
-        return int(raw) if raw is not None else None
-    except ValueError:
-        return None
-
-
-def _parse_lock_age(raw: str | None) -> float | None:
-    try:
-        acquired_at = float(raw) if raw is not None else None
-    except ValueError:
-        return None
-    if acquired_at is None or not math.isfinite(acquired_at):
-        return None
-    return time.time() - acquired_at
-
-
-# ENOENT: the temp directory was swept (a clock far ahead of the filesystem's made a live one look
-# orphaned) -- the acquire lost, not failed, and retries.
-_RENAME_DESTINATION_TAKEN = frozenset({errno.ENOTEMPTY, errno.EEXIST, errno.ENOENT})
-
-
-def _acquire_lock_dir(dest_root: Path, lock_dir: Path) -> bool:
-    """Atomically create `lock_dir` already fully populated with `pid`/`acquired_at`: build a
-    temp directory on the same filesystem as `dest_root` (so the rename below is a same-fs
-    atomic rename, not a cross-fs copy) with both files written first, then `os.rename()` it
-    into place as `lock_dir` in one step. Renaming onto an existing non-empty directory fails
-    (`ENOTEMPTY`/`EEXIST`) the same way a bare `os.mkdir(lock_dir)` used to fail with
-    `FileExistsError`, giving the same mutual-exclusion guarantee -- but now no waiter can
-    ever observe `lock_dir` before it's fully populated, closing the identity-less window
-    `held_lock()` previously had to grow three successive staleness-fallback layers to
-    tolerate safely (see its docstring history).
-
-    Returns True if this call won (`lock_dir` now exists, fully populated, owned by this
-    process); False if `lock_dir` was already occupied when the rename ran (whoever's there
-    might be live or stale -- the caller's own staleness logic decides). Any other failure
-    (permission denied, disk full, building the temp directory itself) is re-raised, matching
-    `os.mkdir`'s old contract where any non-FileExistsError OSError propagated uncaught.
-
-    Classified by `exc.errno`, not by re-checking `lock_dir.exists()` afterward: that check
-    would be racy -- the contending holder can finish releasing (its own `held_lock()`
-    `finally: shutil.rmtree(lock_dir, ...)`) in the gap between this rename failing and that
-    check running, making an ordinary, already-resolved contention failure look like a real,
-    unrelated error (and, in principle, the reverse).
+    POSIX: `flock(LOCK_EX | LOCK_NB)` -- held for as long as `fd` (or any dup of it) stays
+    open, and released by the kernel the instant every such fd is gone, including on a crash:
+    it is not a file on disk with content to interpret, so there is nothing to reclaim, age, or
+    misjudge the identity of. Windows: `msvcrt.locking()` on a one-byte region of the same file,
+    the closest stdlib equivalent -- released the same way, by handle closure or process exit.
     """
-    temp_dir = Path(tempfile.mkdtemp(dir=dest_root, prefix=f"{lock_dir.name}.tmp."))
-    try:
-        (temp_dir / "pid").write_text(str(os.getpid()), encoding="utf-8")
-        (temp_dir / "acquired_at").write_text(str(time.time()), encoding="utf-8")
-        os.rename(temp_dir, lock_dir)
-    except BaseException as exc:
-        # BaseException, not just OSError: an interrupt between mkdtemp and the rename would
-        # otherwise strand this directory, and nothing sweeps a stray `.lock.tmp.*` later.
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        if isinstance(exc, OSError) and exc.errno in _RENAME_DESTINATION_TAKEN:
+    if sys.platform == "win32":
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        except OSError:
             return False
-        raise
-    return True
-
-
-def _reclaim_stale_lock(lock_dir: Path, observed: tuple[str | None, str | None]) -> bool:
-    """Take over a lock judged stale from `observed` (the identity read when it was judged).
-    Rename-then-remove, so only the waiter whose rename succeeds ever deletes anything.
-
-    Renaming is by *path*, though, so between judging and renaming the lock can be released
-    and a third party can legitimately acquire it -- a plain rename would then delete that
-    live lock and let two holders run at once. So the moved directory's identity is compared
-    with `observed`; if it differs, it was not the lock judged stale and is put back (or, if
-    someone has already taken the path again, discarded, since it is no longer the lock of
-    record). A narrow window remains between the rename and the put-back, accepted and
-    documented in ADR 0007.
-
-    Returns True when the caller should retry acquiring straight away (the stale lock was
-    removed, or was already gone), False when it should wait as for a live lock (the rename
-    failed for a persistent reason, or what it moved turned out not to be stale).
-    """
-    stale_dir = lock_dir.with_name(f"{lock_dir.name}.stale.{os.getpid()}.{uuid.uuid4().hex[:8]}")
-    try:
-        os.rename(lock_dir, stale_dir)
-    except FileNotFoundError:
         return True
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         return False
-    if _read_lock_identity(stale_dir) != observed:
-        try:
-            os.rename(stale_dir, lock_dir)
-        except OSError:
-            shutil.rmtree(stale_dir, ignore_errors=True)
-        return False
-    shutil.rmtree(stale_dir, ignore_errors=True)
     return True
+
+
+def _unlock(fd: int) -> None:
+    """Explicit release, best-effort. POSIX's flock needs no counterpart -- closing `fd` (which
+    the caller always does right after this) releases it implicitly, including under a signal
+    or a crash between here and the close -- but Windows' documentation asks a locked region be
+    unlocked before its handle closes, so this does that where it matters and is a harmless
+    no-op everywhere else."""
+    if sys.platform == "win32":
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass
+
+
+def _write_holder_pid(fd: int) -> None:
+    """Diagnostics only: never read back to decide anything, only to name a holder in a
+    LockTimeoutError message. A failure here must not fail the acquisition itself. Writes at
+    `_PID_TEXT_OFFSET`, past the locked byte -- see that constant's comment."""
+    try:
+        os.ftruncate(fd, 0)
+        os.lseek(fd, _PID_TEXT_OFFSET, os.SEEK_SET)
+        os.write(fd, str(os.getpid()).encode("ascii"))
+    except OSError:
+        pass
+
+
+def _read_holder_pid(fd: int) -> str:
+    try:
+        os.lseek(fd, _PID_TEXT_OFFSET, os.SEEK_SET)
+        return os.read(fd, 32).decode("ascii", errors="replace").strip() or "unknown"
+    except OSError:
+        return "unknown"
 
 
 def _terminate_signal() -> int | None:
@@ -408,107 +308,69 @@ def held_lock(
     skill: str,
     *,
     wait_timeout: float = DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS,
-    stale_after: float = DEFAULT_LOCK_STALE_SECONDS,
 ) -> Iterator[None]:
     """Hold an exclusive, cross-process lock on (dest_root, skill) for the duration of the
-    `with` block. A directory is used (not a file) because a directory rename is atomic and
-    fails against anything already at that path -- see `_acquire_lock_dir()`, which builds
-    `lock_dir` fully populated (via a temp dir + one atomic rename) before it ever becomes
-    visible at its canonical path, rather than `mkdir`-then-populate. A waiter's
-    `_acquire_lock_dir()` failure therefore always means a *complete* lock exists -- there is
-    no window where this module's own acquisition leaves `lock_dir` present but
-    unidentifiable.
+    `with` block, via the operating system's own advisory file lock rather than a lock file or
+    directory this module tracks the identity, age, or liveness of itself (see `_try_lock()`).
 
-    A lock is reclaimed (taken over) when its recorded PID both exists and is no longer
-    alive, or its recorded age exceeds `stale_after` regardless of PID liveness (covers a
-    PID that died and was later reused by an unrelated live process, e.g. after a reboot).
-    A lock that is neither dead-PID-stale nor age-stale is genuinely live; after
-    `wait_timeout` seconds of polling, this raises LockTimeoutError instead of waiting
-    forever.
+    The OS releases the lock the moment the holding process is gone, by any means -- a clean
+    return, an uncaught exception, SIGKILL, power loss to the machine underneath a remote
+    holder. There is no "stale lock" for this module to reclaim, no PID to check the liveness
+    of, no age to weigh against a configurable threshold: acquiring simply blocks (bounded by
+    `wait_timeout`, polled at `_LOCK_POLL_INTERVAL_SECONDS`) until the OS itself reports the
+    lock free. This replaces the previous design's atomic-directory acquisition, its rename-
+    based stale-lock reclaim, and the pid-liveness/wall-clock-age fallbacks that reclaim needed
+    -- along with the one residual race that design's own ADR 0007 entry documented (a third
+    holder acquiring in the microseconds between a reclaim judging a lock stale and moving it
+    aside): there is no reclaim step left to race.
 
-    The missing-pid/missing-age fallback logic below is defensive, not load-bearing for this
-    module's own normal operation: since acquisition is now atomic, it only matters against
-    an externally-produced or corrupted lock directory (a manual `mkdir` at that path, a
-    lock format from an older version, a directory whose files were partially removed by
-    something other than this module). A pid-less directory that still has other contents is
-    waited on, not treated as stale outright (the old bash lock made the same choice); only a
-    genuinely old one (age > stale_after, via the pid file's timestamp when present, falling
-    back to the lock directory's own mtime when unreadable) is treated as abandoned. A pid-less
-    *empty* directory is different: this module only ever publishes a lock populated, so an
-    empty one is vacated (an interrupted release) and is removed with `rmdir` -- which cannot
-    take a populated lock -- and the acquire retried. That includes an empty directory somebody
-    else created at that path by hand.
+    `flock()` is scoped to the *open file description*, not the process: a second, nested
+    `held_lock()` call for the same (dest_root, skill) from the same process (or from a second
+    thread in it) does not self-deadlock silently or succeed by mistake -- it blocks like any
+    other contender, for up to `wait_timeout`, and then raises `LockTimeoutError` naming this
+    process's own pid as the holder. Not expected in normal use (nothing in this module calls
+    `held_lock()` reentrantly), but worth knowing if you're debugging a hang.
 
-    A hard kill (SIGKILL, power loss) between `_acquire_lock_dir()`'s `mkdtemp` and its rename can
-    orphan a `.{skill}.lock.tmp.*` directory; the next install or uninstall of that skill sweeps
-    it once it is older than any acquire could be (`_sweep_leftovers`), the same way it sweeps
-    `.staging.*`/`.removing.*` and restores or discards `.backup.*` (`_recover_leftover_backups`).
+    Known, accepted tradeoff: `flock()` is unreliable over NFS -- some client/server
+    combinations (particularly NFSv3 without a running lock daemon) silently no-op it, so two
+    hosts sharing an NFS-mounted home directory could both believe they hold the lock. Accepted
+    for a single-machine, ordinarily-local-disk install target; see ADR 0007.
 
-    Also accepted: `_reclaim_stale_lock()` checks the identity of the directory it moved, but
-    has no way to make judging, moving and (if it was not the stale one) putting back a single
-    atomic step, so a third holder acquiring inside that few-microsecond window is displaced.
+    Releasing is just closing `fd` (`_unlock()` plus `os.close()`) -- not meaningfully
+    interruptible partway the way the previous design's directory removal was, so unlike that
+    design this needs no `_defer_interrupts()` around it for signal safety: even a signal
+    landing mid-release leaves nothing worse than a closed-on-process-exit fd, and the OS's own
+    lock release guarantee already covers a harder kill than any signal this process could
+    still be running to handle. `os.close()` can still *raise* on a slow filesystem (it is one
+    of the syscalls PEP 475 deliberately excludes from automatic EINTR retry, since retrying a
+    close risks closing an unrelated fd number reused in the meantime) -- caught below rather
+    than left to escape as a raw, unhandled exception, since there is nothing more to do about
+    a failed close of a lock file: the fd (and whatever lock it held) is gone either way.
     """
-    lock_dir = _lock_dir_for(dest_root, skill)
-    waited = 0.0
-    acquired = False
+    lock_path = _lock_path_for(dest_root, skill)
+    fd = _open_lock_file(lock_path)
     try:
         # Waiting must be stoppable by a supervisor's SIGTERM the same as the work under the
         # lock: unconverted, the process dies with the raw 143 install.sh does not recognise.
         with _sigterm_as_system_exit():
-            while True:
-                if _acquire_lock_dir(dest_root, lock_dir):
-                    acquired = True
-                    break
-                identity = _read_lock_identity(lock_dir)
-                lock_pid = _parse_lock_pid(identity[0])
-                is_stale = lock_pid is not None and not is_pid_alive(lock_pid)
-                if not is_stale and identity == (None, None) and _is_empty_dir(lock_dir):
-                    # A lock is only ever published fully populated, so an empty directory is a
-                    # vacated one (an interrupted release). POSIX's rename absorbs it on the next
-                    # acquire; Windows' refuses to rename onto any existing directory, so it
-                    # would otherwise be waited on until it aged out. `rmdir`, not a reclaim
-                    # rename: it can only ever remove an EMPTY directory, so it cannot take a
-                    # live lock a third party has just published there (a rename-based reclaim
-                    # of a directory every release passes through made exactly that race hot).
-                    if _remove_empty_dir(lock_dir):
-                        continue
-                if not is_stale:
-                    age = _parse_lock_age(identity[1])
-                    if age is None:
-                        try:
-                            age = time.time() - lock_dir.stat().st_mtime
-                        except FileNotFoundError:
-                            # Released between the failed acquire and this read. Not stale --
-                            # "gone" is not "abandoned": reclaiming here would rename whatever
-                            # a third party has acquired since, breaking mutual exclusion.
-                            continue
-                        except OSError:
-                            age = None
-                    is_stale = age is not None and age > stale_after
-                if is_stale and _reclaim_stale_lock(lock_dir, identity):
-                    continue
+            waited = 0.0
+            while not _try_lock(fd):
                 if waited >= wait_timeout:
                     raise LockTimeoutError(
-                        f"timed out waiting for lock on {skill} at {lock_dir} "
-                        f"(held by pid {lock_pid if lock_pid is not None else 'unknown'})"
+                        f"timed out waiting for lock on {skill} at {lock_path} "
+                        f"(held by pid {_read_holder_pid(fd)})"
                     )
                 time.sleep(_LOCK_POLL_INTERVAL_SECONDS)
                 waited += _LOCK_POLL_INTERVAL_SECONDS
+            _write_holder_pid(fd)
         yield
     finally:
-        # Only what this call acquired: a failed or interrupted wait must never remove
-        # another holder's lock. A signal in the couple of bytecodes between the rename
-        # succeeding and `acquired` being set would leave a lock behind, but it names this
-        # process's pid, so it goes stale the moment the process exits.
-        if acquired:
-            # This runs after the caller's guarded body has already returned or raised, so it's
-            # outside any `with _sigterm_as_system_exit()` the caller itself entered -- a
-            # second, closely-timed SIGTERM landing here would otherwise terminate the process
-            # mid-release. Deferred rather than converted: the release finishes, then exits 130.
-            # (An interrupted release would be self-healing anyway -- a stale/partial lock is
-            # reclaimed by the next waiter -- but there's no reason to leave one behind.)
-            with _defer_interrupts():
-                shutil.rmtree(lock_dir, ignore_errors=True)
+        try:
+            _unlock(fd)
+            os.close(fd)
+        except OSError:
+            pass
+
 
 
 # tempfile.mkdtemp() appends exactly 8 characters from this alphabet. Matching *exactly* that, not
@@ -575,14 +437,15 @@ def _recover_leftover_backups(dest_root: Path, skill: str, skill_dest: Path) -> 
 
 
 def _sweep_leftovers(dest_root: Path, skill: str) -> None:
-    """Delete this skill's `.{skill}.removing.<suffix>` and `.{skill}.staging.<suffix>` directories
-    (and any `.{skill}.lock.tmp.<suffix>` orphaned for over `_ORPHAN_LOCK_TMP_MIN_AGE_SECONDS`).
-    Called with the lock held, so no other run of this skill can own one. They are garbage by
-    construction -- the skill was already uninstalled, or the staged copy never went live -- and
-    used to be orphaned by a failed deletion or a hard kill and never swept. A `.removing.*` is
-    only deleted if it holds nothing but the `skill` entry the uninstall moved into it. `.backup.*`
-    is NOT swept here: after a rollback cut short it can hold the only copy of the user's previous
-    install (see `_recover_leftover_backups`, which restores or discards it only when safe)."""
+    """Delete this skill's `.{skill}.removing.<suffix>` and `.{skill}.staging.<suffix>`
+    directories. Called with the lock held, so no other run of this skill can own one. They are
+    garbage by construction -- the skill was already uninstalled, or the staged copy never went
+    live -- and used to be orphaned by a failed deletion or a hard kill and never swept. A
+    `.removing.*` is only deleted if it holds nothing but the `skill` entry the uninstall moved
+    into it. `.backup.*` is NOT swept here: after a rollback cut short it can hold the only copy
+    of the user's previous install (see `_recover_leftover_backups`, which restores or discards
+    it only when safe). There is no `.lock.tmp.*` to sweep any more -- the OS-held lock this
+    module now uses has nothing analogous; see `held_lock()`."""
     for entry in _leftover_entries(dest_root, skill, "removing"):
         try:
             contents = os.listdir(entry.path)
@@ -592,17 +455,6 @@ def _sweep_leftovers(dest_root: Path, skill: str) -> None:
             shutil.rmtree(entry.path, ignore_errors=True)
     for entry in _leftover_entries(dest_root, skill, "staging"):
         shutil.rmtree(entry.path, ignore_errors=True)
-    now = time.time()
-    for entry in _leftover_entries(dest_root, skill, "lock.tmp"):
-        # `_acquire_lock_dir()`'s temp directory exists for microseconds -- but it is made
-        # *before* the lock is held, so this sweep cannot know its owner; only one older than
-        # any plausible acquire is an orphan (a hard kill between mkdtemp and the rename).
-        try:
-            age = now - entry.stat(follow_symlinks=False).st_mtime
-        except OSError:
-            continue
-        if age > _ORPHAN_LOCK_TMP_MIN_AGE_SECONDS:
-            shutil.rmtree(entry.path, ignore_errors=True)
 
 
 _BLOCKING_OWNERSHIP_STATES = frozenset(
@@ -674,7 +526,6 @@ def install_skill(
     host_label: str,
     dry_run: bool = False,
     wait_timeout: float = DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS,
-    stale_after: float = DEFAULT_LOCK_STALE_SECONDS,
 ) -> InstallOutcome:
     """Install one skill from repo_root into dest_root/skill_id, following install.sh's own
     install_skill() sequence: validate -> early ownership check -> (dry-run short-circuit) ->
@@ -713,7 +564,7 @@ def install_skill(
 
     try:
         dest_root.mkdir(parents=True, exist_ok=True)
-        with held_lock(dest_root, skill_id, wait_timeout=wait_timeout, stale_after=stale_after):
+        with held_lock(dest_root, skill_id, wait_timeout=wait_timeout):
             # Unprotected otherwise: a signal landing here (after the lock's own conversion has
             # exited, before the primary work's) hit the default disposition instead of the
             # engine's clean exit 130. Both calls are safe to interrupt and retry -- the next run
@@ -810,7 +661,6 @@ def uninstall_skill(
     dest_root: Path,
     dry_run: bool = False,
     wait_timeout: float = DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS,
-    stale_after: float = DEFAULT_LOCK_STALE_SECONDS,
 ) -> UninstallOutcome:
     """Remove one installed skill from dest_root/skill_id, following install.sh's own
     uninstall_skill() sequence: lock -> classify ownership -> ABSENT is a warning, not a
@@ -842,7 +692,7 @@ def uninstall_skill(
             return UninstallOutcome(skill_id, skill_dest, "dry_run", f"would remove {skill_dest}")
 
         dest_root.mkdir(parents=True, exist_ok=True)
-        with held_lock(dest_root, skill_id, wait_timeout=wait_timeout, stale_after=stale_after):
+        with held_lock(dest_root, skill_id, wait_timeout=wait_timeout):
             with _sigterm_as_system_exit():
                 _sweep_leftovers(dest_root, skill_id)
                 _recover_leftover_backups(dest_root, skill_id, skill_dest)
@@ -930,19 +780,14 @@ def _env_float(name: str, default: float) -> float:
         raise ValueError(f"{name} must be a number, got {value!r}") from None
 
 
-def _lock_timing_from_env() -> tuple[float, float]:
-    # scripts/tests/test_install_concurrency.py sets these to exercise timeout/staleness
-    # behavior without waiting out real-world-sized delays.
+def _lock_timing_from_env() -> float:
+    # scripts/tests/test_install_concurrency.py sets this to exercise the timeout behavior
+    # without waiting out a real-world-sized delay.
     wait_timeout = _env_float("LOCK_WAIT_TIMEOUT_SECONDS", DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS)
-    stale_after = _env_float("LOCK_STALE_SECONDS", DEFAULT_LOCK_STALE_SECONDS)
-    # float() accepts "nan"/"inf"/negatives. nan or inf as the wait timeout waits forever; a
-    # zero or negative stale age makes every live lock immediately stealable; nan as the stale
-    # age makes age-based reclaim unreachable. Reject them rather than run with a broken lock.
+    # float() accepts "nan"/"inf"/negatives; nan or inf here would wait forever.
     if not (math.isfinite(wait_timeout) and wait_timeout >= 0):
         raise ValueError(f"LOCK_WAIT_TIMEOUT_SECONDS must be a finite number >= 0, got {wait_timeout!r}")
-    if not (math.isfinite(stale_after) and stale_after > 0):
-        raise ValueError(f"LOCK_STALE_SECONDS must be a finite number > 0, got {stale_after!r}")
-    return wait_timeout, stale_after
+    return wait_timeout
 
 
 def _start_parent_watch(expected_parent: int, poll_seconds: float = _PARENT_POLL_SECONDS) -> None:
@@ -979,7 +824,7 @@ def _start_parent_watch(expected_parent: int, poll_seconds: float = _PARENT_POLL
 
 
 def _cli_install(args: argparse.Namespace) -> int:
-    wait_timeout, stale_after = _lock_timing_from_env()
+    wait_timeout = _lock_timing_from_env()
     try:
         outcome = install_skill(
             args.skill_id,
@@ -988,7 +833,6 @@ def _cli_install(args: argparse.Namespace) -> int:
             host_label=args.host_label,
             dry_run=args.dry_run,
             wait_timeout=wait_timeout,
-            stale_after=stale_after,
         )
     except (KeyboardInterrupt, SystemExit):
         # install_skill() already ran its own cleanup before re-raising (see the
@@ -1002,14 +846,13 @@ def _cli_install(args: argparse.Namespace) -> int:
 
 
 def _cli_uninstall(args: argparse.Namespace) -> int:
-    wait_timeout, stale_after = _lock_timing_from_env()
+    wait_timeout = _lock_timing_from_env()
     try:
         outcome = uninstall_skill(
             args.skill_id,
             dest_root=args.dest_root,
             dry_run=args.dry_run,
             wait_timeout=wait_timeout,
-            stale_after=stale_after,
         )
     except (KeyboardInterrupt, SystemExit):
         return 130
@@ -1062,7 +905,7 @@ def main(argv: list[str] | None = None) -> int:
         # A catch-all clean-failure net: install_skill()/uninstall_skill() already convert
         # their own realistic failures into a clean InstallOutcome/UninstallOutcome, but a
         # few things run before either is even called (_lock_timing_from_env() reading a
-        # malformed, non-empty LOCK_WAIT_TIMEOUT_SECONDS/LOCK_STALE_SECONDS, for example) --
+        # malformed, non-empty LOCK_WAIT_TIMEOUT_SECONDS, for example) --
         # this must not surface as a raw traceback. Returns 1, not a new exit code, so
         # install.sh's existing {0, 1, 130} handling doesn't need to learn a fourth case.
         # Doesn't catch KeyboardInterrupt/SystemExit (both are BaseException, not Exception);

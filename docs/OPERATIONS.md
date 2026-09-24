@@ -9,22 +9,26 @@ live in [RELEASE.md](RELEASE.md); stale golden fixtures have their own runbook i
 **Symptom:** `error: timed out waiting for lock on <skill> at <dest>/.<skill>.lock (held by pid N)`
 
 `scripts/install.sh` serializes concurrent installs of the same skill into the same destination root
-with a lock *directory* at `<dest_root>/.<skill>.lock` — `mkdir` is atomic and, unlike a symlink, cannot
-be pre-planted to redirect a later write. The waiter clears a lock on its own in two cases: the recorded
-PID is no longer alive (`kill -0`), or the lock is older than `LOCK_STALE_SECONDS` (default 300). It
-gives up after `LOCK_WAIT_TIMEOUT_SECONDS` (default 30).
+with the operating system's own advisory file lock (POSIX `flock()`, or `msvcrt.locking()` on
+Windows) on a plain file at `<dest_root>/.<skill>.lock`, held only for as long as the installing
+process's file descriptor stays open. The OS itself releases it the instant that process is gone —
+a clean exit, a crash, `SIGKILL` — so there is no stale-lock state for install.sh or `sb` to guess
+about, and nothing here for a human to clear by hand in the ordinary case. It gives up after
+`LOCK_WAIT_TIMEOUT_SECONDS` (default 30).
 
-Seeing the timeout therefore means the lock is younger than `LOCK_STALE_SECONDS` **and** its holder
-could not be proved dead — either the recorded PID is alive on this host, or there is no readable
-`pid` file to check. In order:
+Seeing the timeout means a process genuinely still holds the lock. In order:
 
 1. Check whether that PID really is another install (`ps -p <N>`). If it is, wait for it — installs are
    seconds long, and two installs into one destination must not run concurrently.
-2. If the PID belongs to something unrelated, the lock is a PID-reuse artifact. Either wait out
-   `LOCK_STALE_SECONDS` (the next attempt clears it automatically) or re-run with a shorter window:
-   `LOCK_STALE_SECONDS=0 bash scripts/install.sh <skill>`.
-3. Remove `<dest_root>/.<skill>.lock` by hand only after confirming no install is running. The lock
-   directory holds just `pid` and `acquired_at`; deleting it loses nothing.
+2. If `ps -p <N>` shows nothing (or the message says `held by pid unknown`), the lock is real but its
+   holder has already exited on a host where the lock file lives on a network filesystem — see the NFS
+   caveat below; on ordinary local disk this should not happen, since the OS drops the lock with the
+   process. Report it as a bug if you hit it on local disk.
+3. `flock()` is unreliable over NFS: some client/server combinations (particularly NFSv3 without a
+   running lock daemon) silently no-op it, so two hosts sharing an NFS-mounted home directory can each
+   believe they hold the lock. If that's the setup, confirm no install is actually running on either
+   host, then delete `<dest_root>/.<skill>.lock` by hand — it is now just an empty marker file with no
+   state to lose.
 
 A killed install does not leave a half-written skill: the installer stages into a temporary directory,
 validates it, moves any existing install aside to a same-filesystem backup, and restores that backup if

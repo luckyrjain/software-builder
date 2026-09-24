@@ -196,19 +196,27 @@ it was scope discipline for the original porting task, not a standing constraint
     the backup recovery verifies the backup's manifest names the skill and restores the newest first;
     the earlier prefix matching could delete or misplace a user's lookalike directory or a sibling skill's
     working directories. `uninstall --dry-run` is fully read-only.
-  - *Residual (round 3).* `_reclaim_stale_lock()` checks the identity of what it moved, but
-    judging, moving and putting back is not one atomic step, so a third holder acquiring in that
-    few-microsecond window is displaced. A signal in the couple of bytecodes between the lock
-    rename succeeding and `acquired` being set leaves a lock naming this process's pid, which goes
-    stale as soon as the process exits.
-  - *Residual.* A signal landing in the few bytecodes between the primary work's
-    `_sigterm_as_system_exit()` exiting and the rollback's `_defer_interrupts()` starting hits
-    the default disposition; closing it needs the handler to stay installed across that
-    hand-off. Signals that cannot be caught (SIGKILL, power loss), including SIGKILL of the
+  - *Resolved (2026-09-24): the lock design was rewritten around the OS's own advisory file lock
+    (`flock()` on POSIX, `msvcrt.locking()` on Windows) instead of a directory this module tracked
+    the identity, age, and liveness of itself.* This closes the round-3 residual directly above --
+    there is no reclaim step left for a third holder to race, because there is no reclaim step --
+    and the microsecond acquire-then-signal window right after it, since acquiring is now one
+    syscall (`flock`), not a temp-directory build followed by a rename. It also removes the whole
+    class of bug this ADR's entries above spent the most effort on: PID-liveness/wall-clock-age
+    staleness guessing, the identity-check-on-reclaim fix, the empty-directory-vs-populated-lock
+    race the Windows CI job's own fix introduced and then had to fix again. The OS releases the
+    lock the instant the holding process is gone by any means, including `SIGKILL` and power loss,
+    so "stale lock" is no longer a state this module can observe. `is_pid_alive()`,
+    `_acquire_lock_dir()`, `_reclaim_stale_lock()`, and the `.{skill}.lock.tmp.*` orphan sweep are
+    all deleted, not merely hardened -- there is nothing left in that shape to hold a residual
+    against. New, accepted tradeoff in their place: `flock()` is unreliable over some NFS
+    client/server combinations (notably NFSv3 without a running lock daemon), where it can silently
+    no-op -- two hosts sharing an NFS-mounted home directory could then both believe they hold the
+    lock. Judged acceptable for a single-machine, ordinarily-local-disk install target; see
+    `docs/OPERATIONS.md`'s "Stale install lock" entry for the manual-recovery path if it's hit.
+  - *Residual.* Signals that cannot be caught (SIGKILL, power loss), including SIGKILL of the
     `install.sh` process itself (which orphans the engine, as before), are unaddressed -- nothing
-    short of an external sweeper handles them. A hard kill between `_acquire_lock_dir()`'s
-    temp-directory creation and its rename can still orphan that temp directory, the same
-    accepted gap `install_skill()`'s staging/backup directories always had. A deferred signal
-    arriving during a *successful* install's lock release exits 130 with the skill installed
-    and the "Installed" line unprinted -- the process was told to stop and did, but the exit
-    code doesn't distinguish that from an interrupted install.
+    short of an external sweeper handles them. A deferred signal arriving during a *successful*
+    install's lock release exits 130 with the skill installed and the "Installed" line unprinted
+    -- the process was told to stop and did, but the exit code doesn't distinguish that from an
+    interrupted install.
