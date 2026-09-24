@@ -50,6 +50,7 @@ def test_real_sensitive_path_list_self_protects_its_own_enforcement_files() -> N
         "scripts/sensitive_path_match.py",
         "scripts/check_review_evidence.py",
         ".github/workflows/review-evidence.yml",
+        ".github/workflows/review-evidence-post.yml",
     ):
         assert expected in spec.globs, f"{expected} must self-protect via globs"
 

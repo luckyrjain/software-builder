@@ -43,12 +43,17 @@ globs:
 
   # Self-protection (design doc, Components: sensitive-path-list; Failure strategy: "the
   # sensitive-path-list, or the enforcement mechanism itself, is edited to remove or weaken
-  # coverage"). These four files ARE the enforcement mechanism -- any edit to them is itself a
-  # sensitive-path change requiring evidence.
+  # coverage"). These files ARE the enforcement mechanism -- any edit to them is itself a
+  # sensitive-path change requiring evidence. review-evidence-post.yml is a second workflow file
+  # (not one of the original four named in the design/Builder dispatch) made necessary by a
+  # GitHub Actions platform restriction discovered while authoring this list: a workflow_run
+  # trigger cannot watch its own workflow's completion, so review-evidence-post had to move out
+  # of review-evidence.yml into its own file -- see that file's header comment.
   - docs/sensitive-paths.yaml
   - scripts/sensitive_path_match.py
   - scripts/check_review_evidence.py
   - .github/workflows/review-evidence.yml
+  - .github/workflows/review-evidence-post.yml
 
 content_patterns:
   # Concurrency-primitive / crash-recovery keywords, matched against the *full diff text*
