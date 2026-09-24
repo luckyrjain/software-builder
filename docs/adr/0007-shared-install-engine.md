@@ -196,9 +196,9 @@ it was scope discipline for the original porting task, not a standing constraint
     the backup recovery verifies the backup's manifest names the skill and restores the newest first;
     the earlier prefix matching could delete or misplace a user's lookalike directory or a sibling skill's
     working directories. `uninstall --dry-run` is fully read-only.
-  - *Resolved (2026-09-24): the lock design was rewritten around the OS's own advisory file lock
-    (`flock()` on POSIX, `msvcrt.locking()` on Windows) instead of a directory this module tracked
-    the identity, age, and liveness of itself.* This closes the round-3 residual directly above --
+  - *Resolved (2026-09-24): the lock design was rewritten around the OS's own file lock
+    (`flock()` on POSIX, advisory; `msvcrt.locking()` on Windows, mandatory) instead of a directory
+    this module tracked the identity, age, and liveness of itself.* This closes the round-3 residual directly above --
     there is no reclaim step left for a third holder to race, because there is no reclaim step --
     and the microsecond acquire-then-signal window right after it, since acquiring is now one
     syscall (`flock`), not a temp-directory build followed by a rename. It also removes the whole
@@ -214,6 +214,15 @@ it was scope discipline for the original porting task, not a standing constraint
     no-op -- two hosts sharing an NFS-mounted home directory could then both believe they hold the
     lock. Judged acceptable for a single-machine, ordinarily-local-disk install target; see
     `docs/OPERATIONS.md`'s "Stale install lock" entry for the manual-recovery path if it's hit.
+  - *Two failed Windows fixes before the real one.* `install-engine-windows` CI caught the first cut
+    of this rewrite silently reading back a corrupted holder pid ("held by pid unknown" on every
+    Windows timeout). The first fix (seek to byte 0 before writing the pid) didn't resolve it,
+    because the actual cause was different from what was diagnosed: `msvcrt.locking()` is
+    *mandatory*, not advisory -- unlike POSIX `flock()`, it blocks every other handle from
+    *reading*, not just writing, the exact locked byte range, so `_read_holder_pid()` came back
+    empty on Windows regardless of write position. The real fix keeps the lock on byte 0 (nothing
+    ever reads or writes it as data) and moves the pid diagnostic to `_PID_TEXT_OFFSET` (byte 1),
+    outside the locked range.
   - *Residual.* Signals that cannot be caught (SIGKILL, power loss), including SIGKILL of the
     `install.sh` process itself (which orphans the engine, as before), are unaddressed -- nothing
     short of an external sweeper handles them. A deferred signal arriving during a *successful*

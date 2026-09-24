@@ -9,9 +9,10 @@ live in [RELEASE.md](RELEASE.md); stale golden fixtures have their own runbook i
 **Symptom:** `error: timed out waiting for lock on <skill> at <dest>/.<skill>.lock (held by pid N)`
 
 `scripts/install.sh` serializes concurrent installs of the same skill into the same destination root
-with the operating system's own advisory file lock (POSIX `flock()`, or `msvcrt.locking()` on
-Windows) on a plain file at `<dest_root>/.<skill>.lock`, held only for as long as the installing
-process's file descriptor stays open. The OS itself releases it the instant that process is gone —
+with the operating system's own file lock — POSIX `flock()` (advisory) or Windows `msvcrt.locking()`
+(mandatory: it blocks other handles from reading the locked byte, not only from writing it) — on a
+plain file at `<dest_root>/.<skill>.lock`, held only for as long as the installing process's file
+descriptor stays open. The OS itself releases it the instant that process is gone —
 a clean exit, a crash, `SIGKILL` — so there is no stale-lock state for install.sh or `sb` to guess
 about, and nothing here for a human to clear by hand in the ordinary case. It gives up after
 `LOCK_WAIT_TIMEOUT_SECONDS` (default 30).
