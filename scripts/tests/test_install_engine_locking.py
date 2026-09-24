@@ -295,3 +295,46 @@ def test_pid_diagnostics_are_written_and_read_outside_the_locked_byte(tmp_path: 
         assert install_engine._read_holder_pid(fd) == str(os.getpid())
     finally:
         os.close(fd)
+
+
+def test_write_holder_pid_leaves_no_trailing_garbage_from_a_longer_previous_write(tmp_path: Path) -> None:
+    """A shorter pid overwriting a longer one (a 5-digit holder replaced by a 3-digit one, or
+    any stale content pre-dating the very first write to a reused lock file) must not leave the
+    old, longer content's trailing bytes readable after it -- `_write_holder_pid()`'s
+    `os.ftruncate(fd, 0)` exists specifically to prevent this."""
+    lock_path = install_engine._lock_path_for(tmp_path, "demo-skill")
+    fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        os.lseek(fd, install_engine._PID_TEXT_OFFSET, os.SEEK_SET)
+        os.write(fd, b"999999999999999")  # much longer than any real pid written next
+
+        install_engine._write_holder_pid(fd)
+
+        assert install_engine._read_holder_pid(fd) == str(os.getpid())
+    finally:
+        os.close(fd)
+
+
+def test_a_failure_releasing_the_lock_does_not_escape_held_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`os.close()` is one of the syscalls PEP 475 deliberately excludes from automatic EINTR
+    retry; a failure there (or in `_unlock()`) must not surface as a raw exception out of
+    `held_lock()` -- there is nothing more to do about a failed close of a lock file, and the
+    caller's own successful work must not be reported as a failure because of it."""
+    real_close = os.close
+    closed = []
+
+    def failing_close(fd: int) -> None:
+        closed.append(fd)
+        raise OSError("simulated: close failed")
+
+    monkeypatch.setattr(install_engine.os, "close", failing_close)
+    try:
+        with held_lock(tmp_path, "demo-skill", wait_timeout=5.0):
+            pass  # the body itself succeeds; only the release fails
+    finally:
+        monkeypatch.undo()
+        if closed:
+            real_close(closed[0])  # avoid leaking the fd from this test itself
+    assert closed, "the mutation should have reached os.close"
