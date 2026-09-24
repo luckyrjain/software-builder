@@ -77,6 +77,15 @@ def _open_lock_file(lock_path: Path) -> int:
     return os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
 
 
+# The lock covers exactly byte 0. Windows' `msvcrt.locking()` is *mandatory*, not advisory --
+# unlike POSIX flock, it blocks every other handle from reading or writing that exact byte
+# range too, not just from also locking it (confirmed on Windows CI: `_read_holder_pid()`
+# reading byte 0 while another handle held it there came back empty every time). The pid
+# diagnostic text is written and read starting at `_PID_TEXT_OFFSET`, outside the locked byte,
+# so it stays visible to a waiter on every platform.
+_PID_TEXT_OFFSET = 1
+
+
 def _try_lock(fd: int) -> bool:
     """Attempt to claim the OS's own advisory lock on `fd` without blocking. True on success.
 
@@ -116,18 +125,11 @@ def _unlock(fd: int) -> None:
 
 def _write_holder_pid(fd: int) -> None:
     """Diagnostics only: never read back to decide anything, only to name a holder in a
-    LockTimeoutError message. A failure here must not fail the acquisition itself.
-
-    Seeks to 0 explicitly rather than assuming the caller left the position there: on Windows,
-    `msvcrt.locking()` (the immediately-preceding `_try_lock()` call, on success) advances the
-    file position past the byte it locked, so a write right after it without an explicit seek
-    landed one byte in -- confirmed on Windows CI, where the resulting pid text (offset by a
-    leading NUL from the truncate-then-write gap) failed to decode into anything `_read_holder_
-    pid()` recognised, and the diagnostic silently fell back to "unknown" instead of the truth.
-    """
+    LockTimeoutError message. A failure here must not fail the acquisition itself. Writes at
+    `_PID_TEXT_OFFSET`, past the locked byte -- see that constant's comment."""
     try:
         os.ftruncate(fd, 0)
-        os.lseek(fd, 0, os.SEEK_SET)
+        os.lseek(fd, _PID_TEXT_OFFSET, os.SEEK_SET)
         os.write(fd, str(os.getpid()).encode("ascii"))
     except OSError:
         pass
@@ -135,7 +137,7 @@ def _write_holder_pid(fd: int) -> None:
 
 def _read_holder_pid(fd: int) -> str:
     try:
-        os.lseek(fd, 0, os.SEEK_SET)
+        os.lseek(fd, _PID_TEXT_OFFSET, os.SEEK_SET)
         return os.read(fd, 32).decode("ascii", errors="replace").strip() or "unknown"
     except OSError:
         return "unknown"

@@ -219,3 +219,23 @@ def test_lock_stale_seconds_is_no_longer_read(monkeypatch: pytest.MonkeyPatch) -
     setting it must not raise or change the timeout that comes back."""
     monkeypatch.setenv("LOCK_STALE_SECONDS", "not-a-number-at-all")
     assert install_engine._lock_timing_from_env() == install_engine.DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS
+
+
+def test_pid_diagnostics_are_written_and_read_outside_the_locked_byte(tmp_path: Path) -> None:
+    """Windows' `msvcrt.locking()` is mandatory: it blocks *reads* of the locked byte range
+    from other handles, not just writes or further locks -- unlike POSIX flock, which is purely
+    advisory and never interferes with plain reads/writes at all. `_write_holder_pid()`/
+    `_read_holder_pid()` must agree on writing and reading the diagnostic text outside byte 0,
+    the byte `_try_lock()` locks, so it stays visible to a waiter on every platform. This can't
+    reproduce the Windows-only symptom (mandatory locking doesn't exist on POSIX), but it does
+    guard the two functions from drifting to different offsets."""
+    lock_path = install_engine._lock_path_for(tmp_path, "demo-skill")
+    fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        install_engine._write_holder_pid(fd)
+        raw = lock_path.read_bytes()
+        assert raw[: install_engine._PID_TEXT_OFFSET] == b"\x00" * install_engine._PID_TEXT_OFFSET
+        assert raw[install_engine._PID_TEXT_OFFSET :] == str(os.getpid()).encode("ascii")
+        assert install_engine._read_holder_pid(fd) == str(os.getpid())
+    finally:
+        os.close(fd)
