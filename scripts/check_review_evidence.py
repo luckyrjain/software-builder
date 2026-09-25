@@ -28,18 +28,25 @@ same-repo PR could forge the "classify" step itself. `review-evidence-post` now 
 subcommand itself, from a checkout it can prove is base-branch-pinned (see that workflow file's
 header comment for the full reasoning) -- so nothing this subcommand's *caller* computed on a
 PR branch is ever trusted, only what this subcommand computes against the base-pinned code that
-is running it. Phase 0 ships no real review pass -- see `build_verdict`'s `TODO(condition-1)`.
+is running it. `build_verdict` now runs a real classification pass for a sensitive PR: see
+docs/superpowers/specs/2026-09-25-f1-condition1-lock-safety-classifier-design.md (architecture
+review Condition 1's resolution) and `scripts/lock_safety_patterns.py`.
 
 The PR diff text both subcommands read is untrusted, third-party content (any PR author can
 write it) -- it is parsed here purely as data (glob/regex matching over its text), never
-executed or treated as instructions, per docs/skill-framework/shared/prompt-injection.md.
+executed or treated as instructions, per docs/skill-framework/shared/prompt-injection.md. The
+same is true of the full file *source* text `fetch_pr_file_contents` fetches for `build_verdict`:
+it is only ever handed to `lock_safety_patterns.check`, which parses/inspects it via `ast.parse`
+and never executes, imports, or otherwise runs it.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -49,9 +56,19 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts import sensitive_path_match  # noqa: E402
+from scripts import lock_safety_patterns, sensitive_path_match  # noqa: E402
 
 DEFAULT_REPO = os.environ.get("GITHUB_REPOSITORY", "luckyrjain/software-builder")
+
+# Matches the same `diff --git a/<path> b/<path>` header sensitive_path_match._DIFF_GIT_LINE_RE
+# matches (see that module), applied per-line here rather than over the whole diff text at once,
+# so parse_changed_lines can track "which file is the current hunk's line-number parsing for".
+_DIFF_GIT_LINE_RE = re.compile(r'^diff --git "?a/(?P<old>.+?)"? "?b/(?P<new>.+?)"?$')
+
+# `@@ -a,b +c,d @@` -- only the `+c,d` side (the new/current file's line numbers) is needed:
+# that's what changed_lines describes, paired with fetch_pr_file_contents's full-file fetch at
+# the same head SHA (design doc, `lock_safety_patterns.check`'s APIs row).
+_HUNK_HEADER_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(?P<new_start>\d+)(?:,\d+)? @@")
 
 
 class GhApiError(RuntimeError):
@@ -124,6 +141,75 @@ def fetch_pr_reviews(repo: str, pr_number: int) -> list[dict[str, Any]]:
             raise GhApiError("`gh api .../reviews` did not return a JSON array")
         reviews.extend(page)
     return reviews
+
+
+def fetch_pr_file_contents(repo: str, pr_number: int, paths: list[str], head_sha: str) -> dict[str, str]:
+    """Fetch each `.py` path in `paths` at `head_sha` via the read-only GitHub Contents API
+    (`gh api repos/<repo>/contents/<path>?ref=<sha>`), base64-decoded.
+
+    `pr_number` is accepted (and unused beyond being part of this function's documented contract
+    alongside every other `fetch_pr_*` helper here) because the content fetch itself is keyed on
+    `repo`/`path`/`head_sha` alone -- a blob at a fixed SHA needs no PR number to look up. A
+    non-`.py` path is skipped, never fetched -- `lock_safety_patterns.check` only ever evaluates
+    Python source (design doc, APIs table). Raises `GhApiError` on any single fetch or decode
+    failure, same fail-closed posture as every other `gh` call in this module: a partial result
+    is never handed back silently.
+    """
+    del pr_number  # part of this helper's documented signature; the API call itself doesn't need it
+    contents: dict[str, str] = {}
+    for path in paths:
+        if not path.endswith(".py"):
+            continue
+        stdout = run_gh(["api", f"repos/{repo}/contents/{path}?ref={head_sha}"])
+        try:
+            data = json.loads(stdout)
+        except json.JSONDecodeError as exc:
+            raise GhApiError(f"could not parse `gh api .../contents/{path}` output: {exc}") from exc
+        encoding = data.get("encoding")
+        encoded_content = data.get("content")
+        if encoding != "base64" or not isinstance(encoded_content, str):
+            raise GhApiError(f"`gh api .../contents/{path}` did not return base64-encoded content")
+        try:
+            contents[path] = base64.b64decode(encoded_content).decode("utf-8")
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise GhApiError(f"could not decode content for {path}: {exc}") from exc
+    return contents
+
+
+def parse_changed_lines(diff_text: str) -> dict[str, set[int]]:
+    """Parse `gh pr diff`'s unified-diff text into {new-side path -> set of added/modified line
+    numbers}, from each hunk header's `@@ -a,b +c,d @@` `+c,d` side.
+
+    Paired with `fetch_pr_file_contents`'s full-file fetch at the same head SHA: full file
+    content plus exactly which lines the diff touched is what lets
+    `lock_safety_patterns.check`'s rules see an added lock call's whole enclosing function while
+    still only ever flagging a line the PR actually changed.
+    """
+    result: dict[str, set[int]] = {}
+    current_path: str | None = None
+    new_lineno: int | None = None
+    for line in diff_text.splitlines():
+        git_match = _DIFF_GIT_LINE_RE.match(line)
+        if git_match:
+            current_path = git_match.group("new")
+            new_lineno = None
+            continue
+        hunk_match = _HUNK_HEADER_RE.match(line)
+        if hunk_match:
+            new_lineno = int(hunk_match.group("new_start"))
+            continue
+        if current_path is None or new_lineno is None:
+            continue
+        if line.startswith("+"):
+            result.setdefault(current_path, set()).add(new_lineno)
+            new_lineno += 1
+        elif line.startswith("-"):
+            continue  # removed line -- doesn't exist on the new side, no line-number advance
+        elif line.startswith("\\"):
+            continue  # "\ No newline at end of file" -- not a content line
+        else:
+            new_lineno += 1  # context line -- still advances the new-side counter
+    return result
 
 
 def most_recent_review_per_login(reviews: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -215,35 +301,74 @@ def build_verdict(
     spec: sensitive_path_match.SensitivePathList,
     diff_text: str,
     pr_number: int,
+    *,
+    repo: str,
+    head_sha: str,
 ) -> dict[str, Any] | None:
     """The `analyze` subcommand's own decision: classify, then produce a verdict for a sensitive
     PR. Returns None for a non-sensitive PR (nothing to write -- analyze does nothing further,
     per the design doc's Components table).
 
-    TODO(condition-1): the design's Open Questions leave "what the analyze subcommand's
-    underlying review pass actually is" unresolved -- this repo's own pr-review/code-review
-    skill, or a narrower purpose-built check (the design's own lean for v1, since it also
-    sidesteps the prompt-injection risk architecture review Condition 1 names). Whichever is
-    chosen MUST treat the diff text as data, never instructions, per
-    docs/skill-framework/shared/prompt-injection.md, and Condition 1 requires an explicit
-    adversarial-content test case before this becomes a live (required-check) activation. Phase
-    0 ships no real review pass: every sensitive PR gets `block` here -- fail closed, never
-    invent an auto-approve verdict, until that decision is made and implemented.
+    Resolves architecture review Condition 1
+    (docs/superpowers/specs/2026-09-25-f1-condition1-lock-safety-classifier-design.md): for a
+    sensitive PR, identifies its changed `.py` files (reusing the paths
+    `sensitive_path_match.extract_changed_paths` already parsed from `diff_text`, never
+    recomputed), fetches each one's full content at `head_sha` plus the diff's changed-line
+    ranges, and runs `lock_safety_patterns.check` -- a narrow, non-LLM static classifier for the
+    specific lock/signal/idempotency bug class PR #289 shipped. Zero violations -> `verdict:
+    "approve"`, the first time this function can produce anything other than `"block"`. One or
+    more violations, a changed-file-contents fetch failure (`GhApiError`), or a sensitive PR
+    whose changed files include no Python source at all -> `verdict: "block"` -- fail closed in
+    every case, never an invented approval. The diff text and the full file source text this
+    fetches are both untrusted, PR-author-controlled content: `lock_safety_patterns.check` only
+    ever parses/inspects it via `ast.parse`, never executes it, per
+    docs/skill-framework/shared/prompt-injection.md.
     """
     result = sensitive_path_match.classify(diff_text, spec)
     if not result.sensitive:
         return None
-    return {
+
+    base_fields = {
         "verdict": "block",
         "pr_number": pr_number,
         "matched_globs": list(result.matched_globs),
         "matched_content_patterns": list(result.matched_content_patterns),
-        "reason": (
-            "the analyze subcommand's underlying review pass is not yet implemented "
-            "(architecture review Condition 1; design doc Open Questions). Phase 0 fails "
-            "closed rather than inventing a verdict."
-        ),
     }
+
+    changed_paths = sorted(sensitive_path_match.extract_changed_paths(diff_text))
+    python_paths = [path for path in changed_paths if path.endswith(".py")]
+    if not python_paths:
+        return {
+            **base_fields,
+            "reason": (
+                "sensitive PR's changed files include no Python source for the lock-safety "
+                "classifier to evaluate -- blocked, not auto-approved, since there is nothing "
+                "for a structural Python check to clear"
+            ),
+        }
+
+    try:
+        file_contents = fetch_pr_file_contents(repo, pr_number, python_paths, head_sha)
+    except GhApiError as exc:
+        return {
+            **base_fields,
+            "reason": f"could not fetch changed file contents to classify: {exc}",
+        }
+
+    changed_lines = parse_changed_lines(diff_text)
+    violations = lock_safety_patterns.check(file_contents, changed_lines)
+
+    if not violations:
+        return {
+            **base_fields,
+            "verdict": "approve",
+            "reason": "lock-safety classifier found no violations in the changed Python file(s)",
+        }
+
+    reason = "lock-safety classifier found violation(s):\n" + "\n".join(
+        f"{violation.file}:{violation.line} [{violation.rule}] {violation.message}" for violation in violations
+    )
+    return {**base_fields, "reason": reason}
 
 
 def run_analyze(*, repo: str, pr_number: int, sensitive_path_list: Path, out_path: Path) -> int:
@@ -258,12 +383,13 @@ def run_analyze(*, repo: str, pr_number: int, sensitive_path_list: Path, out_pat
         return 2
 
     try:
+        head_sha, _author_login = fetch_pr_metadata(repo, pr_number)
         diff_text = fetch_pr_diff(repo, pr_number)
     except GhApiError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    verdict = build_verdict(spec, diff_text, pr_number)
+    verdict = build_verdict(spec, diff_text, pr_number, repo=repo, head_sha=head_sha)
     if verdict is None:
         print(f"ok: PR #{pr_number} is not sensitive -- no verdict artifact written")
         return 0

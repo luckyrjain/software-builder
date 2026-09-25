@@ -128,6 +128,7 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `install-incident-rca-deps.sh` | Install incident-rca's prerequisite skills before incident-rca itself. |
 | `install.sh` | The installer itself, documented in full above. |
 | `install_support.py` | Helpers for scripts/install.sh: registry allowlist and installed-package verify. |
+| `lock_safety_patterns.py` | Static, non-LLM AST classifier for the F1 review-evidence gate's Condition 1: flags added lock-acquisition-without-try/finally, bare-except, unsafe-signal-handler, and idempotency-check-after-effect patterns so `check_review_evidence.py`'s `build_verdict` can auto-approve a sensitive PR with none of them. |
 | `lint_skills.py` | Run the shared per-skill structural lint checks (SKILL.md length, workflow frontmatter, dangling links, required reference files, framework wiring, render-surface sanitization) over one skill or the whole registry. |
 | `operational_upkeep.py` | Prompt-system upkeep policy: file-role classification, ownership, health report, and diff-risk gating. |
 | `package_release.py` | Create a byte-reproducible, checksummed release bundle for software-builder. |

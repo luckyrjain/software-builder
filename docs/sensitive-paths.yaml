@@ -58,6 +58,7 @@ globs:
   - scripts/sensitive_path_match.py
   - scripts/check_review_evidence.py
   - scripts/check_sensitive_path_bypass.py
+  - scripts/lock_safety_patterns.py
   - .github/workflows/review-evidence.yml
   - .github/workflows/review-evidence-post.yml
 
