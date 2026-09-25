@@ -67,12 +67,60 @@ the generation-checked `plan_execution_state` checkpoint; that checkpoint is now
 (item 3's initialization check, item 12's reconciliation) and `plan_state_store.cas_advance(...)` as
 the one write path — it wraps the same generation-checked reconciliation this section already
 requires, so it changes where the checkpoint lives, not the reconciliation rules themselves. A
-`PlanStateLockTimeoutError` or `PlanStateCasError` from either call follows this file's existing
-escalation path (§19's `supporting_evidence`) — re-read and retry once for a CAS rejection (the same
-pattern already used for a remote-write collision), and escalate if the lock still cannot be acquired
-within its timeout. This store is separate from, and never a substitute for, the run log (§20): the
-run log is an append-only audit trail of what happened, the plan-state store is the current
-checkpoint of where the plan is.
+`PlanStateLockTimeoutError` from either call follows this file's existing escalation path (§19's
+`supporting_evidence`) — escalate if the lock still cannot be acquired within its timeout.
+
+A `PlanStateCasError` (a concurrent writer already advanced past `expected_generation`) does **not**
+mean "retry once and hope" — it means one of two structurally different things happened, and which one
+determines the response (gap-backlog A6 correction to this paragraph's own earlier text): call
+`plan_state_store.read_state` again, fresh, and look up the same `task_id` in the freshly-read
+`task_statuses` map.
+
+- If its value is still `"PENDING"` — nobody else claimed it; the rejection was caused by an unrelated
+  generation bump, e.g. a different task's own advance — re-derive `expected_generation` from the fresh
+  read and retry the **same** claim, exactly once.
+- If its value is now `"IN_PROGRESS"` — this is the specific, concrete signal that a peer's claim landed
+  first. This is the `plan_execution_state.task_statuses` field's own vocabulary
+  (`scripts/implementation_plan.py`'s `TASK_STATUSES`/`OFFICIAL_TASK_STATUS_MAP`) — **not** `"BUILDING"`,
+  which belongs to the separate, legacy `task.status` field the §2 resume rule below checks; the two
+  fields' vocabularies are not interchangeable. Select a **different** task — never retry this one.
+- If a second consecutive rejection occurs on the retry, stop retrying and escalate per §19 — never a
+  third attempt, so two Orchestrators cannot churn indefinitely on generation contention.
+
+This store is separate from, and never a substitute for, the run log (§20): the run log is an
+append-only audit trail of what happened, the plan-state store is the current checkpoint of where the
+plan is.
+
+**Task lease (gap-backlog A6).** Before dispatching a Builder for a task (item 4 above), acquire that
+task's lease: derive its id with `task_lease.derive_lease_id(repo, base_branch, task_id)` (deterministic
+— the same triple always derives the same id, unlike `run_id`) and call
+`task_lease.try_acquire(lease_dir, lease_id)` (`lease_dir` resolved the same way as the plan-state
+directory — `~/.software-builder/task-leases/` by default). A successful acquisition returns a
+`LeaseHandle` to hold for the rest of this task's dispatch; release it (`handle.release()`) on the
+task's terminal state — `COMPLETE`, `ESCALATED`, `BLOCKED` — or let it release naturally if this process
+exits first. `try_acquire` returning `None` means a peer is already working this task on this machine:
+this is the expected, common outcome of contention, not an error — log a `lease_denied` event (see
+below) and select a different eligible task, or escalate if none remains. `try_acquire` **raising**
+`task_lease.TaskLeaseError` is a different, infrastructure-level failure (disk full, permission error,
+an unwritable lease directory) and must escalate per §19 — never treat it as "task already claimed,"
+which would incorrectly stop all progress on every task while masking a systemic fault.
+
+This amends the §2 "never dispatch a Builder for a task already `BUILDING`" rule with one explicit
+exception: a successful `task_lease.try_acquire` on that task's `lease_id` is the concrete, checkable
+signal that the prior claimant is actually gone (its lock would still be held if it were alive) — not a
+license to skip the rest of §5's independent re-verification (does a branch/PR already exist, what is
+its actual SCM state) before treating the task as safe to restart. The lease and the durable
+`plan_execution_state` checkpoint are two independent mechanisms, not layered: the lease answers "is
+anyone actively working this task right now," the checkpoint answers "what is the durable, authoritative
+status of this task" — a crashed process can leave `task.status == "BUILDING"` in shared state with no
+lease currently held, and the lease acquisition is what tells you it is now safe to resume it.
+
+**`lease_denied` observability.** Every lease denial — not only the ones that end in escalation — is
+logged via `run_log.py`'s `append` mechanism as a `lease_denied` event (`data: {task_id, lease_id}`),
+following the same call pattern as every other event in §20. This covers the common, non-escalating
+case (contention → pick a different task → finish normally) as well as the escalating one: a lease
+denial must leave a durable trace either way, not only a possible mention in an escalation report that
+only fires when the run actually stops.
 
 ---
 
@@ -147,6 +195,11 @@ Select the next task only when:
   shared state exists yet for this task, check for an existing branch/PR matching its ID before
   treating it as unstarted — a second Orchestrator invocation against the same repo must not
   duplicate work.
+  **Exception (gap-backlog A6):** a task already `BUILDING` may still be dispatched when
+  `task_lease.try_acquire` for that task's `lease_id` **succeeds** — a live prior claimant would still
+  hold the lease, so a successful acquisition is the concrete signal it is actually gone. This is not a
+  license to skip verification: independently re-check SCM state (§5 — does a branch/PR already exist,
+  what is its actual head) before treating the task as safe to restart, exactly as for any other resume.
 - The target base branch is known.
 - Its acceptance criteria are sufficiently concrete for safe implementation.
 - The task is within the authorized repository and scope.

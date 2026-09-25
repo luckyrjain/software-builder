@@ -138,6 +138,7 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `release_info.py` | Read distribution version and source identity for manifests and release tooling. |
 | `release_readiness_v2.py` | Backward-compatible release manifest v2 parsing, trusted production-readiness reuse, and conditional production-readiness invocation for release-readiness-checker. |
 | `resilience_review.py` | Runtime normalization for the resilience-review specialist. |
+| `task_lease.py` | Non-blocking, flock-based mutual exclusion over a deterministic `(repo, base_branch, task_id)` lease identity (`derive_lease_id`); answers whether a task is already being worked on this machine before Builder dispatch. |
 | `test_creator_catalog.py` | Canonical catalog shared by test-creator packaging and parity checks. |
 | `test_creator_write_guard.py` | Fail-closed pre-write guard shared by the five test-creator skills. |
 | `validate_metadata_footer.py` | Validate review_metadata / assessment_metadata YAML footers (shared schema v2). |

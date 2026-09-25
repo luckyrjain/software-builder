@@ -135,6 +135,7 @@ EVENTS = (
     "escalated",
     "merge_attempted",
     "run_completed",
+    "lease_denied",
 )
 ACTORS = ("orchestrator", "builder", "reviewer", "ci", "human", "system")
 OUTCOMES = ("COMPLETE", "ESCALATED", "HUMAN_ACTION_REQUIRED", "ABANDONED")
@@ -613,6 +614,10 @@ def _validate_event_data(event: str, data: dict[str, Any]) -> None:
         raise ValueError(f"escalated needs data.reason, one of: {', '.join(REASON_CODES)}")
     if event == "task_selected" and not (isinstance(data.get("task_id"), str) and data["task_id"]):
         raise ValueError("task_selected needs data.task_id, the task's id: it is what the per-task budget is counted against")
+    if event == "lease_denied" and not (
+        isinstance(data.get("task_id"), str) and data["task_id"] and isinstance(data.get("lease_id"), str) and data["lease_id"]
+    ):
+        raise ValueError("lease_denied needs data.task_id and data.lease_id: which task was denied, and which lease it contended for")
     if event == "run_completed" and data.get("outcome") not in OUTCOMES:
         raise ValueError(f"run_completed needs data.outcome, one of: {', '.join(OUTCOMES)}")
 
