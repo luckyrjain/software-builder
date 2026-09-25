@@ -36,8 +36,9 @@ already enforces. Every failure path here fails closed: a lock the caller cannot
 (:class:`PlanStateLockTimeoutError`); a stale ``expected_generation`` raises rather than silently
 discarding the caller's write (:class:`PlanStateCasError`); a malformed or hand-edited existing state
 file raises rather than being treated as "no state yet" (:class:`PlanStateStoreError`, the same
-fail-closed doctrine ``scripts/sensitive_path_match.py``'s ``SensitivePathListError`` already
-establishes for this repository); and a ``completed_evidence_refs`` merge that would exceed
+fail-closed doctrine ``run_log.py``'s ``IntegrityError`` already establishes for this repository —
+raise on an unexpected on-disk state rather than silently proceeding as if it were fine); and a
+``completed_evidence_refs`` merge that would exceed
 ``MAX_COMPLETED_EVIDENCE_REFS`` raises rather than silently truncating audit evidence or growing the
 file unboundedly.
 

@@ -118,8 +118,6 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `check_pinned_actions.py` | Fail on any GitHub Action reference not pinned to a full commit SHA. |
 | `check_platform_files.py` | Assert every load-bearing platform file is present in the repository. |
 | `check_requirements_lock.py` | Ensure requirements.lock pins every package declared in requirements.txt. |
-| `check_review_evidence.py` | Enforce the F1 review-evidence gate for one PR: verify existing review evidence (`check`, the required `review-evidence-check` status check), or classify sensitivity and write a verdict artifact (`analyze`, invoked directly by the base-branch-pinned `review-evidence-post` CI job). |
-| `check_sensitive_path_bypass.py` | Scheduled scan for merged PRs that touched the sensitive-path list without a passing `review-evidence-check` run; files a tracking issue on a bypass, and on its own failure. |
 | `deprecation_diff_guard.py` | Block removal of governed prompt-system identities before deprecation matures. |
 | `deprecation_lifecycle.py` | Validate deprecated prompt/contract items against the configured lifecycle window. |
 | `doctor.py` | Preflight / doctor command for software-builder skills. |
@@ -129,7 +127,6 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `install-incident-rca-deps.sh` | Install incident-rca's prerequisite skills before incident-rca itself. |
 | `install.sh` | The installer itself, documented in full above. |
 | `install_support.py` | Helpers for scripts/install.sh: registry allowlist and installed-package verify. |
-| `lock_safety_patterns.py` | Static, non-LLM AST classifier for the F1 review-evidence gate's Condition 1: flags added lock-acquisition-without-try/finally, bare-except, unsafe-signal-handler, and idempotency-check-after-effect patterns so `check_review_evidence.py`'s `build_verdict` can auto-approve a sensitive PR with none of them. |
 | `lint_skills.py` | Run the shared per-skill structural lint checks (SKILL.md length, workflow frontmatter, dangling links, required reference files, framework wiring, render-surface sanitization) over one skill or the whole registry. |
 | `operational_upkeep.py` | Prompt-system upkeep policy: file-role classification, ownership, health report, and diff-risk gating. |
 | `package_release.py` | Create a byte-reproducible, checksummed release bundle for software-builder. |
@@ -141,7 +138,6 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `release_info.py` | Read distribution version and source identity for manifests and release tooling. |
 | `release_readiness_v2.py` | Backward-compatible release manifest v2 parsing, trusted production-readiness reuse, and conditional production-readiness invocation for release-readiness-checker. |
 | `resilience_review.py` | Runtime normalization for the resilience-review specialist. |
-| `sensitive_path_match.py` | Shared sensitive-path matcher for the F1 review-evidence gate: glob matching plus a content-pattern supplement against full diff text, so `check_review_evidence.py`'s `check` and `analyze` subcommands never independently re-derive "is this PR sensitive". |
 | `test_creator_catalog.py` | Canonical catalog shared by test-creator packaging and parity checks. |
 | `test_creator_write_guard.py` | Fail-closed pre-write guard shared by the five test-creator skills. |
 | `validate_metadata_footer.py` | Validate review_metadata / assessment_metadata YAML footers (shared schema v2). |
