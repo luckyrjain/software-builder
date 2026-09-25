@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git fetch origin:*)",
+      "Bash(git checkout -b claude/*)",
+      "Bash(git checkout main)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(python3 skills/loop-task-implementer/scripts/run_log.py:*)",
+      "Bash(python3 skills/loop-task-implementer/scripts/validate_loop_lifecycle.py:*)",
+      "Bash(python3 -m pytest:*)",
+      "Bash(make lint-*)"
+    ],
+    "deny": [
+      "Bash(git reset --hard:*)",
+      "Bash(git clean -f:*)",
+      "Bash(git branch -D:*)",
+      "Bash(git merge:*)",
+      "Bash(rm -rf:*)"
+    ]
+  }
+}

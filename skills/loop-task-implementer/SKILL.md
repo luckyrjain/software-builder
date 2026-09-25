@@ -128,7 +128,7 @@ A reviewer rerun is a new review generation even when code is unchanged: increme
 
 ## Platform behavior
 
-Use the strongest isolation primitive available: (1) native subagents, (2) separate fresh sessions, (3) separate disposable worktrees, (4) sequential role simulation with explicit context resets, last resort. Read [reference/platform-adapters.md](reference/platform-adapters.md) for Cursor, ChatGPT/Codex, Claude Code, GitHub Copilot, and Kiro setup. Preserve the actual `isolation_status`; explicit human acceptance of degraded isolation is recorded separately with provenance and is bound to both the exact `reviewed_change_identity` and current `review_generation`, never by relabeling a review as isolated.
+Use the strongest isolation primitive available: (1) native subagents, (2) separate fresh sessions, (3) separate disposable worktrees, (4) sequential role simulation with explicit context resets, last resort. Read [reference/platform-adapters.md](reference/platform-adapters.md) for Cursor, ChatGPT/Codex, Claude Code, GitHub Copilot, and Kiro setup. Preserve the actual `isolation_status`; explicit human acceptance of degraded isolation is recorded separately with provenance and is bound to both the exact `reviewed_change_identity` and current `review_generation`, never by relabeling a review as isolated. On Claude Code specifically, `.claude/settings.json` is this repository's first host-enforced (not merely instruction-level) permission template, scoped to one local session's own Bash calls — see [reference/enforcement-layer.md](reference/enforcement-layer.md) for what it constrains, what it deliberately does not, and the no-override tradeoff its narrow `deny` list makes.
 
 ## Required state
 

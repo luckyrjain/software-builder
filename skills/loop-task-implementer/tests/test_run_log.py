@@ -1696,6 +1696,30 @@ def test_a_selection_needs_a_task_id_and_an_interleaved_task_is_a_new_window(run
     assert verdict["window"]["since_seq"] == 5 and verdict["seq"] == 5
 
 
+def test_a_lease_denial_needs_both_a_task_id_and_a_lease_id(run_log, log_dir):
+    """gap-backlog A6: the companion validation rule for `lease_denied`, mirroring task_selected's
+    own data.task_id requirement above -- adding the event to EVENTS alone is not enough."""
+    _start(run_log, log_dir)
+    head = _head(run_log, log_dir)
+    for bad in (
+        None,
+        {},
+        {"task_id": "T-1"},
+        {"lease_id": "lease-aaaaaaaaaaaaaaaa"},
+        {"task_id": "", "lease_id": "lease-aaaaaaaaaaaaaaaa"},
+        {"task_id": "T-1", "lease_id": ""},
+        {"task_id": 5, "lease_id": "lease-aaaaaaaaaaaaaaaa"},
+        {"task_id": "T-1", "lease_id": 5},
+    ):
+        with pytest.raises(ValueError, match="lease_id"):
+            run_log.append_event(log_dir, RUN_ID, "lease_denied", "orchestrator", data=bad, expect_head=head)
+    record = run_log.append_event(
+        log_dir, RUN_ID, "lease_denied", "orchestrator",
+        data={"task_id": "T-1", "lease_id": "lease-aaaaaaaaaaaaaaaa"}, expect_head=head,
+    )
+    assert record["data"] == {"task_id": "T-1", "lease_id": "lease-aaaaaaaaaaaaaaaa"}
+
+
 @pytest.mark.parametrize(
     "different",
     [{"usage": {"input_tokens": 5}}, {"actor": "builder"}, {"event": "ci_polled"}],

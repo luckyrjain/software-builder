@@ -58,6 +58,7 @@ integers up to 10^10. A record with all-zero tokens counts as **no** usage.
 | `pr_opened`, `adjudicated`, `ci_polled`, `merge_attempted` | the action happens | ids and counts |
 | `budget_checked` | optional note of a check's result (the script derives `unmeasured` and `unlimited` itself) | those lists |
 | `escalated` | a circuit breaker fires | `reason`, **required**, one of the codes below |
+| `lease_denied` | `task_lease.try_acquire` returned `None` for this task (a peer already holds it on this machine) | `task_id`, `lease_id`, both **required** |
 | `run_completed` | the run ends in any state | `outcome`, **required**, one of the codes below |
 
 `escalated.reason` is one of `DIRTY_REVIEW_LIMIT`, `FIX_ATTEMPT_LIMIT`, `CONTESTED_TWICE`, `SIZE_HARD_STOP`,
