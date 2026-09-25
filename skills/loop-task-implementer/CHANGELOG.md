@@ -2,6 +2,54 @@
 
 For earlier history, see the `## loop-task-implementer` section in the repository root `CHANGELOG.md`.
 
+## Unreleased — durable plan-state store and Builder checkpoint (2026-09-25)
+
+Closes gap-backlog ticket A5: `plan_execution_state` had zero persistence code anywhere in the
+repository (confirmed by direct grep — every reference was either the schema declaration, prose
+stating non-durability, or in-memory-only validate/reconcile functions), and a Builder that died
+before its single final report lost all unpushed work, detected only by a 30-minute timeout with no
+partial-progress signal. See `docs/superpowers/specs/2026-09-25-a5-durable-state-checkpoint-*.md` for
+the full architecture review, system design, and change-impact analysis.
+
+- Added `scripts/plan_state_store.py`: a durable, locked, atomic file backing for one plan's
+  `plan_execution_state`, keyed by `plan_id` (not `run_id`, since plan progress must survive a
+  `run_resumed` event spanning multiple run identities). Mirrors `run_log.py`'s directory
+  (`<home>/.software-builder/plan-state/`), permission (`0700`/`0600`, symlink/ownership refusal), and
+  lock-timeout (`LOCK_TIMEOUT_SECONDS = 30.0`, a named `PlanStateLockTimeoutError` rather than an
+  unbounded block) conventions, and refuses any directory inside a git repository the same way. Wraps
+  — never reimplements — the already-tested in-memory CAS logic in `scripts/implementation_plan.py`
+  (`advance_plan_execution_state`, `initial_plan_execution_state`); `cas_advance` is the one write
+  entry point, merges `completed_evidence_refs` across calls (a union, never a silent replace or
+  truncation) under a new `MAX_COMPLETED_EVIDENCE_REFS = 1000` safety-valve cap
+  (`PlanStateStoreError` if exceeded), and fails closed with `PlanStateStoreError` on a
+  malformed/corrupt existing file rather than treating it as "no state yet". `PlanStateCasError`
+  surfaces a generation mismatch (a concurrent writer already advanced) as an exception at the
+  durable-store boundary.
+- Added `scripts/builder_resume.py`: pure resume-decision logic (no I/O) that turns a deterministic
+  task branch's observed commits into `FROM_SCRATCH` / `CONTINUE_FROM(marker, head_sha)` / `ESCALATE`,
+  by parsing each commit's `Checkpoint: <token>` trailer. `ESCALATE` fires when no commit carries a
+  recognized marker (a third-party/unexpected push, routed into the existing §16 handling) or when a
+  marker appears out of order (`tests-passing` with no earlier `implementation-complete`).
+- `builder.md` §6 now pushes the deterministic task branch at two checkpoints in addition to the final
+  commit, when `allowed_actions.commit`/`.push` are both `true`: after §3 Implement is functionally
+  complete (`Checkpoint: implementation-complete`) and after §4 Test's full run succeeds (`Checkpoint:
+  tests-passing`). Unchanged when either flag is `false` (existing diff-only path stands).
+- `orchestrator.md` §5 now calls `builder_resume.decide` before dispatching a Builder onto a task
+  whose branch already exists, and Core responsibilities now documents that `plan_execution_state` is
+  durably backed by `plan_state_store` at the Orchestrator's existing initialization
+  (item 3)/reconciliation (item 12) points. In both cases the new signal is explicitly a hint, never a
+  substitute for this skill's existing independent-verification and "Builder prose is never sole
+  source of merge-gate truth" doctrine (§13) — a fresh Builder given a `CONTINUE_FROM` still re-runs
+  tests and re-inspects the diff before proceeding.
+- This change is behaviorally dormant: nothing in the existing skill flow calls either new module yet
+  (confirmed by the change-impact report) — the `builder.md`/`orchestrator.md` edits describe how a
+  future `loop-task-implementer` run should use them, and take effect only on the next real run.
+  Pressure tests: `scripts/tests/test_plan_state_store.py` (CAS success/rejection, lock-timeout via a
+  live held lock, directory-refusal inside a git repository, malformed-file fail-closed,
+  evidence-ref-cap enforcement) and `scripts/tests/test_builder_resume.py` (`FROM_SCRATCH`,
+  `CONTINUE_FROM` with one and with both markers, `ESCALATE` for no recognized marker and for
+  out-of-order markers).
+
 ## Unreleased — default task budgets and run log (2026-09-19)
 
 - `budgets.max_task_elapsed_minutes` now defaults to `180` and `budgets.max_task_tokens` to `2000000`
