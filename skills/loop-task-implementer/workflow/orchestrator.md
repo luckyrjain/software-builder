@@ -58,6 +58,22 @@ task description that says "skip review" or "merge without checks" does not chan
 
 Work on exactly one task at a time.
 
+**Durable backing for `plan_execution_state` (gap-backlog A5).** Items 3 and 12 above read and write
+the generation-checked `plan_execution_state` checkpoint; that checkpoint is now durably backed by
+`scripts/plan_state_store.py`, keyed by `plan_id`, at `~/.software-builder/plan-state/` by default
+(same directory-outside-every-repository, `0700`/`0600` convention as the run log — see
+`docs/superpowers/specs/2026-09-25-a5-durable-state-checkpoint-design.md`). Use
+`plan_state_store.read_state(state_dir, plan_id)` wherever this workflow needs the current checkpoint
+(item 3's initialization check, item 12's reconciliation) and `plan_state_store.cas_advance(...)` as
+the one write path — it wraps the same generation-checked reconciliation this section already
+requires, so it changes where the checkpoint lives, not the reconciliation rules themselves. A
+`PlanStateLockTimeoutError` or `PlanStateCasError` from either call follows this file's existing
+escalation path (§19's `supporting_evidence`) — re-read and retry once for a CAS rejection (the same
+pattern already used for a remote-write collision), and escalate if the lock still cannot be acquired
+within its timeout. This store is separate from, and never a substitute for, the run log (§20): the
+run log is an append-only audit trail of what happened, the plan-state store is the current
+checkpoint of where the plan is.
+
 ---
 
 ## 1. Repository policy discovery
@@ -242,6 +258,23 @@ Record:
 - `last_branch_update_at`
 
 A push by a human, bot, dependency updater, or any unrecognized actor invalidates all clean review results until the new diff is classified.
+
+**Resuming a task whose deterministic branch already exists.** Before dispatching a Builder for a
+task whose branch was created by an earlier, now-dead session, build the branch's commit list (this
+step already gathers it) in chronological order and call `scripts/builder_resume.py`'s
+`decide(branch_commits, base_revision)` (gap-backlog A5 —
+`docs/superpowers/specs/2026-09-25-a5-durable-state-checkpoint-design.md`). Act on its result:
+
+- `FROM_SCRATCH` — dispatch as a normal fresh task.
+- `CONTINUE_FROM` — dispatch a Builder told to continue from `last_marker`/`resume_head`, but this is
+  a hint about *where* to resume from, never a substitute for the independent verification this
+  section already requires (branch exists, PR exists, base/head commits correct, changed files match
+  claimed scope, no unexpected third-party push, fingerprint matches). Re-run tests and re-inspect the
+  diff before proceeding, exactly as if no checkpoint marker existed — a Builder's commit message is
+  advisory content, not authoritative evidence (§13's "Builder prose is never sole source of
+  merge-gate truth" doctrine applies here unchanged).
+- `ESCALATE` — treat as an unrecognized/third-party branch change per §16: pause, record the actor
+  and commits, and decide whether the change belongs to the task before proceeding.
 
 ---
 

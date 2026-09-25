@@ -110,6 +110,7 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `apply_repo_metadata.py` | Apply .github/repo-metadata.yaml to the GitHub repository via gh. |
 | `apply_repo_metadata.sh` | Thin shell wrapper around `apply_repo_metadata.py`. |
 | `atomic_write.py` | Atomic file writes: temp file + `os.replace`, so a failed write never leaves a truncated file at the real path. |
+| `builder_resume.py` | Pure resume-decision logic for a redispatched loop-task-implementer Builder: given a deterministic task branch's observed commits, decides `FROM_SCRATCH` / `CONTINUE_FROM` / `ESCALATE` from each commit's `Checkpoint:` trailer. |
 | `change_impact.py` | Deterministic, bounded change-impact analysis primitives. |
 | `check_changelog_placement.py` | Flag root CHANGELOG.md entries that look like they duplicate a skill's own CHANGELOG.md. |
 | `check_github_ruleset.py` | Verify the live GitHub main-branch ruleset matches docs/github-ruleset-main.json. |
@@ -133,6 +134,7 @@ Makefile wrappers: `make install`, `make install-<skill>` (per skill), `make ins
 | `operational_upkeep.py` | Prompt-system upkeep policy: file-role classification, ownership, health report, and diff-risk gating. |
 | `package_release.py` | Create a byte-reproducible, checksummed release bundle for software-builder. |
 | `package_skill.py` | Package a skill directory into a self-contained install bundle. |
+| `plan_state_store.py` | Durable, locked, atomic on-disk backing for one plan's `plan_execution_state`, keyed by `plan_id`; wraps `implementation_plan.py`'s already-tested in-memory CAS logic (`advance_plan_execution_state`) rather than reimplementing it. |
 | `production_readiness.py` | Pure evidence-aggregation and gating logic for the production-readiness-review orchestrator. |
 | `reference_utils.py` | Shared helpers for Markdown link extraction, framework path handling, and the install-package manifest workflow (packaging, verification) per ADR 0002. |
 | `release_contract.py` | Machine-readable release contract: repository version, tag shape, release artifact names, compatibility policy, and required provenance fields. |

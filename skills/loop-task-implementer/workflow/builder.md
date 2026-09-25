@@ -200,6 +200,27 @@ When publication is authorized, include in the PR description:
 
 Do not state that the change is approved, review-clean, CI-green, or ready for final repository action unless you directly observed an authorized source and were explicitly asked to report that fact.
 
+### Checkpoint pushes (in-flight durability)
+
+When `allowed_actions.commit` and `allowed_actions.push` are both `true`, push to the deterministic
+task branch at two checkpoints in addition to the final commit described above, so a Builder that
+dies mid-task leaves real, git-native evidence of how far it got instead of losing all unpushed work
+(gap-backlog A5 — see `docs/superpowers/specs/2026-09-25-a5-durable-state-checkpoint-design.md`):
+
+- After §3 Implement is functionally complete (before running the full test suite in §4), commit and
+  push with a commit message whose last line is the trailer `Checkpoint: implementation-complete`.
+- After §4 Test's full run succeeds, commit and push again with a commit message whose last line is
+  the trailer `Checkpoint: tests-passing`.
+
+Each checkpoint commit otherwise follows the same rules as any other commit in this section (focused,
+pushed only to the authorized task branch). The final §6 commit made after §5's diff inspection needs
+no special marker — its existence, plus the pull request, is the existing "done" signal a fresh
+Orchestrator pass already recognizes.
+
+When `allowed_actions.commit` or `allowed_actions.push` is `false`, this subsection does not apply —
+behavior is unchanged from the diff-only path described above (§6 as a whole, before this
+subsection).
+
 ---
 
 ## 7. Remediation findings
