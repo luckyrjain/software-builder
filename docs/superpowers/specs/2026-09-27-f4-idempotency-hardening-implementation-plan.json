@@ -1,0 +1,196 @@
+{
+  "plan_set_id": "PLANSET-84115bdf9743",
+  "plan_id": "PLANSET-84115bdf9743-ef4a510c",
+  "title": "F4 pr-gatekeeper idempotency store hardening",
+  "readiness": "READY",
+  "assessment_target": {
+    "repo": "luckyrjain/software-builder"
+  },
+  "target_repo": "luckyrjain/software-builder",
+  "external_dependencies": [],
+  "source_refs": [
+    "architecture_review_report:99c748e32f8295c9d2ed1ee542d5501648bcba75719d147b37c97c376a7cddc8",
+    "change_impact_report:a25c1aad2cbcfa10284b234d28e3c2c8392c98b0fa7f27e9a11c30378257bdba",
+    "system_design_spec:9c1072b3dd745cb8a7b029b8fd8f30e2f7f45a0681dfdfea70140de811df21d6"
+  ],
+  "tasks": [
+    {
+      "task_id": "TASK-001-a246a235",
+      "title": "Implement changes under skills/pr-gatekeeper/reference/idempotency.md",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path skills/pr-gatekeeper/reference/idempotency.md in luckyrjain/software-builder.",
+      "target_paths": [
+        "skills/pr-gatekeeper/reference/idempotency.md"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/pr-gatekeeper/reference/idempotency.md."
+      ],
+      "dependencies": [],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F4-COND-1",
+        "architecture-condition:F4-COND-2",
+        "architecture-condition:F4-COND-3",
+        "architecture-condition:F4-COND-4",
+        "architecture-condition:F4-COND-5"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 100,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-002-08914053",
+      "title": "Implement changes under skills/pr-gatekeeper/scripts/idempotency_store.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path skills/pr-gatekeeper/scripts/idempotency_store.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "skills/pr-gatekeeper/scripts/idempotency_store.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/pr-gatekeeper/scripts/idempotency_store.py."
+      ],
+      "dependencies": [
+        "TASK-001-a246a235"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F4-COND-1",
+        "architecture-condition:F4-COND-2",
+        "architecture-condition:F4-COND-3",
+        "architecture-condition:F4-COND-4",
+        "architecture-condition:F4-COND-5"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 100,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-003-9185e74d",
+      "title": "Implement changes under skills/pr-gatekeeper/tests/test_idempotency_store.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path skills/pr-gatekeeper/tests/test_idempotency_store.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "skills/pr-gatekeeper/tests/test_idempotency_store.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/pr-gatekeeper/tests/test_idempotency_store.py.",
+        "skills/pr-gatekeeper/tests/test_idempotency_store.py",
+        "make lint-python"
+      ],
+      "dependencies": [
+        "TASK-002-08914053"
+      ],
+      "required_tests": [
+        "skills/pr-gatekeeper/tests/test_idempotency_store.py",
+        "make lint-python"
+      ],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F4-COND-1",
+        "architecture-condition:F4-COND-2",
+        "architecture-condition:F4-COND-3",
+        "architecture-condition:F4-COND-4",
+        "architecture-condition:F4-COND-5"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 100,
+        "confidence": "MEDIUM"
+      }
+    }
+  ],
+  "execution_waves": [
+    [
+      "TASK-001-a246a235"
+    ],
+    [
+      "TASK-002-08914053"
+    ],
+    [
+      "TASK-003-9185e74d"
+    ]
+  ],
+  "sequencing_constraints": [
+    "Tasks execute in deterministic dependency-wave order."
+  ],
+  "verification_gates": [
+    "Every required test, task verification, and traceability item is satisfied."
+  ],
+  "traceability": {
+    "condition_coverage": {
+      "architecture-condition:F4-COND-1": [
+        "TASK-001-a246a235",
+        "TASK-002-08914053",
+        "TASK-003-9185e74d"
+      ],
+      "architecture-condition:F4-COND-2": [
+        "TASK-001-a246a235",
+        "TASK-002-08914053",
+        "TASK-003-9185e74d"
+      ],
+      "architecture-condition:F4-COND-3": [
+        "TASK-001-a246a235",
+        "TASK-002-08914053",
+        "TASK-003-9185e74d"
+      ],
+      "architecture-condition:F4-COND-4": [
+        "TASK-001-a246a235",
+        "TASK-002-08914053",
+        "TASK-003-9185e74d"
+      ],
+      "architecture-condition:F4-COND-5": [
+        "TASK-001-a246a235",
+        "TASK-002-08914053",
+        "TASK-003-9185e74d"
+      ]
+    },
+    "action_coverage": {},
+    "required_test_coverage": {
+      "skills/pr-gatekeeper/tests/test_idempotency_store.py": [
+        "TASK-003-9185e74d"
+      ],
+      "make lint-python": [
+        "TASK-003-9185e74d"
+      ]
+    }
+  }
+}
