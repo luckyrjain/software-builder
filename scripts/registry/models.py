@@ -68,6 +68,12 @@ class SkillEntry:
     composition: CompositionSpec = field(default_factory=CompositionSpec)
     capabilities: CapabilitiesSpec = field(default_factory=CapabilitiesSpec)
     risk_class: list[str] = field(default_factory=list)
+    # Resolved (explicit-override-or-derived) platform support -- see
+    # scripts/registry/platform_detection.py. Defaults to the permissive value so a direct
+    # SkillEntry construction (test factories, etc.) that doesn't set this explicitly keeps
+    # working unchanged; every real parse path (schema.py's _parse_skill_entry) always resolves
+    # this explicitly, one way or the other.
+    platforms: list[str] = field(default_factory=lambda: ["posix", "windows"])
 
 
 @dataclass(frozen=True)

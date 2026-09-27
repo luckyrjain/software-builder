@@ -46,18 +46,30 @@ negative values are rejected at parse time with exit `2`). Omitting the flag pre
 previous, genuinely unbounded lock wait byte-for-byte — this is an additive change, not a
 default-behavior change.
 
-| Action | `0` | `1` | `2` | `3` | `4` |
-|--------|-----|-----|-----|-----|-----|
-| `check` | Head is new (unprocessed) | Duplicate — already processed | Usage error | Lock held past an opted-in `--lock-wait-timeout` (error names the current holder's pid) — `check` has always acquired the same per-MR lock as `mark`/`run-if-new`, this just bounds an existing wait | N/A |
-| `mark` | Head persisted | N/A | Usage error | Same as `check` | N/A |
-| `run-if-new` | Command ran and exited `0` (marked) | Duplicate head — command not run | Usage error (e.g. missing command after `--`) | Same as `check`/`mark` | Interrupted: SIGINT/SIGTERM/SIGHUP arrived while the command was running, forwarded to it, `mark_processed` skipped |
+| Action | `0` | `1` | `2` | `3` | `4` | `5` |
+|--------|-----|-----|-----|-----|-----|-----|
+| `check` | Head is new (unprocessed) | Duplicate — already processed | Usage error | Lock held past an opted-in `--lock-wait-timeout` (error names the current holder's pid) — `check` has always acquired the same per-MR lock as `mark`/`run-if-new`, this just bounds an existing wait | N/A | This platform has no `fcntl` (not POSIX) — `mr_lock()` raised `UnsupportedPlatformError` |
+| `mark` | Head persisted | N/A | Usage error | Same as `check` | N/A | Same as `check` |
+| `run-if-new` | Command ran and exited `0` (marked) | Duplicate head — command not run | Usage error (e.g. missing command after `--`) | Same as `check`/`mark` | Interrupted: SIGINT/SIGTERM/SIGHUP arrived while the command was running, forwarded to it, `mark_processed` skipped | Same as `check`/`mark` |
 
-Codes `3` and `4` are net-new and additive — `0`/`1`/`2` are unchanged from before this hardening,
-including for any integrator who has already deployed this file and does not pass
+Codes `3`, `4`, and `5` are net-new and additive — `0`/`1`/`2` are unchanged from before this
+hardening, including for any integrator who has already deployed this file and does not pass
 `--lock-wait-timeout`. As before, a wrapped command's own exit code passes through `run-if-new`
-unchanged when it isn't `0`, `1`, `3`, or `4` — a wrapped command that happens to exit with one of
-those codes has always collided with this file's own contract, same posture this file already had
-for `1`.
+unchanged when it isn't `0`, `1`, `3`, `4`, or `5` — a wrapped command that happens to exit with
+one of those codes has always collided with this file's own contract, same posture this file
+already had for `1`.
+
+### Platform support (`5`)
+
+This file requires `fcntl` and is POSIX-only (Linux, macOS) — see
+docs/superpowers/specs/2026-09-27-f2-platform-support-design.md. The `import fcntl` at module load
+is guarded, so importing this module on Windows never raises a raw `ModuleNotFoundError`; instead
+`mr_lock()` itself raises `UnsupportedPlatformError` the moment it's actually invoked. This matters
+because the **Python handler** integration style above calls `mr_lock()`/`should_process()`/
+`mark_processed()` directly, bypassing `main()` — so the guard lives in `mr_lock()`, not just in
+`main()`'s CLI dispatch. `main()` catches it and exits `5` with a clean message for every action
+(`check`/`mark`/`run-if-new` alike); a direct Python-handler caller sees `UnsupportedPlatformError`
+raised directly, never a raw traceback either way.
 
 ### Signal handling for `run-if-new`
 

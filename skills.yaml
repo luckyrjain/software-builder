@@ -4420,6 +4420,8 @@ skills:
       target: migration-program-manager
     risk_class:
     - read-only
+    platforms:
+    - posix
     version: 1.0.0
     type: orchestrator
     authority: read-only
@@ -4742,6 +4744,8 @@ skills:
     risk_class:
     - posting
     - unattended
+    platforms:
+    - posix
     version: 1.1.0
     type: trigger
     authority: comment

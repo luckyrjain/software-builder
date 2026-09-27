@@ -161,6 +161,7 @@ def _cmd_install(args: argparse.Namespace) -> int:
             dest_root=dest_root,
             host_label=host_label,
             dry_run=args.dry_run,
+            allow_unsupported_platform=args.allow_unsupported_platform,
         )
 
     def _on_installed(host_label: str, outcome: Any) -> None:
@@ -259,6 +260,12 @@ def main(argv: list[str] | None = None) -> int:
     install_parser.add_argument("--host", required=True, help=f"install selector: {', '.join(install_selectors())}")
     install_parser.add_argument("--target-dir", type=Path, default=None, help="project root for project-scope targets")
     install_parser.add_argument("--dry-run", action="store_true")
+    install_parser.add_argument(
+        "--allow-unsupported-platform",
+        action="store_true",
+        help="proceed (with a warning) when a skill's declared platforms exclude this one, "
+        "instead of refusing the install",
+    )
 
     uninstall_parser = subparsers.add_parser("uninstall", help="uninstall one or more skills")
     uninstall_parser.add_argument("skill_ids", nargs="+", help="registered skill id(s)")

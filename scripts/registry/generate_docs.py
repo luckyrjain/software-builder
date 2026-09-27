@@ -89,8 +89,8 @@ def render_skills_table(
 ) -> str:
     deprecated = deprecated or {}
     lines = [
-        "| Skill | Category | Invocation | Install requires | Lint target |",
-        "|-------|----------|------------|------------------|-------------|",
+        "| Skill | Category | Invocation | Install requires | Lint target | Platforms |",
+        "|-------|----------|------------|------------------|-------------|-----------|",
     ]
     for skill_id, entry in sorted(registry.skills.items()):
         requires = ", ".join(entry.install.requires) if entry.install.requires else "—"
@@ -99,9 +99,10 @@ def render_skills_table(
             if skill_id in deprecated
             else f"`{skill_id}`"
         )
+        platforms_cell = ", ".join(sorted(entry.platforms)) if entry.platforms else "—"
         lines.append(
             f"| {skill_cell} | {entry.category} | {entry.invocation} | {requires} | "
-            f"`make lint-{entry.lint.target}` |",
+            f"`make lint-{entry.lint.target}` | {platforms_cell} |",
         )
     return "\n".join(lines) + "\n"
 

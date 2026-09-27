@@ -33,6 +33,13 @@ migration-program-manager:
     target: migration-program-manager
   risk_class:
   - read-only
+  # Defense-in-depth/explicitness only, not load-bearing correctness -- the auto-detector
+  # (scripts/registry/platform_detection.py) independently classifies this skill as ["posix"]
+  # from its scripts/aggregate_migration_status.py's fcntl usage alone (see gap-backlog F2's
+  # design doc, Phase 0's gating test requires this). validate_platform_declarations fails make
+  # generate --check/cmd_validate if this override ever drifts from that derivation.
+  platforms:
+  - posix
   version: 1.0.0
   type: orchestrator
   authority: read-only

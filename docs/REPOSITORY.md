@@ -77,58 +77,58 @@ software-builder/
 Each skill directory follows the same pattern:
 
 <!-- registry-skills-table:start -->
-| Skill | Category | Invocation | Install requires | Lint target |
-|-------|----------|------------|------------------|-------------|
-| `api-design-review` | review | ambient | — | `make lint-api-design-review` |
-| `api-test-creator` | testing | ambient | — | `make lint-api-test-creator` |
-| `architecture-remediation-loop` | architecture | ambient | codebase-architecture-review, engineering-decision-discovery, module-design, loop-task-implementer, production-readiness-review | `make lint-architecture-remediation-loop` |
-| `architecture-review` | review | ambient | — | `make lint-architecture-review` |
-| `backlog-runner` | automation | automation-only | loop-task-implementer | `make lint-backlog-runner` |
-| `bug-diagnosis` | review | ambient | — | `make lint-bug-diagnosis` |
-| `capacity-planner` | platform | ambient | — | `make lint-capacity-planner` |
-| `change-impact-analyzer` | analysis | ambient | — | `make lint-change-impact-analyzer` |
-| `codebase-architecture-review` | architecture | ambient | — | `make lint-codebase-architecture-review` |
-| `contract-test-creator` | testing | ambient | — | `make lint-contract-test-creator` |
-| `cost-optimization-sprint-planner` | platform | ambient | k8s-overprovisioning-datadog, squad-map | `make lint-cost-optimization-sprint-planner` |
-| `database-review` | review | ambient | — | `make lint-database-review` |
-| `dependency-upgrade-review` | review | ambient | — | `make lint-dependency-upgrade-review` |
-| `deployment-risk-review` | review | ambient | — | `make lint-deployment-risk-review` |
-| `domain-comprehension` | architecture | ambient | squad-map | `make lint-domain-comprehension` |
-| `domain-modeling` | architecture | ambient | — | `make lint-domain-modeling` |
-| `e2e-test-creator` | testing | ambient | — | `make lint-e2e-test-creator` |
-| `engineering-decision-discovery` | architecture | ambient | — | `make lint-engineering-decision-discovery` |
-| `implementation-planner` | automation | ambient | — | `make lint-implementation-planner` |
-| `incident-rca` | incident | ambient | — | `make lint-incident-rca` |
-| `incident-triage-agent` | incident | automation-only | incident-rca, squad-map | `make lint-incident-triage-agent` |
-| `initiative-mapper` | architecture | ambient | — | `make lint-initiative-mapper` |
-| `integration-test-creator` | testing | ambient | — | `make lint-integration-test-creator` |
-| `issue-triage` | analysis | ambient | — | `make lint-issue-triage` |
-| `k8s-overprovisioning-datadog` | platform | ambient | — | `make lint-k8s-skill` |
-| `local-diff-review` | review | ambient | — | `make lint-local-diff-review` |
-| `loop-task-implementer` | automation | ambient | — | `make lint-loop-task-implementer` |
-| `merge-conflict-analysis` | review | ambient | — | `make lint-merge-conflict-analysis` |
-| `migration-program-manager` | migration | ambient | mysql-to-postgres-sql, squad-map | `make lint-migration-program-manager` |
-| `module-design` | architecture | ambient | — | `make lint-module-design` |
-| `mysql-to-postgres-sql` | migration | ambient | — | `make lint-mysql-to-postgres-sql` |
-| `new-hire-guide` | architecture | ambient | domain-comprehension, squad-map | `make lint-new-hire-guide` |
-| `observability-review` | review | ambient | — | `make lint-observability-review` |
-| `performance-review` | review | ambient | — | `make lint-performance-review` |
-| `pr-gatekeeper` | review | automation-only | pr-review | `make lint-pr-gatekeeper` |
-| `pr-review` | review | ambient | — | `make lint-pr-review` |
-| `prd-architect` | product | ambient | — | `make lint-prd-architect` |
-| `production-readiness-review` | release | ambient | pr-review, change-impact-analyzer, deployment-risk-review, security-review, observability-review, resilience-review, api-design-review, database-review, performance-review, capacity-planner, dependency-upgrade-review | `make lint-production-readiness-review` |
-| `release-readiness-checker` | release | ambient | pr-review, k8s-overprovisioning-datadog, incident-rca | `make lint-release-readiness-checker` |
-| `research-brief` | analysis | ambient | — | `make lint-research-brief` |
-| `resilience-review` | review | ambient | — | `make lint-resilience-review` |
-| `security-review` | review | ambient | — | `make lint-security-review` |
-| `squad-map` | architecture | ambient | — | `make lint-squad-map` |
-| `stakeholder-questionnaire` | product | ambient | — | `make lint-stakeholder-questionnaire` |
-| `system-design` | architecture | ambient | — | `make lint-system-design` |
-| `tech-debt-assessor` | platform | ambient | — | `make lint-tech-debt-assessor` |
-| `test-writer` | product | ambient | unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator | `make lint-test-writer` |
-| `unit-test-creator` | testing | ambient | — | `make lint-unit-test-creator` |
-| `weekly-squad-digest` | migration | automation-only | migration-program-manager, cost-optimization-sprint-planner | `make lint-weekly-squad-digest` |
-| `who-owns-x-bot` | architecture | automation-only | squad-map | `make lint-who-owns-x-bot` |
+| Skill | Category | Invocation | Install requires | Lint target | Platforms |
+|-------|----------|------------|------------------|-------------|-----------|
+| `api-design-review` | review | ambient | — | `make lint-api-design-review` | posix, windows |
+| `api-test-creator` | testing | ambient | — | `make lint-api-test-creator` | posix, windows |
+| `architecture-remediation-loop` | architecture | ambient | codebase-architecture-review, engineering-decision-discovery, module-design, loop-task-implementer, production-readiness-review | `make lint-architecture-remediation-loop` | posix, windows |
+| `architecture-review` | review | ambient | — | `make lint-architecture-review` | posix, windows |
+| `backlog-runner` | automation | automation-only | loop-task-implementer | `make lint-backlog-runner` | posix, windows |
+| `bug-diagnosis` | review | ambient | — | `make lint-bug-diagnosis` | posix, windows |
+| `capacity-planner` | platform | ambient | — | `make lint-capacity-planner` | posix, windows |
+| `change-impact-analyzer` | analysis | ambient | — | `make lint-change-impact-analyzer` | posix, windows |
+| `codebase-architecture-review` | architecture | ambient | — | `make lint-codebase-architecture-review` | posix, windows |
+| `contract-test-creator` | testing | ambient | — | `make lint-contract-test-creator` | posix, windows |
+| `cost-optimization-sprint-planner` | platform | ambient | k8s-overprovisioning-datadog, squad-map | `make lint-cost-optimization-sprint-planner` | posix, windows |
+| `database-review` | review | ambient | — | `make lint-database-review` | posix, windows |
+| `dependency-upgrade-review` | review | ambient | — | `make lint-dependency-upgrade-review` | posix, windows |
+| `deployment-risk-review` | review | ambient | — | `make lint-deployment-risk-review` | posix, windows |
+| `domain-comprehension` | architecture | ambient | squad-map | `make lint-domain-comprehension` | posix, windows |
+| `domain-modeling` | architecture | ambient | — | `make lint-domain-modeling` | posix, windows |
+| `e2e-test-creator` | testing | ambient | — | `make lint-e2e-test-creator` | posix, windows |
+| `engineering-decision-discovery` | architecture | ambient | — | `make lint-engineering-decision-discovery` | posix, windows |
+| `implementation-planner` | automation | ambient | — | `make lint-implementation-planner` | posix, windows |
+| `incident-rca` | incident | ambient | — | `make lint-incident-rca` | posix, windows |
+| `incident-triage-agent` | incident | automation-only | incident-rca, squad-map | `make lint-incident-triage-agent` | posix, windows |
+| `initiative-mapper` | architecture | ambient | — | `make lint-initiative-mapper` | posix, windows |
+| `integration-test-creator` | testing | ambient | — | `make lint-integration-test-creator` | posix, windows |
+| `issue-triage` | analysis | ambient | — | `make lint-issue-triage` | posix, windows |
+| `k8s-overprovisioning-datadog` | platform | ambient | — | `make lint-k8s-skill` | posix, windows |
+| `local-diff-review` | review | ambient | — | `make lint-local-diff-review` | posix, windows |
+| `loop-task-implementer` | automation | ambient | — | `make lint-loop-task-implementer` | posix |
+| `merge-conflict-analysis` | review | ambient | — | `make lint-merge-conflict-analysis` | posix, windows |
+| `migration-program-manager` | migration | ambient | mysql-to-postgres-sql, squad-map | `make lint-migration-program-manager` | posix |
+| `module-design` | architecture | ambient | — | `make lint-module-design` | posix, windows |
+| `mysql-to-postgres-sql` | migration | ambient | — | `make lint-mysql-to-postgres-sql` | posix, windows |
+| `new-hire-guide` | architecture | ambient | domain-comprehension, squad-map | `make lint-new-hire-guide` | posix, windows |
+| `observability-review` | review | ambient | — | `make lint-observability-review` | posix, windows |
+| `performance-review` | review | ambient | — | `make lint-performance-review` | posix, windows |
+| `pr-gatekeeper` | review | automation-only | pr-review | `make lint-pr-gatekeeper` | posix |
+| `pr-review` | review | ambient | — | `make lint-pr-review` | posix, windows |
+| `prd-architect` | product | ambient | — | `make lint-prd-architect` | posix, windows |
+| `production-readiness-review` | release | ambient | pr-review, change-impact-analyzer, deployment-risk-review, security-review, observability-review, resilience-review, api-design-review, database-review, performance-review, capacity-planner, dependency-upgrade-review | `make lint-production-readiness-review` | posix, windows |
+| `release-readiness-checker` | release | ambient | pr-review, k8s-overprovisioning-datadog, incident-rca | `make lint-release-readiness-checker` | posix, windows |
+| `research-brief` | analysis | ambient | — | `make lint-research-brief` | posix, windows |
+| `resilience-review` | review | ambient | — | `make lint-resilience-review` | posix, windows |
+| `security-review` | review | ambient | — | `make lint-security-review` | posix, windows |
+| `squad-map` | architecture | ambient | — | `make lint-squad-map` | posix, windows |
+| `stakeholder-questionnaire` | product | ambient | — | `make lint-stakeholder-questionnaire` | posix, windows |
+| `system-design` | architecture | ambient | — | `make lint-system-design` | posix, windows |
+| `tech-debt-assessor` | platform | ambient | — | `make lint-tech-debt-assessor` | posix, windows |
+| `test-writer` | product | ambient | unit-test-creator, integration-test-creator, contract-test-creator, e2e-test-creator, api-test-creator | `make lint-test-writer` | posix, windows |
+| `unit-test-creator` | testing | ambient | — | `make lint-unit-test-creator` | posix, windows |
+| `weekly-squad-digest` | migration | automation-only | migration-program-manager, cost-optimization-sprint-planner | `make lint-weekly-squad-digest` | posix, windows |
+| `who-owns-x-bot` | architecture | automation-only | squad-map | `make lint-who-owns-x-bot` | posix, windows |
 <!-- registry-skills-table:end -->
 
 | File | Audience | Purpose |

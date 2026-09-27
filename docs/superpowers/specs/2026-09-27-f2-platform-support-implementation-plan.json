@@ -1,0 +1,673 @@
+{
+  "plan_set_id": "PLANSET-9aa171f61f6c",
+  "plan_id": "PLANSET-9aa171f61f6c-ef4a510c",
+  "title": "F2 per-skill platform support declaration + install-time enforcement",
+  "readiness": "READY",
+  "assessment_target": {
+    "repo": "luckyrjain/software-builder"
+  },
+  "target_repo": "luckyrjain/software-builder",
+  "external_dependencies": [],
+  "source_refs": [
+    "architecture_review_report:b856ac7a3a276f86e4652fe5fa2b664b0cb4b4f3dddb50a012f476ea8cec3774",
+    "change_impact_report:eb401526990ab2ad07aee0437a5459d0b5126b6d4604d9773565168bffb66bd2",
+    "system_design_spec:38a736fe8466d470dd7ed472c75cf0ccbe0329127806a420b221addaa5e54005"
+  ],
+  "tasks": [
+    {
+      "task_id": "TASK-001-e4e558f9",
+      "title": "Implement changes under docs/skill-framework/shared/terminology-glossary.md",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path docs/skill-framework/shared/terminology-glossary.md in luckyrjain/software-builder.",
+      "target_paths": [
+        "docs/skill-framework/shared/terminology-glossary.md"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for docs/skill-framework/shared/terminology-glossary.md."
+      ],
+      "dependencies": [],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F2-COND-1",
+        "architecture-condition:F2-COND-2",
+        "architecture-condition:F2-COND-3",
+        "architecture-condition:F2-COND-4"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 2,
+        "changed_lines_upper_bound": 70,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-002-1ae8f475",
+      "title": "Implement changes under scripts/install_engine.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/install_engine.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/install_engine.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/install_engine.py."
+      ],
+      "dependencies": [
+        "TASK-001-e4e558f9"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F2-COND-1",
+        "architecture-condition:F2-COND-2",
+        "architecture-condition:F2-COND-3",
+        "architecture-condition:F2-COND-4"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 2,
+        "changed_lines_upper_bound": 70,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-003-974dfa70",
+      "title": "Implement changes under scripts/registry/crosscheck.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/registry/crosscheck.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/registry/crosscheck.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/registry/crosscheck.py."
+      ],
+      "dependencies": [
+        "TASK-002-1ae8f475"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F2-COND-1",
+        "architecture-condition:F2-COND-2",
+        "architecture-condition:F2-COND-3",
+        "architecture-condition:F2-COND-4"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 2,
+        "changed_lines_upper_bound": 70,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-004-f1af10ca",
+      "title": "Implement changes under scripts/registry/generate_agent_compatibility.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/registry/generate_agent_compatibility.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/registry/generate_agent_compatibility.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/registry/generate_agent_compatibility.py."
+      ],
+      "dependencies": [
+        "TASK-003-974dfa70"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F2-COND-1",
+        "architecture-condition:F2-COND-2",
+        "architecture-condition:F2-COND-3",
+        "architecture-condition:F2-COND-4"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 2,
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-005-dd3d41b7",
+      "title": "Implement changes under scripts/registry/generate_docs.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/registry/generate_docs.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/registry/generate_docs.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/registry/generate_docs.py."
+      ],
+      "dependencies": [
+        "TASK-004-f1af10ca"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F2-COND-1",
+        "architecture-condition:F2-COND-2",
+        "architecture-condition:F2-COND-3",
+        "architecture-condition:F2-COND-4"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-006-2f1817d4",
+      "title": "Implement changes under scripts/registry/models.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/registry/models.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/registry/models.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/registry/models.py."
+      ],
+      "dependencies": [
+        "TASK-005-dd3d41b7"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F2-COND-1",
+        "architecture-condition:F2-COND-2",
+        "architecture-condition:F2-COND-3",
+        "architecture-condition:F2-COND-4"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-007-ab24f638",
+      "title": "Implement changes under scripts/registry/platform_detection.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/registry/platform_detection.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/registry/platform_detection.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/registry/platform_detection.py."
+      ],
+      "dependencies": [
+        "TASK-006-2f1817d4"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F2-COND-1",
+        "architecture-condition:F2-COND-2",
+        "architecture-condition:F2-COND-3",
+        "architecture-condition:F2-COND-4"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-008-0c7d07e6",
+      "title": "Implement changes under scripts/registry/schema.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/registry/schema.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/registry/schema.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/registry/schema.py."
+      ],
+      "dependencies": [
+        "TASK-007-ab24f638"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F2-COND-1",
+        "architecture-condition:F2-COND-2",
+        "architecture-condition:F2-COND-3",
+        "architecture-condition:F2-COND-4"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-009-c352291e",
+      "title": "Implement changes under scripts/registry/skills.d/migration-program-manager.yaml",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/registry/skills.d/migration-program-manager.yaml in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/registry/skills.d/migration-program-manager.yaml"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/registry/skills.d/migration-program-manager.yaml."
+      ],
+      "dependencies": [
+        "TASK-008-0c7d07e6"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F2-COND-1",
+        "architecture-condition:F2-COND-2",
+        "architecture-condition:F2-COND-3",
+        "architecture-condition:F2-COND-4"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-010-ae3b83ec",
+      "title": "Implement changes under scripts/registry/skills.d/pr-gatekeeper.yaml",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/registry/skills.d/pr-gatekeeper.yaml in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/registry/skills.d/pr-gatekeeper.yaml"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/registry/skills.d/pr-gatekeeper.yaml."
+      ],
+      "dependencies": [
+        "TASK-009-c352291e"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F2-COND-1",
+        "architecture-condition:F2-COND-2",
+        "architecture-condition:F2-COND-3",
+        "architecture-condition:F2-COND-4"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-011-9baea2da",
+      "title": "Implement changes under skills/migration-program-manager/scripts/aggregate_migration_status.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path skills/migration-program-manager/scripts/aggregate_migration_status.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "skills/migration-program-manager/scripts/aggregate_migration_status.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/migration-program-manager/scripts/aggregate_migration_status.py."
+      ],
+      "dependencies": [
+        "TASK-010-ae3b83ec"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F2-COND-1",
+        "architecture-condition:F2-COND-2",
+        "architecture-condition:F2-COND-3",
+        "architecture-condition:F2-COND-4"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-012-7d430903",
+      "title": "Implement changes under skills/pr-gatekeeper/reference/idempotency.md",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path skills/pr-gatekeeper/reference/idempotency.md in luckyrjain/software-builder.",
+      "target_paths": [
+        "skills/pr-gatekeeper/reference/idempotency.md"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/pr-gatekeeper/reference/idempotency.md."
+      ],
+      "dependencies": [
+        "TASK-011-9baea2da"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F2-COND-1",
+        "architecture-condition:F2-COND-2",
+        "architecture-condition:F2-COND-3",
+        "architecture-condition:F2-COND-4"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-013-7e74b5cc",
+      "title": "Implement changes under skills/pr-gatekeeper/scripts/idempotency_store.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path skills/pr-gatekeeper/scripts/idempotency_store.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "skills/pr-gatekeeper/scripts/idempotency_store.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/pr-gatekeeper/scripts/idempotency_store.py.",
+        "scripts/tests/test_platform_detection.py",
+        "scripts/tests/test_schema.py",
+        "scripts/tests/test_crosscheck.py",
+        "scripts/tests/test_install_engine_platform_gate.py",
+        "skills/pr-gatekeeper/tests/test_idempotency_store.py",
+        "make lint-python",
+        "make generate --check"
+      ],
+      "dependencies": [
+        "TASK-012-7d430903"
+      ],
+      "required_tests": [
+        "scripts/tests/test_platform_detection.py",
+        "scripts/tests/test_schema.py",
+        "scripts/tests/test_crosscheck.py",
+        "scripts/tests/test_install_engine_platform_gate.py",
+        "skills/pr-gatekeeper/tests/test_idempotency_store.py",
+        "make lint-python",
+        "make generate --check"
+      ],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:F2-COND-1",
+        "architecture-condition:F2-COND-2",
+        "architecture-condition:F2-COND-3",
+        "architecture-condition:F2-COND-4"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM"
+      }
+    }
+  ],
+  "execution_waves": [
+    [
+      "TASK-001-e4e558f9"
+    ],
+    [
+      "TASK-002-1ae8f475"
+    ],
+    [
+      "TASK-003-974dfa70"
+    ],
+    [
+      "TASK-004-f1af10ca"
+    ],
+    [
+      "TASK-005-dd3d41b7"
+    ],
+    [
+      "TASK-006-2f1817d4"
+    ],
+    [
+      "TASK-007-ab24f638"
+    ],
+    [
+      "TASK-008-0c7d07e6"
+    ],
+    [
+      "TASK-009-c352291e"
+    ],
+    [
+      "TASK-010-ae3b83ec"
+    ],
+    [
+      "TASK-011-9baea2da"
+    ],
+    [
+      "TASK-012-7d430903"
+    ],
+    [
+      "TASK-013-7e74b5cc"
+    ]
+  ],
+  "sequencing_constraints": [
+    "Tasks execute in deterministic dependency-wave order."
+  ],
+  "verification_gates": [
+    "Every required test, task verification, and traceability item is satisfied."
+  ],
+  "traceability": {
+    "condition_coverage": {
+      "architecture-condition:F2-COND-1": [
+        "TASK-001-e4e558f9",
+        "TASK-002-1ae8f475",
+        "TASK-003-974dfa70",
+        "TASK-004-f1af10ca",
+        "TASK-005-dd3d41b7",
+        "TASK-006-2f1817d4",
+        "TASK-007-ab24f638",
+        "TASK-008-0c7d07e6",
+        "TASK-009-c352291e",
+        "TASK-010-ae3b83ec",
+        "TASK-011-9baea2da",
+        "TASK-012-7d430903",
+        "TASK-013-7e74b5cc"
+      ],
+      "architecture-condition:F2-COND-2": [
+        "TASK-001-e4e558f9",
+        "TASK-002-1ae8f475",
+        "TASK-003-974dfa70",
+        "TASK-004-f1af10ca",
+        "TASK-005-dd3d41b7",
+        "TASK-006-2f1817d4",
+        "TASK-007-ab24f638",
+        "TASK-008-0c7d07e6",
+        "TASK-009-c352291e",
+        "TASK-010-ae3b83ec",
+        "TASK-011-9baea2da",
+        "TASK-012-7d430903",
+        "TASK-013-7e74b5cc"
+      ],
+      "architecture-condition:F2-COND-3": [
+        "TASK-001-e4e558f9",
+        "TASK-002-1ae8f475",
+        "TASK-003-974dfa70",
+        "TASK-004-f1af10ca",
+        "TASK-005-dd3d41b7",
+        "TASK-006-2f1817d4",
+        "TASK-007-ab24f638",
+        "TASK-008-0c7d07e6",
+        "TASK-009-c352291e",
+        "TASK-010-ae3b83ec",
+        "TASK-011-9baea2da",
+        "TASK-012-7d430903",
+        "TASK-013-7e74b5cc"
+      ],
+      "architecture-condition:F2-COND-4": [
+        "TASK-001-e4e558f9",
+        "TASK-002-1ae8f475",
+        "TASK-003-974dfa70",
+        "TASK-004-f1af10ca",
+        "TASK-005-dd3d41b7",
+        "TASK-006-2f1817d4",
+        "TASK-007-ab24f638",
+        "TASK-008-0c7d07e6",
+        "TASK-009-c352291e",
+        "TASK-010-ae3b83ec",
+        "TASK-011-9baea2da",
+        "TASK-012-7d430903",
+        "TASK-013-7e74b5cc"
+      ]
+    },
+    "action_coverage": {},
+    "required_test_coverage": {
+      "scripts/tests/test_platform_detection.py": [
+        "TASK-013-7e74b5cc"
+      ],
+      "scripts/tests/test_schema.py": [
+        "TASK-013-7e74b5cc"
+      ],
+      "scripts/tests/test_crosscheck.py": [
+        "TASK-013-7e74b5cc"
+      ],
+      "scripts/tests/test_install_engine_platform_gate.py": [
+        "TASK-013-7e74b5cc"
+      ],
+      "skills/pr-gatekeeper/tests/test_idempotency_store.py": [
+        "TASK-013-7e74b5cc"
+      ],
+      "make lint-python": [
+        "TASK-013-7e74b5cc"
+      ],
+      "make generate --check": [
+        "TASK-013-7e74b5cc"
+      ]
+    }
+  }
+}

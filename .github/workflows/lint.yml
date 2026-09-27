@@ -149,6 +149,7 @@ jobs:
           scripts/tests/test_install_engine_locking.py
           scripts/tests/test_install_engine_uninstall.py
           scripts/tests/test_install_engine_lock_hardening.py
+          scripts/tests/test_install_engine_platform_gate.py
           scripts/tests/test_registry_root_lock.py
 
       - name: sb snapshot build tests
