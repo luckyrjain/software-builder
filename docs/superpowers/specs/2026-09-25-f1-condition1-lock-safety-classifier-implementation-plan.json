@@ -1,0 +1,327 @@
+{
+  "plan_set_id": "PLANSET-a76bc2a5692b",
+  "plan_id": "PLANSET-a76bc2a5692b-ef4a510c",
+  "title": "F1 Condition 1: lock-safety static classifier",
+  "readiness": "READY",
+  "assessment_target": {
+    "repo": "luckyrjain/software-builder"
+  },
+  "target_repo": "luckyrjain/software-builder",
+  "external_dependencies": [],
+  "source_refs": [
+    "architecture_review_report:163d711c4b74ce4337ec1ac61bc42eeca2fe96a1d3c913da0e0fb440bd0ce3b7",
+    "change_impact_report:37210b4aa0d4b33f705085e5a3310f32f7c5d07840141a64eeb375f0b1b7d9a4",
+    "system_design_spec:142af759c76fcfb8d3a541919b81b10c19d66b7a67bddc44974b8fe6aa50203b"
+  ],
+  "tasks": [
+    {
+      "task_id": "TASK-001-3e21cfdf",
+      "title": "Implement changes under docs/sensitive-paths.yaml",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path docs/sensitive-paths.yaml in luckyrjain/software-builder.",
+      "target_paths": [
+        "docs/sensitive-paths.yaml"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for docs/sensitive-paths.yaml."
+      ],
+      "dependencies": [],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:AR-COND-1",
+        "architecture-condition:AR-COND-2",
+        "architecture-condition:AR-COND-3"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 100,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-002-abb546dc",
+      "title": "Implement changes under scripts/README.md",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/README.md in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/README.md"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/README.md."
+      ],
+      "dependencies": [
+        "TASK-001-3e21cfdf"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:AR-COND-1",
+        "architecture-condition:AR-COND-2",
+        "architecture-condition:AR-COND-3"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 100,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-003-40b8960e",
+      "title": "Implement changes under scripts/check_review_evidence.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/check_review_evidence.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/check_review_evidence.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/check_review_evidence.py."
+      ],
+      "dependencies": [
+        "TASK-002-abb546dc"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:AR-COND-1",
+        "architecture-condition:AR-COND-2",
+        "architecture-condition:AR-COND-3"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 100,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-004-05fc6860",
+      "title": "Implement changes under scripts/lock_safety_patterns.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/lock_safety_patterns.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/lock_safety_patterns.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/lock_safety_patterns.py."
+      ],
+      "dependencies": [
+        "TASK-003-40b8960e"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:AR-COND-1",
+        "architecture-condition:AR-COND-2",
+        "architecture-condition:AR-COND-3"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 100,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-005-cf74beb9",
+      "title": "Implement changes under scripts/tests/test_check_review_evidence.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/tests/test_check_review_evidence.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/tests/test_check_review_evidence.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/tests/test_check_review_evidence.py."
+      ],
+      "dependencies": [
+        "TASK-004-05fc6860"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:AR-COND-1",
+        "architecture-condition:AR-COND-2",
+        "architecture-condition:AR-COND-3"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 100,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-006-c3020289",
+      "title": "Implement changes under scripts/tests/test_lock_safety_patterns.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/tests/test_lock_safety_patterns.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/tests/test_lock_safety_patterns.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/tests/test_lock_safety_patterns.py.",
+        "scripts/tests/test_lock_safety_patterns.py",
+        "scripts/tests/test_check_review_evidence.py",
+        "make lint-python",
+        "make lint-actions-pinning",
+        "make lint-actions-security"
+      ],
+      "dependencies": [
+        "TASK-005-cf74beb9"
+      ],
+      "required_tests": [
+        "scripts/tests/test_lock_safety_patterns.py",
+        "scripts/tests/test_check_review_evidence.py",
+        "make lint-python",
+        "make lint-actions-pinning",
+        "make lint-actions-security"
+      ],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:AR-COND-1",
+        "architecture-condition:AR-COND-2",
+        "architecture-condition:AR-COND-3"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 100,
+        "confidence": "MEDIUM"
+      }
+    }
+  ],
+  "execution_waves": [
+    [
+      "TASK-001-3e21cfdf"
+    ],
+    [
+      "TASK-002-abb546dc"
+    ],
+    [
+      "TASK-003-40b8960e"
+    ],
+    [
+      "TASK-004-05fc6860"
+    ],
+    [
+      "TASK-005-cf74beb9"
+    ],
+    [
+      "TASK-006-c3020289"
+    ]
+  ],
+  "sequencing_constraints": [
+    "Tasks execute in deterministic dependency-wave order."
+  ],
+  "verification_gates": [
+    "Every required test, task verification, and traceability item is satisfied."
+  ],
+  "traceability": {
+    "condition_coverage": {
+      "architecture-condition:AR-COND-1": [
+        "TASK-001-3e21cfdf",
+        "TASK-002-abb546dc",
+        "TASK-003-40b8960e",
+        "TASK-004-05fc6860",
+        "TASK-005-cf74beb9",
+        "TASK-006-c3020289"
+      ],
+      "architecture-condition:AR-COND-2": [
+        "TASK-001-3e21cfdf",
+        "TASK-002-abb546dc",
+        "TASK-003-40b8960e",
+        "TASK-004-05fc6860",
+        "TASK-005-cf74beb9",
+        "TASK-006-c3020289"
+      ],
+      "architecture-condition:AR-COND-3": [
+        "TASK-001-3e21cfdf",
+        "TASK-002-abb546dc",
+        "TASK-003-40b8960e",
+        "TASK-004-05fc6860",
+        "TASK-005-cf74beb9",
+        "TASK-006-c3020289"
+      ]
+    },
+    "action_coverage": {},
+    "required_test_coverage": {
+      "scripts/tests/test_lock_safety_patterns.py": [
+        "TASK-006-c3020289"
+      ],
+      "scripts/tests/test_check_review_evidence.py": [
+        "TASK-006-c3020289"
+      ],
+      "make lint-python": [
+        "TASK-006-c3020289"
+      ],
+      "make lint-actions-pinning": [
+        "TASK-006-c3020289"
+      ],
+      "make lint-actions-security": [
+        "TASK-006-c3020289"
+      ]
+    }
+  }
+}

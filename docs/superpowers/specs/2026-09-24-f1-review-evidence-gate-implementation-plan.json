@@ -1,0 +1,469 @@
+{
+  "plan_set_id": "PLANSET-2ede6113bb7b",
+  "plan_id": "PLANSET-2ede6113bb7b-ef4a510c",
+  "title": "F1 review-evidence gate (Track B)",
+  "readiness": "READY",
+  "assessment_target": {
+    "repo": "luckyrjain/software-builder"
+  },
+  "target_repo": "luckyrjain/software-builder",
+  "external_dependencies": [],
+  "source_refs": [
+    "architecture_review_report:a4fc330e3560ef4f24213b2f8b1a52643f147785503994a228e2c5e602b219e1",
+    "change_impact_report:2b55cd7080ad17f9e3656059258469964ba0a9e83483b1d906044ac3cbbdaaa5",
+    "system_design_spec:6ec6dc685580997d3e987ae869d2a7fbfe6f052bb7405c69c701cd5900e2f45d"
+  ],
+  "tasks": [
+    {
+      "task_id": "TASK-001-3343c4b5",
+      "title": "Implement changes under .github/workflows/review-evidence.yml",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path .github/workflows/review-evidence.yml in luckyrjain/software-builder.",
+      "target_paths": [
+        ".github/workflows/review-evidence.yml"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for .github/workflows/review-evidence.yml."
+      ],
+      "dependencies": [],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:AR-COND-1",
+        "architecture-condition:AR-COND-2",
+        "architecture-condition:AR-COND-3"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 106,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-002-ba0ee78e",
+      "title": "Implement changes under docs/sensitive-paths.yaml",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path docs/sensitive-paths.yaml in luckyrjain/software-builder.",
+      "target_paths": [
+        "docs/sensitive-paths.yaml"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for docs/sensitive-paths.yaml."
+      ],
+      "dependencies": [
+        "TASK-001-3343c4b5"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:AR-COND-1",
+        "architecture-condition:AR-COND-2",
+        "architecture-condition:AR-COND-3"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 106,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-003-bae277f7",
+      "title": "Implement changes under scripts/README.md",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/README.md in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/README.md"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/README.md."
+      ],
+      "dependencies": [
+        "TASK-002-ba0ee78e"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:AR-COND-1",
+        "architecture-condition:AR-COND-2",
+        "architecture-condition:AR-COND-3"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 106,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-004-e2d7f4ca",
+      "title": "Implement changes under scripts/check_review_evidence.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/check_review_evidence.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/check_review_evidence.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/check_review_evidence.py."
+      ],
+      "dependencies": [
+        "TASK-003-bae277f7"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:AR-COND-1",
+        "architecture-condition:AR-COND-2",
+        "architecture-condition:AR-COND-3"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 106,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-005-a9e6fbe5",
+      "title": "Implement changes under scripts/check_sensitive_path_bypass.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/check_sensitive_path_bypass.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/check_sensitive_path_bypass.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/check_sensitive_path_bypass.py."
+      ],
+      "dependencies": [
+        "TASK-004-e2d7f4ca"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:AR-COND-1",
+        "architecture-condition:AR-COND-2",
+        "architecture-condition:AR-COND-3"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 106,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-006-0aca8c15",
+      "title": "Implement changes under scripts/sensitive_path_match.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/sensitive_path_match.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/sensitive_path_match.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/sensitive_path_match.py."
+      ],
+      "dependencies": [
+        "TASK-005-a9e6fbe5"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:AR-COND-1",
+        "architecture-condition:AR-COND-2",
+        "architecture-condition:AR-COND-3"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 105,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-007-f4273ddb",
+      "title": "Implement changes under scripts/tests/test_check_review_evidence.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/tests/test_check_review_evidence.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/tests/test_check_review_evidence.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/tests/test_check_review_evidence.py."
+      ],
+      "dependencies": [
+        "TASK-006-0aca8c15"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:AR-COND-1",
+        "architecture-condition:AR-COND-2",
+        "architecture-condition:AR-COND-3"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 105,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-008-727849d5",
+      "title": "Implement changes under scripts/tests/test_check_sensitive_path_bypass.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/tests/test_check_sensitive_path_bypass.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/tests/test_check_sensitive_path_bypass.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/tests/test_check_sensitive_path_bypass.py."
+      ],
+      "dependencies": [
+        "TASK-007-f4273ddb"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:AR-COND-1",
+        "architecture-condition:AR-COND-2",
+        "architecture-condition:AR-COND-3"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 105,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-009-032fdb25",
+      "title": "Implement changes under scripts/tests/test_sensitive_path_match.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/tests/test_sensitive_path_match.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/tests/test_sensitive_path_match.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/tests/test_sensitive_path_match.py.",
+        "scripts/tests/test_sensitive_path_match.py",
+        "scripts/tests/test_check_review_evidence.py",
+        "scripts/tests/test_check_sensitive_path_bypass.py",
+        "make lint-python",
+        "make lint-actions-pinning",
+        "make lint-actions-security",
+        "make lint-scripts-shellcheck"
+      ],
+      "dependencies": [
+        "TASK-008-727849d5"
+      ],
+      "required_tests": [
+        "scripts/tests/test_sensitive_path_match.py",
+        "scripts/tests/test_check_review_evidence.py",
+        "scripts/tests/test_check_sensitive_path_bypass.py",
+        "make lint-python",
+        "make lint-actions-pinning",
+        "make lint-actions-security",
+        "make lint-scripts-shellcheck"
+      ],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:AR-COND-1",
+        "architecture-condition:AR-COND-2",
+        "architecture-condition:AR-COND-3"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 105,
+        "confidence": "MEDIUM"
+      }
+    }
+  ],
+  "execution_waves": [
+    [
+      "TASK-001-3343c4b5"
+    ],
+    [
+      "TASK-002-ba0ee78e"
+    ],
+    [
+      "TASK-003-bae277f7"
+    ],
+    [
+      "TASK-004-e2d7f4ca"
+    ],
+    [
+      "TASK-005-a9e6fbe5"
+    ],
+    [
+      "TASK-006-0aca8c15"
+    ],
+    [
+      "TASK-007-f4273ddb"
+    ],
+    [
+      "TASK-008-727849d5"
+    ],
+    [
+      "TASK-009-032fdb25"
+    ]
+  ],
+  "sequencing_constraints": [
+    "Tasks execute in deterministic dependency-wave order."
+  ],
+  "verification_gates": [
+    "Every required test, task verification, and traceability item is satisfied."
+  ],
+  "traceability": {
+    "condition_coverage": {
+      "architecture-condition:AR-COND-1": [
+        "TASK-001-3343c4b5",
+        "TASK-002-ba0ee78e",
+        "TASK-003-bae277f7",
+        "TASK-004-e2d7f4ca",
+        "TASK-005-a9e6fbe5",
+        "TASK-006-0aca8c15",
+        "TASK-007-f4273ddb",
+        "TASK-008-727849d5",
+        "TASK-009-032fdb25"
+      ],
+      "architecture-condition:AR-COND-2": [
+        "TASK-001-3343c4b5",
+        "TASK-002-ba0ee78e",
+        "TASK-003-bae277f7",
+        "TASK-004-e2d7f4ca",
+        "TASK-005-a9e6fbe5",
+        "TASK-006-0aca8c15",
+        "TASK-007-f4273ddb",
+        "TASK-008-727849d5",
+        "TASK-009-032fdb25"
+      ],
+      "architecture-condition:AR-COND-3": [
+        "TASK-001-3343c4b5",
+        "TASK-002-ba0ee78e",
+        "TASK-003-bae277f7",
+        "TASK-004-e2d7f4ca",
+        "TASK-005-a9e6fbe5",
+        "TASK-006-0aca8c15",
+        "TASK-007-f4273ddb",
+        "TASK-008-727849d5",
+        "TASK-009-032fdb25"
+      ]
+    },
+    "action_coverage": {},
+    "required_test_coverage": {
+      "scripts/tests/test_sensitive_path_match.py": [
+        "TASK-009-032fdb25"
+      ],
+      "scripts/tests/test_check_review_evidence.py": [
+        "TASK-009-032fdb25"
+      ],
+      "scripts/tests/test_check_sensitive_path_bypass.py": [
+        "TASK-009-032fdb25"
+      ],
+      "make lint-python": [
+        "TASK-009-032fdb25"
+      ],
+      "make lint-actions-pinning": [
+        "TASK-009-032fdb25"
+      ],
+      "make lint-actions-security": [
+        "TASK-009-032fdb25"
+      ],
+      "make lint-scripts-shellcheck": [
+        "TASK-009-032fdb25"
+      ]
+    }
+  }
+}

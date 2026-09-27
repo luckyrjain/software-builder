@@ -1,0 +1,141 @@
+# Autonomous-engineer gap re-analysis (2026-09-24)
+
+Second pass on the goal from [2026-09-18-autonomous-engineer-gap-backlog.md](2026-09-18-autonomous-engineer-gap-backlog.md):
+let software-builder act as a trustworthy engineer that takes a task from ticket to reviewed PR.
+
+Method: four independent read-only re-verification passes over `skills/`, `skills.yaml`, `agent-hosts.yaml`,
+`docs/`, `evals/`, and `git log` against `origin/main` at `73090b3` (2026-09-24), each re-deriving evidence
+from current source rather than trusting the 2026-09-18 doc. Findings below are graded STILL OPEN /
+PARTIALLY ADDRESSED / NOW CLOSED against the original tickets, plus a new epic for gaps the first pass missed
+or that appeared in the work shipped since.
+
+**What shipped since 2026-09-18:** E6, A2, A3 (#281, #284, #286), then eleven rounds of adversarial review on
+A3's run log (#287, #291, #294). Separately — not tracked by the original backlog at all — nine PRs (#285,
+#288–#290, #292, #293, #295–#297) rewrote the install engine's locking around `flock`/`msvcrt`, hardened
+signal handling and atomic uninstall, and added Windows CI. Nothing else in the original backlog moved.
+
+**Doctrine:** unchanged, still holds (see the 2026-09-18 doc). Finding F1 below is about whether the
+project's own recent engineering actually went through it.
+
+---
+
+## Epic A: Trust foundation — re-verified
+
+| ID | Verdict | Evidence |
+|----|---------|----------|
+| A1 | **STILL OPEN**, acceptance needs rewording | `evals/live/` holds one uncertified case (`squad-map/single-repo-clean-map.yaml`); nothing for `loop-task-implementer`. Worse: the "existing harness" the ticket names is mock-tool-only (`docs/evals/LIVE-HARNESS.md:1-7`) — it answers every tool call from a fixture, so it structurally cannot produce real CI status, review rounds, or a merge outcome, and cannot exercise Builder/Reviewer subagent isolation. A1 needs a different runner before the ticket is even executable as written. |
+| A2 | Done (#281) | — |
+| A3 | Done (#284), then hardened 11 rounds (#287, #291, #294) | — |
+| A4 | **STILL OPEN**, same block | `docs/agent-compatibility.md:147`: `claude \| loop-task-implementer \| BLOCKED \| host.role.isolation, host.ci.status, host.pull_request.write`. `agent-hosts.yaml:121-138` unchanged since #262 (2026-09-13); its one RUNTIME evidence entry (a `squad-map` install, 2026-09-07) says isolation "was not exercised" and goes STALE around 2026-12-06 (90-day window, `agent-hosts.yaml:23`). |
+| A5 | **DONE, 2026-09-25** | Full doctrine chain: [architecture review](../specs/2026-09-25-a5-durable-state-checkpoint-architecture-review.md) (Approved with conditions, 4 conditions), [design](../specs/2026-09-25-a5-durable-state-checkpoint-design.md), [change-impact](../specs/2026-09-25-a5-durable-state-checkpoint-change-impact.md) (COMPLETE). Built `scripts/plan_state_store.py` (durable CAS store for `plan_execution_state`, keyed by `plan_id`, mirrors `run_log.py`'s directory/lock/permission conventions exactly, wraps the existing tested `advance_plan_execution_state` rather than reimplementing) and `scripts/builder_resume.py` (pure `FROM_SCRATCH`/`CONTINUE_FROM`/`ESCALATE` decision function reading git commit `Checkpoint:` trailers). Additive edits to `builder.md` (checkpoint-push cadence) and `orchestrator.md` (2 call-outs) — Builder now pushes after implementation-complete and tests-passing, not just at the end; a crash after either checkpoint leaves real git evidence instead of total loss. Both review lenses CLEAN on first pass — Lens A ran a real 8-process concurrent CAS stress test (120/120, no lost updates/corruption) and diffed the lock code line-by-line against `run_log.py`. Merged as [PR #301](https://github.com/luckyrjain/software-builder/pull/301) at `627a0fa`. Behaviorally dormant until a real `loop-task-implementer` run exercises the new paths (nothing else calls these modules yet). |
+| A6 | **DONE, 2026-09-27** | Full doctrine chain, 2 rounds of adversarial multi-persona design review (Security Architect, SRE, Software Architect — design revision 3 fixed a real exploit chain in the original allow list plus a vocabulary-mixing bug in the CAS-retry fork): [architecture review](../specs/2026-09-25-a6-enforcement-layer-architecture-review.md) (Approved with conditions, 4 conditions, all addressed), [design](../specs/2026-09-25-a6-enforcement-layer-design.md) (rev 3), [change-impact](../specs/2026-09-25-a6-enforcement-layer-change-impact.md) (COMPLETE). Shipped this repo's first host-enforced (not instruction-level) control: checked-in `.claude/settings.json` permission template (narrow allow list — status/diff/log/fetch/checkout, `run_log.py`/`validate_loop_lifecycle.py`/pytest/`make lint-*`; explicit deny — `reset --hard`, `clean -f`, `branch -D`, `merge`, `rm -rf`; deliberately excludes `add`/`commit`/`push`/`gh pr create`/`gh pr comment` after 2 review rounds found exploitable chains through them). Also shipped `scripts/task_lease.py` (non-blocking flock mutual exclusion, deterministic `SHA-256(repo, base_branch, task_id)` identity, explicitly distinct from `run_id`) and corrected A5's CAS-retry fork in `orchestrator.md` (was checking legacy `task.status` value `"BUILDING"` against the `plan_execution_state.task_statuses` field, which can only hold `PENDING/IN_PROGRESS/COMPLETE/BLOCKED` — fixed to `"IN_PROGRESS"`). `run_log.py`'s `EVENTS` tuple gained `lease_denied` plus its companion field-validation rule (12th hardening round). Both review lenses CLEAN. Merged as [PR #303](https://github.com/luckyrjain/software-builder/pull/303) at `22e024c`. **Live-verified post-merge against the real host** (not just asserted): all 5 deny patterns confirmed blocking outright, including inside compound/chained commands and for a legitimately-named `claude/*` branch delete — directly answering the architecture review's own Condition 1 uncertainty about compound-command matching; allow-list entries ran without prompting, with the caveat that this session's pre-existing permission mode couldn't fully isolate "new template allows this" from "session was already permissive" (deny-side result is unambiguous either way). |
+
+## Epic B: Engineer behaviors — re-verified
+
+All still open except two partials; no commit since 2026-09-18 touches this area.
+
+| ID | Verdict |
+|----|---------|
+| B1 clarify step | STILL OPEN — task selection gates only on "acceptance criteria are sufficiently concrete" (`orchestrator.md:135`), no branch to `engineering-decision-discovery` |
+| B2 lightweight plan path | STILL OPEN — `implementation-planner` unconditionally requires `system_design_spec`/`architecture_review_report`/`change_impact_report`; a missing one is "an explicit planning blocker" |
+| B3 bug-diagnosis regression gate | **PARTIALLY ADDRESSED** — a handoff row now exists (`cross-skill-escalation.md:137`), and the Reviewer has a generic, optional practice: "you may locally remove or revert the implementation and confirm that the test fails" (`reviewer.md:168`) plus a `required_regression_test` finding field. Not mandatory, not bug-diagnosis-specific, no dedicated envelope template |
+| B4 review-comment loop | STILL OPEN — zero mentions of PR comment ingestion/reply/re-request anywhere in `orchestrator.md` |
+| B5 flaky-CI policy | STILL OPEN — CI handling is binary (remediate vs. "infrastructure or pre-existing failure"), no rerun budget or flake taxonomy |
+| B6 convention capture | STILL OPEN — no such mechanism exists anywhere |
+| B7 app-run/UI verification | STILL OPEN — Builder verification is test/check execution only, no screenshot/browser/app-launch tier |
+| B8 post-merge + write-back | **PARTIALLY ADDRESSED** — post-merge verification is solid (`orchestrator.md:640-652`: fetches PR state, verifies merge + target-branch landing, "issuing a command is not proof of completion"). Tracker write-back is still absent — `run-queue.md` only *reads* the tracker; no status-comment or PR-link write-back exists to be authorized |
+
+Side finding: `orchestrator.md` grew 25% (4,011 → 5,014 words) from the run-log hardening rounds alone.
+
+## Epic C + D: Handoffs and scope expansion — re-verified
+
+**No drift at all.** All twelve tickets (C1–C8, D1–D4) remain STILL OPEN; no commit since 2026-09-18 touches
+any of these skills' composition/dependencies. Confirmed directly: none of the eight C1/C6 analysis skills
+(`security-review`, `dependency-upgrade-review`, `incident-rca`, `performance-review`, `tech-debt-assessor`,
+`database-review`, `observability-review`, `resilience-review`) reference `loop-task-implementer` anywhere;
+`implementation-planner` explicitly scopes out cross-repo work (D1); `pr-gatekeeper` explicitly says GitHub
+webhooks and auto-fix are "not built yet, roadmap item" (D4). 19 of 50 skills currently reference
+`loop-task-implementer` in their SKILL.md — the C/D-ticket skills are not among them.
+
+## Epic E: Hygiene — re-verified
+
+| ID | Verdict |
+|----|---------|
+| E1 | **STANDS** — `skills.yaml:2948-2950`: `backlog-runner` still `authority: read-only` with `permissions: {repository: write, merge: true}` in the same block |
+| E2 | **STILL OPEN**, mitigated but not fixed — ADR 0003's "38/38" is now wrong at 50 skills / 50 adversarial cases; 12+ specs still say "implementation not started" or "Approved design" for shipped work (e.g. Batch 5.2B/5.2C shipped as #145/#146/#149 but the spec still says otherwise); plan checkboxes for shipped work are mostly unchecked (0/52, 0/43, 5/33 examples). `docs/history/README.md` disclaims these as non-normative, but the per-file status banner it calls for is missing from most |
+| E4 | **NOW CLOSED** (was settled 2026-09-19, one day after the backlog was written) — #273/#275/#278 merged, #274/#276/#277 closed once #283 applied the same bumps; `gh pr list --state open` returns nothing |
+
+---
+
+## Epic F: New — dogfooding and operational gaps (found this pass)
+
+Not in the 2026-09-18 doc. Ordered by severity.
+
+| ID | Severity | Finding |
+|----|----------|---------|
+| **F1** | **P1, trust-adjacent** | **Software-builder's own recent engineering didn't go through its own doctrine.** All nine install-engine-hardening PRs (#285, #288–#290, #292, #293, #295–#297) have zero GitHub reviews (`required_approving_review_count: 0` in the branch ruleset) and no run-log trace (no `run-<hex>` id, no `chain_head`, no `loop-task-implementer` run mentioned in any PR body or commit since 2026-09-18). Review happened ad hoc, often post-merge: #289 shipped a lock-concurrency regression (the six-process test failed ~5/8 runs) that was only caught by a later review round and fixed in #292; #296 was opened with "I have not run an independent adversarial review round" and never updated its body once review did happen. This is how a real regression reached `main`. Not a literal ADR 0008 violation (that ADR scopes to what skills do to a *target* workspace), but it means the heaviest recent engineering on this repo produced zero data for A1's eval baseline, and skipped the "both lenses clean" gate that's supposed to catch exactly this. **Direction:** state an explicit dev-process policy for the software-builder repo itself — either dogfood `loop-task-implementer` on its own PRs, or explicitly exempt the repo and require human pre-merge review for concurrency-sensitive code as a substitute gate. |
+| **F2** | **P1** | **The only `repository-write` executor is POSIX-only, but `sb` now installs on native Windows.** `run_log.py:31` refuses to run outside POSIX by design, and pressure test #29 makes continuing unlogged "Wrong" — so on native Windows, `loop-task-implementer` always ends in `LOG_UNAVAILABLE` and can never complete a run. Two other skills (`pr-gatekeeper`'s `idempotency_store.py`, `migration-program-manager`'s `aggregate_migration_status.py`) do top-level `import fcntl` and fail outright with `ImportError` on Windows. Nothing in `skills.yaml`/`agent-hosts.yaml`/README declares per-skill platform support, so a Windows user gets a clean install of skills that can't run, and finds out mid-run. **Direction:** add a per-skill `platforms` registry field; have `sb` warn or refuse at install time for a skill the host can't run. |
+| **F3** | **P1, generalizes A1** | **Eval coverage is broad on paper, nearly zero from a real model run.** `evals/live/` = 1 of 50 skills. `evals/transcripts/` = 6 of 50. All 50 have golden fixtures, but 31 (including every review-lens-adjacent skill this project's own C-epic wants to wire to executors: security, database, performance, observability, resilience, dependency-upgrade) have only the mandatory injection fixture. Zero of 102 golden files carry `refresh_meta` — none has ever been refreshed from a real run — so the staleness checker (`check_golden_staleness.py`) silently skips all of them and reports clean. **Direction:** make the staleness check count (not skip) never-refreshed fixtures; put a live-case minimum on any analysis skill Epic C wires to an executor. |
+| **F4** | **P1** | **`pr-gatekeeper`'s idempotency store is a third, weaker concurrency path**, sitting on an unattended skill with comment authority. In `idempotency_store.py`: the lock wait has no timeout and is held across the whole gatekeeper subprocess (one hung run blocks every later webhook for that MR, permanently); no signal handling, so a SIGTERM releases the lock while the child may still be posting → duplicate run on the next webhook; exit code 1 is overloaded ("duplicate, skipped" and "child failed" both use it); no fsync, so a crash can leave an empty file that raises `JSONDecodeError` on every later call; a late/out-of-order webhook for an older head passes the staleness check and overwrites a newer mark. **Direction:** same treatment as the install engine got — lock timeout, forward signals to the child, distinct exit codes, fsync, reject an incoming head older than the stored one. |
+| **F5** | **P2** | Windows CI (`install-engine-windows`) is not required in the merge ruleset — only `lint-static`/`lint-suites` are — despite the Windows lock path (`msvcrt.locking()`, mandatory not advisory) needing two failed fixes before the real one landed (#296 → #297). **Direction:** make it required, at least scoped to changes under `scripts/install_engine.py`. |
+| **F6** | **P2** | No ADR exists for the lock-strategy rewrite (directory lock → `flock`/`msvcrt`) or its accepted NFS silent-no-op risk (`install_engine.py:336` doesn't detect NFS) — both sit inside ADR 0007's Consequences bullets instead. `docs/adr/README.md` requires a new ADR for a material platform-behavior change and an `## Amended <date>` section rather than an in-place rewrite; neither happened. **Direction:** file ADR 0009 for the lock/crash-recovery design; convert 0007's history into `Amended` sections. |
+| **F7** | **P2** | `CONTEXT.md` (last touched 2026-09-19) has no glossary entry for run log, run id, chain head, budget (task/time/session), or install lock — the trust vocabulary A2/A3 introduced lives only in `run-log.md`. Also: 26 of 50 skills have no `risk_class` at all, though `CONTEXT.md:259` says risk class governs guardrail strictness. **Direction:** add the glossary entries; either require `risk_class` on every skill or document it as derived from `permissions`. |
+| **F8** | **P2** | `make lint-framework` false-fails locally after a local `sb` snapshot build: the gitignored `cli/sb/_registry_snapshot/` isn't excluded from reference validation (only `docs/superpowers` and `.claude/worktrees` are), producing 48 dangling-link errors from bundled docs that link to unbundled `docs/superpowers/specs/...`. Also shows the shipped `sb` snapshot itself contains broken links. **Direction:** validate only git-tracked files, or exclude/rewrite `docs/superpowers` links when building the snapshot. |
+
+**Checked and clean:** registry has zero drift (50/50 skills match both directions, `generate --check` passes,
+8/2/40 write-authority split matches the ADR 0008 amendment); the vendored install engine is byte-identical
+to source; `migration-program-manager`'s aggregator already does `flock` + atomic write + corrupt-JSON handling
+correctly (its Windows import issue is F2, not a logic gap).
+
+### F1, promoted to a ticket
+
+**Reversed, 2026-09-25.** After Track B (review-evidence gate + Condition 1's lock-safety classifier +
+Condition 2's bot-health monitoring) was fully built and merged (#298/#299/#300/#301), the owner decided
+to remove the whole mechanism: it's a solo-maintainer repo, the gate's second-reviewer requirement could
+structurally never pass without provisioning a bot credential that was never set up (Phase 1 never
+happened), so `review-evidence-check` sat permanently red on every sensitive-path PR — noise, not
+protection. Removed in [PR #302](https://github.com/luckyrjain/software-builder/pull/302) (merged
+`f17e994`): 11 files deleted, 2 edited to drop dangling references, both review lenses clean, full test
+suite unaffected. The design/architecture-review/change-impact docs under `../specs/` are left as
+historical record. The underlying problem F1 was meant to solve (PRs #285/#288-297 merging with zero
+review evidence, #289's regression) is unaddressed again — if it recurs, the fix this time should
+probably be Track A (self-hosted `loop-task-implementer` review) or a human-discipline policy, not
+another automated gate a solo maintainer can't satisfy.
+
+| Field | Value |
+|---|---|
+| **ID** | F1 |
+| **Title** | Software-builder's own engineering doesn't go through its own write-authority doctrine |
+| **Size** | M (the decision is free; the substitute-gate build is the size) |
+| **Depends** | none |
+| **Priority** | P1, trust-adjacent — not a literal ADR 0008 violation (that ADR scopes to what skills do to a *target* workspace, not to this repo's own PRs), but the absence of any gate is what let a real regression (#289's lock-concurrency bug) reach `main` |
+| **Problem** | All nine install-engine-hardening PRs (#285, #288–#290, #292, #293, #295–#297) merged with zero GitHub reviews (`required_approving_review_count: 0`) and no run-log trace. Review, where it happened, was ad hoc and sometimes post-merge. |
+| **Acceptance** | A written, owner-approved policy exists for how software-builder's own concurrency-sensitive/crash-recovery code gets reviewed before merge, and it's actually followed on the next such PR — either evidenced by a `loop-task-implementer` run (run id + chain head in the PR body) or by a required human review recorded in the ruleset. |
+| **Decision this needs first** (owner, not design work) | Dogfood `loop-task-implementer` on software-builder's own repo, or exempt it and require human pre-merge review for concurrency-sensitive paths as a substitute gate. This is decision #6 in "Updated decisions needed" above — it is a policy choice, not an implementation question, so it isn't itself in scope for a system-design pass. |
+| **Route** | The choice above routes to `engineering-decision-discovery` (an unresolved engineering decision needing an evidence-backed challenge), matching how ticket E5 was routed in the 2026-09-18 doc. The two *mechanisms* on either side of that choice were handed to `system-design`, which produced [2026-09-24-f1-review-evidence-gate-design.md](../specs/2026-09-24-f1-review-evidence-gate-design.md) (Track A: dogfooded Builder/Reviewer loop via a frozen-skill-snapshot to solve the self-hosting bootstrap problem; Track B: a required `review-evidence-check` CI job — cheap, ships regardless of the decision, and directly closes the gap #289 exposed). Verdict: **Ready with open questions** (the decision itself, plus PR-volume sizing). The owner now has two concrete, comparable designs to decide between, plus a recommended rollout that lands Track B immediately either way. |
+| **Implementation status** | Track B, Phase 0 implemented via the full doctrine chain (`architecture-review` → `change-impact-analyzer` → `implementation-planner` → `loop-task-implementer`) on 2026-09-24: [architecture review](../specs/2026-09-24-f1-review-evidence-gate-architecture-review.md) (Approved with conditions), [change-impact report](../specs/2026-09-24-f1-review-evidence-gate-change-impact.md) (COMPLETE), [implementation plan](../specs/2026-09-24-f1-review-evidence-gate-implementation-plan.json) (READY). Built by an isolated Builder, independently reviewed by two isolated lenses across 2 generations — round 1 caught a critical PR-forgeable trust-boundary bypass in the analyze/post split (fixed by removing the PR-triggered analyze job and having the `workflow_run`-triggered post job recompute its own verdict from a base-pinned checkout) plus a critical wrong-commit-SHA bug in the bypass scanner and a missing self-protection entry (both fixed); round 2 came back clean of blocking findings. Result: [PR #298](https://github.com/luckyrjain/software-builder/pull/298) — a follow-up commit fixed a bootstrap crash in `review-evidence-check`/`-post` (the checker script doesn't exist on `main` until this PR itself lands, so the raw file-not-found now exits cleanly instead of crashing). All checks green, explicitly authorized and **merged** to `main` at `8d6d1a9` on 2026-09-24. Phase 0 is live, un-required. Known non-blocking follow-ups from that PR (both later fixed in [PR #299](https://github.com/luckyrjain/software-builder/pull/299), merged `41ccac6`): LENS-B-4 (stale design doc) and LENS-B-5 (cancelled-run no-op). **Condition 1 resolved 2026-09-25**: owner chose the narrow non-LLM static classifier; designed ([2026-09-25-f1-condition1-lock-safety-classifier-design.md](../specs/2026-09-25-f1-condition1-lock-safety-classifier-design.md)), built via the same doctrine chain, independently reviewed across 3 generations — rounds 1-2 each caught a real, live-reproduced bypass in the flagship `lock-without-tryfinally` rule (function/lambda scope boundary, keyword-arg detection, generator-expression laziness), round 3 clean; one accepted residual risk documented (async/coroutine deferral — repo has zero asyncio usage today). Merged as [PR #300](https://github.com/luckyrjain/software-builder/pull/300) at `7e66b6a` on 2026-09-24. `build_verdict` can now produce a real `approve`, not just the old placeholder `block`. **Phase 0.5 done 2026-09-25**: dry-ran `build_verdict` against all 9 historical PRs' real diffs. 6/9 approve, 3/9 block — but honestly caveated: the #289/#292 blocks are coincidental (an unrelated test-file idempotency-ordering match, not the real bug), since the actual #289 regression was a TOCTOU race in the old directory-based lock design that none of the 4 rules model (that whole design was later replaced by #296's flock rewrite, which the rules are actually grounded in); #296 itself gets one real false positive (`_try_lock`'s flock call has no own-function try/finally — protection is one level up in `held_lock()`, same shape as the `mr_lock()` false positive PR #300's own review found). Zero false-approvals observed. Recorded in the design doc's Capacity/Rollout sections. **Condition 2 was already resolved back in PR #298/#299's own remediation** (`bot_credential_health`/`ensure_bot_health_issue` in `scripts/check_sensitive_path_bypass.py`, folded into the already-scheduled weekly bypass scan per the architecture review's own suggestion — confirmed wired into `_run` and unit-tested; this was missed in an earlier status note here). With Conditions 1 and 2 both resolved, everything remaining on F1 is owner-only: provision `REVIEW_EVIDENCE_BOT_TOKEN`, then Phase 1's live smoke-test, then Phase 3's manual ruleset update. |
+
+---
+
+## Corrections to the 2026-09-18 doc
+
+1. **A1's acceptance criteria don't fit the tooling that exists.** "Run via the existing harness" can't produce CI/review/merge-outcome data, because that harness answers every tool call from a fixture. Reword the ticket around a runner that can actually dispatch real work, or scope A1 down to what the mock harness *can* certify.
+2. **A4's block is discoverable but not per-skill.** `agent-hosts.yaml` has no per-skill entries; `docs/agent-compatibility.md` is generated from it plus `skills.yaml`. Unblocking means adding the three missing capabilities to the `claude` host entry with fresh RUNTIME evidence — the existing one is already 11 days from going stale.
+3. **A5 is bigger than "Builder checkpoint."** The run log's own crash-recovery already assumes its state (`chain_head`, `pending`) survives a crash. It has nowhere durable to live. Durable storage for `plan_execution_state` is A5's actual first step, not an add-on.
+4. **E4 was already resolved** the day after the backlog was written — no action needed, just close it out in the tracker.
+
+## Updated decisions needed from the owner
+
+Same five as 2026-09-18 (target hosts, tracker of record, autonomy ceiling for merge, A2 budget numbers, E3
+release timing — still all open), plus:
+
+6. Does software-builder's own repository dogfood `loop-task-implementer` for its own engineering (F1), or is
+   it formally exempt with a substitute human-review gate for concurrency-sensitive code?
+7. Is native-Windows support for `loop-task-implementer` itself in scope, or is Windows install-only (skills
+   that can't run there refuse cleanly at install time) an acceptable near-term shape (F2)?
+
+## Updated suggested order
+
+`F1` (process decision, costs nothing to decide) → `E6, A2, A3` (done) → **A5's durable-state step** → `A1`
+(reworded) → `A4, A6` → `F2, F4` (both are real crash-safety bugs, cheap relative to their blast radius) →
+`B*` → `C*` → `D*`. `F5–F8` and the rest of `E*` can land opportunistically alongside any of the above.
