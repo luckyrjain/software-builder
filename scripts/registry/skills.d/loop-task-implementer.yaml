@@ -31,6 +31,13 @@ loop-task-implementer:
   risk_class:
   - merge
   - repository-write
+  # Defense-in-depth/explicitness only, not load-bearing correctness -- the auto-detector
+  # (scripts/registry/platform_detection.py) independently classifies this skill as ["posix"]
+  # from its scripts/run_log.py's fcntl usage alone (see gap-backlog F2 follow-up).
+  # validate_platform_declarations fails make generate --check/cmd_validate if this override
+  # ever drifts from that derivation.
+  platforms:
+  - posix
   version: 1.4.0
   type: orchestrator
   authority: repository-write

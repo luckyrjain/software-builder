@@ -4295,6 +4295,8 @@ skills:
     risk_class:
     - merge
     - repository-write
+    platforms:
+    - posix
     version: 1.4.0
     type: orchestrator
     authority: repository-write
