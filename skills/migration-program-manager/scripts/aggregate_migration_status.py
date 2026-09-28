@@ -6,12 +6,20 @@ output files. Computes org_rollup_item entries (org-rollup-schema.md, pg_migrati
 adapter) and persists per-service gate-signature state across runs so staleness
 ("gate unchanged for N days") can be computed even though MIGRATION_STATUS.yaml itself
 has no per-gate timestamp.
+
+Platform support (see docs/superpowers/specs/2026-09-27-f2-platform-support-design.md): this
+file requires ``fcntl`` (POSIX only). The import is guarded (mirroring
+``scripts/plan_state_store.py``/``scripts/task_lease.py``'s own independently-duplicated
+convention, not a shared helper) so a Windows import doesn't crash with a raw
+``ModuleNotFoundError``. A CLI-entrypoint guard in ``main()`` is sufficient here (unlike
+``idempotency_store.py``'s ``mr_lock()``-level guard) — this script's only real callers are CLI
+invocations of ``main()``; nothing calls ``_state_file_lock``/``build_rollup`` directly the way
+pr-gatekeeper's integrators call ``mr_lock()``.
 """
 
 from __future__ import annotations
 
 import argparse
-import fcntl
 import json
 import os
 import sys
@@ -25,6 +33,11 @@ try:
     import yaml
 except ImportError:  # pragma: no cover - exercised when PyYAML missing
     yaml = None  # type: ignore
+
+try:  # POSIX
+    import fcntl
+except ImportError:  # pragma: no cover - not POSIX
+    fcntl = None  # type: ignore[assignment]
 
 # GENERATED yaml-safety-bootstrap:start -- do not edit; run `make generate`. See scripts/registry/generate_yaml_safety_bootstrap.py
 _SCRIPT_DIR = Path(__file__).resolve().parent
@@ -483,6 +496,14 @@ def build_rollup(
 
 
 def main(argv: list[str] | None = None) -> int:
+    if fcntl is None:
+        print(
+            "error: aggregate_migration_status requires a POSIX platform (fcntl); "
+            "this platform is not supported",
+            file=sys.stderr,
+        )
+        return 1
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True, help="Path to a JSON program_manifest file")
     parser.add_argument("--staleness-threshold-days", type=int, required=True)

@@ -24,6 +24,7 @@ from scripts.registry.fragments import (
     load_fragment_skills,
     skills_fragments_dir,
 )
+from scripts.registry.platform_detection import ALLOWED_PLATFORMS, derive_platforms
 from scripts.yaml_safety import load_unique_yaml_file
 from scripts.yaml_safety import require_mapping as _require_mapping
 
@@ -310,7 +311,7 @@ def parse_registry(path: Path) -> Registry:
             errors.append(f"skills.{skill_id!r}: skill id must be a string")
             continue
         try:
-            skills[skill_id] = _parse_skill_entry(skill_id, entry_raw, host_ids)
+            skills[skill_id] = _parse_skill_entry(skill_id, entry_raw, host_ids, path.parent)
         except ValueError as exc:
             errors.append(str(exc))
     if errors:
@@ -357,7 +358,12 @@ def _parse_hosts(
     return hosts
 
 
-def _parse_skill_entry(skill_id: str, entry_raw: Any, host_ids: frozenset[str]) -> SkillEntry:
+def _parse_skill_entry(
+    skill_id: str,
+    entry_raw: Any,
+    host_ids: frozenset[str],
+    root: Path,
+) -> SkillEntry:
     entry = _require_mapping(entry_raw, f"skills.{skill_id}")
     invocation = str(entry.get("invocation", ""))
     if invocation not in ALLOWED_INVOCATION:
@@ -381,8 +387,17 @@ def _parse_skill_entry(skill_id: str, entry_raw: Any, host_ids: frozenset[str]) 
     capabilities = _parse_capabilities(entry.get("capabilities"), skill_id)
     risk_class = _parse_risk_class(entry.get("risk_class"), skill_id)
 
+    # The skill's on-disk directory, computed independently -- same fallback logic
+    # paths.skill_dir()/package_skill._resolve_source_dir use (root / path, falling back to
+    # root / skill_id), but resolved locally here rather than by calling
+    # package_skill._resolve_source_dir itself, which calls parse_registry() and would recurse
+    # straight back into this very per-skill loop (see design doc revision 3->4, the
+    # circular-recursion trap round 3 found and fixed).
+    skill_path = str(entry.get("path", skill_id))
+    platforms = _parse_platforms(entry.get("platforms"), skill_id, root / skill_path)
+
     return SkillEntry(
-        path=str(entry.get("path", skill_id)),
+        path=skill_path,
         category=str(entry.get("category", "")),
         invocation=invocation,
         hosts=hosts,
@@ -397,6 +412,7 @@ def _parse_skill_entry(skill_id: str, entry_raw: Any, host_ids: frozenset[str]) 
         composition=composition,
         capabilities=capabilities,
         risk_class=risk_class,
+        platforms=platforms,
     )
 
 
@@ -525,4 +541,31 @@ def _parse_risk_class(raw: Any, skill_id: str) -> list[str]:
     unknown = sorted({item for item in parsed if item not in ALLOWED_RISK_CLASSES})
     if unknown:
         raise ValueError(f"skills.{skill_id}.risk_class invalid values: {', '.join(unknown)}")
+    return parsed
+
+
+def _parse_platforms(raw: Any, skill_id: str, skill_dir: Path) -> list[str]:
+    """Resolve one skill's `platforms` value.
+
+    Absent (`raw is None`, the common case -- ticket F2's architecture review Condition 1
+    deliberately avoids a required, hand-authored field, given this repo's own recorded F7
+    finding that a required field does not reliably get populated) -> derived fresh via
+    `platform_detection.derive_platforms(skill_dir)` on every load (generate, validate, and
+    install alike all resolve through this same function, so all three see the same value for
+    the same on-disk content).
+
+    Present -> validated as an enum-checked non-empty list, following `_parse_risk_class`'s exact
+    precedent -- but never compared against a fresh derivation *here*. A mismatch between an
+    explicit override and what the auto-detector would derive is `validate_platform_declarations`
+    (scripts/registry/crosscheck.py)'s job, a separate validation-layer step; this function itself
+    never raises on that mismatch (design doc revision 2->3's correction).
+    """
+    if raw is None:
+        return derive_platforms(skill_dir)
+    if not isinstance(raw, list) or not raw:
+        raise ValueError(f"skills.{skill_id}.platforms must be a non-empty list")
+    parsed = [str(item) for item in raw]
+    unknown = sorted({item for item in parsed if item not in ALLOWED_PLATFORMS})
+    if unknown:
+        raise ValueError(f"skills.{skill_id}.platforms invalid values: {', '.join(unknown)}")
     return parsed

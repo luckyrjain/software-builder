@@ -77,6 +77,7 @@ def test_cli_install_returns_130_when_install_skill_raises_system_exit(
         dest_root=Path("/dest"),
         host_label="cursor",
         dry_run=False,
+        allow_unsupported_platform=False,
     )
 
     assert _cli_install(args) == 130

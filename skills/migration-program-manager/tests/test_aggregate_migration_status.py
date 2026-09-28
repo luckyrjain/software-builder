@@ -685,3 +685,36 @@ def test_state_file_lock_creates_lock_file(tmp_path: Path) -> None:
     state_path = tmp_path / "state.json"
     with _state_file_lock(str(state_path)):
         assert (tmp_path / "state.json.lock").exists()
+
+
+# --- F2 platform support: CLI-entrypoint guard --------------------------------------------------
+#
+# docs/superpowers/specs/2026-09-27-f2-platform-support-design.md: this script's only real
+# callers are CLI invocations of main(), confirmed sufficient for a CLI-entrypoint-only guard
+# (unlike idempotency_store.py's mr_lock()-level guard, needed because that file's documented
+# integration style calls mr_lock() directly, bypassing main()).
+
+
+def test_main_reports_a_clean_error_when_fcntl_is_unavailable(tmp_path, monkeypatch, capsys) -> None:
+    import aggregate_migration_status
+    from aggregate_migration_status import main
+
+    monkeypatch.setattr(aggregate_migration_status, "fcntl", None)
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text('[{"workspace_root": "/does/not/matter"}]', encoding="utf-8")
+
+    rc = main(
+        [
+            "--manifest", str(manifest),
+            "--staleness-threshold-days", "1",
+            "--state-path", str(tmp_path / "state.json"),
+            "--out-rollup", str(tmp_path / "rollup.json"),
+        ]
+    )
+
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert "posix" in captured.err.lower() or "platform" in captured.err.lower()
+    # Fails closed before touching the filesystem -- no rollup/state file written.
+    assert not (tmp_path / "rollup.json").exists()
+    assert not (tmp_path / "state.json").exists()

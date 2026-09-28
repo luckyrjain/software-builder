@@ -46,6 +46,25 @@ what is declared in `agent-hosts.yaml`, verified by whatever evidence is actuall
 ## Hosts
 """
 
+# Ticket F2's architecture review, Condition 4: a skill's `platforms` value (posix/windows,
+# skills.yaml) is a self-declared-or-auto-derived registry claim, cross-checked at
+# generate/validate time against a fresh AST-based re-derivation -- it is not a per-skill,
+# CI-verified guarantee. No per-skill Windows smoke-test precedent exists in this repository
+# today; only the shared install engine itself (`install-engine-windows` CI) is Windows-tested.
+PLATFORM_SUPPORT_DISCLAIMER = (
+    "**A note on `platforms`:** each skill's declared platform support (`posix`/`windows`, see "
+    "the skills table's Platforms column) is a registry-level claim -- either hand-authored or "
+    "derived by a purely syntactic AST scan of the skill's own scripts "
+    "(`scripts/registry/platform_detection.py`), cross-checked against a fresh derivation on "
+    "every `make generate`/`make validate`. It is **not** a CI-verified guarantee: this "
+    "repository has no per-skill Windows smoke-test precedent today, only "
+    "`scripts/install_engine.py`'s own shared install-engine Windows CI. `sb install`/`install.sh` "
+    "refuse an install whose declared platforms exclude the current one (override with "
+    "`--allow-unsupported-platform`), and the two scripts known to require POSIX "
+    "(`fcntl`) raise a clean, readable error instead of a raw traceback if reached anyway -- but "
+    "an inaccurate `platforms` declaration for any other skill would not be caught by CI."
+)
+
 _MATRIX_HEADER = """
 ## Host × skill compatibility
 
@@ -101,6 +120,7 @@ def render_agent_compatibility_doc(host_registry: HostRegistry, registry: Regist
         for alias_id in aliases:
             lines.append(f"| {_cell(alias_id)} | {_cell(host_registry.aliases[alias_id].id)} |")
 
+    lines.append("\n" + PLATFORM_SUPPORT_DISCLAIMER)
     lines.append(_MATRIX_HEADER.rstrip("\n"))
     for result in resolve_matrix(host_registry, registry):
         missing = ", ".join(result.missing_required) if result.missing_required else "—"

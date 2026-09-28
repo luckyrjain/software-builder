@@ -40,7 +40,13 @@ def test_cmd_install_raises_on_an_unrecognized_outcome_status(
         "install_skill",
         lambda *_a, **_kw: _FakeOutcome("demo", tmp_path / "demo", "something_new", "?"),
     )
-    args = argparse.Namespace(skill_ids=["demo"], host="cursor", target_dir=None, dry_run=False)
+    args = argparse.Namespace(
+        skill_ids=["demo"],
+        host="cursor",
+        target_dir=None,
+        dry_run=False,
+        allow_unsupported_platform=False,
+    )
 
     with pytest.raises(AssertionError, match="unhandled install outcome status"):
         sb_main._cmd_install(args)

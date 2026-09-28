@@ -48,6 +48,8 @@ from scripts.reference_utils import (
     OWNERSHIP_UNOWNED,
     classify_install_destination,
 )
+from scripts.registry.platform_detection import PERMISSIVE_DEFAULT
+from scripts.registry.schema import parse_registry
 from scripts.validate_references import validate_tree
 
 DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS = 30.0
@@ -60,6 +62,47 @@ _FORCE_QUIT_SIGNAL_COUNT = 3
 class LockTimeoutError(RuntimeError):
     """Raised when a live lock on (dest_root, skill) is still held after the configured wait
     timeout -- mirrors install.sh's own historical "timed out waiting for lock" error."""
+
+
+def _current_platform_label() -> str:
+    """This process's platform, in `platforms:`'s own vocabulary (`scripts/registry/
+    platform_detection.py`'s `ALLOWED_PLATFORMS`) -- exactly `"windows" if sys.platform ==
+    "win32" else "posix"`, matching this module's own existing `sys.platform == "win32"` branches
+    (see `_try_lock`/`_unlock`/`_terminate_signal` above) rather than inventing a new convention."""
+    return "windows" if sys.platform == "win32" else "posix"
+
+
+def _check_platform_supported(
+    skill_id: str,
+    repo_root: Path,
+    *,
+    allow_unsupported_platform: bool,
+) -> str | None:
+    """None when the install may proceed; otherwise the failure message to return.
+
+    Hooks in before ownership classification and before the dry-run short-circuit (so a dry-run
+    preview accurately reflects a refusal) -- see install_skill()'s call site. A skill absent from
+    the registry can't reach here (the caller already checked registry membership first); a skill
+    present but with no resolvable entry falls back to the permissive default, same as
+    `SkillEntry.platforms`'s own dataclass default, rather than refusing on an internal lookup gap.
+    """
+    registry = parse_registry(repo_root / "skills.yaml")
+    entry = registry.skills.get(skill_id)
+    supported = entry.platforms if entry is not None else list(PERMISSIVE_DEFAULT)
+    current = _current_platform_label()
+    if current in supported:
+        return None
+    message = (
+        f"{skill_id!r} declares platforms {supported!r}, which does not include this platform "
+        f"({current!r})"
+    )
+    if allow_unsupported_platform:
+        print(
+            f"warning: {message} -- proceeding because --allow-unsupported-platform was passed",
+            file=sys.stderr,
+        )
+        return None
+    return f"refusing to install: {message} (pass --allow-unsupported-platform to override)"
 
 
 def _lock_path_for(dest_root: Path, skill: str) -> Path:
@@ -528,12 +571,14 @@ def install_skill(
     host_label: str,
     dry_run: bool = False,
     wait_timeout: float = DEFAULT_LOCK_WAIT_TIMEOUT_SECONDS,
+    allow_unsupported_platform: bool = False,
 ) -> InstallOutcome:
     """Install one skill from repo_root into dest_root/skill_id, following install.sh's own
-    install_skill() sequence: validate -> early ownership check -> (dry-run short-circuit) ->
-    lock -> stage (same filesystem as dest_root) -> package -> validate references -> re-check
-    ownership -> back up any existing software-builder-owned install -> atomic replace ->
-    clean up the backup on success, or restore it and discard the stage on any failure.
+    install_skill() sequence: validate -> registry membership -> platform-support check ->
+    early ownership check -> (dry-run short-circuit) -> lock -> stage (same filesystem as
+    dest_root) -> package -> validate references -> re-check ownership -> back up any existing
+    software-builder-owned install -> atomic replace -> clean up the backup on success, or
+    restore it and discard the stage on any failure.
     """
     try:
         validate_skill_name(skill_id)
@@ -542,6 +587,15 @@ def install_skill(
             return InstallOutcome(
                 skill_id, dest_root / skill_id, "failed", f"{skill_id!r} is not in skills.yaml"
             )
+
+        # Platform-support gate (gap-backlog F2): before ownership classification and before the
+        # dry-run short-circuit, so a dry-run preview accurately reflects a refusal rather than
+        # reporting "would install" for a skill that install_skill() would actually refuse.
+        platform_failure = _check_platform_supported(
+            skill_id, repo_root, allow_unsupported_platform=allow_unsupported_platform
+        )
+        if platform_failure is not None:
+            return InstallOutcome(skill_id, dest_root / skill_id, "failed", platform_failure)
 
         skill_dest = dest_root / skill_id
         classification = classify_install_destination(skill_dest, skill_id=skill_id)
@@ -835,6 +889,7 @@ def _cli_install(args: argparse.Namespace) -> int:
             host_label=args.host_label,
             dry_run=args.dry_run,
             wait_timeout=wait_timeout,
+            allow_unsupported_platform=args.allow_unsupported_platform,
         )
     except (KeyboardInterrupt, SystemExit):
         # install_skill() already ran its own cleanup before re-raising (see the
@@ -886,6 +941,12 @@ def main(argv: list[str] | None = None) -> int:
     install_parser.add_argument("host_label")
     install_parser.add_argument("--repo-root", type=Path, required=True)
     install_parser.add_argument("--dry-run", action="store_true")
+    install_parser.add_argument(
+        "--allow-unsupported-platform",
+        action="store_true",
+        help="proceed (with a warning) when the skill's declared platforms exclude this one, "
+        "instead of refusing the install",
+    )
     install_parser.set_defaults(func=_cli_install)
 
     uninstall_parser = subparsers.add_parser("uninstall")

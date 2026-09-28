@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 # scripts/tests/install_lock_test_helpers.py's spawn_lock_holder is this repo's established
@@ -381,6 +384,101 @@ def test_default_unbounded_lock_wait_still_honors_sigterm(tmp_path: Path) -> Non
     finally:
         holder.kill()
         holder.wait()
+
+
+# --- F2 platform support: UnsupportedPlatformError / exit 5 ------------------------------------
+#
+# docs/superpowers/specs/2026-09-27-f2-platform-support-design.md: mr_lock() itself (not just
+# main()) must raise UnsupportedPlatformError when the guarded `import fcntl` failed, since the
+# documented "Python handler" integration style calls mr_lock()/should_process()/mark_processed()
+# directly, bypassing main() entirely.
+
+
+def test_mr_lock_raises_unsupported_platform_error_when_fcntl_is_none(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Direct mr_lock() call path (simulated sys.platform == "win32" via the guarded import
+    having already failed, i.e. the module-level `fcntl` name being None) -- exercises the
+    "Python handler" integrator style, which never goes through main() at all."""
+    monkeypatch.setattr(idempotency_store, "fcntl", None)
+    with pytest.raises(idempotency_store.UnsupportedPlatformError):
+        with idempotency_store.mr_lock(tmp_path, "group/repo", 1):
+            pass  # pragma: no cover - must never be reached
+
+
+def test_mr_lock_raises_before_touching_the_filesystem_when_fcntl_is_none(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(idempotency_store, "fcntl", None)
+    with pytest.raises(idempotency_store.UnsupportedPlatformError):
+        with idempotency_store.mr_lock(tmp_path, "group/repo", 2):
+            pass  # pragma: no cover
+    assert not (tmp_path / ".locks").exists()
+
+
+def _write_fake_fcntl_module(directory: Path) -> None:
+    """A directory containing a fake fcntl.py that raises ImportError the moment it's imported --
+    prepended onto a subprocess's PYTHONPATH, this shadows the real (POSIX-only, otherwise always
+    importable in this CI) `fcntl` module, so idempotency_store.py's own guarded `import fcntl`
+    genuinely fails and falls back to `fcntl = None` -- a real subprocess-level simulation of
+    "this platform has no fcntl," not a monkeypatch of an already-imported module."""
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "fcntl.py").write_text(
+        'raise ImportError("simulated: no fcntl on this platform")\n',
+        encoding="utf-8",
+    )
+
+
+def _run_with_simulated_missing_fcntl(*args: str, tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    fake_lib = tmp_path / "fake_fcntl_lib"
+    _write_fake_fcntl_module(fake_lib)
+    env = dict(os.environ)
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{fake_lib}{os.pathsep}{existing}" if existing else str(fake_lib)
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *args],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+
+def test_cli_check_exits_5_when_fcntl_is_unavailable(tmp_path: Path) -> None:
+    result = _run_with_simulated_missing_fcntl(
+        "--store-root", str(tmp_path / "store"),
+        "--project", "group/repo",
+        "--merge-request-iid", "1",
+        "--head-sha", "abc123",
+        "check",
+        tmp_path=tmp_path,
+    )
+    assert result.returncode == 5
+    assert "posix" in result.stderr.lower() or "platform" in result.stderr.lower()
+
+
+def test_cli_mark_exits_5_when_fcntl_is_unavailable(tmp_path: Path) -> None:
+    result = _run_with_simulated_missing_fcntl(
+        "--store-root", str(tmp_path / "store"),
+        "--project", "group/repo",
+        "--merge-request-iid", "2",
+        "--head-sha", "abc123",
+        "mark",
+        tmp_path=tmp_path,
+    )
+    assert result.returncode == 5
+
+
+def test_cli_run_if_new_exits_5_when_fcntl_is_unavailable(tmp_path: Path) -> None:
+    result = _run_with_simulated_missing_fcntl(
+        "--store-root", str(tmp_path / "store"),
+        "--project", "group/repo",
+        "--merge-request-iid", "3",
+        "--head-sha", "abc123",
+        "run-if-new", "--", sys.executable, "-c", "print('should not run')",
+        tmp_path=tmp_path,
+    )
+    assert result.returncode == 5
 
 
 def test_save_record_fsyncs_temp_file_then_directory(tmp_path: Path, monkeypatch) -> None:

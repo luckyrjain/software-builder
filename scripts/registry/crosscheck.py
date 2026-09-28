@@ -11,6 +11,7 @@ from scripts.registry.canonical_manifest import has_canonical_manifest_shape
 from scripts.registry.graph import detect_cycles
 from scripts.registry.load import load_deprecated_skills
 from scripts.registry.models import Registry
+from scripts.registry.platform_detection import derive_platforms
 from scripts.registry.repository_doc_sync import validate_repository_doc_layout_tree
 from scripts.registry.routing_sync import (
     validate_skill_not_these_subsets,
@@ -275,6 +276,40 @@ def _validate_stale_adapters(root: Path, registry: Registry) -> list[str]:
     ]
 
 
+def validate_platform_declarations(root: Path, registry: Registry) -> list[str]:
+    """Compare each skill's resolved `platforms` against a fresh derivation.
+
+    `SkillEntry.platforms` resolution itself (schema.py's `_parse_platforms`) never raises on an
+    override-vs-derivation mismatch -- a mismatch is data, not an exception. This is the separate,
+    dedicated validator that turns it into a `make generate --check`/`cmd_validate` failure
+    (design doc revision 2->3's correction). It must be called from *inside* `validate_registry()`
+    specifically, alongside its sibling `_validate_*` checks below -- `validate_registry()` is the
+    one function both `cmd_generate` (via `_validate_for_generate`) and `cmd_validate` (via
+    `_validate_all` -> `_validate_for_generate`) unconditionally share (confirmed by tracing
+    `scripts/registry/cli.py`'s actual call graph, design doc revision 3->4). Calling it from
+    anywhere else -- e.g. `_validate_all` directly -- would compile and pass a unit test of this
+    function in isolation while silently never being reached by `cmd_generate --check`.
+
+    For a skill whose fragment omits `platforms:` (the common case), `entry.platforms` already
+    *is* a fresh derivation (schema.py computed it exactly the same way, moments earlier in the
+    same parse) -- comparing it against another fresh derivation here is a no-op that always
+    matches, by construction, as long as the skill's `scripts/` tree hasn't changed in between.
+    Only an explicit `platforms:` override can actually diverge from a fresh derivation.
+    """
+    errors: list[str] = []
+    for skill_id in sorted(registry.skills):
+        entry = registry.skills[skill_id]
+        expected = derive_platforms(root / entry.path)
+        if sorted(entry.platforms) != sorted(expected):
+            errors.append(
+                f"error: {skill_id}: platforms {sorted(entry.platforms)} does not match the "
+                f"auto-detected value {sorted(expected)} -- update the platforms: override in "
+                f"scripts/registry/skills.d/{skill_id}.yaml to match, or remove it to use the "
+                "derived value"
+            )
+    return errors
+
+
 def validate_registry(root: Path) -> list[str]:
     registry_path = root / "skills.yaml"
     registry = parse_registry(registry_path)
@@ -290,6 +325,7 @@ def validate_registry(root: Path) -> list[str]:
     errors.extend(_validate_skill_frontmatter_shape(root, registry))
     errors.extend(_validate_automation_only_rules(registry))
     errors.extend(_validate_stale_adapters(root, registry))
+    errors.extend(validate_platform_declarations(root, registry))
     errors.extend(validate_skill_routing_references(root, registry))
     errors.extend(validate_skill_not_these_subsets(root, registry))
     errors.extend(validate_escalation_matrix(root, registry))

@@ -10,12 +10,22 @@ naming the current holder's pid), an fsync step before the atomic record replace
 signal forwarding to ``run-if-new``'s child subprocess (exit 4 when interrupted). Every
 flag/exit-code addition here is additive — codes 0/1/2 and every existing caller's
 behavior when the new flag is omitted are byte-for-byte unchanged.
+
+Platform support (see docs/superpowers/specs/2026-09-27-f2-platform-support-design.md): this
+file requires ``fcntl`` (POSIX only). The import is guarded (mirroring
+``scripts/plan_state_store.py``/``scripts/task_lease.py``'s own independently-duplicated
+convention, not a shared helper) so a Windows import doesn't crash with a raw
+``ModuleNotFoundError`` — ``mr_lock()`` itself raises ``UnsupportedPlatformError`` the moment
+it's actually invoked on a platform where the import failed, since this file's documented
+"Python handler" integration style (reference/idempotency.md) calls ``mr_lock()``/
+``should_process()``/``mark_processed()`` directly, bypassing ``main()``. ``main()`` catches it
+and exits ``5`` (codes 0-4 are already spoken for) with a clean message; a direct caller sees
+the exception itself.
 """
 
 from __future__ import annotations
 
 import argparse
-import fcntl
 import json
 import math
 import os
@@ -28,6 +38,11 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Iterator
+
+try:  # POSIX
+    import fcntl
+except ImportError:  # pragma: no cover - not POSIX
+    fcntl = None  # type: ignore[assignment]
 
 _SLUG_MAX_LENGTH = 128
 
@@ -46,6 +61,14 @@ _PID_TEXT_OFFSET = 1
 
 class LockTimeoutError(RuntimeError):
     """Raised when mr_lock's optional wait_timeout elapses before the lock is acquired."""
+
+
+class UnsupportedPlatformError(RuntimeError):
+    """Raised by ``mr_lock()`` when the guarded ``import fcntl`` failed (this platform has no
+    ``fcntl``, i.e. not POSIX). Raised inside ``mr_lock()`` itself, not just ``main()``, since a
+    "Python handler" integrator (reference/idempotency.md) calls ``mr_lock()``/
+    ``should_process()``/``mark_processed()`` directly, bypassing ``main()`` entirely — ``main()``
+    catches this and exits ``5`` with a clean message; a direct caller sees this exception."""
 
 
 def _safe_slug(value: str) -> str:
@@ -161,7 +184,14 @@ def mr_lock(
     ``mark``, and ``run-if-new`` alike, bounded or unbounded — not only when a bounded wait was
     requested, so a concurrently-waiting bounded caller's timeout error always names the real
     current holder rather than a stale one.
+
+    Raises :class:`UnsupportedPlatformError` immediately, before touching the filesystem, if the
+    guarded ``import fcntl`` at module load failed — this platform has no ``fcntl`` (not POSIX).
     """
+    if fcntl is None:
+        raise UnsupportedPlatformError(
+            "idempotency_store requires a POSIX platform (fcntl); this platform is not supported"
+        )
     lock_dir = root / ".locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
     safe_project = _safe_slug(project)
@@ -405,6 +435,9 @@ def main(argv: list[str] | None = None) -> int:
         except LockTimeoutError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 3
+        except UnsupportedPlatformError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 5
 
     try:
         with mr_lock(
@@ -420,6 +453,9 @@ def main(argv: list[str] | None = None) -> int:
     except LockTimeoutError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 3
+    except UnsupportedPlatformError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 5
 
 
 if __name__ == "__main__":
