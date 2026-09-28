@@ -20,10 +20,10 @@ what is declared in `agent-hosts.yaml`, verified by whatever evidence is actuall
 ### claude
 - **Verification:** VERIFIED
 - **Maintainer support:** BEST_EFFORT
-- **Isolation:** UNKNOWN
+- **Isolation:** STRONG
 - **Discovery surfaces:** LOCAL \(claude-project, claude-user\)
-- **Capabilities:** host.filesystem.read=AVAILABLE, host.repository.read_write=AVAILABLE
-- **Evidence:** RUNTIME: Ran \`bash scripts/install.sh --agent claude-project --target-dir \<scratch-repo\> squad-map\` from inside a live Claude Code session operating on this repository; confirmed the skill landed at \`\<scratch-repo\>/.claude/skills/squad-map/SKILL.md\` \(claude-project discovery target\) and re-read it back through the same session's filesystem access -- Claude Code is itself the host being verified, so this session's own read/write of the repository under test is the runtime observation. Isolation \(subagents/worktrees\) was not exercised by this run and stays UNKNOWN.
+- **Capabilities:** host.ci.status=AVAILABLE, host.filesystem.read=AVAILABLE, host.pull_request.write=AVAILABLE, host.repository.read_write=AVAILABLE, host.role.isolation=AVAILABLE
+- **Evidence:** RUNTIME: Ran \`bash scripts/install.sh --agent claude-project --target-dir \<scratch-repo\> squad-map\` from inside a live Claude Code session operating on this repository; confirmed the skill landed at \`\<scratch-repo\>/.claude/skills/squad-map/SKILL.md\` \(claude-project discovery target\) and re-read it back through the same session's filesystem access -- Claude Code is itself the host being verified, so this session's own read/write of the repository under test is the runtime observation. Isolation \(subagents/worktrees\) was not exercised by this run and stays UNKNOWN.; RUNTIME: Gap-backlog ticket A4: verified host.role.isolation, host.ci.status, and host.pull_request.write end to end, not just file placement, from inside a live Claude Code session operating on this repository -- resolves the 2026-09-07 entry's open "isolation was not exercised" gap. host.role.isolation: dispatched independent Builder and Reviewer subagents \(Claude Code's Agent tool\) across 6 real loop-task-implementer runs this session \(gap-backlog tickets F1, A5, A6, F4, F2, F2-followup\) -- each subagent starts with zero visibility into the orchestrating session's prior conversation or any other subagent's output, and returns its result only via an asynchronous completion notification the orchestrator cannot see into until it arrives, matching platform-adapters.md's documented isolation primitive for this host \("subagents or fresh sessions for role isolation"\). host.ci.status: read real GitHub Actions CI status for the exact head commit of every PR before every one of those 6 merges \(via \`gh pr checks\`/the ccd_pr status tool\), always gating merge on CI green and a clean merge state for that exact head, never on a Builder's own self-reported check results -- including waiting out still-pending checks rather than merging early. host.pull_request.write: real PR creation \(\`gh pr create\`, exercised by dispatched Builder subagents against this repository -- PRs #298, #299, #300, #301, #302, #303, #308, #309, #310\) and real PR merge \(\`gh pr merge --squash --delete-branch\`, exercised directly against luckyrjain/software-builder's actual \`main\` branch for every one of those merges\). All three capabilities were exercised repeatedly, not once, across a real, varied workload \(a new subsystem build, a full subsystem reversal, two core-executor changes, one high-criticality shared-registry-code change, and a small follow-up\) -- see docs/superpowers/plans/2026-09-28-a1-live-eval-baseline-results.md for the itemized results table this evidence is drawn from.
 
 ### codex
 - **Verification:** UNVERIFIED
@@ -146,7 +146,7 @@ concrete missing capability (`BLOCKED`) always takes precedence, matching
 | claude | issue-triage | BLOCKED | host.report.write, host.repository.read |
 | claude | k8s-overprovisioning-datadog | BLOCKED | kubernetes.metrics.history |
 | claude | local-diff-review | BLOCKED | host.report.write, host.repository.read |
-| claude | loop-task-implementer | BLOCKED | host.role.isolation, host.ci.status, host.pull_request.write |
+| claude | loop-task-implementer | DEGRADED | — |
 | claude | merge-conflict-analysis | BLOCKED | host.report.write, host.repository.read |
 | claude | migration-program-manager | DEGRADED | — |
 | claude | module-design | BLOCKED | host.report.write, host.repository.read |
