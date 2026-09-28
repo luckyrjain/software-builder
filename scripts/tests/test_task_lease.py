@@ -52,6 +52,26 @@ def test_derive_lease_id_differs_when_any_single_input_differs() -> None:
     assert derive_lease_id(REPO, BASE_BRANCH, "TASK-002") != base
 
 
+# --- clarify-entry lease formula (gap-backlog B1): input-side modification, zero task_lease.py changes ---
+
+
+def test_clarify_lease_id_is_derived_from_a_suffixed_task_id_never_colliding_with_the_builder_lease() -> None:
+    """derive_lease_id itself is completely unmodified (fixed 3-argument signature). B1's clarify-entry
+    lease is a *new usage* of it: f"{task_id}:clarify" passed as the existing task_id argument -- an
+    input-side modification, never a suffix appended to the output lease-id string."""
+    builder_lease = derive_lease_id(REPO, BASE_BRANCH, TASK_ID)
+    clarify_lease = derive_lease_id(REPO, BASE_BRANCH, f"{TASK_ID}:clarify")
+    assert clarify_lease != builder_lease
+    assert clarify_lease.startswith("lease-")
+    assert len(clarify_lease) == len("lease-") + 16
+    # Deterministic, same as the ordinary formula.
+    assert derive_lease_id(REPO, BASE_BRANCH, f"{TASK_ID}:clarify") == clarify_lease
+
+
+def test_clarify_lease_id_differs_per_task_even_though_the_suffix_is_shared() -> None:
+    assert derive_lease_id(REPO, BASE_BRANCH, "TASK-001:clarify") != derive_lease_id(REPO, BASE_BRANCH, "TASK-002:clarify")
+
+
 # --- single-process acquire/release --------------------------------------------------------------
 
 
@@ -216,6 +236,33 @@ def test_a_real_second_process_holding_the_lease_makes_try_acquire_return_none_i
 
     # The OS releases the holder's flock the instant its process (and fd) is gone: a fresh attempt
     # from this process now succeeds, with no stale-lease reclaim logic involved.
+    after = try_acquire(lease_dir, lease_id)
+    assert after is not None
+    after.release()
+
+
+@posix_only
+def test_a_real_second_process_holding_the_clarify_entry_lease_makes_try_acquire_return_none_immediately(
+    tmp_path: Path,
+) -> None:
+    """The same genuine cross-process contention guarantee, exercised against the clarify-entry
+    lease id (gap-backlog B1: derive_lease_id(repo, base_branch, f"{task_id}:clarify")) -- proves the
+    real OS lock actually serializes two Orchestrators racing to enter the clarify interview for the
+    same task, not just the ordinary Builder-dispatch lease."""
+    lease_dir = tmp_path / "leases"
+    lease_id = derive_lease_id(REPO, BASE_BRANCH, f"{TASK_ID}:clarify")
+
+    holder = _spawn_lease_holder(lease_dir, lease_id)
+    try:
+        started = time.monotonic()
+        result = try_acquire(lease_dir, lease_id)
+        elapsed = time.monotonic() - started
+        assert result is None
+        assert elapsed < 1.0
+    finally:
+        holder.kill()
+        holder.wait()
+
     after = try_acquire(lease_dir, lease_id)
     assert after is not None
     after.release()

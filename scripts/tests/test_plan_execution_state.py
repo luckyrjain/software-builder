@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
+
+import yaml
 
 from scripts.implementation_plan import (
+    EXECUTION_STATE_FIELDS,
     advance_plan_execution_state,
     canonical_plan_digest,
     derive_plan_id,
@@ -90,6 +94,7 @@ def test_execution_state_requires_plan_digest_and_monotonic_generation() -> None
         "observed_head_revision": "a" * 40,
         "blocked_reason": None,
         "updated_at": "2026-08-26T00:00:00Z",
+        "clarifications": {},
     }
     assert validate_plan_execution_state(state, plan, current_head="a" * 40) == []
     state["plan_digest"] = "b" * 64
@@ -110,6 +115,7 @@ def test_execution_state_blocks_stale_head_and_generation() -> None:
         "observed_head_revision": "a" * 40,
         "blocked_reason": None,
         "updated_at": "2026-08-26T00:00:00Z",
+        "clarifications": {},
     }
     errors = validate_plan_execution_state(state, plan, current_head="b" * 40, minimum_generation=1)
     assert any("generation" in error for error in errors)
@@ -130,9 +136,109 @@ def test_in_progress_task_without_matching_current_task_id_is_rejected() -> None
         "observed_head_revision": "a" * 40,
         "blocked_reason": None,
         "updated_at": "2026-08-26T00:00:00Z",
+        "clarifications": {},
     }
     errors = validate_plan_execution_state(state, plan, current_head="a" * 40)
     assert any("current_task_id must be the IN_PROGRESS task" in error for error in errors)
+
+
+# -- clarifications (gap-backlog B1) --------------------------------------------------------------
+
+
+def test_initial_plan_execution_state_seeds_empty_clarifications() -> None:
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    assert state["clarifications"] == {}
+    assert validate_plan_execution_state(state, plan, current_head="a" * 40) == []
+
+
+def test_validate_plan_execution_state_rejects_a_non_mapping_clarifications() -> None:
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    state["clarifications"] = ["not", "a", "mapping"]
+    errors = validate_plan_execution_state(state, plan, current_head="a" * 40)
+    assert any("clarifications must be a mapping" in error for error in errors)
+
+
+def test_reconcile_merges_clarifications_by_task_id_using_state_not_current() -> None:
+    """Regression test for the round-3 design bug: an earlier draft's reconcile line referenced a
+    variable named ``current``, which does not exist in reconcile_plan_execution_state's own scope
+    (only its ``state`` parameter and the deep-copied ``normalized`` do) and would raise NameError on
+    first use. The corrected line reads ``state.get("clarifications", {})``."""
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    state["clarifications"] = {
+        "TASK-001": {"status": "OPEN", "resolved_summary": None, "resolved_at": None},
+    }
+    reconciled, errors = reconcile_plan_execution_state(
+        state,
+        plan,
+        authoritative_task_statuses={"TASK-001": "NOT_STARTED", "TASK-002": "NOT_STARTED"},
+        current_head="a" * 40,
+        clarifications={
+            "TASK-002": {"status": "RESOLVED", "resolved_summary": "Use the existing retry budget.", "resolved_at": "2026-08-26T00:05:00Z"},
+        },
+    )
+    assert errors == []
+    assert reconciled is not None
+    # Pre-existing durable entries survive a call that resolves a different task_id...
+    assert reconciled["clarifications"]["TASK-001"] == {"status": "OPEN", "resolved_summary": None, "resolved_at": None}
+    # ...and the newly-supplied entry is merged in alongside it.
+    assert reconciled["clarifications"]["TASK-002"]["status"] == "RESOLVED"
+
+
+def test_reconcile_clarifications_new_entry_wins_on_key_conflict() -> None:
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    state["clarifications"] = {"TASK-001": {"status": "OPEN", "resolved_summary": None, "resolved_at": None}}
+    reconciled, errors = reconcile_plan_execution_state(
+        state,
+        plan,
+        authoritative_task_statuses={"TASK-001": "NOT_STARTED", "TASK-002": "NOT_STARTED"},
+        current_head="a" * 40,
+        clarifications={"TASK-001": {"status": "RESOLVED", "resolved_summary": "resolved on retry", "resolved_at": "2026-08-26T00:10:00Z"}},
+    )
+    assert errors == []
+    assert reconciled["clarifications"]["TASK-001"]["status"] == "RESOLVED"
+
+
+def test_reconcile_omits_clarifications_argument_leaves_durable_entries_untouched() -> None:
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    state["clarifications"] = {"TASK-001": {"status": "RESOLVED", "resolved_summary": "already resolved", "resolved_at": "2026-08-26T00:00:00Z"}}
+    reconciled, errors = reconcile_plan_execution_state(
+        state,
+        plan,
+        authoritative_task_statuses={"TASK-001": "BUILDING", "TASK-002": "NOT_STARTED"},
+        current_head="a" * 40,
+    )
+    assert errors == []
+    assert reconciled["clarifications"] == state["clarifications"]
+
+
+def test_advance_plan_execution_state_threads_clarifications_through() -> None:
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    advanced, errors = advance_plan_execution_state(
+        state,
+        plan,
+        expected_generation=0,
+        authoritative_task_statuses={"TASK-001": "BUILDING", "TASK-002": "NOT_STARTED"},
+        current_head="a" * 40,
+        updated_at="2026-08-26T00:01:00Z",
+        clarifications={"TASK-001": {"status": "OPEN", "resolved_summary": None, "resolved_at": None}},
+    )
+    assert errors == []
+    assert advanced["clarifications"]["TASK-001"]["status"] == "OPEN"
+
+
+def test_execution_state_fields_matches_state_schema_yaml_plan_execution_state_block() -> None:
+    """Companion drift-prevention test, mirroring run_log.py's EVENTS-vs-run-log.md precedent for a
+    different field: EXECUTION_STATE_FIELDS (Python) and state-schema.yaml's documented
+    plan_execution_state: key set must never silently diverge."""
+    schema_path = Path(__file__).resolve().parents[2] / "skills/loop-task-implementer/reference/state-schema.yaml"
+    schema = yaml.safe_load(schema_path.read_text(encoding="utf-8"))
+    assert set(schema["plan_execution_state"]) == EXECUTION_STATE_FIELDS
 
 
 def test_malformed_execution_state_fails_closed_without_raising() -> None:

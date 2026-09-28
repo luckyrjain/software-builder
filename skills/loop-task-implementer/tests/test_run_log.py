@@ -854,6 +854,25 @@ def test_a_session_gap_without_a_reported_duration_is_capped(run_log, log_dir):
     assert verdict["consumed"]["elapsed_minutes"] == pytest.approx(31.0) and verdict["exceeded"] == []
 
 
+def test_clarify_dispatched_and_returned_round_trip_and_are_charged_like_a_builder_session(run_log, log_dir):
+    """gap-backlog B1: clarify_dispatched/clarify_returned mirror builder_dispatched/builder_returned
+    exactly, including SESSION_RETURNS/USAGE_EVENTS membership -- a budget-exhaustion escalation
+    during the clarify sub-step's dispatch must be genuinely attributable, not indistinguishable from
+    a Builder/Reviewer timeout (round-3 finding)."""
+    _start(run_log, log_dir)
+    _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z", data={"task_id": "T-1"})
+    _append(run_log, log_dir, event="clarify_dispatched", actor="orchestrator", ts="2026-01-15T10:02:00.000Z", data={"task_id": "T-1", "attempt": 1})
+    returned = _append(
+        run_log, log_dir, event="clarify_returned", actor="orchestrator", ts="2026-01-15T10:20:00.000Z",
+        data={"task_id": "T-1", "status": "RESOLVED"}, usage={"input_tokens": 10, "elapsed_seconds": 1080},  # 18 minutes
+    )
+    assert "usage_missing" not in returned
+    verdict = _budget(run_log, log_dir, now="2026-01-15T10:21:00.000Z")
+    assert verdict["consumed"]["elapsed_minutes"] == pytest.approx(20.0)  # 1 + 18 + 1
+    assert verdict["consumed"]["estimated_tokens"] == 10
+    assert verdict["unmeasured"] == []
+
+
 def test_parallel_sessions_are_not_charged_twice(run_log, log_dir):
     _start(run_log, log_dir)
     _append(run_log, log_dir, ts="2026-01-15T10:01:00.000Z", data={"task_id": "T-1"})
@@ -1673,7 +1692,15 @@ def test_a_host_payload_with_a_split_and_a_matching_total_is_accepted(run_log, l
     }
 
 
-@pytest.mark.parametrize("event,actor", [("remediation_returned", "builder"), ("review_returned", "reviewer"), ("orchestrator_usage", "orchestrator")])
+@pytest.mark.parametrize(
+    "event,actor",
+    [
+        ("remediation_returned", "builder"),
+        ("review_returned", "reviewer"),
+        ("orchestrator_usage", "orchestrator"),
+        ("clarify_returned", "orchestrator"),
+    ],
+)
 def test_every_usage_event_is_expected_to_carry_usage(run_log, log_dir, event, actor):
     _start(run_log, log_dir)
     _append(run_log, log_dir, ts="2026-01-15T10:00:30.000Z", data={"task_id": "T-1"})

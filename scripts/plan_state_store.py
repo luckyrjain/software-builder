@@ -404,6 +404,7 @@ def cas_advance(
     updated_at: str,
     completed_evidence_refs: list[str] | None = None,
     blocked_reason: str | None = None,
+    clarifications: Mapping[str, Any] | None = None,
     timeout: float = LOCK_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
     """Advance one plan's durable checkpoint by exactly one generation, under a single exclusive-lock
@@ -413,6 +414,12 @@ def cas_advance(
     evidence already recorded by an earlier resume cycle), call the existing, already-tested
     ``advance_plan_execution_state`` with the merged refs, write the result via
     :func:`atomic_write_text`, and return it.
+
+    ``clarifications`` (gap-backlog B1) needs no separate merge step here: it is passed straight
+    through to ``advance_plan_execution_state`` (and from there to ``reconcile_plan_execution_state``),
+    which merges it by ``task_id`` directly against ``current`` -- the durable state this same
+    exclusive-lock critical section already read from disk -- so the merge against durably-stored
+    clarifications still happens under this one lock, the same as every other field here.
 
     Raises :class:`PlanStateCasError` when ``advance_plan_execution_state`` reports a generation
     mismatch (a concurrent writer already advanced past ``expected_generation``); the caller must
@@ -454,6 +461,7 @@ def cas_advance(
                 updated_at=updated_at,
                 completed_evidence_refs=merged_refs,
                 blocked_reason=blocked_reason,
+                clarifications=clarifications,
             )
             if errors or normalized is None:
                 raise PlanStateCasError(

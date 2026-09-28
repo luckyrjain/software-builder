@@ -66,6 +66,7 @@ EXECUTION_STATE_FIELDS = {
     "observed_head_revision",
     "blocked_reason",
     "updated_at",
+    "clarifications",
 }
 READINESS = {"READY", "PARTIAL", "BLOCKED"}
 TASK_TYPES = {"code", "config", "schema", "migration", "other"}
@@ -1146,6 +1147,8 @@ def validate_plan_execution_state(
         errors.append("error: plan_execution_state observed head is stale")
     if not isinstance(state.get("completed_evidence_refs"), list) or not all(non_empty_str(item) for item in state["completed_evidence_refs"]):
         errors.append("error: plan_execution_state.completed_evidence_refs must be a list of strings")
+    if not isinstance(state.get("clarifications"), Mapping):
+        errors.append("error: plan_execution_state.clarifications must be a mapping")
     if state.get("current_task_id") is not None and state.get("current_task_id") not in task_ids:
         errors.append("error: plan_execution_state.current_task_id is not a plan task")
     if isinstance(statuses, Mapping):
@@ -1376,6 +1379,7 @@ def initial_plan_execution_state(
         "observed_head_revision": current_head,
         "blocked_reason": None,
         "updated_at": updated_at,
+        "clarifications": {},
     }
 
 
@@ -1416,6 +1420,7 @@ def reconcile_plan_execution_state(
     completed_evidence_refs: list[str] | None = None,
     minimum_generation: int | None = None,
     blocked_reason: str | None = None,
+    clarifications: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """Reconcile advisory checkpoint data to official task state and current SCM head.
 
@@ -1423,6 +1428,13 @@ def reconcile_plan_execution_state(
     checkpoint: it is cleared whenever no task is reconciled to BLOCKED (even if the prior
     checkpoint still named a since-resolved reason), and only set when the caller supplies one
     for a task that authoritative state confirms is BLOCKED.
+
+    ``clarifications`` (gap-backlog B1) is merged directly against ``state`` here -- unlike
+    ``completed_evidence_refs``, whose durable-store union happens one layer up inside
+    ``cas_advance``, a task's clarify-step record is merged by ``task_id`` in this function
+    against the ``state`` this call was actually given, with new entries winning on key
+    conflict. ``state`` is this function's own parameter (not ``current`` -- that name belongs
+    to ``cas_advance``'s local variable one layer up and does not exist in this scope).
     """
     if plan.get("readiness") != "READY":
         return None, ["error: implementation_plan must be READY before execution-state reconciliation"]
@@ -1458,6 +1470,7 @@ def reconcile_plan_execution_state(
     normalized["observed_head_revision"] = current_head
     is_blocked = any(status == "BLOCKED" for status in normalized["task_statuses"].values())
     normalized["blocked_reason"] = blocked_reason if is_blocked else None
+    normalized["clarifications"] = {**state.get("clarifications", {}), **(clarifications or {})}
     return normalized, []
 
 
@@ -1471,6 +1484,7 @@ def advance_plan_execution_state(
     updated_at: str,
     completed_evidence_refs: list[str] | None = None,
     blocked_reason: str | None = None,
+    clarifications: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """Advance one checkpoint generation; stale writers cannot overwrite newer state."""
     if not isinstance(state, Mapping) or state.get("state_generation") != expected_generation:
@@ -1483,6 +1497,7 @@ def advance_plan_execution_state(
         completed_evidence_refs=completed_evidence_refs,
         minimum_generation=expected_generation,
         blocked_reason=blocked_reason,
+        clarifications=clarifications,
     )
     if errors or normalized is None:
         return None, errors

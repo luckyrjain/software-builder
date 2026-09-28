@@ -17,6 +17,11 @@ plan_execution_state:
   observed_head_revision: null
   blocked_reason: null
   updated_at: null
+  # task_id -> {status: RESOLVED|OPEN, resolved_summary: str|null, resolved_at: str|null}. One
+  # entry per task that ever triggered the optional clarify sub-step (orchestrator.md §2,
+  # gap-backlog B1). Absence of a task_id means "never triggered", distinct from an entry with
+  # status OPEN (interview ran, ambiguity not resolved).
+  clarifications: {}
 
 task:
   task_id: null

@@ -123,6 +123,8 @@ EVENTS = (
     "task_selected",
     "builder_dispatched",
     "builder_returned",
+    "clarify_dispatched",
+    "clarify_returned",
     "pr_opened",
     "review_dispatched",
     "review_returned",
@@ -142,9 +144,9 @@ OUTCOMES = ("COMPLETE", "ESCALATED", "HUMAN_ACTION_REQUIRED", "ABANDONED")
 
 _USAGE_INT_FIELDS = ("input_tokens", "output_tokens", "total_tokens")
 PAUSE_EVENTS = ("run_completed",)  # a wait after one of these before a `run_resumed` is a pause, not work
-SESSION_RETURNS = ("builder_returned", "review_returned", "remediation_returned")
+SESSION_RETURNS = ("builder_returned", "review_returned", "remediation_returned", "clarify_returned")
 # Events whose record is where a session's token usage is supposed to appear.
-USAGE_EVENTS = ("builder_returned", "review_returned", "remediation_returned", "orchestrator_usage")
+USAGE_EVENTS = ("builder_returned", "review_returned", "remediation_returned", "clarify_returned", "orchestrator_usage")
 REASON_CODES = (
     "DIRTY_REVIEW_LIMIT", "FIX_ATTEMPT_LIMIT", "CONTESTED_TWICE", "SIZE_HARD_STOP", "FINGERPRINT_ALTERNATION",
     "SCOPE_EXCEEDED", "MISSING_DECISION", "THIRD_PARTY_CHANGE", "CI_UNDIAGNOSABLE", "SESSION_TIMEOUT",
