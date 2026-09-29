@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import sys
 from copy import deepcopy
+from pathlib import Path
 
 from scripts.implementation_plan import (
+    ELIGIBILITY_CATEGORIES,
+    PLAN_FIELDS,
     canonical_plan_digest,
     derive_plan_id,
     derive_plan_ids,
@@ -20,6 +23,9 @@ from scripts.implementation_plan import (
     validate_plan_set,
     _load_json,
 )
+
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def _task(task_id: str, dependencies: list[str] | None = None) -> dict[str, object]:
@@ -773,3 +779,250 @@ def test_builder_blocks_when_an_upstream_source_escalated() -> None:
         repository_evidence={"estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 50, "confidence": "HIGH"}},
     )
     assert plan["readiness"] == "BLOCKED"
+
+
+# --- B2: lightweight ticket -> plan path for small tasks ------------------------------------------------
+
+
+def _single_task_plan(target_paths: list[str], planning_path: dict[str, object] | None = None) -> dict[str, object]:
+    """A minimal single-task variant of `_plan()` for exercising `_validate_planning_path` directly."""
+    plan = _plan()
+    task = _task("TASK-001")
+    task["target_paths"] = target_paths
+    plan["tasks"] = [task]
+    plan["execution_waves"] = [["TASK-001"]]
+    plan["traceability"] = {
+        "condition_coverage": {"condition:timeout-budget": ["TASK-001"]},
+        "action_coverage": {"action:implement-timeout": ["TASK-001"]},
+        "required_test_coverage": {"pytest -q tests/test_checkout.py": ["TASK-001"]},
+    }
+    if planning_path is not None:
+        plan["planning_path"] = planning_path
+    return plan
+
+
+def _lw(category: str = "CONFIG_VALUE_ONLY", asserted_by: str = "Bump the pinned value in src/checkout.py per CONFIG_VALUE_ONLY.") -> dict[str, object]:
+    return {"mode": "LIGHTWEIGHT", "eligibility_category": category, "asserted_by": asserted_by}
+
+
+def _lightweight_stub_sources(title: str, target_paths: list[str], category: str, *, repo: str = "github.com/acme/checkout") -> dict[str, object]:
+    evidence_refs = ["lightweight-plan-path:v1", f"eligibility:{category}"]
+    return {
+        "system_design_spec": {
+            "skill_result": {"status": "SUCCESS"},
+            "payload": {
+                "title": title,
+                "readiness": "ready",
+                "assessment_target": {"repo": repo, "target_paths": target_paths},
+                "normalized_decision": {"status": "READY"},
+                "findings": [], "conditions": [], "required_actions": [],
+                "evidence_refs": evidence_refs,
+            },
+        },
+        "architecture_review_report": {
+            "skill_result": {"status": "SUCCESS"},
+            "payload": {
+                "title": title,
+                "decision": "Approved",
+                "assessment_target": {"repo": repo, "target_paths": target_paths},
+                "normalized_decision": {"status": "READY"},
+                "findings": [], "conditions": [], "required_actions": [],
+                "evidence_refs": evidence_refs,
+            },
+        },
+        "change_impact_report": {
+            "skill_result": {"status": "SUCCESS"},
+            "payload": {
+                "title": title,
+                "assessment_target": {"repo": repo},
+                "coverage_status": "COMPLETE",
+                "material_unknowns": [],
+                "impacted_repositories": [repo],
+                "criticality": "Low",
+                "change_classes": [category],
+                "impacted_services": [], "impacted_contracts": [], "impacted_data": [],
+                "impacted_dependencies": [], "impacted_owners": [],
+                "target_paths": target_paths,
+                "required_tests": [],
+                "operational_impacts": [],
+                "review_triggers": [],
+                "unknowns": [],
+                "evidence_refs": evidence_refs,
+            },
+        },
+    }
+
+
+def _lightweight_evidence(category: str, target_paths: list[str], asserted_by: str) -> dict[str, object]:
+    return {
+        "estimated_scope": {
+            "estimate_known": True,
+            "files_upper_bound": len(target_paths),
+            "changed_lines_upper_bound": 20,
+            "confidence": "HIGH",
+        },
+        "planning_path": {"mode": "LIGHTWEIGHT", "eligibility_category": category, "asserted_by": asserted_by},
+    }
+
+
+def test_full_mode_plan_gains_only_the_new_planning_path_key() -> None:
+    # Required test 1 (change-impact report): a FULL-mode plan built through the unmodified default
+    # path is unchanged except for the addition of the new planning_path key.
+    sources = {
+        "system_design_spec": {"payload": {"title": "Checkout", "readiness": "Ready", "assessment_target": {"repo": "github.com/acme/checkout"}}},
+        "architecture_review_report": {"payload": {"normalized_decision": {"status": "PASS"}}},
+        "change_impact_report": {"skill_result": {"status": "SUCCESS"}, "payload": {"title": "Impact", "assessment_target": {"repo": "github.com/acme/checkout"}, "coverage_status": "COMPLETE", "target_paths": ["src/checkout.py"], "required_tests": [], "review_triggers": []}},
+    }
+    evidence = {"estimated_scope": {"estimate_known": True, "files_upper_bound": 1, "changed_lines_upper_bound": 50, "confidence": "HIGH"}}
+    plan = build_implementation_plan(sources, repository_evidence=evidence)
+    assert plan["readiness"] == "READY"
+    assert set(plan) == PLAN_FIELDS
+    assert plan["planning_path"] == {"mode": "FULL", "eligibility_category": None, "asserted_by": None}
+    assert validate_implementation_plan(plan) == []
+
+
+def test_resume_compatibility_accepts_a_real_historical_plan_without_planning_path() -> None:
+    # Required test 2: a real, already-committed plan built before planning_path existed still
+    # validates cleanly (implicit FULL via the backward-compat carve-out).
+    historical_plan = _load_json(ROOT / "docs/superpowers/specs/2026-09-28-b1-clarify-step-implementation-plan.json")
+    assert isinstance(historical_plan, dict)
+    assert "planning_path" not in historical_plan
+    assert validate_implementation_plan(historical_plan) == []
+
+
+def test_lightweight_plan_with_valid_category_and_asserted_by_passes() -> None:
+    plan = _single_task_plan(["src/checkout.py"], _lw())
+    assert validate_implementation_plan(plan) == []
+
+
+def test_lightweight_plan_rejects_invalid_category() -> None:
+    plan = _single_task_plan(["src/checkout.py"], _lw(category="NOT_A_REAL_CATEGORY"))
+    errors = validate_implementation_plan(plan)
+    assert any("eligibility_category" in error for error in errors)
+
+
+def test_lightweight_plan_rejects_missing_asserted_by() -> None:
+    plan = _single_task_plan(["src/checkout.py"], _lw(asserted_by=""))
+    errors = validate_implementation_plan(plan)
+    assert any("asserted_by" in error for error in errors)
+
+
+def test_lightweight_plan_rejects_more_than_three_target_paths() -> None:
+    plan = _single_task_plan(["a.md", "b.md", "c.md", "d.md"], _lw(category="DOC_ONLY"))
+    errors = validate_implementation_plan(plan)
+    assert any("at most 3 target_paths" in error for error in errors)
+
+
+def test_lightweight_plan_denylist_rejects_dotslash_prefixed_ci_path() -> None:
+    plan = _single_task_plan(["./.github/workflows/ci.yml"], _lw())
+    errors = validate_implementation_plan(plan)
+    assert any("never eligible" in error for error in errors)
+
+
+def test_lightweight_plan_denylist_rejects_backslash_separated_ci_path() -> None:
+    plan = _single_task_plan([".github\\workflows\\ci.yml"], _lw())
+    errors = validate_implementation_plan(plan)
+    assert any("never eligible" in error for error in errors)
+
+
+def test_lightweight_plan_denylist_rejects_dependency_manifest_basename() -> None:
+    plan = _single_task_plan(["requirements.txt"], _lw())
+    errors = validate_implementation_plan(plan)
+    assert any("never eligible" in error for error in errors)
+
+
+def test_lightweight_plan_denylist_rejects_case_varied_dependency_manifest_basename() -> None:
+    plan = _single_task_plan(["Requirements.txt"], _lw())
+    errors = validate_implementation_plan(plan)
+    assert any("never eligible" in error for error in errors)
+
+
+def test_lightweight_plan_denylist_exempts_manifest_basename_under_tests_fixtures() -> None:
+    plan = _single_task_plan(["tests/fixtures/requirements.txt"], _lw(category="ADDITIVE_TEST_ONLY"))
+    assert validate_implementation_plan(plan) == []
+
+
+def test_full_mode_plan_rejects_non_null_eligibility_category_or_asserted_by() -> None:
+    plan = _single_task_plan(["src/checkout.py"], {"mode": "FULL", "eligibility_category": "DOC_ONLY", "asserted_by": "reason"})
+    errors = validate_implementation_plan(plan)
+    assert any("FULL planning_path must have null" in error for error in errors)
+
+
+def test_lightweight_build_produces_a_ready_plan_with_planning_path_recorded() -> None:
+    target_paths = ["src/checkout.py"]
+    title = "Bump the pinned timeout value in src/checkout.py"
+    asserted_by = "Bump the pinned timeout value in src/checkout.py per CONFIG_VALUE_ONLY."
+    plan = build_implementation_plan(
+        _lightweight_stub_sources(title, target_paths, "CONFIG_VALUE_ONLY"),
+        repository_evidence=_lightweight_evidence("CONFIG_VALUE_ONLY", target_paths, asserted_by),
+    )
+    assert plan["readiness"] == "READY"
+    assert plan["planning_path"] == {
+        "mode": "LIGHTWEIGHT",
+        "eligibility_category": "CONFIG_VALUE_ONLY",
+        "asserted_by": asserted_by,
+    }
+    assert validate_implementation_plan(plan) == []
+
+
+def test_two_lightweight_builds_with_different_titles_produce_different_plan_ids() -> None:
+    # Required test 4 (plan-identity uniqueness): different, genuinely task-specific title text
+    # must not collide even when category and target_paths match.
+    target_paths = ["src/checkout.py"]
+    plan_a = build_implementation_plan(
+        _lightweight_stub_sources("Bump numpy to 1.26.4 in src/checkout.py", target_paths, "CONFIG_VALUE_ONLY"),
+        repository_evidence=_lightweight_evidence("CONFIG_VALUE_ONLY", target_paths, "Bump numpy to 1.26.4 per CONFIG_VALUE_ONLY."),
+    )
+    plan_b = build_implementation_plan(
+        _lightweight_stub_sources("Bump requests to 2.32.0 in src/checkout.py", target_paths, "CONFIG_VALUE_ONLY"),
+        repository_evidence=_lightweight_evidence("CONFIG_VALUE_ONLY", target_paths, "Bump requests to 2.32.0 per CONFIG_VALUE_ONLY."),
+    )
+    assert plan_a["plan_id"] != plan_b["plan_id"]
+
+
+def test_two_lightweight_builds_with_identical_stub_content_produce_the_same_plan_id() -> None:
+    # Required test 4 (plan-identity uniqueness), idempotent-retry half: identical stub content
+    # (the natural shape of a legitimate retry of the same logical task) must produce the same
+    # plan_id.
+    target_paths = ["src/checkout.py"]
+    title = "Bump numpy to 1.26.4 in src/checkout.py"
+    asserted_by = "Bump numpy to 1.26.4 per CONFIG_VALUE_ONLY."
+    plan_a = build_implementation_plan(
+        _lightweight_stub_sources(title, target_paths, "CONFIG_VALUE_ONLY"),
+        repository_evidence=_lightweight_evidence("CONFIG_VALUE_ONLY", target_paths, asserted_by),
+    )
+    plan_b = build_implementation_plan(
+        _lightweight_stub_sources(title, target_paths, "CONFIG_VALUE_ONLY"),
+        repository_evidence=_lightweight_evidence("CONFIG_VALUE_ONLY", target_paths, asserted_by),
+    )
+    assert plan_a["plan_id"] == plan_b["plan_id"]
+
+
+def test_identical_lightweight_stub_content_yields_stable_canonical_plan_digest_across_builds() -> None:
+    # Required test 5 (resume-digest stability): byte-identical title/target_paths/asserted_by/
+    # eligibility_category across two builds must produce the same canonical_plan_digest -- the
+    # direct regression test for the round-4/5 bug class (run-scoped content silently entering the
+    # resume digest via planning_path/asserted_by).
+    target_paths = ["src/checkout.py"]
+    title = "Bump numpy to 1.26.4 in src/checkout.py"
+    asserted_by = "Bump numpy to 1.26.4 per CONFIG_VALUE_ONLY."
+    plan_a = build_implementation_plan(
+        _lightweight_stub_sources(title, target_paths, "CONFIG_VALUE_ONLY"),
+        repository_evidence=_lightweight_evidence("CONFIG_VALUE_ONLY", target_paths, asserted_by),
+    )
+    plan_b = build_implementation_plan(
+        _lightweight_stub_sources(title, target_paths, "CONFIG_VALUE_ONLY"),
+        repository_evidence=_lightweight_evidence("CONFIG_VALUE_ONLY", target_paths, asserted_by),
+    )
+    assert canonical_plan_digest(plan_a) == canonical_plan_digest(plan_b)
+
+
+def test_reference_documents_every_eligibility_category() -> None:
+    # Required test 6 (design Fix 10): every ELIGIBILITY_CATEGORIES value appears backtick-wrapped
+    # in reference/lightweight-path.md, matching test_run_log.py's
+    # test_reference_documents_every_event_actor_outcome_reason_and_exit_code convention exactly
+    # (literal-text containment), not test_plan_execution_state.py's structured YAML-equality
+    # convention.
+    text = (ROOT / "skills/implementation-planner/reference/lightweight-path.md").read_text(encoding="utf-8")
+    for category in ELIGIBILITY_CATEGORIES:
+        assert f"`{category}`" in text, category

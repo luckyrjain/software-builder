@@ -20,6 +20,10 @@ Resolve the immutable source set: system design, architecture review, change imp
 design-time specialist named by `review_triggers`. Verify source digests and the canonical target
 repository. A missing or stale source is a planning blocker.
 
+Exception: for a caller-asserted small task, a `LIGHTWEIGHT` stub may stand in for the three reports above —
+see [reference/lightweight-path.md](../reference/lightweight-path.md); this skill adds no judgment of its
+own about eligibility.
+
 ## 2. Build
 
 Derive the plan-set and repository plan identities from a canonical digest of the immutable source

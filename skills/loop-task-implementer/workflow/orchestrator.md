@@ -324,6 +324,15 @@ When the warning threshold is exceeded, shard review by coherent area while pres
 
 When the hard threshold is exceeded, split the task or escalate unless the user explicitly authorizes a larger review.
 
+Both safety nets above — the planning-time estimate hard-stop (`implementation_plan.py`'s
+`LOOP_TASK_MAX_FILES`/`LOOP_TASK_MAX_LINES` check) and this section's execution-time `SIZE_HARD_STOP` circuit
+breaker — apply unconditionally to `LIGHTWEIGHT`-planning-path plans (gap-backlog B2) exactly as they do to
+`FULL`-path plans; a task's planning path never exempts it from either check. The `LIGHTWEIGHT` planning path
+is distinct from the legacy `implementation_task` bypass: the bypass skips `implementation-planner` entirely
+— no plan identity, DAG, or resume-compatibility — and the architecture review characterized it as
+ungoverned; the `LIGHTWEIGHT` path keeps all of that (identity, DAG, traceability, resume), only with
+minimal, caller-asserted upstream evidence in place of the three full reports.
+
 Budget exhaustion must stop the workflow: check the elapsed and token budgets before every dispatch
 (Builder, Reviewer, remediation, **clarify sub-step**), stop when either is reached, and escalate with
 `budget_consumed` populated. Do not silently degrade review depth to fit the remaining budget.

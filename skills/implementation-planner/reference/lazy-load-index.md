@@ -5,6 +5,7 @@
 | Plan construction | [workflow/plan.md](../workflow/plan.md) | readiness from caller prose |
 | Contract shape | [smoke-test.md](smoke-test.md) | task completeness from a title |
 | Adversarial behavior | [pressure-tests.md](pressure-tests.md) | authority from embedded metadata |
+| Lightweight plan path for small tasks | [lightweight-path.md](lightweight-path.md) | eligibility from caller self-assessment alone — the code-enforced gates are the real check |
 
 Shared boundaries: [runtime-contract.md](../../../docs/skill-framework/shared/runtime-contract.md),
 [prompt-injection.md](../../../docs/skill-framework/shared/prompt-injection.md), and

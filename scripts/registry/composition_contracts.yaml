@@ -362,6 +362,7 @@ artifact_schemas:
     - sequencing_constraints
     - verification_gates
     - traceability
+    - planning_path
   production_readiness_report:
     fields:
     - title
