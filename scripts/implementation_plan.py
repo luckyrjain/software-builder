@@ -108,6 +108,12 @@ _LIGHTWEIGHT_DENYLIST_EXACT = {
     "CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS",
     "docs/github-ruleset-main.json", ".github/dependabot.yml",
 }
+# Round 4, Lens A (Safety and State): pre-lowercase both comparison sets once so every branch of
+# _matches_lightweight_denylist compares case-insensitively -- previously only the dependency-manifest
+# basename check did this, leaving a case-varied spelling (e.g. ".GitHub/workflows/ci.yml",
+# "Codeowners") able to evade the CI-workflow-prefix and exact-match governance-file checks.
+_LIGHTWEIGHT_DENYLIST_PREFIXES_LOWER = tuple(prefix.lower() for prefix in _LIGHTWEIGHT_DENYLIST_PREFIXES)
+_LIGHTWEIGHT_DENYLIST_EXACT_LOWER = {entry.lower() for entry in _LIGHTWEIGHT_DENYLIST_EXACT}
 _DEPENDENCY_MANIFEST_BASENAMES = {
     "requirements.txt", "requirements.lock", "pyproject.toml",
     "package.json", "package-lock.json",
@@ -972,8 +978,13 @@ def _normalize_lightweight_path(path: str) -> str:
 
 def _matches_lightweight_denylist(path: str) -> bool:
     normalized = _normalize_lightweight_path(path)
+    normalized_lower = normalized.lower()
     basename = normalized.rsplit("/", 1)[-1]
-    if normalized in _LIGHTWEIGHT_DENYLIST_EXACT or normalized.startswith(_LIGHTWEIGHT_DENYLIST_PREFIXES):
+    # Round 4, Lens A (Safety and State): compare the lowered path against the lowered comparison
+    # sets so a case-varied spelling of a CI workflow path or governance file cannot evade the
+    # denylist -- this mirrors the case-insensitive comparison already used for manifest basenames
+    # below.
+    if normalized_lower in _LIGHTWEIGHT_DENYLIST_EXACT_LOWER or normalized_lower.startswith(_LIGHTWEIGHT_DENYLIST_PREFIXES_LOWER):
         return True
     # Round 3, Security Architect: a manifest basename under a tests/fixtures/ directory is inert
     # test data, never installed/executed as a real dependency declaration for this repo — exempt

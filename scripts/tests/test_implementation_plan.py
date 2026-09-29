@@ -937,6 +937,23 @@ def test_lightweight_plan_denylist_rejects_case_varied_dependency_manifest_basen
     assert any("never eligible" in error for error in errors)
 
 
+def test_lightweight_plan_denylist_rejects_case_varied_ci_workflow_path() -> None:
+    # Round 4, Lens A (Safety and State): a case-varied spelling of the CI workflow prefix must
+    # not evade the denylist -- mirrors the case-insensitivity already required of the
+    # dependency-manifest basename check above.
+    plan = _single_task_plan([".GitHub/Workflows/ci.yml"], _lw())
+    errors = validate_implementation_plan(plan)
+    assert any("never eligible" in error for error in errors)
+
+
+def test_lightweight_plan_denylist_rejects_case_varied_governance_file() -> None:
+    # Round 4, Lens A (Safety and State): a case-varied spelling of an exact-match governance file
+    # (e.g. CODEOWNERS) must not evade the denylist either.
+    plan = _single_task_plan(["Codeowners"], _lw())
+    errors = validate_implementation_plan(plan)
+    assert any("never eligible" in error for error in errors)
+
+
 def test_lightweight_plan_denylist_exempts_manifest_basename_under_tests_fixtures() -> None:
     plan = _single_task_plan(["tests/fixtures/requirements.txt"], _lw(category="ADDITIVE_TEST_ONLY"))
     assert validate_implementation_plan(plan) == []
