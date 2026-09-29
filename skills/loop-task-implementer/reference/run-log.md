@@ -54,6 +54,8 @@ integers up to 10^10. A record with all-zero tokens counts as **no** usage.
 | `task_selected` | a **new** task is chosen; starts its budget window | `task_id`, `execution_identity` |
 | `builder_dispatched` / `remediation_dispatched` / `review_dispatched` | a session starts | `attempt`, `session_ref`, `lens`, `review_generation` |
 | `builder_returned` / `remediation_returned` / `review_returned` | a session returns; **carries its `usage`** | `head_commit`, `changed_file_count`, `finding_count` (counts, never verdict text) |
+| `clarify_dispatched` | the optional clarify sub-step (`orchestrator.md` §2, gap-backlog B1) invokes `engineering-decision-discovery` for a task whose acceptance criteria failed the concreteness check | `task_id`, `attempt`, `session_ref` |
+| `clarify_returned` | the clarify sub-step returns; **carries its `usage`**, same as `builder_returned` | `task_id`, `status` (`RESOLVED`\|`OPEN`) |
 | `orchestrator_usage` | after each Builder or Reviewer return: the tokens you used since your last such record (a delta), **only if the host reports them** (never a guess) | — (`usage`) |
 | `pr_opened`, `adjudicated`, `ci_polled`, `merge_attempted` | the action happens | ids and counts |
 | `budget_checked` | optional note of a check's result (the script derives `unmeasured` and `unlimited` itself) | those lists |

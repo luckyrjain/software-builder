@@ -1,0 +1,40 @@
+schema_version: 1
+skill: loop-task-implementer
+case_id: clarify-step-unattended-skip
+tier: 2
+description: >-
+  gap-backlog B1: when interaction_policy.unattended is true (or human_available is false), the
+  optional clarify sub-step (orchestrator.md §2) must be skipped entirely -- never acquire the
+  clarify-entry lease, never dispatch engineering-decision-discovery -- and task selection must fall
+  through directly to the existing §19 escalation path with escalation_reason: MISSING_DECISION,
+  matching engineering-decision-discovery's own "unattended -> BLOCKED, never synthesize" semantics.
+events:
+  - type: tool
+    name: check_acceptance_criteria_concrete
+    args:
+      task_id: T-9
+      concrete: false
+  - type: gate
+    name: clarify_interaction_policy
+    decision: skip_unattended
+  - type: gate
+    name: task_selection_escalation
+    decision: escalated
+    reason: MISSING_DECISION
+  - type: outcome
+    status: escalated
+assertions:
+  - type: tool_not_called
+    name: acquire_clarify_lease
+  - type: tool_not_called
+    name: dispatch_clarify_interview
+  - type: tool_not_called
+    name: persist_clarification
+  - type: gate_decision
+    name: clarify_interaction_policy
+    decision: skip_unattended
+  - type: gate_decision
+    name: task_selection_escalation
+    decision: escalated
+  - type: outcome_status
+    status: escalated

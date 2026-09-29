@@ -134,6 +134,7 @@ Skills reference each other when a finding belongs in another workflow:
 | loop-task-implementer | Task implementation causes or needs incident investigation | incident-rca |
 | loop-task-implementer | Task requires understanding an unfamiliar domain/codebase first | domain-comprehension |
 | loop-task-implementer | Task touches MySQL-dialect SQL during a PG migration | mysql-to-postgres-sql |
+| loop-task-implementer | Task selection finds a candidate task's acceptance criteria insufficiently concrete for safe implementation (`orchestrator.md` §2, gap-backlog B1) | engineering-decision-discovery |
 | migration-program-manager | Caller wants one workspace's own migration status, not an org-wide rollup | mysql-to-postgres-sql |
 | migration-program-manager | A workspace in the rollup has no `SQUAD_MAP.md` (services join as `squad: UNKNOWN`) | squad-map |
 | cost-optimization-sprint-planner | Caller wants one deployment's own rightsizing question, not a sweep | k8s-overprovisioning-datadog |

@@ -1,0 +1,75 @@
+schema_version: 1
+skill: loop-task-implementer
+case_id: clarify-step-resolves-and-persists
+tier: 2
+description: >-
+  gap-backlog B1: in interactive mode (human_available: true, unattended: false), a task whose
+  acceptance criteria fail the concreteness check triggers the bounded clarify sub-step
+  (orchestrator.md §2): acquire the clarify-entry lease, re-check plan_execution_state.clarifications
+  (TOCTOU close) before dispatching engineering-decision-discovery, persist the RESOLVED outcome via
+  the generation-checked plan_state_store.cas_advance write path (never before the dispatch gate
+  decides to proceed), release the lease, then continue task selection into a normal Builder dispatch
+  carrying resolved_summary forward (§4).
+events:
+  - type: tool
+    name: check_acceptance_criteria_concrete
+    args:
+      task_id: T-9
+      concrete: false
+  - type: gate
+    name: clarify_interaction_policy
+    decision: proceed_interactive
+  - type: tool
+    name: acquire_clarify_lease
+    args:
+      task_id: T-9
+  - type: tool
+    name: recheck_clarifications
+    args:
+      task_id: T-9
+      already_resolved: false
+  - type: tool
+    name: dispatch_clarify_interview
+    args:
+      task_id: T-9
+  - type: tool
+    name: clarify_interview_returned
+    args:
+      task_id: T-9
+      status: SUCCESS
+  - type: tool
+    name: persist_clarification
+    args:
+      task_id: T-9
+      status: RESOLVED
+  - type: tool
+    name: release_clarify_lease
+    args:
+      task_id: T-9
+  - type: tool
+    name: dispatch_builder
+    args:
+      task_id: T-9
+  - type: outcome
+    status: complete
+assertions:
+  - type: tool_order
+    tools:
+      - acquire_clarify_lease
+      - recheck_clarifications
+      - dispatch_clarify_interview
+      - persist_clarification
+      - release_clarify_lease
+      - dispatch_builder
+  - type: forbid_tool_before_gate
+    tool: dispatch_clarify_interview
+    gate: clarify_interaction_policy
+  - type: tool_args_match
+    name: persist_clarification
+    args:
+      task_id: T-9
+      status: RESOLVED
+  - type: tool_called
+    name: dispatch_builder
+  - type: outcome_status
+    status: complete

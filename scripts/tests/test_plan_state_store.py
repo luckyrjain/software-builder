@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -28,6 +29,7 @@ from scripts.plan_state_store import (
     resolve_state_dir,
     state_path,
 )
+from scripts.task_lease import derive_lease_id, try_acquire
 
 if sys.platform != "win32":
     import fcntl
@@ -307,3 +309,148 @@ def test_cas_advance_merges_evidence_refs_across_calls_rather_than_replacing(tmp
         completed_evidence_refs=["ci:task-002"],
     )
     assert result["completed_evidence_refs"] == ["ci:task-001", "ci:task-002"]
+
+
+# --- clarifications (gap-backlog B1) --------------------------------------------------------------
+
+
+def test_cas_advance_merges_clarifications_by_task_id_across_calls_under_the_exclusive_lock(tmp_path: Path) -> None:
+    state_dir = tmp_path / "state"
+    plan = _plan()
+    cas_advance(
+        state_dir,
+        plan,
+        expected_generation=0,
+        authoritative_task_statuses=_official_state(),
+        current_head=HEAD,
+        updated_at=UPDATED_AT,
+        clarifications={"TASK-001": {"status": "OPEN", "resolved_summary": None, "resolved_at": None}},
+    )
+    result = cas_advance(
+        state_dir,
+        plan,
+        expected_generation=1,
+        authoritative_task_statuses=_official_state(),
+        current_head=HEAD,
+        updated_at="2026-09-25T00:06:00Z",
+        clarifications={
+            "TASK-002": {
+                "status": "RESOLVED",
+                "resolved_summary": "Use the existing retry budget.",
+                "resolved_at": "2026-09-25T00:06:00Z",
+            },
+        },
+    )
+    # The first call's durable entry for TASK-001 survives a second call that only resolves
+    # TASK-002 -- this is a dict merge by task_id, not a replace.
+    assert result["clarifications"]["TASK-001"] == {"status": "OPEN", "resolved_summary": None, "resolved_at": None}
+    assert result["clarifications"]["TASK-002"]["status"] == "RESOLVED"
+
+    on_disk = read_state(state_dir, plan["plan_id"])
+    assert on_disk["clarifications"] == result["clarifications"]
+
+
+def test_cas_advance_without_clarifications_argument_leaves_durably_stored_entries_untouched(tmp_path: Path) -> None:
+    state_dir = tmp_path / "state"
+    plan = _plan()
+    cas_advance(
+        state_dir,
+        plan,
+        expected_generation=0,
+        authoritative_task_statuses=_official_state(),
+        current_head=HEAD,
+        updated_at=UPDATED_AT,
+        clarifications={"TASK-001": {"status": "RESOLVED", "resolved_summary": "already resolved", "resolved_at": UPDATED_AT}},
+    )
+    result = cas_advance(
+        state_dir,
+        plan,
+        expected_generation=1,
+        authoritative_task_statuses=_official_state(**{"TASK-002": "BUILDING"}),
+        current_head=HEAD,
+        updated_at="2026-09-25T00:07:00Z",
+    )
+    assert result["clarifications"]["TASK-001"]["status"] == "RESOLVED"
+
+
+# --- clarify-entry lease TOCTOU close (gap-backlog B1) ---------------------------------------------
+
+_TOCTOU_RESOLVE_CODE = """
+import json, sys
+from pathlib import Path
+sys.path.insert(0, {root!r})
+from scripts.plan_state_store import cas_advance
+from scripts.task_lease import try_acquire
+
+plan = json.loads(Path({plan_path!r}).read_text(encoding="utf-8"))
+handle = try_acquire(Path({lease_dir!r}), {lease_id!r})
+assert handle is not None, "peer failed to acquire the clarify-entry lease"
+cas_advance(
+    Path({state_dir!r}),
+    plan,
+    expected_generation=0,
+    authoritative_task_statuses={{task["task_id"]: "NOT_STARTED" for task in plan["tasks"]}},
+    current_head={head!r},
+    updated_at={updated_at!r},
+    clarifications={{{task_id!r}: {{"status": "RESOLVED", "resolved_summary": "resolved by a peer", "resolved_at": {updated_at!r}}}}},
+)
+handle.release()
+print("resolved", flush=True)
+"""
+
+
+@posix_only
+def test_post_acquisition_recheck_detects_a_peer_resolution_between_stale_read_and_lease_acquisition(
+    tmp_path: Path,
+) -> None:
+    """Dedicated regression test for the round-2/3 TOCTOU gap: a second process's stale "absent" read
+    of plan_execution_state.clarifications[task_id], followed by a *delayed* lease acquisition after a
+    first process already resolved the clarification and released the lease, must not trigger a
+    redundant interview -- the fix is a mandatory re-read of clarifications[task_id] immediately after
+    acquiring the clarify-entry lease, before invoking engineering-decision-discovery.
+
+    This runs the resolving side in a real subprocess (not an in-process fake), so the state this
+    process re-reads after acquiring the lease was genuinely written by a different process using the
+    same durable store and the same real OS lock -- the same "second process must skip" acceptance
+    criterion the cross-process lease-contention tests already establish, applied to the data race
+    the lease alone does not close.
+    """
+    state_dir = tmp_path / "state"
+    lease_dir = tmp_path / "leases"
+    plan = _plan()
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    task_id = "TASK-001"
+    lease_id = derive_lease_id("acme/checkout", "main", f"{task_id}:clarify")
+
+    # Step 1 (orchestrator.md §2, item 1): the stale, pre-lease-acquisition read. Nothing has been
+    # written yet, so this snapshot -- taken in isolation -- would incorrectly conclude "never
+    # triggered" for task_id.
+    stale = read_state(state_dir, plan["plan_id"])
+    assert stale is None or task_id not in stale.get("clarifications", {})
+
+    # A peer resolves the clarification and releases the lease, entirely between the stale read
+    # above and this process's own (about to happen) lease acquisition -- a real subprocess, not an
+    # in-process simulation.
+    code = _TOCTOU_RESOLVE_CODE.format(
+        root=str(ROOT), plan_path=str(plan_path), lease_dir=str(lease_dir), lease_id=lease_id,
+        state_dir=str(state_dir), head=HEAD, updated_at=UPDATED_AT, task_id=task_id,
+    )
+    resolved = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=30)
+    assert resolved.returncode == 0, resolved.stderr
+    assert resolved.stdout.strip() == "resolved"
+
+    # Step 2 (orchestrator.md §2, item 2): this process now acquires the clarify-entry lease itself --
+    # succeeds, since the peer released it.
+    handle = try_acquire(lease_dir, lease_id)
+    assert handle is not None, "the peer must have released the lease before exiting"
+    try:
+        # Step 3 (orchestrator.md §2, item 3 -- the TOCTOU fix itself): re-check
+        # clarifications[task_id] again, now that the lease is held, instead of trusting the stale
+        # read from step 1.
+        fresh = read_state(state_dir, plan["plan_id"])
+        assert fresh is not None
+        assert fresh["clarifications"][task_id]["status"] == "RESOLVED"
+        # Only the re-check reveals this: the stale snapshot from before the peer's write did not.
+    finally:
+        handle.release()

@@ -1,0 +1,648 @@
+{
+  "plan_set_id": "PLANSET-6999447a7734",
+  "plan_id": "PLANSET-6999447a7734-ef4a510c",
+  "title": "B1 optional clarify step in loop-task-implementer task selection",
+  "readiness": "READY",
+  "assessment_target": {
+    "repo": "luckyrjain/software-builder"
+  },
+  "target_repo": "luckyrjain/software-builder",
+  "external_dependencies": [],
+  "source_refs": [
+    "architecture_review_report:f0827489ef8440d1c0af47f917f4233d7c55194c229917e9525db9ec203571f5",
+    "change_impact_report:42ff356b5e8cabe8c762cce7454bf6610906a73bebf26d1ae119813736f65b21",
+    "system_design_spec:011ee273d1d391737d35781809f50d7e8fc1b4bd2e00ca15d5ae3303328c40e2"
+  ],
+  "tasks": [
+    {
+      "task_id": "TASK-001-79c5725c",
+      "title": "Implement changes under docs/skill-framework/shared/cross-skill-escalation.md",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path docs/skill-framework/shared/cross-skill-escalation.md in luckyrjain/software-builder.",
+      "target_paths": [
+        "docs/skill-framework/shared/cross-skill-escalation.md"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for docs/skill-framework/shared/cross-skill-escalation.md."
+      ],
+      "dependencies": [],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:B1-COND-1",
+        "architecture-condition:B1-COND-2",
+        "architecture-condition:B1-COND-3",
+        "architecture-condition:B1-COND-4",
+        "architecture-condition:B1-COND-5"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 2,
+        "changed_lines_upper_bound": 59,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-002-b8190730",
+      "title": "Implement changes under docs/skill-framework/shared/prompt-injection.md",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path docs/skill-framework/shared/prompt-injection.md in luckyrjain/software-builder.",
+      "target_paths": [
+        "docs/skill-framework/shared/prompt-injection.md"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for docs/skill-framework/shared/prompt-injection.md."
+      ],
+      "dependencies": [
+        "TASK-001-79c5725c"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:B1-COND-1",
+        "architecture-condition:B1-COND-2",
+        "architecture-condition:B1-COND-3",
+        "architecture-condition:B1-COND-4",
+        "architecture-condition:B1-COND-5"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 2,
+        "changed_lines_upper_bound": 59,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-003-69b70828",
+      "title": "Implement changes under evals/transcripts/loop-task-implementer/clarify-step-resolves-and-persists.yaml",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path evals/transcripts/loop-task-implementer/clarify-step-resolves-and-persists.yaml in luckyrjain/software-builder.",
+      "target_paths": [
+        "evals/transcripts/loop-task-implementer/clarify-step-resolves-and-persists.yaml"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for evals/transcripts/loop-task-implementer/clarify-step-resolves-and-persists.yaml."
+      ],
+      "dependencies": [
+        "TASK-002-b8190730"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:B1-COND-1",
+        "architecture-condition:B1-COND-2",
+        "architecture-condition:B1-COND-3",
+        "architecture-condition:B1-COND-4",
+        "architecture-condition:B1-COND-5"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 2,
+        "changed_lines_upper_bound": 59,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-004-96918fec",
+      "title": "Implement changes under evals/transcripts/loop-task-implementer/clarify-step-unattended-skip.yaml",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path evals/transcripts/loop-task-implementer/clarify-step-unattended-skip.yaml in luckyrjain/software-builder.",
+      "target_paths": [
+        "evals/transcripts/loop-task-implementer/clarify-step-unattended-skip.yaml"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for evals/transcripts/loop-task-implementer/clarify-step-unattended-skip.yaml."
+      ],
+      "dependencies": [
+        "TASK-003-69b70828"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:B1-COND-1",
+        "architecture-condition:B1-COND-2",
+        "architecture-condition:B1-COND-3",
+        "architecture-condition:B1-COND-4",
+        "architecture-condition:B1-COND-5"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 2,
+        "changed_lines_upper_bound": 59,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-005-963c8a44",
+      "title": "Implement changes under scripts/implementation_plan.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/implementation_plan.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/implementation_plan.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/implementation_plan.py."
+      ],
+      "dependencies": [
+        "TASK-004-96918fec"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:B1-COND-1",
+        "architecture-condition:B1-COND-2",
+        "architecture-condition:B1-COND-3",
+        "architecture-condition:B1-COND-4",
+        "architecture-condition:B1-COND-5"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 2,
+        "changed_lines_upper_bound": 58,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-006-1217fc4d",
+      "title": "Implement changes under scripts/plan_state_store.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/plan_state_store.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/plan_state_store.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/plan_state_store.py."
+      ],
+      "dependencies": [
+        "TASK-005-963c8a44"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:B1-COND-1",
+        "architecture-condition:B1-COND-2",
+        "architecture-condition:B1-COND-3",
+        "architecture-condition:B1-COND-4",
+        "architecture-condition:B1-COND-5"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 2,
+        "changed_lines_upper_bound": 58,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-007-6370a1b7",
+      "title": "Implement changes under scripts/registry/eval_contracts.yaml",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path scripts/registry/eval_contracts.yaml in luckyrjain/software-builder.",
+      "target_paths": [
+        "scripts/registry/eval_contracts.yaml"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/registry/eval_contracts.yaml."
+      ],
+      "dependencies": [
+        "TASK-006-1217fc4d"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:B1-COND-1",
+        "architecture-condition:B1-COND-2",
+        "architecture-condition:B1-COND-3",
+        "architecture-condition:B1-COND-4",
+        "architecture-condition:B1-COND-5"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 58,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-008-e3c0d230",
+      "title": "Implement changes under skills/loop-task-implementer/SKILL.md",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path skills/loop-task-implementer/SKILL.md in luckyrjain/software-builder.",
+      "target_paths": [
+        "skills/loop-task-implementer/SKILL.md"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/loop-task-implementer/SKILL.md."
+      ],
+      "dependencies": [
+        "TASK-007-6370a1b7"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:B1-COND-1",
+        "architecture-condition:B1-COND-2",
+        "architecture-condition:B1-COND-3",
+        "architecture-condition:B1-COND-4",
+        "architecture-condition:B1-COND-5"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 58,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-009-be439cd8",
+      "title": "Implement changes under skills/loop-task-implementer/reference/run-log.md",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path skills/loop-task-implementer/reference/run-log.md in luckyrjain/software-builder.",
+      "target_paths": [
+        "skills/loop-task-implementer/reference/run-log.md"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/loop-task-implementer/reference/run-log.md."
+      ],
+      "dependencies": [
+        "TASK-008-e3c0d230"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:B1-COND-1",
+        "architecture-condition:B1-COND-2",
+        "architecture-condition:B1-COND-3",
+        "architecture-condition:B1-COND-4",
+        "architecture-condition:B1-COND-5"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 58,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-010-4fc34a06",
+      "title": "Implement changes under skills/loop-task-implementer/reference/state-schema.yaml",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path skills/loop-task-implementer/reference/state-schema.yaml in luckyrjain/software-builder.",
+      "target_paths": [
+        "skills/loop-task-implementer/reference/state-schema.yaml"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/loop-task-implementer/reference/state-schema.yaml."
+      ],
+      "dependencies": [
+        "TASK-009-be439cd8"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:B1-COND-1",
+        "architecture-condition:B1-COND-2",
+        "architecture-condition:B1-COND-3",
+        "architecture-condition:B1-COND-4",
+        "architecture-condition:B1-COND-5"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 58,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-011-65929e54",
+      "title": "Implement changes under skills/loop-task-implementer/scripts/run_log.py",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path skills/loop-task-implementer/scripts/run_log.py in luckyrjain/software-builder.",
+      "target_paths": [
+        "skills/loop-task-implementer/scripts/run_log.py"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/loop-task-implementer/scripts/run_log.py."
+      ],
+      "dependencies": [
+        "TASK-010-4fc34a06"
+      ],
+      "required_tests": [],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:B1-COND-1",
+        "architecture-condition:B1-COND-2",
+        "architecture-condition:B1-COND-3",
+        "architecture-condition:B1-COND-4",
+        "architecture-condition:B1-COND-5"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 58,
+        "confidence": "MEDIUM"
+      }
+    },
+    {
+      "task_id": "TASK-012-5c7c8906",
+      "title": "Implement changes under skills/loop-task-implementer/workflow/orchestrator.md",
+      "task_type": "code",
+      "executor": "loop-task-implementer",
+      "scope": "Implement the approved change impact for target path skills/loop-task-implementer/workflow/orchestrator.md in luckyrjain/software-builder.",
+      "target_paths": [
+        "skills/loop-task-implementer/workflow/orchestrator.md"
+      ],
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/loop-task-implementer/workflow/orchestrator.md.",
+        "scripts/tests/test_implementation_plan.py",
+        "scripts/tests/test_plan_execution_state.py",
+        "scripts/tests/test_plan_state_store.py",
+        "scripts/tests/test_task_lease.py",
+        "skills/loop-task-implementer/tests/test_run_log.py",
+        "make lint-python"
+      ],
+      "dependencies": [
+        "TASK-011-65929e54"
+      ],
+      "required_tests": [
+        "scripts/tests/test_implementation_plan.py",
+        "scripts/tests/test_plan_execution_state.py",
+        "scripts/tests/test_plan_state_store.py",
+        "scripts/tests/test_task_lease.py",
+        "skills/loop-task-implementer/tests/test_run_log.py",
+        "make lint-python"
+      ],
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "source_condition_refs": [
+        "architecture-condition:B1-COND-1",
+        "architecture-condition:B1-COND-2",
+        "architecture-condition:B1-COND-3",
+        "architecture-condition:B1-COND-4",
+        "architecture-condition:B1-COND-5"
+      ],
+      "source_action_refs": [],
+      "estimated_scope": {
+        "estimate_known": true,
+        "files_upper_bound": 1,
+        "changed_lines_upper_bound": 58,
+        "confidence": "MEDIUM"
+      }
+    }
+  ],
+  "execution_waves": [
+    [
+      "TASK-001-79c5725c"
+    ],
+    [
+      "TASK-002-b8190730"
+    ],
+    [
+      "TASK-003-69b70828"
+    ],
+    [
+      "TASK-004-96918fec"
+    ],
+    [
+      "TASK-005-963c8a44"
+    ],
+    [
+      "TASK-006-1217fc4d"
+    ],
+    [
+      "TASK-007-6370a1b7"
+    ],
+    [
+      "TASK-008-e3c0d230"
+    ],
+    [
+      "TASK-009-be439cd8"
+    ],
+    [
+      "TASK-010-4fc34a06"
+    ],
+    [
+      "TASK-011-65929e54"
+    ],
+    [
+      "TASK-012-5c7c8906"
+    ]
+  ],
+  "sequencing_constraints": [
+    "Tasks execute in deterministic dependency-wave order."
+  ],
+  "verification_gates": [
+    "Every required test, task verification, and traceability item is satisfied."
+  ],
+  "traceability": {
+    "condition_coverage": {
+      "architecture-condition:B1-COND-1": [
+        "TASK-001-79c5725c",
+        "TASK-002-b8190730",
+        "TASK-003-69b70828",
+        "TASK-004-96918fec",
+        "TASK-005-963c8a44",
+        "TASK-006-1217fc4d",
+        "TASK-007-6370a1b7",
+        "TASK-008-e3c0d230",
+        "TASK-009-be439cd8",
+        "TASK-010-4fc34a06",
+        "TASK-011-65929e54",
+        "TASK-012-5c7c8906"
+      ],
+      "architecture-condition:B1-COND-2": [
+        "TASK-001-79c5725c",
+        "TASK-002-b8190730",
+        "TASK-003-69b70828",
+        "TASK-004-96918fec",
+        "TASK-005-963c8a44",
+        "TASK-006-1217fc4d",
+        "TASK-007-6370a1b7",
+        "TASK-008-e3c0d230",
+        "TASK-009-be439cd8",
+        "TASK-010-4fc34a06",
+        "TASK-011-65929e54",
+        "TASK-012-5c7c8906"
+      ],
+      "architecture-condition:B1-COND-3": [
+        "TASK-001-79c5725c",
+        "TASK-002-b8190730",
+        "TASK-003-69b70828",
+        "TASK-004-96918fec",
+        "TASK-005-963c8a44",
+        "TASK-006-1217fc4d",
+        "TASK-007-6370a1b7",
+        "TASK-008-e3c0d230",
+        "TASK-009-be439cd8",
+        "TASK-010-4fc34a06",
+        "TASK-011-65929e54",
+        "TASK-012-5c7c8906"
+      ],
+      "architecture-condition:B1-COND-4": [
+        "TASK-001-79c5725c",
+        "TASK-002-b8190730",
+        "TASK-003-69b70828",
+        "TASK-004-96918fec",
+        "TASK-005-963c8a44",
+        "TASK-006-1217fc4d",
+        "TASK-007-6370a1b7",
+        "TASK-008-e3c0d230",
+        "TASK-009-be439cd8",
+        "TASK-010-4fc34a06",
+        "TASK-011-65929e54",
+        "TASK-012-5c7c8906"
+      ],
+      "architecture-condition:B1-COND-5": [
+        "TASK-001-79c5725c",
+        "TASK-002-b8190730",
+        "TASK-003-69b70828",
+        "TASK-004-96918fec",
+        "TASK-005-963c8a44",
+        "TASK-006-1217fc4d",
+        "TASK-007-6370a1b7",
+        "TASK-008-e3c0d230",
+        "TASK-009-be439cd8",
+        "TASK-010-4fc34a06",
+        "TASK-011-65929e54",
+        "TASK-012-5c7c8906"
+      ]
+    },
+    "action_coverage": {},
+    "required_test_coverage": {
+      "scripts/tests/test_implementation_plan.py": [
+        "TASK-012-5c7c8906"
+      ],
+      "scripts/tests/test_plan_execution_state.py": [
+        "TASK-012-5c7c8906"
+      ],
+      "scripts/tests/test_plan_state_store.py": [
+        "TASK-012-5c7c8906"
+      ],
+      "scripts/tests/test_task_lease.py": [
+        "TASK-012-5c7c8906"
+      ],
+      "skills/loop-task-implementer/tests/test_run_log.py": [
+        "TASK-012-5c7c8906"
+      ],
+      "make lint-python": [
+        "TASK-012-5c7c8906"
+      ]
+    }
+  }
+}

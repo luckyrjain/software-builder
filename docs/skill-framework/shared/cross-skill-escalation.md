@@ -63,6 +63,7 @@ dispatch, and `codebase-architecture-review`'s `composition.invokes` does not ga
 | Task implementation causes or needs incident investigation | loop-task-implementer → incident-rca | Service + window + task ref | "RCA for `{service}` {window} — regression from task `{task_id}`" |
 | Task requires understanding an unfamiliar domain/codebase first | loop-task-implementer → domain-comprehension | Repo/workspace + task ref | "Map domain for `{workspace}` before implementing task `{task_id}`" |
 | Task touches MySQL-dialect SQL during a PG migration | loop-task-implementer → mysql-to-postgres-sql | Service + repo | "Scan/rewrite MySQL dialect in `{service}` for task `{task_id}`" |
+| Task selection finds a candidate task's acceptance criteria insufficiently concrete for safe implementation (`orchestrator.md` §2, gap-backlog B1) | loop-task-implementer → engineering-decision-discovery | `decision_scope` (task_id, target_paths, title, dependencies) | "Grill me on task `{task_id}`'s acceptance criteria before implementation" |
 | Caller wants one workspace's own migration status, not an org-wide rollup | migration-program-manager → mysql-to-postgres-sql | `workspace_root` | "What's the migration status for `{workspace}`?" |
 | A workspace in the rollup has no `SQUAD_MAP.md` (services join as `squad: UNKNOWN`) | migration-program-manager → squad-map | `workspace_root` | "Map squads for repos in `{workspace}` — org prefix `{org}`, segment `{n}`" |
 | Caller wants one deployment's own rightsizing question, not a sweep | cost-optimization-sprint-planner → k8s-overprovisioning-datadog | Deployment + env | "Assess rightsizing for `{deployment}` in `{env}`" |
@@ -201,6 +202,7 @@ Skill-specific rows in each `SKILL.md` MUST be a subset of this table plus local
 | research-brief surfaces a decision needing interrogation | engineering-decision-discovery receives the `research_brief` findings | "Grill me on the decision surfaced by researching `{research_question}`" |
 | issue-triage flags an issue as security-sensitive | security-review receives the finding | "Security review of `{finding}` flagged during issue triage" |
 | initiative-mapper finds a ticket that's one unresolved decision | engineering-decision-discovery receives the `initiative_map` ticket and evidence | "Grill me on the unresolved decision for ticket `{ticket_id}` in `{initiative}`" |
+| loop-task-implementer's task selection finds acceptance criteria insufficiently concrete | engineering-decision-discovery receives the `decision_scope` built from the task's target_paths/title/dependencies | "Grill me on task `{task_id}`'s acceptance criteria before implementation" |
 
 ## 3. Handoff block (required fields)
 

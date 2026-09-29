@@ -3,9 +3,9 @@ schema_version: 1
 required_dimensions: [positive, negative, ambiguous, adversarial, degraded]
 dimension_coverage:
   positive:
-    case_refs: [pr-review/happy-mcp-contract]
+    case_refs: [pr-review/happy-mcp-contract, loop-task-implementer/clarify-step-resolves-and-persists]
   negative:
-    case_refs: [pr-review/golden-chat-only-not-posted]
+    case_refs: [pr-review/golden-chat-only-not-posted, loop-task-implementer/clarify-step-unattended-skip]
   ambiguous:
     contract_gate: routing_collisions
   adversarial:
@@ -16,9 +16,9 @@ dimension_coverage:
 # Item 24: executable behavior scenarios that the common harness must retain.
 behavior_scenarios:
   correct_invocation:
-    case_refs: [pr-review/happy-mcp-contract]
+    case_refs: [pr-review/happy-mcp-contract, loop-task-implementer/clarify-step-resolves-and-persists]
   correct_non_invocation:
-    case_refs: [pr-gatekeeper/adversarial-no-ambient-discovery]
+    case_refs: [pr-gatekeeper/adversarial-no-ambient-discovery, loop-task-implementer/clarify-step-unattended-skip]
   routing:
     contract_gate: routing_collisions
   insufficient_evidence:
