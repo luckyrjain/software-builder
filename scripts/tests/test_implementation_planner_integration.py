@@ -66,6 +66,7 @@ def test_implementation_plan_v1_contract_fields() -> None:
         "sequencing_constraints",
         "verification_gates",
         "traceability",
+        "planning_path",
     ]
 
 

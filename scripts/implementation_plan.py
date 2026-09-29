@@ -30,6 +30,7 @@ PLAN_FIELDS = {
     "sequencing_constraints",
     "verification_gates",
     "traceability",
+    "planning_path",
 }
 TASK_FIELDS = {
     "task_id",
@@ -94,6 +95,31 @@ SPECIALIST_ARTIFACTS = {
 SHA256 = 64
 LOOP_TASK_MAX_FILES = 40
 LOOP_TASK_MAX_LINES = 1500
+
+PLANNING_PATH_MODES = {"FULL", "LIGHTWEIGHT"}
+PLANNING_PATH_FIELDS = {"mode", "eligibility_category", "asserted_by"}
+ELIGIBILITY_CATEGORIES = {
+    "CONFIG_VALUE_ONLY", "DOC_ONLY", "ADDITIVE_TEST_ONLY", "MECHANICAL_PRECEDENT_APPLICATION",
+}
+_DEFAULT_PLANNING_PATH = {"mode": "FULL", "eligibility_category": None, "asserted_by": None}
+
+_LIGHTWEIGHT_DENYLIST_PREFIXES = (".github/workflows/", ".claude/")
+_LIGHTWEIGHT_DENYLIST_EXACT = {
+    "CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS",
+    "docs/github-ruleset-main.json", ".github/dependabot.yml",
+}
+# Round 4, Lens A (Safety and State): pre-lowercase both comparison sets once so every branch of
+# _matches_lightweight_denylist compares case-insensitively -- previously only the dependency-manifest
+# basename check did this, leaving a case-varied spelling (e.g. ".GitHub/workflows/ci.yml",
+# "Codeowners") able to evade the CI-workflow-prefix and exact-match governance-file checks.
+_LIGHTWEIGHT_DENYLIST_PREFIXES_LOWER = tuple(prefix.lower() for prefix in _LIGHTWEIGHT_DENYLIST_PREFIXES)
+_LIGHTWEIGHT_DENYLIST_EXACT_LOWER = {entry.lower() for entry in _LIGHTWEIGHT_DENYLIST_EXACT}
+_DEPENDENCY_MANIFEST_BASENAMES = {
+    "requirements.txt", "requirements.lock", "pyproject.toml",
+    "package.json", "package-lock.json",
+    "cargo.toml", "cargo.lock", "go.mod", "go.sum", "gemfile.lock",   # compared lower-cased
+}
+_TEST_FIXTURE_SEGMENT = "tests/fixtures/"
 
 
 def _string_list(value: object, label: str, errors: list[str], *, allow_empty: bool = True) -> None:
@@ -561,6 +587,11 @@ def build_implementation_plan(
     estimate = evidence.get("estimated_scope") if isinstance(evidence.get("estimated_scope"), Mapping) else None
     if estimate is None:
         estimate = {"estimate_known": False, "files_upper_bound": 0, "changed_lines_upper_bound": 0, "confidence": "UNKNOWN"}
+    caller_planning_path = evidence.get("planning_path")
+    planning_path = (
+        caller_planning_path if isinstance(caller_planning_path, Mapping)
+        else {"mode": "FULL", "eligibility_category": None, "asserted_by": None}
+    )
     task_count = len(target_paths) or 1
 
     def _task_share(total: object, index: int) -> object:
@@ -644,6 +675,7 @@ def build_implementation_plan(
         "sequencing_constraints": ["Tasks execute in deterministic dependency-wave order."],
         "verification_gates": ["Every required test, task verification, and traceability item is satisfied."],
         "traceability": traceability,
+        "planning_path": planning_path,
     }
     validation_errors = validate_implementation_plan(
         plan,
@@ -932,6 +964,67 @@ def validate_external_dependency_cycles(
     return sorted(set(errors))
 
 
+def _normalize_lightweight_path(path: str) -> str:
+    # Round 3, SRE: backslash-separated paths are valid caller input (_validate_task itself
+    # normalizes them for its own shape check) — convert first, then strip "./" and collapse "//",
+    # matching in a single canonical forward-slash form before any denylist/basename check.
+    normalized = path.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    while "//" in normalized:
+        normalized = normalized.replace("//", "/")
+    return normalized
+
+
+def _matches_lightweight_denylist(path: str) -> bool:
+    normalized = _normalize_lightweight_path(path)
+    normalized_lower = normalized.lower()
+    basename = normalized.rsplit("/", 1)[-1]
+    # Round 4, Lens A (Safety and State): compare the lowered path against the lowered comparison
+    # sets so a case-varied spelling of a CI workflow path or governance file cannot evade the
+    # denylist -- this mirrors the case-insensitive comparison already used for manifest basenames
+    # below.
+    if normalized_lower in _LIGHTWEIGHT_DENYLIST_EXACT_LOWER or normalized_lower.startswith(_LIGHTWEIGHT_DENYLIST_PREFIXES_LOWER):
+        return True
+    # Round 3, Security Architect: a manifest basename under a tests/fixtures/ directory is inert
+    # test data, never installed/executed as a real dependency declaration for this repo — exempt
+    # it from the manifest check specifically (not from the CI/permissions checks above, which stay
+    # absolute regardless of directory).
+    if _TEST_FIXTURE_SEGMENT in normalized:
+        return False
+    # Round 3, SRE: compare case-insensitively -- a case-insensitive-but-preserving filesystem
+    # (e.g. default macOS APFS) would otherwise let "Requirements.txt" evade a lower-cased list.
+    return basename.lower() in _DEPENDENCY_MANIFEST_BASENAMES
+
+
+def _validate_planning_path(value: object, plan: Mapping[str, Any], errors: list[str]) -> None:
+    if not isinstance(value, Mapping):
+        errors.append("error: planning_path must be a mapping"); return
+    unknown = _safe_sorted(set(value) - PLANNING_PATH_FIELDS)
+    missing = _safe_sorted(PLANNING_PATH_FIELDS - set(value))
+    if unknown: errors.append(f"error: planning_path contains undeclared fields: {', '.join(unknown)}")
+    if missing: errors.append(f"error: planning_path missing fields: {', '.join(missing)}")
+    mode = value.get("mode")
+    if mode not in PLANNING_PATH_MODES:
+        errors.append("error: planning_path.mode must be FULL or LIGHTWEIGHT"); return
+    if mode == "FULL":
+        if value.get("eligibility_category") is not None or value.get("asserted_by") is not None:
+            errors.append("error: FULL planning_path must have null eligibility_category and asserted_by")
+        return
+    category = value.get("eligibility_category")
+    if category not in ELIGIBILITY_CATEGORIES:
+        errors.append(f"error: planning_path.eligibility_category must be one of {sorted(ELIGIBILITY_CATEGORIES)}")
+    if not non_empty_str(value.get("asserted_by")):
+        errors.append("error: planning_path.asserted_by must be a non-empty string")
+    all_paths = {path for task in plan.get("tasks", []) if isinstance(task, Mapping)
+                 for path in task.get("target_paths", []) if isinstance(path, str)}
+    if len(all_paths) > 3:
+        errors.append(f"error: LIGHTWEIGHT planning_path allows at most 3 target_paths, found {len(all_paths)}")
+    for path in all_paths:
+        if _matches_lightweight_denylist(path):
+            errors.append(f"error: {path} is never eligible for the LIGHTWEIGHT planning path (CI/permissions/governance/dependency-manifest)")
+
+
 def validate_implementation_plan(
     plan: object,
     *,
@@ -949,8 +1042,12 @@ def validate_implementation_plan(
         canonical_payload_digest(dict(plan))
     except (TypeError, ValueError):
         errors.append("error: implementation_plan must contain only finite JSON-compatible values")
-    unknown = _safe_sorted(set(plan) - PLAN_FIELDS)
-    missing = _safe_sorted(PLAN_FIELDS - set(plan))
+    # planning_path is optional for backward compatibility with plans built before this field existed:
+    # absence is treated as implicit FULL for field-set validation only. This never mutates `plan` --
+    # only the SET of field names considered "present" is adjusted for this one diff.
+    present_fields = set(plan) if "planning_path" in plan else set(plan) | {"planning_path"}
+    unknown = _safe_sorted(present_fields - PLAN_FIELDS)
+    missing = _safe_sorted(PLAN_FIELDS - present_fields)
     if unknown:
         errors.append(f"error: implementation_plan contains undeclared fields: {', '.join(map(str, unknown))}")
     if missing:
@@ -1041,6 +1138,7 @@ def validate_implementation_plan(
         required_tests,
     )
     _validate_source_readiness(plan, source_statuses or {}, errors)
+    _validate_planning_path(plan.get("planning_path", _DEFAULT_PLANNING_PATH), plan, errors)
     errors.extend(validate_external_dependency_cycles(plan, sibling_plans))
     return sorted(set(errors))
 

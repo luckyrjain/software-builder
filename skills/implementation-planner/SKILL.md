@@ -27,6 +27,15 @@ design-time specialist report named by `change_impact_report.review_triggers`. A
 triggered report is an explicit planning blocker. Repository read is required for target paths,
 verification commands, and conservative scope estimates.
 
+**Exception — lightweight plan path:** for a task the caller asserts is genuinely small, this skill accepts
+a caller-supplied `LIGHTWEIGHT` stub in place of the three real reports above, per
+[reference/lightweight-path.md](reference/lightweight-path.md). This skill performs zero additional judgment
+of its own about whether a task actually qualifies for the exception — it accepts the caller-supplied stub as
+evidence, exactly the same trust model this skill already applies to any other supplied report. The
+mechanically-checkable parts of eligibility (category enum, target-path count, path denylist) are
+code-enforced in `_validate_planning_path`; the "is this task actually small" judgment itself is the caller's
+alone.
+
 ## Capabilities
 
 - Required: `host.report.write` for emitting `implementation_plan`.

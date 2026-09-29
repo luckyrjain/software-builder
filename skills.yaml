@@ -504,6 +504,7 @@ contracts:
           sequencing_constraints: list
           verification_gates: list
           traceability: mapping
+          planning_path: mapping
         production_readiness_report:
           title: string
           assessment_target: mapping
@@ -1687,6 +1688,7 @@ contracts:
         - sequencing_constraints
         - verification_gates
         - traceability
+        - planning_path
       production_readiness_report:
         fields:
         - title
