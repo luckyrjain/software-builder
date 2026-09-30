@@ -35,6 +35,7 @@ write-authority-doctrine sense, and why it must never invoke ``git add``/``commi
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import subprocess
@@ -43,6 +44,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Sequence
 
 # --- repo-root import bootstrap (mirrors the sys.path convention already used by sibling skill
@@ -63,6 +65,68 @@ except ImportError:  # pragma: no cover - only reachable outside a source checko
     derive_lease_id = None  # type: ignore[assignment]
     resolve_lease_dir = None  # type: ignore[assignment]
     try_acquire = None  # type: ignore[assignment]
+
+
+# Loads docs/skill-framework/shared/redaction.py -- the one redaction table every skill that
+# renders untrusted text into a report shares (see that module's own docstring), rather than a
+# second, private redaction list drifting from it. `_RUNTIME_DESCRIPTION` is read by name, never
+# inlined, by the generated `_shared_runtime_loader()` below.
+_RUNTIME_DESCRIPTION = "shared redaction runtime"
+
+
+# GENERATED shared-runtime-bootstrap:start -- do not edit; run `make generate`. See scripts/registry/generate_shared_runtime_bootstrap.py
+SKILL_ROOT = Path(__file__).resolve().parents[1]
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_INSTALL_MANIFEST = ".software-builder-manifest.json"
+
+
+def _shared_runtime_loader() -> ModuleType:
+    """Import shared_runtime_loader, which owns the containment policy for every module this
+    script executes out of docs/skill-framework/shared/.
+
+    Only locating the loader itself is handled here, and it needs no policy of its own: an
+    installed package carries the loader beside this script (package_skill.py vendors it), so the
+    lookup never leaves the package, and the install manifest is what proves a missing vendored
+    copy is a packaging fault rather than an invitation to read a sibling path.
+    """
+    beside = _SCRIPT_DIR / "shared_runtime_loader.py"
+    if beside.is_file():
+        path = beside
+    elif (SKILL_ROOT / _INSTALL_MANIFEST).is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {beside}")
+    else:
+        _relative_loader = "docs/skill-framework/shared/shared_runtime_loader.py"
+        path = SKILL_ROOT.parent / _relative_loader
+        for ancestor in (SKILL_ROOT, *SKILL_ROOT.parents)[:6]:
+            candidate = ancestor / _relative_loader
+            if candidate.is_file():
+                path = candidate
+                break
+    if not path.is_file():
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
+    spec = importlib.util.spec_from_file_location("software_builder_shared_runtime_loader", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load packaged {_RUNTIME_DESCRIPTION} loader: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+# GENERATED shared-runtime-bootstrap:end
+
+
+_redaction = _shared_runtime_loader().load_shared_runtime(
+    SKILL_ROOT,
+    "redaction",
+    alias="shared_redaction",
+    description=_RUNTIME_DESCRIPTION,
+)
+
+# Data model / Rollout Phase 3 / safe-output.md Rule 5: candidate.principle/category/scope are
+# synthesized from real historical PR review-comment text (the Orchestrator's own synthesis
+# step), so they are untrusted the same way any fetched/quoted evidence is -- redact before they
+# are embedded in the durable report file. The document profile (human-authored prose quoted back
+# into a report), not the log profile, matches this content's own shape.
+_REDACTION_PROFILE = _redaction.DOCUMENT_PATTERNS
+_REDACTED_SECRET_MARKER = _redaction.SECRET_MARKER
 
 
 DEFAULT_REPO = "luckyrjain/software-builder"
@@ -207,6 +271,22 @@ def _fetch_review_comment_text(
         except OSError:
             # e.g. `gh` not installed. Never retryable -- no amount of backoff installs the CLI.
             failure_category = "gh_unavailable"
+            break
+        except UnicodeDecodeError:
+            # `text=True` makes subprocess.run itself decode gh's stdout/stderr -- a realistic
+            # failure when a PR review comment carries emoji/accented text and the process's
+            # locale isn't UTF-8 (common on a minimal CI image). UnicodeDecodeError is a
+            # ValueError subclass, not an OSError, so it is never caught by the clause above;
+            # left uncaught, it would propagate past this function's whole retry loop as a raw,
+            # undocumented exception instead of becoming the ConventionCaptureFetchError the
+            # Reviewer's workflow (reviewer.md's Convention-capture investigation) is written to
+            # catch and route to NEEDS_EVIDENCE. Treated as fail-fast, not retryable: it is a
+            # deterministic property of this PR's comment bytes under the current locale, and no
+            # amount of backoff changes either one. The failure category is deliberately bare --
+            # never the exception's own str(), which embeds the offending byte value and its
+            # position (exactly the kind of fetched-content fragment this exception must never
+            # carry, per the class docstring above).
+            failure_category = "decode_error"
             break
         else:
             if result.returncode == 0:
@@ -404,7 +484,7 @@ def scan_pr_history(
     max_prs: int = SCAN_MAX_PRS,
     window_days: int = SCAN_WINDOW_DAYS,
     now: datetime | None = None,
-) -> set[int]:
+) -> set[int] | None:
     """Query up to ``max_prs`` most-recently-merged/closed PRs for ``repo``, intersected with a
     ``window_days``-day recency window (Data model: ``min(50 most recent closed/merged PRs, PRs
     within the last 90 days)``). Read-only; never writes. Returns the set of eligible PR numbers —
@@ -415,9 +495,16 @@ def scan_pr_history(
     Does not fetch review-comment text (that is :func:`fetch_and_score`'s own, separate, narrower
     capability) — only lightweight PR metadata (number, closed date).
 
-    On a missing ``gh`` CLI, an unauthenticated call, or a malformed response, returns an empty set
-    and prints a bare, non-leaking warning to stderr (Failure strategy: "PR-history-read capability
-    absent -> skip the scan entirely, report the gap").
+    Returns ``None`` -- never an empty set -- on a missing ``gh`` CLI, an unauthenticated call, a
+    non-zero ``gh`` exit, or a malformed response, and prints a bare, non-leaking warning to
+    stderr (Failure strategy: "PR-history-read capability absent -> skip the scan entirely, report
+    the gap"). This is a deliberately distinct return from the empty set: an empty set means the
+    scan itself succeeded and genuinely found zero eligible PRs (a legitimate result a caller
+    should filter against, crediting nothing), while ``None`` means the scan did not run to
+    completion at all, so its silence proves nothing about which PRs are in-window. A caller that
+    collapsed both to "don't filter" (e.g. via ``eligible_prs or None``) would let a failed scan
+    silently disable the occurrence/diversity threshold's PR-window bound entirely -- callers must
+    treat ``None`` as fail-closed (skip generating candidates this pass), never as "no filter".
     """
     now = now or datetime.now(timezone.utc)
     cutoff = now - timedelta(days=window_days)
@@ -447,13 +534,13 @@ def scan_pr_history(
             "skipping the scan",
             file=sys.stderr,
         )
-        return set()
+        return None
     if result.returncode != 0:
         print(
             "convention_capture: PR-history scan failed (gh api error) -- skipping the scan",
             file=sys.stderr,
         )
-        return set()
+        return None
     try:
         prs = json.loads(result.stdout)
     except json.JSONDecodeError:
@@ -461,9 +548,14 @@ def scan_pr_history(
             "convention_capture: PR-history scan returned malformed JSON -- skipping the scan",
             file=sys.stderr,
         )
-        return set()
+        return None
     if not isinstance(prs, list):
-        return set()
+        print(
+            "convention_capture: PR-history scan returned an unexpected shape (not a JSON array) "
+            "-- skipping the scan",
+            file=sys.stderr,
+        )
+        return None
     eligible: set[int] = set()
     for pr in prs:
         if not isinstance(pr, dict):
@@ -597,15 +689,67 @@ def _load_occurrences(path: Path) -> list[Occurrence]:
     return occurrences
 
 
-def _render_candidate(candidate: CandidateConvention) -> str:
+def _neutralize_markdown_structure(text: str) -> str:
+    """safe-output.md Rule 4 (Markdown-structure escaping), sized for one synthesized report
+    field (``principle``/``category``/``scope``): these fields are meant to render as a single
+    inert value inside the report template's own fixed structure -- never to define their own
+    block structure.
+
+    Collapses every embedded newline to a space. This alone defeats an embedded heading-injection
+    sequence (e.g. a candidate whose ``principle`` contains a literal ``"\\n## Fake Heading\\n"``):
+    a Markdown heading must start a line, and after this step the field contributes no internal
+    line starts at all, only the template's own fixed ``###``/``\\n\\n`` literals do.
+
+    Also replaces every backtick with the visually similar but structurally inert
+    ``ˋ`` (modifier letter grave accent, the same substitution already used by
+    ``skills/prd-architect/scripts/prd_safe_output.py``'s own Markdown-structure escaping) --
+    this neutralizes an inline code span and any run of 3+ backticks (an unbalanced or
+    attacker-supplied triple-backtick fence) the same way: no delimiter run in the field's own
+    text survives intact.
+    """
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"\n+", " ", text)
+    return text.replace("`", "ˋ")
+
+
+def _sanitize_report_field(text: str) -> tuple[str, bool]:
+    """Apply safe-output.md Rule 4 (:func:`_neutralize_markdown_structure`) and Rule 5 (PII/secret
+    redaction, via the shared ``docs/skill-framework/shared/redaction.py`` table's document
+    profile -- the same module ``incident-rca`` and ``prd-architect`` already redact through) to
+    one synthesized report field before :func:`_render_candidate` embeds it in the durable report
+    file.
+
+    ``candidate.principle``/``category``/``scope`` are sourced from real historical PR
+    review-comment text via the Orchestrator's synthesis step (Data model, Rollout Phase 3) --
+    untrusted the same way any fetched/quoted evidence is, never skill-authored prose.
+
+    Returns ``(sanitized_text, redacted)``; ``redacted`` is ``True`` when Rule 5 redaction fired,
+    so the caller can note in the report that redaction was applied (Rule 5: "note in the output
+    that redaction was applied, so a reader doesn't mistake a redacted placeholder for missing
+    evidence").
+    """
+    neutralized = _neutralize_markdown_structure(text)
+    redacted_text, hits = _redaction.redact(
+        neutralized, patterns=_REDACTION_PROFILE, marker=_REDACTED_SECRET_MARKER
+    )
+    return redacted_text, bool(hits)
+
+
+def _render_candidate(candidate: CandidateConvention) -> tuple[str, bool]:
+    """Render one candidate's report entry. Returns ``(rendered_text, redacted)`` -- see
+    :func:`_sanitize_report_field` for what ``redacted`` means."""
     evidence = ", ".join(f"PR #{n}" for n in candidate.evidence_prs)
-    return (
-        f"### {candidate.principle}\n\n"
-        f"**Category:** {candidate.category} — for human browsing only; not used for "
+    principle, principle_redacted = _sanitize_report_field(candidate.principle)
+    category, category_redacted = _sanitize_report_field(candidate.category)
+    scope, scope_redacted = _sanitize_report_field(candidate.scope)
+    rendered = (
+        f"### {principle}\n\n"
+        f"**Category:** {category} — for human browsing only; not used for "
         f"duplicate-recognition\n"
         f"**Evidence:** {evidence} ({len(candidate.evidence_prs)} distinct PRs)\n"
-        f"**Scope:** {candidate.scope}\n"
+        f"**Scope:** {scope}\n"
     )
+    return rendered, (principle_redacted or category_redacted or scope_redacted)
 
 
 def _write_report(
@@ -614,6 +758,7 @@ def _write_report(
     output_dir: Path,
     scan_window_end_date: str,
     counts: dict[str, int],
+    scan_failed: bool = False,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / f"{scan_window_end_date}-b6-convention-scan-report.md"
@@ -629,19 +774,44 @@ def _write_report(
         "add`/`git commit`/`git push`. A human decides whether/when to act on any candidate below "
         "(gap-backlog B6 design, Rollout Phase 3).",
         "",
-        f"Discarded below occurrence/diversity threshold: {counts.get('below_threshold', 0)} "
-        "(bare count only).",
-        f"Discarded as already-captured (matches an existing `learned-conventions.md` entry): "
-        f"{counts.get('already_captured', 0)} (bare count only).",
-        f"Discarded on textual-contradiction check: {counts.get('contradicted', 0)} (bare count "
-        "only).",
-        "",
     ]
+    if scan_failed:
+        lines.append(
+            "**PR-history scan failed this pass** (gh CLI missing, unauthenticated, a non-zero "
+            "exit, or a malformed response -- see stderr for which). Per the design's Failure "
+            "strategy (\"PR-history-read capability absent -> skip the scan entirely, report the "
+            "gap\"), this pass was skipped entirely and fail-closed: no occurrence could be "
+            "verified as citing an in-window PR, so **no candidates were generated this pass** -- "
+            "the counts below are all zero, not evidence that nothing recurred."
+        )
+        lines.append("")
+    lines.extend(
+        [
+            f"Discarded below occurrence/diversity threshold: {counts.get('below_threshold', 0)} "
+            "(bare count only).",
+            f"Discarded as already-captured (matches an existing `learned-conventions.md` entry): "
+            f"{counts.get('already_captured', 0)} (bare count only).",
+            f"Discarded on textual-contradiction check: {counts.get('contradicted', 0)} (bare "
+            "count only).",
+            "",
+        ]
+    )
     if surviving:
         lines.append("## Candidates")
         lines.append("")
+        any_redacted = False
         for candidate in surviving:
-            lines.append(_render_candidate(candidate))
+            rendered, redacted = _render_candidate(candidate)
+            any_redacted = any_redacted or redacted
+            lines.append(rendered)
+        if any_redacted:
+            lines.append(
+                "_Some candidate text above was redacted before being written to this report "
+                "(safe-output.md Rule 5: the synthesized principle/category/scope is sourced "
+                "from real historical PR text, so a credential- or PII-shaped token in it is "
+                "replaced with a `[REDACTED SECRET]` placeholder rather than written verbatim)._"
+            )
+            lines.append("")
     else:
         lines.append("No candidates cleared every check this pass.")
         lines.append("")
@@ -697,7 +867,18 @@ def generate_convention_scan_report(
     try:
         occurrences = _load_occurrences(occurrences_path) if occurrences_path else []
         eligible_prs = scan_pr_history(repo=repo)
-        all_candidates = aggregate_occurrences(occurrences, eligible_prs=eligible_prs or None)
+        scan_failed = eligible_prs is None
+        if scan_failed:
+            # Fail-closed (Failure strategy: "PR-history-read capability absent -> skip the scan
+            # entirely, report the gap"): a failed scan never distinguishes an out-of-window PR
+            # from an in-window one, so no occurrence can be verified against the bounded scan
+            # window this pass -- crediting any of them anyway would be exactly the fail-open bug
+            # `eligible_prs or None` used to cause (an empty-on-failure set collapsing to "no
+            # filter" and letting arbitrary/stale PR numbers through). Skip candidate generation
+            # entirely rather than guess.
+            all_candidates: list[CandidateConvention] = []
+        else:
+            all_candidates = aggregate_occurrences(occurrences, eligible_prs=eligible_prs)
 
         surviving: list[CandidateConvention] = []
         counts = {"already_captured": 0, "contradicted": 0}
@@ -719,15 +900,18 @@ def generate_convention_scan_report(
             surviving.append(candidate)
 
         # Below-threshold candidates never reach aggregate_occurrences' own output at all, so the
-        # bare count for the report is computed from the category universe, not from `all_candidates`.
+        # bare count for the report is computed from the category universe, not from
+        # `all_candidates`. When the scan itself failed, every occurrence was skipped outright
+        # (not "below threshold"), so that count is 0, not the full category universe.
         categories_seen = {occ.category for occ in occurrences}
-        counts["below_threshold"] = len(categories_seen) - len(all_candidates)
+        counts["below_threshold"] = 0 if scan_failed else len(categories_seen) - len(all_candidates)
 
         return _write_report(
             surviving,
             output_dir=output_dir,
             scan_window_end_date=scan_window_end_date,
             counts=counts,
+            scan_failed=scan_failed,
         )
     finally:
         if handle is not None:
