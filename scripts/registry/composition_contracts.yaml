@@ -116,6 +116,7 @@ artifact_schemas:
     - deadline
     - session_token_budget
     - output_dir
+    - regression_gate
   implementation_pr:
     fields:
     - pr_url
@@ -216,6 +217,7 @@ artifact_schemas:
     - symptom
     - repro_status
     - repro_evidence
+    - repro_command
     - hypotheses_tested
     - root_cause
     - confidence

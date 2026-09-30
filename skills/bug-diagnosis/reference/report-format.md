@@ -27,6 +27,7 @@ of them:
 | Symptom | <symptom> |
 | Repro status | confirmed / unconfirmed |
 | Repro evidence | <cited evidence, or the reason it's unconfirmed> |
+| Repro command | <validated runnable command, or "null — <reason>"> |
 
 ## Hypotheses tested
 
@@ -57,4 +58,11 @@ of them:
   [confidence-bands.md](../../../docs/skill-framework/shared/confidence-bands.md) — never a numeric score
   or an alternate label.
 - `repro_status: confirmed` requires cited evidence; otherwise `unconfirmed` with a stated reason.
+- `repro_command` is populated only when `repro_status: confirmed` and the repro is expressible as a
+  single, directly runnable command (e.g. `pytest tests/test_foo.py::test_bar`, `make test`,
+  `npm run test:unit`) that independently passes `validate_repro_command`
+  ([workflow/repro.md](../workflow/repro.md)) — the fixed, delimiter-agnostic validator that rejects
+  shell metacharacters/chaining, absolute-path arguments, and `..` traversal. Otherwise it is `null`, and
+  `repro_evidence` explains why the repro isn't automatable (manual repro, external-system state, a
+  command shape the validator can't express) — the existing free-text fallback is unchanged.
 - Never claim a fix was applied — this report never edits source, tests, or configuration.
