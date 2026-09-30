@@ -476,6 +476,44 @@ def test_render_candidate_neutralizes_embedded_heading_injection(cc):
     assert "## Fake Heading" not in rendered.splitlines()
 
 
+def test_render_candidate_neutralizes_unclosed_html_comment(cc):
+    # Reproduction: a literal, unclosed `<!--` with no matching `-->` anywhere later in the same
+    # field. Under a GFM-compatible renderer with raw-HTML passthrough, an unescaped, unclosed
+    # `<!--` here would hide everything from that point in the rendered document onward --
+    # including this candidate's own Evidence/Scope lines below -- until a literal `-->` appears
+    # anywhere later in the file, or EOF if none exists.
+    candidate = cc.CandidateConvention(
+        category="cite-evidence-inline",
+        principle="Always cite evidence inline. <!-- swallow-the-rest",
+        evidence_prs=(1, 2, 3),
+        scope="loop-task-implementer",
+    )
+
+    rendered, _redacted = cc._render_candidate(candidate)
+
+    assert "<!--" not in rendered
+    assert "&lt;!--" in rendered
+    # The field's own Evidence/Scope lines must still be present and visible -- not swallowed by
+    # the (neutralized) comment opener.
+    assert "**Evidence:**" in rendered
+    assert "**Scope:**" in rendered
+
+
+def test_render_candidate_neutralizes_balanced_html_comment(cc):
+    candidate = cc.CandidateConvention(
+        category="cite-evidence-inline",
+        principle="Always cite evidence inline. <!-- a balanced comment --> Trailing text.",
+        evidence_prs=(1, 2, 3),
+        scope="loop-task-implementer",
+    )
+
+    rendered, _redacted = cc._render_candidate(candidate)
+
+    assert "<!--" not in rendered
+    assert "-->" not in rendered
+    assert "Trailing text." in rendered
+
+
 def test_render_candidate_redacts_credential_shaped_token(cc):
     candidate = cc.CandidateConvention(
         category="cite-evidence-inline",
@@ -520,4 +558,67 @@ def test_generate_convention_scan_report_sanitizes_candidate_before_writing(cc, 
     text = report_path.read_text(encoding="utf-8")
     assert not any(line.startswith("## Fake Heading") for line in text.splitlines())
     assert "AKIAABCDEFGHIJKLMNOP" not in text
-    assert "redacted" in text.lower()
+
+
+def test_generate_convention_scan_report_survives_unclosed_html_comment_injection(
+    cc, tmp_path, monkeypatch
+):
+    # Reproduces the reviewer's exact scenario: two surviving candidates, one whose principle
+    # carries a literal, unclosed `<!-- ` HTML comment opener (no matching `-->` anywhere later in
+    # the same field, or in the report at all), one legitimate candidate with distinct visible
+    # text. Before the fix, an unescaped unclosed `<!--` here would hide everything from that
+    # point in the rendered document onward under a GFM-compatible, raw-HTML-passthrough renderer
+    # -- including the malicious candidate's own Evidence/Scope lines, the legitimate candidate's
+    # entire heading/Evidence/Scope, and the report's redaction-disclosure footer. Asserts both
+    # candidates' content is fully present, visible, and that no literal, renderable HTML comment
+    # delimiter survives into the written report.
+    monkeypatch.setattr(cc, "scan_pr_history", lambda **kwargs: {1, 2, 3})
+
+    payload = [
+        {
+            "category": "malicious-comment-candidate",
+            "principle": "Always cite evidence inline. <!-- swallow-the-rest",
+            "pr_number": pr_number,
+            "scope": "loop-task-implementer",
+        }
+        for pr_number in (1, 2, 3)
+    ] + [
+        {
+            "category": "legitimate-second-candidate",
+            "principle": "Second candidate must remain fully visible and unmangled.",
+            "pr_number": pr_number,
+            "scope": "loop-task-implementer",
+        }
+        for pr_number in (1, 2, 3)
+    ]
+    occurrences_path = tmp_path / "occurrences.json"
+    occurrences_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    report_path = cc.generate_convention_scan_report(
+        occurrences_path,
+        output_dir=tmp_path / "out",
+        learned_conventions_path=tmp_path / "learned-conventions.md",
+        contributing_path=tmp_path / "CONTRIBUTING.md",
+        use_scan_lease=False,
+    )
+
+    text = report_path.read_text(encoding="utf-8")
+
+    # No literal, renderable HTML comment delimiter survives anywhere in the report.
+    assert "<!--" not in text
+    assert "-->" not in text
+
+    # The second, legitimate candidate's principle text is present and unmangled -- not hidden
+    # behind the first candidate's (neutralized) unclosed comment opener.
+    assert "Second candidate must remain fully visible and unmangled." in text
+    assert "### Second candidate must remain fully visible and unmangled." in text
+
+    # Both candidates' Evidence/Scope lines made it into the report (3 "### " headings' worth of
+    # structure: this report only has 2 candidates, so exactly 2 Evidence/Scope pairs).
+    assert text.count("**Evidence:**") == 2
+    assert text.count("**Scope:**") == 2
+
+    # The report's own redaction-disclosure / discard-count footer text (part of `_write_report`'s
+    # own literal template, never candidate-derived) is present -- i.e. nothing after the first
+    # candidate was swallowed.
+    assert "Discarded below occurrence/diversity threshold:" in text

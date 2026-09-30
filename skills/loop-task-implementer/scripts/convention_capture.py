@@ -706,10 +706,29 @@ def _neutralize_markdown_structure(text: str) -> str:
     this neutralizes an inline code span and any run of 3+ backticks (an unbalanced or
     attacker-supplied triple-backtick fence) the same way: no delimiter run in the field's own
     text survives intact.
+
+    Finally, HTML-entity-escapes ``&``, ``<``, and ``>`` -- safe-output.md Rule 6's own
+    Slack-escaping convention, reused here (ampersand first, to avoid double-escaping the
+    entities this step itself creates: ``&`` -> ``&amp;``, then ``<`` -> ``&lt;``,
+    ``>`` -> ``&gt;``) -- to neutralize raw-HTML passthrough. The two syntaxes handled above
+    (heading injection, backtick/fence injection) both require the field to define its own
+    Markdown *block* structure; raw ``<``/``>`` passthrough is a distinct vector neither one
+    closes, because it needs neither a line start nor a delimiter run. Concretely: a candidate
+    whose ``principle`` contains a literal, unclosed HTML comment opener (``"<!-- "`` with no
+    matching ``"-->"`` anywhere later in the same field) would otherwise render verbatim, and
+    under any GFM-compatible renderer with raw-HTML passthrough (GitHub's own file view, VS Code
+    Markdown preview, ...) an unclosed ``<!--`` hides everything from that point in the rendered
+    document onward -- including that candidate's own remaining Evidence/Scope lines, every
+    later candidate's heading/evidence/scope, and the report's own redaction-disclosure footer --
+    until a literal ``-->`` appears anywhere later in the file, or EOF if none exists. Escaping
+    ``<``/``>`` generally (rather than special-casing only ``<!--``/``-->``) defeats raw-HTML
+    passthrough as a whole, not just the comment-delimiter special case -- any other tag-shaped
+    sequence a field might carry is inert the same way.
     """
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"\n+", " ", text)
-    return text.replace("`", "ˋ")
+    text = text.replace("`", "ˋ")
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _sanitize_report_field(text: str) -> tuple[str, bool]:
