@@ -95,6 +95,8 @@ def test_execution_state_requires_plan_digest_and_monotonic_generation() -> None
         "blocked_reason": None,
         "updated_at": "2026-08-26T00:00:00Z",
         "clarifications": {},
+        "comment_threads": {},
+        "final_check_attempts": {},
     }
     assert validate_plan_execution_state(state, plan, current_head="a" * 40) == []
     state["plan_digest"] = "b" * 64
@@ -214,6 +216,78 @@ def test_reconcile_omits_clarifications_argument_leaves_durable_entries_untouche
     )
     assert errors == []
     assert reconciled["clarifications"] == state["clarifications"]
+
+
+def test_initial_plan_execution_state_seeds_empty_comment_threads_and_final_check_attempts() -> None:
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    assert state["comment_threads"] == {}
+    assert state["final_check_attempts"] == {}
+    assert validate_plan_execution_state(state, plan, current_head="a" * 40) == []
+
+
+def test_validate_plan_execution_state_rejects_a_malformed_comment_threads() -> None:
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    # Wrong depth: a flat {thread_id: "not-a-mapping"} instead of task_id -> thread_id -> mapping.
+    state["comment_threads"] = {"TASK-001": "not-a-mapping"}
+    errors = validate_plan_execution_state(state, plan, current_head="a" * 40)
+    assert any("comment_threads" in error for error in errors)
+
+    # Right depth for the outer level, but a non-Mapping per-thread entry underneath it.
+    state["comment_threads"] = {"TASK-001": {"thread-1": "not-a-mapping"}}
+    errors = validate_plan_execution_state(state, plan, current_head="a" * 40)
+    assert any("comment_threads" in error for error in errors)
+
+
+def test_validate_plan_execution_state_rejects_a_malformed_final_check_attempts() -> None:
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    state["final_check_attempts"] = {"TASK-001": "not-an-int"}
+    errors = validate_plan_execution_state(state, plan, current_head="a" * 40)
+    assert any("final_check_attempts" in error for error in errors)
+
+
+def test_cas_advance_style_merge_of_comment_threads_is_thread_id_aware() -> None:
+    """Two separate reconcile calls writing different thread_ids under the same task_id must not
+    clobber each other -- the one new merge-semantics behavior with no direct precedent in
+    clarifications' own shallow-merge test, since comment_threads is two levels deep."""
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    state["comment_threads"] = {
+        "TASK-001": {"thread-a": {"author": "alice", "last_seen_comment_id": "c1"}},
+    }
+    reconciled, errors = reconcile_plan_execution_state(
+        state,
+        plan,
+        authoritative_task_statuses={"TASK-001": "NOT_STARTED", "TASK-002": "NOT_STARTED"},
+        current_head="a" * 40,
+        comment_threads={
+            "TASK-001": {"thread-b": {"author": "bob", "last_seen_comment_id": "c2"}},
+        },
+    )
+    assert errors == []
+    assert reconciled is not None
+    # Thread A's already-persisted entry survives a call that only writes thread B...
+    assert reconciled["comment_threads"]["TASK-001"]["thread-a"]["author"] == "alice"
+    # ...and thread B's newly-supplied entry is merged in alongside it.
+    assert reconciled["comment_threads"]["TASK-001"]["thread-b"]["author"] == "bob"
+
+
+def test_reconcile_final_check_attempts_merges_shallowly_like_clarifications() -> None:
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    state["final_check_attempts"] = {"TASK-001": 1}
+    reconciled, errors = reconcile_plan_execution_state(
+        state,
+        plan,
+        authoritative_task_statuses={"TASK-001": "NOT_STARTED", "TASK-002": "NOT_STARTED"},
+        current_head="a" * 40,
+        final_check_attempts={"TASK-002": 1},
+    )
+    assert errors == []
+    assert reconciled["final_check_attempts"]["TASK-001"] == 1
+    assert reconciled["final_check_attempts"]["TASK-002"] == 1
 
 
 def test_advance_plan_execution_state_threads_clarifications_through() -> None:

@@ -350,6 +350,44 @@ def test_cas_advance_merges_clarifications_by_task_id_across_calls_under_the_exc
     assert on_disk["clarifications"] == result["clarifications"]
 
 
+def test_cas_advance_merges_comment_threads_thread_id_aware_across_calls_under_the_exclusive_lock(tmp_path: Path) -> None:
+    """Two separate cas_advance calls writing different thread_ids under the same task_id must not
+    clobber each other -- comment_threads is two levels deep (task_id -> thread_id -> {...}), one
+    level deeper than clarifications, so a shallow merge would silently destroy a concurrent
+    per-thread write for the same task (gap-backlog B4)."""
+    state_dir = tmp_path / "state"
+    plan = _plan()
+    cas_advance(
+        state_dir,
+        plan,
+        expected_generation=0,
+        authoritative_task_statuses=_official_state(),
+        current_head=HEAD,
+        updated_at=UPDATED_AT,
+        comment_threads={
+            "TASK-001": {"thread-a": {"author": "alice", "last_seen_comment_id": "c1"}},
+        },
+    )
+    result = cas_advance(
+        state_dir,
+        plan,
+        expected_generation=1,
+        authoritative_task_statuses=_official_state(),
+        current_head=HEAD,
+        updated_at="2026-09-25T00:06:00Z",
+        comment_threads={
+            "TASK-001": {"thread-b": {"author": "bob", "last_seen_comment_id": "c2"}},
+        },
+    )
+    # thread-a's already-persisted entry survives a second call that only writes thread-b -- a
+    # thread-id-aware merge, not a task_id-level replace.
+    assert result["comment_threads"]["TASK-001"]["thread-a"]["author"] == "alice"
+    assert result["comment_threads"]["TASK-001"]["thread-b"]["author"] == "bob"
+
+    on_disk = read_state(state_dir, plan["plan_id"])
+    assert on_disk["comment_threads"] == result["comment_threads"]
+
+
 def test_cas_advance_without_clarifications_argument_leaves_durably_stored_entries_untouched(tmp_path: Path) -> None:
     state_dir = tmp_path / "state"
     plan = _plan()

@@ -11,6 +11,10 @@ isolation capability from whichever host agent is running it.
 | CI status for the exact head commit | Required for merge gating | Host agent's CI integration (GitHub Actions, GitLab CI, etc.) | Stop at verified readiness; do not merge on Builder-reported checks alone |
 | Pull-request creation/update | Required | Host agent's repo connector or local `git`/`gh`/`glab` CLI | Stop and report — a completed implementation with no PR is not a completed task |
 | Issue/task tracker read (GitHub Issues, Jira, Linear, etc.) | Optional | Whatever the caller's task source is | Accept task text directly from the user instead of a tracker link |
+| `host.scm.comment.read` | Optional | Host agent's repo connector or local `gh`/`glab` CLI | Skip the comment-check step entirely; proceed exactly as this skill did before this capability existed |
+| `host.scm.actor.permission` | Optional | Same source | Narrow actor-scoping to CODEOWNERS-membership only, and explicitly disclose this narrowing in the completion report — never silently default to trusting every commenter |
+| `host.scm.comment.reply` | Optional | Same source | Skip reply-and-verify; findings are still adjudicated and remediated, just not announced back to the originating thread |
+| `host.scm.review.request` | Optional | Same source | Skip re-request-review; the human reviewer is not automatically re-pinged |
 
 **Phase 0 equivalent:** the Orchestrator's policy-discovery step (`workflow/orchestrator.md` §1)
 serves the same purpose other skills give a Phase 0 MCP-profile announcement — it records which of

@@ -68,6 +68,8 @@ EXECUTION_STATE_FIELDS = {
     "blocked_reason",
     "updated_at",
     "clarifications",
+    "comment_threads",
+    "final_check_attempts",
 }
 READINESS = {"READY", "PARTIAL", "BLOCKED"}
 TASK_TYPES = {"code", "config", "schema", "migration", "other"}
@@ -1247,6 +1249,22 @@ def validate_plan_execution_state(
         errors.append("error: plan_execution_state.completed_evidence_refs must be a list of strings")
     if not isinstance(state.get("clarifications"), Mapping):
         errors.append("error: plan_execution_state.clarifications must be a mapping")
+    final_check_attempts = state.get("final_check_attempts")
+    if not isinstance(final_check_attempts, Mapping) or not all(
+        isinstance(value, int) and not isinstance(value, bool) for value in final_check_attempts.values()
+    ):
+        errors.append("error: plan_execution_state.final_check_attempts must be a mapping of task_id to int")
+    comment_threads = state.get("comment_threads")
+    # comment_threads is task_id -> thread_id -> {...}, two levels deep (gap-backlog B4) -- a
+    # shallow "is it a mapping" check (matching clarifications' one-level precedent above) would
+    # not catch a malformed per-thread record, so every level is checked explicitly here.
+    if not isinstance(comment_threads, Mapping) or not all(
+        isinstance(threads, Mapping) and all(isinstance(entry, Mapping) for entry in threads.values())
+        for threads in comment_threads.values()
+    ):
+        errors.append(
+            "error: plan_execution_state.comment_threads must be a mapping of task_id to thread_id to mapping"
+        )
     if state.get("current_task_id") is not None and state.get("current_task_id") not in task_ids:
         errors.append("error: plan_execution_state.current_task_id is not a plan task")
     if isinstance(statuses, Mapping):
@@ -1478,6 +1496,8 @@ def initial_plan_execution_state(
         "blocked_reason": None,
         "updated_at": updated_at,
         "clarifications": {},
+        "comment_threads": {},
+        "final_check_attempts": {},
     }
 
 
@@ -1509,6 +1529,32 @@ def merge_plan_state(current: Mapping[str, Any], incoming: Mapping[str, Any]) ->
     return current
 
 
+def _merge_comment_threads(
+    durable: Mapping[str, Any] | None, incoming: Mapping[str, Any] | None
+) -> dict[str, Any]:
+    """Thread-id-aware two-level deep merge for ``plan_execution_state.comment_threads``.
+
+    ``comment_threads`` is shaped ``task_id -> thread_id -> {...}`` (gap-backlog B4), one level
+    deeper than ``clarifications``' own ``task_id -> {...}`` shape. A shallow ``{**a, **b}`` merge
+    at the ``task_id`` level alone would clobber every other already-persisted thread for that
+    same task the moment any single thread is written -- concurrent per-thread writes for the same
+    task would silently destroy each other. This merges at the ``task_id`` level, then within each
+    ``task_id``, merges at the ``thread_id`` level, so writing thread B's entry never destroys
+    thread A's already-persisted entry for the same task. New entries win on key conflict, matching
+    ``clarifications``' own conflict rule.
+    """
+    merged: dict[str, Any] = {
+        task_id: dict(threads) if isinstance(threads, Mapping) else {}
+        for task_id, threads in (durable or {}).items()
+    }
+    for task_id, threads in (incoming or {}).items():
+        existing = dict(merged.get(task_id, {}))
+        if isinstance(threads, Mapping):
+            existing.update(threads)
+        merged[task_id] = existing
+    return merged
+
+
 def reconcile_plan_execution_state(
     state: object,
     plan: Mapping[str, Any],
@@ -1519,6 +1565,8 @@ def reconcile_plan_execution_state(
     minimum_generation: int | None = None,
     blocked_reason: str | None = None,
     clarifications: Mapping[str, Any] | None = None,
+    comment_threads: Mapping[str, Any] | None = None,
+    final_check_attempts: Mapping[str, int] | None = None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """Reconcile advisory checkpoint data to official task state and current SCM head.
 
@@ -1533,6 +1581,12 @@ def reconcile_plan_execution_state(
     against the ``state`` this call was actually given, with new entries winning on key
     conflict. ``state`` is this function's own parameter (not ``current`` -- that name belongs
     to ``cas_advance``'s local variable one layer up and does not exist in this scope).
+
+    ``final_check_attempts`` (gap-backlog B4) merges the same shallow way as ``clarifications``:
+    ``{**state.get("final_check_attempts", {}), **(final_check_attempts or {})}``. ``comment_threads``
+    (gap-backlog B4) is two levels deep (``task_id -> thread_id -> {...}``) and uses the
+    thread-id-aware deep merge in :func:`_merge_comment_threads` instead, so writing one thread's
+    entry never clobbers another already-persisted thread for the same task.
     """
     if plan.get("readiness") != "READY":
         return None, ["error: implementation_plan must be READY before execution-state reconciliation"]
@@ -1569,6 +1623,13 @@ def reconcile_plan_execution_state(
     is_blocked = any(status == "BLOCKED" for status in normalized["task_statuses"].values())
     normalized["blocked_reason"] = blocked_reason if is_blocked else None
     normalized["clarifications"] = {**state.get("clarifications", {}), **(clarifications or {})}
+    normalized["final_check_attempts"] = {
+        **state.get("final_check_attempts", {}),
+        **(final_check_attempts or {}),
+    }
+    normalized["comment_threads"] = _merge_comment_threads(
+        state.get("comment_threads", {}), comment_threads
+    )
     return normalized, []
 
 
@@ -1583,6 +1644,8 @@ def advance_plan_execution_state(
     completed_evidence_refs: list[str] | None = None,
     blocked_reason: str | None = None,
     clarifications: Mapping[str, Any] | None = None,
+    comment_threads: Mapping[str, Any] | None = None,
+    final_check_attempts: Mapping[str, int] | None = None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """Advance one checkpoint generation; stale writers cannot overwrite newer state."""
     if not isinstance(state, Mapping) or state.get("state_generation") != expected_generation:
@@ -1596,6 +1659,8 @@ def advance_plan_execution_state(
         minimum_generation=expected_generation,
         blocked_reason=blocked_reason,
         clarifications=clarifications,
+        comment_threads=comment_threads,
+        final_check_attempts=final_check_attempts,
     )
     if errors or normalized is None:
         return None, errors

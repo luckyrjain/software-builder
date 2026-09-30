@@ -405,6 +405,8 @@ def cas_advance(
     completed_evidence_refs: list[str] | None = None,
     blocked_reason: str | None = None,
     clarifications: Mapping[str, Any] | None = None,
+    comment_threads: Mapping[str, Any] | None = None,
+    final_check_attempts: Mapping[str, int] | None = None,
     timeout: float = LOCK_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
     """Advance one plan's durable checkpoint by exactly one generation, under a single exclusive-lock
@@ -420,6 +422,13 @@ def cas_advance(
     which merges it by ``task_id`` directly against ``current`` -- the durable state this same
     exclusive-lock critical section already read from disk -- so the merge against durably-stored
     clarifications still happens under this one lock, the same as every other field here.
+
+    ``comment_threads`` and ``final_check_attempts`` (gap-backlog B4) are wired through exactly the
+    same way -- passed straight through to ``advance_plan_execution_state``, which merges each
+    against ``current`` under this same exclusive lock. ``final_check_attempts`` merges shallowly,
+    same as ``clarifications``; ``comment_threads`` uses a thread-id-aware two-level deep merge
+    (``task_id -> thread_id -> {...}``) so a concurrent write to one thread never clobbers another
+    already-persisted thread for the same task.
 
     Raises :class:`PlanStateCasError` when ``advance_plan_execution_state`` reports a generation
     mismatch (a concurrent writer already advanced past ``expected_generation``); the caller must
@@ -462,6 +471,8 @@ def cas_advance(
                 completed_evidence_refs=merged_refs,
                 blocked_reason=blocked_reason,
                 clarifications=clarifications,
+                comment_threads=comment_threads,
+                final_check_attempts=final_check_attempts,
             )
             if errors or normalized is None:
                 raise PlanStateCasError(
