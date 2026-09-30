@@ -27,8 +27,9 @@ Hypotheses phase, but every hypothesis formed from it must be labeled accordingl
 When `repro_status: confirmed` and the confirming evidence is a single, directly runnable
 test-runner invocation (not a manual repro, an external-system state, or a multi-step sequence),
 also populate `repro_command` with that exact command — this is what lets
-`loop-task-implementer`'s Reviewer re-run the same repro at the task's base and head commits (the
-`regression_gate`, see `docs/superpowers/specs/2026-09-29-b3-regression-gate-design.md`).
+`loop-task-implementer`'s Reviewer re-run the same repro at the task's base and head commits as the
+regression gate: if the command fails at the base commit but passes at head, that's confirmation
+the change fixed the reported regression rather than something else.
 
 Before recording it, validate the command with `validate_repro_command` (the fixed,
 delimiter-agnostic validator — see

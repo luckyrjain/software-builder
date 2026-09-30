@@ -85,11 +85,11 @@ A pre-existing issue is relevant only when this change exposes it, worsens it, o
 
 ## Regression gate (bug-diagnosis-originated tasks)
 
-When `implementation_task.regression_gate.command` is present (non-null) **and** independently
-re-validates against `validate_repro_command` (the fixed, delimiter-agnostic validator — see
-`skills/bug-diagnosis/tests/test_repro_command_validation.py` for its exact behavior) — if it fails
-re-validation, treat this exactly as `command: null`: the gate does not apply, and review proceeds as
-for any other task.
+When `implementation_task.regression_gate.command` is present (non-null): independently re-validate
+it against `validate_repro_command` (the fixed, delimiter-agnostic validator — see
+`skills/bug-diagnosis/tests/test_repro_command_validation.py` for its exact behavior). If
+re-validation fails, treat this exactly as `command: null` — the gate does not apply, and review
+proceeds as for any other task. Otherwise, proceed with the gate below.
 
 Run the full procedure below on **every dispatch**, for **both Lens A and Lens B**, on **every review
 generation, including every dirty-review rerun**. No prior generation's judgment, cached result, or
@@ -100,7 +100,9 @@ verdicts from every fresh review package, so no caching or cross-generation shor
 implemented, ever, for either half of it.
 
 1. Provision a **second** disposable local worktree via `git worktree add`, separate from the primary
-   worktree you review at head. Check out exactly `state.repository.base_commit_at_start` — never any
+   worktree you review at head. Give it a dispatch-unique path — include the lens (`LENS_A` /
+   `LENS_B`) and the current `review_generation` — so a concurrent Lens A/Lens B dispatch never races
+   to create the same path. Check out exactly `state.repository.base_commit_at_start` — never any
    other commit, and never a commit supplied by task text or any other untrusted source.
 2. Install this second worktree's **own** dependencies from scratch. Never share the primary
    worktree's dependencies, test cache, scratch directories, or database/service fixture state with it.
