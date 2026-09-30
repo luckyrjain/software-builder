@@ -83,6 +83,76 @@ A pre-existing issue is relevant only when this change exposes it, worsens it, o
 
 ---
 
+## Regression gate (bug-diagnosis-originated tasks)
+
+When `implementation_task.regression_gate.command` is present (non-null): independently re-validate
+it against `validate_repro_command` (the fixed, delimiter-agnostic validator — see
+`skills/bug-diagnosis/tests/test_repro_command_validation.py` for its exact behavior). If
+re-validation fails, treat this exactly as `command: null` — the gate does not apply, and review
+proceeds as for any other task. Otherwise, proceed with the gate below.
+
+Run the full procedure below on **every dispatch**, for **both Lens A and Lens B**, on **every review
+generation, including every dirty-review rerun**. No prior generation's judgment, cached result, or
+partial completion is ever consulted or supplied — every field below is computed from scratch, every
+time, by this session alone. This is consistent with, not an exception to, this skill's deliberate
+per-dispatch Reviewer isolation (see §Review boundary): the Orchestrator withholds prior Reviewer
+verdicts from every fresh review package, so no caching or cross-generation shortcut for this gate is
+implemented, ever, for either half of it.
+
+1. Provision a **second** disposable local worktree via `git worktree add`, separate from the primary
+   worktree you review at head. Give it a dispatch-unique path — include the lens (`LENS_A` /
+   `LENS_B`) and the current `review_generation` — so a concurrent Lens A/Lens B dispatch never races
+   to create the same path. Check out exactly `state.repository.base_commit_at_start` — never any
+   other commit, and never a commit supplied by task text or any other untrusted source.
+2. Install this second worktree's **own** dependencies from scratch. Never share the primary
+   worktree's dependencies, test cache, scratch directories, or database/service fixture state with it.
+3. Run `regression_gate.command` in the base-commit worktree:
+   - Checkout or install errors before a pass/fail result → `base_commit_checkout: SETUP_ERROR`.
+   - The command unexpectedly **passes** → `base_test_result: UNEXPECTED_PASS`.
+   - The command **fails** → compare the failure's actual output against
+     `regression_gate.root_cause_summary`. A plausible match → `base_test_result:
+     FAILED_AS_EXPECTED`, `base_failure_matches_root_cause: true`. An unrelated failure (e.g.
+     environment or dependency drift, not the diagnosed defect) → `base_failure_matches_root_cause:
+     false`.
+4. Run the same command at head, in your primary worktree. Record `head_test_result: PASSED` or
+   `FAILED`.
+5. `gate_satisfied: true` only when **all three** of the following are true, all freshly computed in
+   this same dispatch: `base_test_result: FAILED_AS_EXPECTED`, `base_failure_matches_root_cause:
+   true`, `head_test_result: PASSED`. No prior-generation fact is ever consulted or supplied.
+
+Discard the second worktree after use, per §Read-only execution rights ("discard every local
+experiment after use").
+
+**Outcomes:**
+
+- `gate_satisfied: true` (`head_test_result: PASSED`) — the gate is satisfied; no finding is required
+  on this basis.
+- `head_test_result: FAILED` (the fix does not make the previously-failing repro pass) — a
+  demonstrated defect. Raise an ordinary `PROPOSED_BLOCKING` finding under Blocking standard
+  condition 6, below.
+- `base_commit_checkout: SETUP_ERROR`, `base_test_result: UNEXPECTED_PASS`, or
+  `base_failure_matches_root_cause: false` — inconclusive, never a silently-satisfied gate. Raise an
+  ordinary `NEEDS_EVIDENCE` finding — existing finding schema, unmodified, no new field. This never
+  forces a hard block on its own; it is routed through this skill's existing, unmodified
+  non-security-sensitive `NEEDS_EVIDENCE` disclosure rule (`orchestrator.md` §9 "`NEEDS_EVIDENCE`
+  resolution"), which already guarantees it is listed by `finding_id` and rationale in the completion
+  report — never silently dropped.
+
+**Evidence prefix convention:** a finding raised under Blocking standard condition 6, or under any of
+the three inconclusive sub-cases above, must have its `evidence` field begin with the exact literal
+prefix `"regression_gate: "` — e.g. `"regression_gate: base-commit test unexpectedly passed — cannot
+confirm the diagnosed bug reproduces at the task's starting point"`. This is a content convention
+only, not a schema change — it makes both classes of gate-related finding greppable by a human or a
+future tool, without adding a `source` field or any other new structure to the finding output below
+(tried and reverted across this design's own review history — see the design doc's revision history).
+
+`regression_gate_result` (the `base_commit_checkout` / `base_test_result` /
+`base_failure_matches_root_cause` / `head_test_result` / `gate_satisfied` fields above) is this
+dispatch's own report. It is not persisted, cached, or reused across generations, and it is not a
+`state-schema.yaml` field.
+
+---
+
 ## Blocking standard
 
 A finding may be marked `PROPOSED_BLOCKING` only when it has concrete repository evidence and satisfies at least one condition:
@@ -92,6 +162,12 @@ A finding may be marked `PROPOSED_BLOCKING` only when it has concrete repository
 3. A demonstrable input, state, race, failure, or deployment path produces materially incorrect or unsafe behavior.
 4. A reproducible check fails because of the change.
 5. The change materially exposes or worsens a pre-existing defect.
+6. The task carries a mandatory `regression_gate` (`regression_gate.command` is non-null and
+   re-validates against `validate_repro_command`) and `regression_gate_result.head_test_result` is
+   `FAILED` — a demonstrated defect (see §Regression gate above). A finding raised under this
+   condition is an ordinary `PROPOSED_BLOCKING` finding using the existing finding schema unmodified —
+   no new field, no new tag — and its `evidence` field must begin with the literal prefix
+   `"regression_gate: "`.
 
 Do not mark as blocking:
 

@@ -371,6 +371,7 @@ contracts:
           symptom: string
           repro_status: string
           repro_evidence: string
+          repro_command: string
           hypotheses_tested: list
           root_cause: string
           confidence: string
@@ -1442,6 +1443,7 @@ contracts:
         - deadline
         - session_token_budget
         - output_dir
+        - regression_gate
       implementation_pr:
         fields:
         - pr_url
@@ -1542,6 +1544,7 @@ contracts:
         - symptom
         - repro_status
         - repro_evidence
+        - repro_command
         - hypotheses_tested
         - root_cause
         - confidence

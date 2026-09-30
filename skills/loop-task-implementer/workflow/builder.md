@@ -152,6 +152,21 @@ Run the repository-required checks relevant to the change.
 
 Your reported results are advisory. Record exact commands and observed exit status, but do not claim they are authoritative repository gates.
 
+### `regression_gate.command` handling
+
+When the task input carries a non-null `regression_gate.command` (a bug-diagnosis-originated task's
+repro command — see `implementation_task`'s envelope), run it locally after implementing the fix,
+before marking the task ready for Reviewer dispatch:
+
+- **PASSES:** proceed normally.
+- **Still FAILS:** an expected mid-implementation signal — keep iterating on the fix.
+- **Errors** (not a test failure — a setup or invocation error): report this explicitly in the
+  completion notes rather than silently treating it as a pass or a fail.
+
+Record the run in `advisory_checks` like any other local check. This is advisory only, for the
+Builder's own iteration — it never replaces, and is never replaced by, the Reviewer's own
+independent dual-worktree execution of the same command against both the base and head commits.
+
 ---
 
 ## 5. Inspect the final diff

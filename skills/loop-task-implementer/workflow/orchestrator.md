@@ -30,7 +30,9 @@ Use separate, fresh-context Builder and Reviewer sessions. Pass only the minimum
 - Authorization policy for branch creation, pull-request creation, CI access, and merging
 - Optional `log_dir` (absolute, outside every repository; default is the account's `.software-builder/runs`)
 - Optional `max_task_elapsed_minutes` and `max_task_tokens` (a positive number, or the word `unlimited`);
-  when absent or `null`, the defaults in §3 apply
+  when absent or `null`, the defaults in §3 apply. For a task whose `implementation_task` carries a
+  non-null `regression_gate.command` (gap-backlog B3), see §3's explicit `≥ 630`-minute ceiling
+  recommendation before accepting the default.
 - Optional `interaction_policy` (gap-backlog B1): `{human_available: bool, unattended: bool}`, default
   `{true, false}` when absent. Field names match `engineering-decision-discovery`'s own exactly
   ([workflow/inputs.md](../../engineering-decision-discovery/workflow/inputs.md)) and are passed
@@ -302,10 +304,23 @@ Record per-task budgets before dispatch:
 - Maximum remediation attempts per finding: `2`
 - Maximum active CI polling per pipeline: default `15 minutes`
 - Maximum wait for a dispatched Builder or Reviewer session, or the optional clarify sub-step's
-  dispatch (§2, gap-backlog B1), to return a result: default `30 minutes` — treat a non-responding
-  session as a failure, escalate, do not silently retry indefinitely
+  dispatch (§2, gap-backlog B1), to return a result: default `30 minutes` — except a Reviewer
+  dispatch whose task carries a non-null `implementation_task.regression_gate.command` (gap-backlog
+  B3), which gets `60 minutes`, reflecting the real ~2x test-execution cost (base + head, each with
+  its own from-scratch dependency install) — treat a non-responding session as a failure, escalate,
+  do not silently retry indefinitely
 - Maximum task time budget: default `180 minutes` of active time (pauses between records count at most 30 minutes each);
   the caller may raise or lower it
+  - **Regression-gate ceiling recommendation (gap-backlog B3):** for a task whose `implementation_task`
+    carries a non-null `regression_gate.command`, set `max_task_elapsed_minutes` to at least `630`. Every
+    Reviewer dispatch for such a task runs the full dual-worktree, dual-dependency-install procedure
+    (`reviewer.md`'s "Regression gate" subsection) for both Lens A and Lens B, every generation, with no
+    caching across generations — a per-generation Reviewer-dispatch cost of `2 × 60 min = 120 minutes`.
+    Worst case across `max_dirty_reviews: 3` (1 initial generation + up to 3 remediation reruns, each
+    re-running the full gate): `30 min` initial Builder dispatch + `4 generations × 120 min = 480 min`
+    Reviewer time + `3 × 30 min = 90 min` Builder remediation ≈ `600 minutes` total worst case. `630`
+    leaves headroom above that disclosed worst case; this is an explicit numeric recommendation, not a
+    vague "raise it if needed."
 - Maximum model/token budget: default `2,000,000` estimated tokens across the Orchestrator, Builder,
   and all Reviewer sessions; the caller may raise or lower it
 - A caller who supplies nothing (or `null`) gets the defaults above — an unset budget is never
