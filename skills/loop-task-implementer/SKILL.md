@@ -72,7 +72,7 @@ discover policy
 → increment Lens B review_generation (old evidence generation becomes stale)
 → adjudicate Lens B proposed findings
 → normalize/validate Lens B review_evidence and bind review_evidence_generation
-→ rerun invalidated lenses after content/conflict/requirements/third-party branch changes
+→ rerun invalidated lenses after content/conflict/requirements/third-party branch changes/external-comment-activity
 → verify authoritative checks for exact current head
 → run lifecycle gate against fresh current identity + requirements and legacy completion gates
 → complete repository action only when separately authorized
@@ -123,7 +123,7 @@ Clean reviews do not consume the dirty-review budget.
 
 ## Base updates and freshness
 
-Use the canonical shared contracts in [change-identity.yaml](../../docs/skill-framework/shared/change-identity.yaml) and [review-evidence.yaml](../../docs/skill-framework/shared/review-evidence.yaml). A content-neutral fast-forward, clean rebase, or merge-queue update preserves lens evidence only when the freshly rebuilt change identity is compatible under the shared freshness rules and conflict-resolution status plus provenance establish that the evidence remains valid. Any content change, manual conflict resolution after evidence was produced, stale requirements surface, or unresolved third-party branch update invalidates affected lens evidence. Unknown conflict provenance after a SHA transition fails closed; a conflict that occurred before a fresh reviewer rerun does not permanently poison the new evidence.
+Use the canonical shared contracts in [change-identity.yaml](../../docs/skill-framework/shared/change-identity.yaml) and [review-evidence.yaml](../../docs/skill-framework/shared/review-evidence.yaml). A content-neutral fast-forward, clean rebase, or merge-queue update preserves lens evidence only when the freshly rebuilt change identity is compatible under the shared freshness rules and conflict-resolution status plus provenance establish that the evidence remains valid. Any content change, manual conflict resolution after evidence was produced, stale requirements surface, unresolved third-party branch update, or new in-scope, diff-scoped external comment activity (gap-backlog B4) invalidates affected lens evidence. Unknown conflict provenance after a SHA transition fails closed; a conflict that occurred before a fresh reviewer rerun does not permanently poison the new evidence.
 
 A reviewer rerun is a new review generation even when code is unchanged: increment `review_generation`, leave the prior `review_evidence_generation` stale until new adjudicated evidence validates, clear any prior isolation exception, and require a new human exception if the rerun remains `NOT_ISOLATED`.
 

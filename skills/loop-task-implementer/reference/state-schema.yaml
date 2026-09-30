@@ -22,6 +22,18 @@ plan_execution_state:
   # gap-backlog B1). Absence of a task_id means "never triggered", distinct from an entry with
   # status OPEN (interview ran, ambiguity not resolved).
   clarifications: {}
+  # task_id -> thread_id -> {author: str, last_seen_comment_id: str, last_seen_at: str,
+  # original_commit_sha: str, actor_in_scope: bool, diff_scoped: bool,
+  # triggered_review_generation: int|null, last_reply_status: null|POSTED|STALE_NOTED}. One entry
+  # per thread ever evaluated for that task (gap-backlog B4, external review-comment loop).
+  # Mirrors clarifications: {} in shape and "absence = never evaluated" convention, one level
+  # deeper since a task can have many external comment threads.
+  comment_threads: {}
+  # task_id -> int, capped at 2. A small per-task counter for the bounded, mandatory
+  # pre-completion recheck for new in-scope, diff-scoped external comment activity (gap-backlog
+  # B4). Distinct from dirty_review_count: it increments on every pre-completion recheck
+  # regardless of clean/dirty outcome, since a clean recheck never increments dirty_review_count.
+  final_check_attempts: {}
 
 task:
   task_id: null

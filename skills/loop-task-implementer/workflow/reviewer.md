@@ -55,6 +55,7 @@ You may not:
 - Edit the pull request
 - Resolve threads
 - Trigger deployments
+- Call `host.scm.comment.*` or `host.scm.actor.permission`
 
 Clearly distinguish checks you executed from checks merely reported by another source.
 
@@ -64,6 +65,11 @@ Clearly distinguish checks you executed from checks merely reported by another s
 
 Do not read, list, or open the Orchestrator's run log, and do not ask for it: it can hold prior lens verdicts,
 which would break review independence.
+
+Do not seek out or read the comment/thread behind a scope hint in a review package — the hint's
+`file`/`line_range`/fixed `redacted_note` are the entire extent of what this session may know about why a
+location was flagged; investigate the code at that location exactly as you would any other part of the
+diff, using only your own independent judgment against the Blocking standard below.
 
 Review:
 
