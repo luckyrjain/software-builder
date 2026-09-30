@@ -43,6 +43,12 @@ Natural-language examples:
 
 Prefer separate Codex tasks or fresh agent sessions. Use repository connectors for authoritative remote state and local git for implementation when available.
 
+The "CI job/run structured metadata (`conclusion` field) for the exact head" capability (used for
+`gh run rerun --failed`) declared in [mcp-capabilities.md](mcp-capabilities.md) has no equivalent
+permission grant on this host yet — `.claude/settings.json` is Claude-Code-specific, so this host needs
+its own equivalent allow-list or approval mechanism before the eligibility gate can run here; until then
+it degrades to the existing, unchanged ambiguous-failure judgment call.
+
 ## Cursor
 
 Keep the canonical skill folder in the repository and use `.cursor/rules/loop-task-implementer.mdc` for discovery.
@@ -54,6 +60,12 @@ Natural-language examples:
 - “Review this PR with Lens B only.”
 
 Use background agents, separate chats, or worktrees as available. Do not pass implementation chat history into Reviewer chats.
+
+The "CI job/run structured metadata (`conclusion` field) for the exact head" capability (used for
+`gh run rerun --failed`) declared in [mcp-capabilities.md](mcp-capabilities.md) has no equivalent
+permission grant on this host yet — `.claude/settings.json` is Claude-Code-specific, so this host needs
+its own equivalent allow-list or approval mechanism before the eligibility gate can run here; until then
+it degrades to the existing, unchanged ambiguous-failure judgment call.
 
 ## GitHub Copilot
 
@@ -81,6 +93,12 @@ Natural-language examples:
 
 Use separate tasks or fresh agent sessions for role isolation.
 
+The "CI job/run structured metadata (`conclusion` field) for the exact head" capability (used for
+`gh run rerun --failed`) declared in [mcp-capabilities.md](mcp-capabilities.md) has no equivalent
+permission grant on this host yet — `.claude/settings.json` is Claude-Code-specific, so this host needs
+its own equivalent allow-list or approval mechanism before the eligibility gate can run here; until then
+it degrades to the existing, unchanged ambiguous-failure judgment call.
+
 ## Kiro
 
 Keep the canonical skill folder in the repository and use `.kiro/steering/loop-task-implementer.md` for discovery.
@@ -92,6 +110,12 @@ Natural-language examples:
 - “Run an isolated Lens A review.”
 
 Use Kiro specs for task requirements, but keep workflow state separate from product requirements.
+
+The "CI job/run structured metadata (`conclusion` field) for the exact head" capability (used for
+`gh run rerun --failed`) declared in [mcp-capabilities.md](mcp-capabilities.md) has no equivalent
+permission grant on this host yet — `.claude/settings.json` is Claude-Code-specific, so this host needs
+its own equivalent allow-list or approval mechanism before the eligibility gate can run here; until then
+it degrades to the existing, unchanged ambiguous-failure judgment call.
 
 ## Sequential role simulation (last-resort fallback)
 

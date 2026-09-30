@@ -114,8 +114,8 @@ Stop and escalate when any applies:
 - Missing product, architecture, access, or destructive-operation decision
 - Unrecognized third-party branch changes
 - CI cannot be diagnosed within the configured budget
-- A dispatched Builder or Reviewer session, or the optional clarify sub-step's dispatch
-  (`workflow/orchestrator.md` §2, gap-backlog B1), exceeds its response-wait budget
+- A CI failure classified as transient-shaped (a structural `timed_out`/`startup_failure` conclusion) but still failing after the configured rerun budget
+- A dispatched Builder or Reviewer session, or the optional clarify sub-step's dispatch (`workflow/orchestrator.md` §2, gap-backlog B1), exceeds its response-wait budget
 - Time or token budget is exhausted (defaults: 180 minutes, 2,000,000 estimated tokens per task; an unset
   budget is never unbounded — see `workflow/orchestrator.md` §3)
 

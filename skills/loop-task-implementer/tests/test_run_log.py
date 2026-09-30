@@ -282,6 +282,50 @@ def test_escalated_and_run_completed_take_a_closed_set_of_codes(run_log, log_dir
     _append(run_log, log_dir, event="run_completed", data={"outcome": "ESCALATED"})
 
 
+def test_ci_polled_new_fields_enforce_only_when_present(run_log, log_dir):
+    _start(run_log, log_dir)
+
+    # Regression test: pre-existing real traffic (no data at all, or a plain PENDING poll) must
+    # still be accepted -- the "enforce only when present" rule must never break these.
+    _append(run_log, log_dir, event="ci_polled", actor="ci")
+    _append(run_log, log_dir, event="ci_polled", actor="ci", data={"status": "PENDING"})
+
+    # attempt: malformed values rejected, valid values accepted.
+    for bad in (-1, "1", 1.5, True, False, None):
+        with pytest.raises(ValueError, match="ci_polled.attempt"):
+            _append(run_log, log_dir, event="ci_polled", actor="ci", data={"attempt": bad})
+    for good in (0, 1, 2):
+        _append(run_log, log_dir, event="ci_polled", actor="ci", data={"attempt": good})
+
+    # eligible_for_rerun: malformed values rejected, valid values accepted.
+    for bad in ("true", 1, 0, None, "yes"):
+        with pytest.raises(ValueError, match="ci_polled.eligible_for_rerun"):
+            _append(run_log, log_dir, event="ci_polled", actor="ci", data={"eligible_for_rerun": bad})
+    for good in (True, False):
+        _append(run_log, log_dir, event="ci_polled", actor="ci", data={"eligible_for_rerun": good})
+
+    # observed_signal: closed 2-value enum -- reject anything outside it, including the dropped
+    # 7-value vocabulary from earlier design revisions.
+    for bad in ("RATE_LIMIT", "NETWORK_ERROR", "DNS_FAILURE", "HTTP_5XX", "RUNNER_ABNORMAL_TERMINATION", "timeout", ""):
+        with pytest.raises(ValueError, match="ci_polled.observed_signal"):
+            _append(run_log, log_dir, event="ci_polled", actor="ci", data={"observed_signal": bad})
+    for good in ("TIMEOUT", "PROVISIONING_FAILURE"):
+        _append(run_log, log_dir, event="ci_polled", actor="ci", data={"observed_signal": good})
+
+    # failure_classification: closed 4-value enum.
+    for bad in ("REGRESSION", "flaky", "unknown", ""):
+        with pytest.raises(ValueError, match="ci_polled.failure_classification"):
+            _append(run_log, log_dir, event="ci_polled", actor="ci", data={"failure_classification": bad})
+    for good in ("regression", "infrastructure", "flaky_confirmed_transient", "undiagnosed"):
+        _append(run_log, log_dir, event="ci_polled", actor="ci", data={"failure_classification": good})
+
+    # All four fields together, as the pressure-test scenario (flaky-then-green) would record them.
+    _append(run_log, log_dir, event="ci_polled", actor="ci", data={
+        "attempt": 1, "eligible_for_rerun": True, "observed_signal": "TIMEOUT",
+        "failure_classification": "flaky_confirmed_transient",
+    })
+
+
 # --- redaction --------------------------------------------------------------------------------
 
 GHP = "ghp_" + "a1B2c3D4" * 4 + "a1B2"  # 36 characters after the prefix
