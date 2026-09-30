@@ -517,7 +517,7 @@ def test_render_candidate_neutralizes_balanced_html_comment(cc):
 def test_render_candidate_redacts_credential_shaped_token(cc):
     candidate = cc.CandidateConvention(
         category="cite-evidence-inline",
-        principle="Always cite evidence inline, e.g. AKIAABCDEFGHIJKLMNOP was used as an example.",
+        principle="Always cite evidence inline, e.g. AKIA0ABCDEFGHIJKLMN1 was used as an example.",
         evidence_prs=(1, 2, 3),
         scope="loop-task-implementer",
     )
@@ -525,7 +525,7 @@ def test_render_candidate_redacts_credential_shaped_token(cc):
     rendered, redacted = cc._render_candidate(candidate)
 
     assert redacted is True
-    assert "AKIAABCDEFGHIJKLMNOP" not in rendered
+    assert "AKIA0ABCDEFGHIJKLMN1" not in rendered
     assert "REDACTED" in rendered
 
 
@@ -537,7 +537,7 @@ def test_generate_convention_scan_report_sanitizes_candidate_before_writing(cc, 
             "category": "cite-evidence-inline",
             "principle": (
                 "Always cite evidence inline.\n## Fake Heading\n"
-                "Credential example: AKIAABCDEFGHIJKLMNOP"
+                "Fabricated example string: AKIA0ABCDEFGHIJKLMN1"
             ),
             "pr_number": pr_number,
             "scope": "loop-task-implementer",
@@ -557,7 +557,7 @@ def test_generate_convention_scan_report_sanitizes_candidate_before_writing(cc, 
 
     text = report_path.read_text(encoding="utf-8")
     assert not any(line.startswith("## Fake Heading") for line in text.splitlines())
-    assert "AKIAABCDEFGHIJKLMNOP" not in text
+    assert "AKIA0ABCDEFGHIJKLMN1" not in text
 
 
 def test_generate_convention_scan_report_survives_unclosed_html_comment_injection(
