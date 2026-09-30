@@ -303,6 +303,9 @@ Record per-task budgets before dispatch:
 - Maximum contested rounds per finding: `2`
 - Maximum remediation attempts per finding: `2`
 - Maximum active CI polling per pipeline: default `15 minutes`
+- Maximum CI reruns per eligible-failure check (gap-backlog B5): default `1`, charged against the same
+  active-polling clock above, never a separate budget — deliberately small and unvalidated against a
+  real required-check flake precedent
 - Maximum wait for a dispatched Builder or Reviewer session, or the optional clarify sub-step's
   dispatch (§2, gap-backlog B1), to return a result: default `30 minutes` — except a Reviewer
   dispatch whose task carries a non-null `implementation_task.regression_gate.command` (gap-backlog
@@ -773,6 +776,15 @@ After both lenses are clean for the current fingerprint:
 3. Poll no more frequently than repository limits allow and never more frequently than every 30 seconds.
 4. Do not create duplicate pipelines or empty commits.
 
+**Resume reconciliation (gap-backlog B5):** on any Orchestrator resume mid-rerun-cycle, before applying
+any of the logic below, query the CI platform's own ground-truth attempt count for the check in
+question (`gh run view --json conclusion,attempt`) and reconcile it against the prose-tracked
+`max_ci_reruns` counter: if the platform's own attempt count is already higher than what the counter
+believes has been spent, reconcile the counter upward to match ground truth before deciding whether
+further reruns are permitted. Never trust the prose counter alone across a resume boundary — a rerun
+can be in flight on the platform's side with no corresponding local record if the session ended between
+dispatch and observation.
+
 If CI fails because of the pull request:
 
 - Dispatch Builder remediation.
@@ -780,9 +792,37 @@ If CI fails because of the pull request:
 - Invalidate both lens approvals.
 - Rerun both review lenses.
 
+**Eligibility gate and rerun sub-flow (gap-backlog B5)**, evaluated on every required-check failure
+before choosing between the branch above and the branch below:
+
+1. **Disqualifying-signal check, first.** Inspect the failed check's own reported output for a
+   test-framework failure marker (`FAILED `, `AssertionError`, a named failing test, a lint/type
+   error). If found, this is unconditionally "CI fails because of the pull request" (above) — no rerun
+   is ever attempted, regardless of remaining budget.
+2. **Qualifying-signal check, only if no disqualifying signal was found.** Read only the CI platform's
+   own structured job/run metadata — never log or annotation text:
+   - the **job's own** `conclusion` field (`gh run view --json jobs`) for `timed_out` →
+     `observed_signal: TIMEOUT`;
+   - the **run's own** `conclusion` field (`gh run view --json conclusion,attempt`) for
+     `startup_failure` → `observed_signal: PROVISIONING_FAILURE`.
+   Neither disqualifying nor qualifying present → completely unchanged, existing judgment call (do not
+   touch this path at all): resolve as `regression` or `infrastructure` exactly as before.
+3. **If qualifying**, rerun via `gh run rerun --failed <run-id>` (this exact invocation order — the
+   `--failed` flag before the positional run-id — is the one invocation this skill's committed
+   `.claude/settings.json` permission pattern actually matches), up to `max_ci_reruns` times, charged
+   against the same `max_ci_poll_minutes` clock as ordinary polling (§3), never a separate budget.
+4. **On PASS after rerun:** classify `ci.failure_classification: flaky_confirmed_transient`, record
+   `ci_polled` evidence for both the failed attempt and the rerun attempt distinctly (an eventual pass
+   must never be indistinguishable from a first-try clean pass in the run log), and proceed exactly as
+   a normal clean CI pass.
+5. **On FAIL through rerun-budget exhaustion:** classify `ci.failure_classification: infrastructure`,
+   escalate with `escalated.reason: CI_RERUN_EXHAUSTED`, and fall through to "CI is an infrastructure or
+   pre-existing failure" (below) — this branch is never silently bypassed or treated as passed.
+
 If CI is an infrastructure or pre-existing failure, record evidence and apply repository policy. Do not assume permission to bypass a required check.
 
-If CI remains pending beyond the configured active polling budget, stop polling and report the actual pending state.
+If CI remains pending beyond the configured active polling budget, stop polling and report the actual
+pending state (`ci.status: TIMEOUT`, paired with `ci.failure_classification: undiagnosed`).
 
 This active-polling budget is independent of the per-dispatch response-wait budget (§3) that also
 bounds the optional clarify sub-step's dispatch (§2, gap-backlog B1) — a stuck CI check and a

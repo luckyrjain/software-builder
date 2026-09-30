@@ -149,8 +149,8 @@ SESSION_RETURNS = ("builder_returned", "review_returned", "remediation_returned"
 USAGE_EVENTS = ("builder_returned", "review_returned", "remediation_returned", "clarify_returned", "orchestrator_usage")
 REASON_CODES = (
     "DIRTY_REVIEW_LIMIT", "FIX_ATTEMPT_LIMIT", "CONTESTED_TWICE", "SIZE_HARD_STOP", "FINGERPRINT_ALTERNATION",
-    "SCOPE_EXCEEDED", "MISSING_DECISION", "THIRD_PARTY_CHANGE", "CI_UNDIAGNOSABLE", "SESSION_TIMEOUT",
-    "TOKEN_BUDGET", "TIME_BUDGET", "OTHER",
+    "SCOPE_EXCEEDED", "MISSING_DECISION", "THIRD_PARTY_CHANGE", "CI_UNDIAGNOSABLE", "CI_RERUN_EXHAUSTED",
+    "SESSION_TIMEOUT", "TOKEN_BUDGET", "TIME_BUDGET", "OTHER",
 )
 _USAGE_FLOAT_FIELDS = ("elapsed_seconds", "cost_usd")
 _USAGE_MAX = {
@@ -622,6 +622,17 @@ def _validate_event_data(event: str, data: dict[str, Any]) -> None:
         raise ValueError("lease_denied needs data.task_id and data.lease_id: which task was denied, and which lease it contended for")
     if event == "run_completed" and data.get("outcome") not in OUTCOMES:
         raise ValueError(f"run_completed needs data.outcome, one of: {', '.join(OUTCOMES)}")
+    if event == "ci_polled":
+        if "attempt" in data and not (isinstance(data["attempt"], int) and not isinstance(data["attempt"], bool) and data["attempt"] >= 0):
+            raise ValueError("ci_polled.attempt, if present, must be a non-negative int")
+        if "eligible_for_rerun" in data and not isinstance(data["eligible_for_rerun"], bool):
+            raise ValueError("ci_polled.eligible_for_rerun, if present, must be a bool")
+        if "observed_signal" in data and data["observed_signal"] not in {"TIMEOUT", "PROVISIONING_FAILURE"}:
+            raise ValueError("ci_polled.observed_signal, if present, must be one of: TIMEOUT, PROVISIONING_FAILURE")
+        if "failure_classification" in data and data["failure_classification"] not in {
+            "regression", "infrastructure", "flaky_confirmed_transient", "undiagnosed"
+        }:
+            raise ValueError("ci_polled.failure_classification, if present, must be one of the four enum values")
 
 
 def _now() -> datetime:

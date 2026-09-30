@@ -57,7 +57,7 @@ integers up to 10^10. A record with all-zero tokens counts as **no** usage.
 | `clarify_dispatched` | the optional clarify sub-step (`orchestrator.md` §2, gap-backlog B1) invokes `engineering-decision-discovery` for a task whose acceptance criteria failed the concreteness check | `task_id`, `attempt`, `session_ref` |
 | `clarify_returned` | the clarify sub-step returns; **carries its `usage`**, same as `builder_returned` | `task_id`, `status` (`RESOLVED`\|`OPEN`) |
 | `orchestrator_usage` | after each Builder or Reviewer return: the tokens you used since your last such record (a delta), **only if the host reports them** (never a guess) | — (`usage`) |
-| `pr_opened`, `adjudicated`, `ci_polled`, `merge_attempted` | the action happens | ids and counts |
+| `pr_opened`, `adjudicated`, `ci_polled`, `merge_attempted` | the action happens | ids and counts (`ci_polled` also carries, present only when relevant: `attempt`, `eligible_for_rerun`, `observed_signal` (`TIMEOUT`\|`PROVISIONING_FAILURE`), `failure_classification` (`regression`\|`infrastructure`\|`flaky_confirmed_transient`\|`undiagnosed`)) |
 | `budget_checked` | optional note of a check's result (the script derives `unmeasured` and `unlimited` itself) | those lists |
 | `escalated` | a circuit breaker fires | `reason`, **required**, one of the codes below |
 | `lease_denied` | `task_lease.try_acquire` returned `None` for this task (a peer already holds it on this machine) | `task_id`, `lease_id`, both **required** |
@@ -65,7 +65,7 @@ integers up to 10^10. A record with all-zero tokens counts as **no** usage.
 
 `escalated.reason` is one of `DIRTY_REVIEW_LIMIT`, `FIX_ATTEMPT_LIMIT`, `CONTESTED_TWICE`, `SIZE_HARD_STOP`,
 `FINGERPRINT_ALTERNATION`, `SCOPE_EXCEEDED`, `MISSING_DECISION`, `THIRD_PARTY_CHANGE`, `CI_UNDIAGNOSABLE`,
-`SESSION_TIMEOUT`, `TOKEN_BUDGET`, `TIME_BUDGET`, `OTHER` (anything else is rejected with exit `2`: correct it and retry
+`CI_RERUN_EXHAUSTED`, `SESSION_TIMEOUT`, `TOKEN_BUDGET`, `TIME_BUDGET`, `OTHER` (anything else is rejected with exit `2`: correct it and retry
 once). A failing log cannot record its own failure: report `INTEGRITY_FAILURE` or `LOG_UNAVAILABLE` in the report only. `run_completed.outcome` is `COMPLETE`, `ESCALATED`,
 `HUMAN_ACTION_REQUIRED` or `ABANDONED`.
 

@@ -144,7 +144,7 @@ ci:
   required_checks_green: false
   active_polling_started_at: null
   active_polling_stopped_at: null
-  failure_classification: null
+  failure_classification: null  # null | regression | infrastructure | flaky_confirmed_transient | undiagnosed
   evidence_refs: []
 
 # Run log (see reference/run-log.md). Written only by the Orchestrator via scripts/run_log.py; `budgets.consumed`
@@ -164,6 +164,9 @@ budgets:
   max_fix_attempts_per_finding: 2
   max_contested_rounds_per_finding: 2
   max_ci_poll_minutes: 15
+  max_ci_reruns: 1  # per eligible-failure check. Deliberately small and unvalidated against a real
+                    # required-check flake precedent -- a considered starting point, not an
+                    # empirically-tuned value.
   # Non-null defaults (A2): a caller that sets nothing still gets a ceiling. A caller may raise or
   # lower either value; the only way to run without one is the explicit string "unlimited", which
   # the completion/escalation report must echo. null/absent means "unset -> default applies".
