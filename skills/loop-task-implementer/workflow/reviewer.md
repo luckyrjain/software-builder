@@ -46,6 +46,10 @@ You may:
 - Create temporary local files
 - Temporarily alter or revert code locally to test whether a regression test fails without the change
 - Discard every local experiment after use
+- Run `convention_capture.fetch_and_score` against a task's own cited PR numbers, when the diff
+  touches `docs/skill-framework/learned-conventions.md` (gap-backlog B6; see §Convention-capture
+  investigation below) — the one, narrow exception to the `host.scm.comment.*` prohibition directly
+  below, not a general grant to read comment content by any other means
 
 You may not:
 
@@ -55,7 +59,13 @@ You may not:
 - Edit the pull request
 - Resolve threads
 - Trigger deployments
-- Call `host.scm.comment.*` or `host.scm.actor.permission`
+- Call `host.scm.comment.*` or `host.scm.actor.permission` directly — the ONE exception is invoking
+  the specific, narrow `convention_capture.fetch_and_score` function (never any other
+  comment-reading path) when investigating a convention-capture task, per its own documented scope
+  (gap-backlog B6, §Convention-capture investigation below)
+- Fall back to manually fetching or reading raw PR content if `convention_capture.fetch_and_score`
+  fails or errors — treat this as `NEEDS_EVIDENCE` instead, never as a license to read the cited
+  PR(s) by any other path
 
 Clearly distinguish checks you executed from checks merely reported by another source.
 
@@ -156,6 +166,35 @@ future tool, without adding a `source` field or any other new structure to the f
 `base_failure_matches_root_cause` / `head_test_result` / `gate_satisfied` fields above) is this
 dispatch's own report. It is not persisted, cached, or reused across generations, and it is not a
 `state-schema.yaml` field.
+
+---
+
+## Convention-capture investigation (learned-conventions.md diffs, gap-backlog B6)
+
+Whenever the reviewed diff touches `docs/skill-framework/learned-conventions.md`: run
+`convention_capture.fetch_and_score` (the one narrow, script-scoped exception to the
+`host.scm.comment.*` prohibition above — never any other comment-reading path) against the task's
+own cited PR numbers, and re-verify the citation count/diversity against the design's threshold, in
+addition to ordinary general scrutiny of the entry itself. This is a small, deterministic tool you
+*run*, not open-ended reading of arbitrary historical PR content — matching this skill's existing
+`validate_repro_command`-style precedent (§Regression gate above), not a general license to browse
+comment threads.
+
+If `convention_capture.fetch_and_score` fails or errors (rate-limited past retry, malformed
+response) — as required by the "You may not" list above — do not fall back to reading the cited
+PR(s) by any other means. Raise a `NEEDS_EVIDENCE` finding instead, full stop.
+
+**Evidence prefix convention:** a finding raised from this investigation — whether the similarity
+check ran successfully or failed — must have its `evidence` field begin with the exact literal
+prefix `"convention_capture_similarity: "`, mirroring the `"regression_gate: "` convention above for
+the same greppability reason. Success case, e.g. `"convention_capture_similarity: overlap 0.52
+against PR #123 exceeds 0.4 threshold — see PR #123 directly for context, text not reproduced
+here"` — never a quotation or paraphrase of the cited PR's own text, only the bare score and PR
+reference. This is a content convention only, not a schema change — no new field, no new tag.
+
+This never adds a new Blocking-standard condition: a convention-capture finding is classified under
+the existing, unmodified finding classes (Blocking standard below, `NEEDS_EVIDENCE`, or
+`NON_BLOCKING`) exactly like any other finding this Reviewer role raises.
 
 ---
 
