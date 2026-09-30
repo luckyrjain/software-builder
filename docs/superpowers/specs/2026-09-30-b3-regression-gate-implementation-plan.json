@@ -1,0 +1,814 @@
+{
+  "assessment_target": {
+    "repo": "luckyrjain/software-builder"
+  },
+  "execution_waves": [
+    [
+      "TASK-001-79ef1272"
+    ],
+    [
+      "TASK-002-d1dde073"
+    ],
+    [
+      "TASK-003-ca00c20e"
+    ],
+    [
+      "TASK-004-35ee2373"
+    ],
+    [
+      "TASK-005-114b4e0c"
+    ],
+    [
+      "TASK-006-951ff0ec"
+    ],
+    [
+      "TASK-007-f3e87161"
+    ],
+    [
+      "TASK-008-90ceaca3"
+    ],
+    [
+      "TASK-009-fd705e6e"
+    ]
+  ],
+  "external_dependencies": [],
+  "plan_id": "PLANSET-4b43029e6be3-ef4a510c",
+  "plan_set_id": "PLANSET-4b43029e6be3",
+  "planning_path": {
+    "asserted_by": null,
+    "eligibility_category": null,
+    "mode": "FULL"
+  },
+  "readiness": "READY",
+  "sequencing_constraints": [
+    "Tasks execute in deterministic dependency-wave order."
+  ],
+  "source_refs": [
+    "architecture_review_report:6c033409627ba66e3ba919fde5d313488853ce2b5763de402603325aa27dc761",
+    "change_impact_report:9b672f70d74ebd8628331d093a3ccd87dc9ed97bc7ef1383e78792d164a3e4a3",
+    "system_design_spec:91b09ec69074ef3ff541738b1a419fa0e6c4e60dad6e73f43fa220c24636f0b2"
+  ],
+  "target_repo": "luckyrjain/software-builder",
+  "tasks": [
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for docs/skill-framework/shared/cross-skill-escalation.md."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 62,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path docs/skill-framework/shared/cross-skill-escalation.md in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "docs/skill-framework/shared/cross-skill-escalation.md"
+      ],
+      "task_id": "TASK-001-79ef1272",
+      "task_type": "code",
+      "title": "Implement changes under docs/skill-framework/shared/cross-skill-escalation.md",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for scripts/registry/composition_contracts.yaml."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [
+        "TASK-001-79ef1272"
+      ],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 61,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path scripts/registry/composition_contracts.yaml in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "scripts/registry/composition_contracts.yaml"
+      ],
+      "task_id": "TASK-002-d1dde073",
+      "task_type": "code",
+      "title": "Implement changes under scripts/registry/composition_contracts.yaml",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills.yaml."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [
+        "TASK-002-d1dde073"
+      ],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 61,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path skills.yaml in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "skills.yaml"
+      ],
+      "task_id": "TASK-003-ca00c20e",
+      "task_type": "code",
+      "title": "Implement changes under skills.yaml",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/bug-diagnosis/reference/report-format.md."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [
+        "TASK-003-ca00c20e"
+      ],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 61,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path skills/bug-diagnosis/reference/report-format.md in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "skills/bug-diagnosis/reference/report-format.md"
+      ],
+      "task_id": "TASK-004-35ee2373",
+      "task_type": "code",
+      "title": "Implement changes under skills/bug-diagnosis/reference/report-format.md",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/bug-diagnosis/tests/test_repro_command_validation.py."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [
+        "TASK-004-35ee2373"
+      ],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 61,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path skills/bug-diagnosis/tests/test_repro_command_validation.py in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "skills/bug-diagnosis/tests/test_repro_command_validation.py"
+      ],
+      "task_id": "TASK-005-114b4e0c",
+      "task_type": "code",
+      "title": "Implement changes under skills/bug-diagnosis/tests/test_repro_command_validation.py",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/bug-diagnosis/workflow/repro.md."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [
+        "TASK-005-114b4e0c"
+      ],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 61,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path skills/bug-diagnosis/workflow/repro.md in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "skills/bug-diagnosis/workflow/repro.md"
+      ],
+      "task_id": "TASK-006-951ff0ec",
+      "task_type": "code",
+      "title": "Implement changes under skills/bug-diagnosis/workflow/repro.md",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/loop-task-implementer/workflow/builder.md."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [
+        "TASK-006-951ff0ec"
+      ],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 61,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path skills/loop-task-implementer/workflow/builder.md in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "skills/loop-task-implementer/workflow/builder.md"
+      ],
+      "task_id": "TASK-007-f3e87161",
+      "task_type": "code",
+      "title": "Implement changes under skills/loop-task-implementer/workflow/builder.md",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/loop-task-implementer/workflow/orchestrator.md."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [
+        "TASK-007-f3e87161"
+      ],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 61,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path skills/loop-task-implementer/workflow/orchestrator.md in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "skills/loop-task-implementer/workflow/orchestrator.md"
+      ],
+      "task_id": "TASK-008-90ceaca3",
+      "task_type": "code",
+      "title": "Implement changes under skills/loop-task-implementer/workflow/orchestrator.md",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/loop-task-implementer/workflow/reviewer.md.",
+        "pytest skills/bug-diagnosis/tests/test_repro_command_validation.py",
+        "make generate-check",
+        "make validate-registry",
+        "make lint-loop-task-implementer",
+        "make lint-bug-diagnosis"
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [
+        "TASK-008-90ceaca3"
+      ],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 61,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [
+        "pytest skills/bug-diagnosis/tests/test_repro_command_validation.py",
+        "make generate-check",
+        "make validate-registry",
+        "make lint-loop-task-implementer",
+        "make lint-bug-diagnosis"
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path skills/loop-task-implementer/workflow/reviewer.md in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "skills/loop-task-implementer/workflow/reviewer.md"
+      ],
+      "task_id": "TASK-009-fd705e6e",
+      "task_type": "code",
+      "title": "Implement changes under skills/loop-task-implementer/workflow/reviewer.md",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    }
+  ],
+  "title": "B3: bug-diagnosis to loop-task-implementer fail-before/pass-after regression gate",
+  "traceability": {
+    "action_coverage": {
+      "architecture-action:action-1": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "architecture-action:action-2": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "architecture-action:action-3": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "architecture-action:action-4": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "architecture-action:action-5": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "design-action:action-1": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "design-action:action-2": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "design-action:action-3": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "design-action:action-4": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "design-action:action-5": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ]
+    },
+    "condition_coverage": {
+      "architecture-condition:condition-1": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "architecture-condition:condition-2": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "architecture-condition:condition-3": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "architecture-condition:condition-4": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "architecture-condition:condition-5": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "design-condition:condition-1": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "design-condition:condition-2": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "design-condition:condition-3": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "design-condition:condition-4": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ],
+      "design-condition:condition-5": [
+        "TASK-001-79ef1272",
+        "TASK-002-d1dde073",
+        "TASK-003-ca00c20e",
+        "TASK-004-35ee2373",
+        "TASK-005-114b4e0c",
+        "TASK-006-951ff0ec",
+        "TASK-007-f3e87161",
+        "TASK-008-90ceaca3",
+        "TASK-009-fd705e6e"
+      ]
+    },
+    "required_test_coverage": {
+      "make generate-check": [
+        "TASK-009-fd705e6e"
+      ],
+      "make lint-bug-diagnosis": [
+        "TASK-009-fd705e6e"
+      ],
+      "make lint-loop-task-implementer": [
+        "TASK-009-fd705e6e"
+      ],
+      "make validate-registry": [
+        "TASK-009-fd705e6e"
+      ],
+      "pytest skills/bug-diagnosis/tests/test_repro_command_validation.py": [
+        "TASK-009-fd705e6e"
+      ]
+    }
+  },
+  "verification_gates": [
+    "Every required test, task verification, and traceability item is satisfied."
+  ]
+}
