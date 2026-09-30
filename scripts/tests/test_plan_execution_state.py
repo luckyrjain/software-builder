@@ -290,6 +290,63 @@ def test_reconcile_final_check_attempts_merges_shallowly_like_clarifications() -
     assert reconciled["final_check_attempts"]["TASK-002"] == 1
 
 
+def test_reconcile_rejects_a_merge_that_would_produce_malformed_comment_threads() -> None:
+    """Regression test for the reviewer-reported bug (B4 follow-up): a malformed
+    ``comment_threads`` argument -- valid at the outer task_id -> thread_id mapping level, but with
+    a non-mapping value one level deeper, under a thread_id -- must be rejected by
+    ``reconcile_plan_execution_state`` itself, immediately, rather than silently merged into an
+    invalid ``normalized`` result that a caller could go on to treat as success and persist.
+    Before the fix, ``reconcile_plan_execution_state`` only validated the PRIOR ``state``, never
+    the merged/normalized result it actually returns, so this malformed merge was never caught
+    here."""
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    reconciled, errors = reconcile_plan_execution_state(
+        state,
+        plan,
+        authoritative_task_statuses={"TASK-001": "NOT_STARTED", "TASK-002": "NOT_STARTED"},
+        current_head="a" * 40,
+        comment_threads={"TASK-001": {"thread-x": "not-a-mapping-at-all"}},
+    )
+    assert reconciled is None
+    assert any("comment_threads" in error for error in errors)
+
+
+def test_reconcile_rejects_a_merge_that_would_produce_malformed_final_check_attempts() -> None:
+    """Same regression as above, for ``final_check_attempts``: a non-int value merges cleanly at
+    the shallow-merge level (no exception raised by the merge itself) but must still be rejected
+    by re-validating the merged result before ``reconcile_plan_execution_state`` reports success."""
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    reconciled, errors = reconcile_plan_execution_state(
+        state,
+        plan,
+        authoritative_task_statuses={"TASK-001": "NOT_STARTED", "TASK-002": "NOT_STARTED"},
+        current_head="a" * 40,
+        final_check_attempts={"TASK-001": "not-an-int"},
+    )
+    assert reconciled is None
+    assert any("final_check_attempts" in error for error in errors)
+
+
+def test_merge_comment_threads_fails_loudly_instead_of_silently_dropping_a_malformed_task_entry() -> None:
+    """Non-blocking companion fix: an incoming ``comment_threads`` value for a task_id that is not
+    itself a mapping of thread_id to mapping (e.g. a bare string) used to be silently discarded by
+    ``_merge_comment_threads`` -- no error, no persisted data, no signal anything went wrong. It
+    must now be rejected instead, consistent with the module's fail-closed convention."""
+    plan = _plan()
+    state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")
+    reconciled, errors = reconcile_plan_execution_state(
+        state,
+        plan,
+        authoritative_task_statuses={"TASK-001": "NOT_STARTED", "TASK-002": "NOT_STARTED"},
+        current_head="a" * 40,
+        comment_threads={"TASK-001": "garbage"},
+    )
+    assert reconciled is None
+    assert any("comment_threads" in error for error in errors)
+
+
 def test_advance_plan_execution_state_threads_clarifications_through() -> None:
     plan = _plan()
     state = initial_plan_execution_state(plan, current_head="a" * 40, updated_at="2026-08-26T00:00:00Z")

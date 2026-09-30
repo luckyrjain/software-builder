@@ -411,6 +411,94 @@ def test_cas_advance_without_clarifications_argument_leaves_durably_stored_entri
     assert result["clarifications"]["TASK-001"]["status"] == "RESOLVED"
 
 
+def test_cas_advance_rejects_malformed_comment_threads_upfront_instead_of_corrupting_durable_state(
+    tmp_path: Path,
+) -> None:
+    """Regression test for the reviewer-reported bug: reconcile_plan_execution_state used to
+    validate only the PRIOR durable state (never the merged result it built and returned), so a
+    malformed ``comment_threads`` argument here would silently pass, get written to disk by
+    ``cas_advance``, and then permanently fail EVERY subsequent well-formed ``cas_advance`` call
+    for this plan (each one's own pre-merge validation would fail against the now-corrupted durable
+    state) -- with no automatic recovery path.
+
+    Reproduces the exact two-step sequence from the review:
+      1. A malformed ``comment_threads`` call must now be rejected upfront (raise
+         ``PlanStateCasError``) and must NOT land on disk.
+      2. A subsequent, well-formed, completely unrelated ``cas_advance`` call for the SAME plan
+         must then succeed -- proving the plan was never corrupted, not merely that the bad call
+         was rejected.
+    """
+    state_dir = tmp_path / "state"
+    plan = _plan()
+
+    # Step 1: the malformed call (valid at the outer task_id -> thread_id level, but with a
+    # non-mapping value one level deeper, under a thread_id) must fail immediately.
+    with pytest.raises(PlanStateCasError):
+        cas_advance(
+            state_dir,
+            plan,
+            expected_generation=0,
+            authoritative_task_statuses=_official_state(),
+            current_head=HEAD,
+            updated_at=UPDATED_AT,
+            comment_threads={"TASK-001": {"thread-x": "not-a-mapping-at-all"}},
+        )
+
+    # Nothing must have been written -- the store must not even have generation-zero state yet.
+    assert not state_path(state_dir, plan["plan_id"]).exists()
+
+    # Step 2: a completely unrelated, well-formed call for the same plan must succeed -- proving
+    # the durable state was never corrupted by the rejected call above.
+    result = cas_advance(
+        state_dir,
+        plan,
+        expected_generation=0,
+        authoritative_task_statuses=_official_state(),
+        current_head=HEAD,
+        updated_at="2026-09-25T00:08:00Z",
+    )
+    assert result["state_generation"] == 1
+
+    on_disk = read_state(state_dir, plan["plan_id"])
+    assert on_disk == result
+
+
+def test_cas_advance_rejects_malformed_final_check_attempts_upfront_instead_of_corrupting_durable_state(
+    tmp_path: Path,
+) -> None:
+    """Same regression as above, for ``final_check_attempts``: a non-int value merges cleanly (no
+    exception from the merge itself, which is a plain shallow ``{**a, **b}``) but must still be
+    rejected before any write to disk, and must not block a later well-formed call."""
+    state_dir = tmp_path / "state"
+    plan = _plan()
+
+    with pytest.raises(PlanStateCasError):
+        cas_advance(
+            state_dir,
+            plan,
+            expected_generation=0,
+            authoritative_task_statuses=_official_state(),
+            current_head=HEAD,
+            updated_at=UPDATED_AT,
+            final_check_attempts={"TASK-001": "not-an-int"},
+        )
+
+    assert not state_path(state_dir, plan["plan_id"]).exists()
+
+    result = cas_advance(
+        state_dir,
+        plan,
+        expected_generation=0,
+        authoritative_task_statuses=_official_state(),
+        current_head=HEAD,
+        updated_at="2026-09-25T00:09:00Z",
+    )
+    assert result["state_generation"] == 1
+
+    on_disk = read_state(state_dir, plan["plan_id"])
+    assert on_disk == result
+
+
 # --- clarify-entry lease TOCTOU close (gap-backlog B1) ---------------------------------------------
 
 _TOCTOU_RESOLVE_CODE = """

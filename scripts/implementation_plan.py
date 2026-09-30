@@ -1542,15 +1542,25 @@ def _merge_comment_threads(
     ``task_id``, merges at the ``thread_id`` level, so writing thread B's entry never destroys
     thread A's already-persisted entry for the same task. New entries win on key conflict, matching
     ``clarifications``' own conflict rule.
+
+    Raises :class:`ValueError` when an ``incoming`` per-task entry is not itself a mapping of
+    thread_id to mapping -- e.g. ``{"TASK-001": "garbage"}``. Silently discarding a malformed
+    per-task entry (the prior behavior) would drop data the caller intended to persist with no
+    signal anything went wrong; this fails loudly instead, matching this module's fail-closed
+    validation convention.
     """
     merged: dict[str, Any] = {
         task_id: dict(threads) if isinstance(threads, Mapping) else {}
         for task_id, threads in (durable or {}).items()
     }
     for task_id, threads in (incoming or {}).items():
+        if not isinstance(threads, Mapping):
+            raise ValueError(
+                "comment_threads entry for task "
+                f"{task_id!r} must be a mapping of thread_id to mapping, got {type(threads).__name__}"
+            )
         existing = dict(merged.get(task_id, {}))
-        if isinstance(threads, Mapping):
-            existing.update(threads)
+        existing.update(threads)
         merged[task_id] = existing
     return merged
 
@@ -1627,9 +1637,29 @@ def reconcile_plan_execution_state(
         **state.get("final_check_attempts", {}),
         **(final_check_attempts or {}),
     }
-    normalized["comment_threads"] = _merge_comment_threads(
-        state.get("comment_threads", {}), comment_threads
+    try:
+        normalized["comment_threads"] = _merge_comment_threads(
+            state.get("comment_threads", {}), comment_threads
+        )
+    except ValueError as exc:
+        return None, [f"error: {exc}"]
+    # Fail-closed: validate the MERGED/normalized result, not just the prior ``state`` validated
+    # above. Validating only the prior state (as this function used to) would let a malformed
+    # caller-supplied ``comment_threads``/``final_check_attempts`` argument merge into an invalid
+    # structure that is nonetheless returned as success -- corrupting the durable checkpoint that
+    # ``cas_advance`` goes on to write to disk, and permanently breaking every subsequent
+    # ``cas_advance`` call for this plan (each one's own pre-merge validation would then fail
+    # against the already-corrupted durable state). Re-validating here, against the same
+    # ``current_head``/``minimum_generation`` this call already checked the prior state with,
+    # closes that gap before any caller can treat this as a successful reconciliation.
+    post_merge_errors = validate_plan_execution_state(
+        normalized,
+        plan,
+        current_head=current_head,
+        minimum_generation=minimum_generation,
     )
+    if post_merge_errors:
+        return None, post_merge_errors
     return normalized, []
 
 
