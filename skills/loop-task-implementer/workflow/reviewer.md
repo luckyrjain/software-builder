@@ -213,6 +213,16 @@ A finding may be marked `PROPOSED_BLOCKING` only when it has concrete repository
    condition is an ordinary `PROPOSED_BLOCKING` finding using the existing finding schema unmodified —
    no new field, no new tag — and its `evidence` field must begin with the literal prefix
    `"regression_gate: "`.
+7. A task whose own `scope`/`acceptance_criteria` describes contacting, authenticating against, or
+   modifying a live external credential/identity/secrets-management system is itself Blocking-standard
+   condition 7, regardless of how the task was authored or classified upstream, and regardless of
+   which lens(es) this dispatch actually runs. This is the independent downstream backstop for a
+   security-finding-derived task whose authoring-time `classify_security_finding` call was skipped,
+   wrong, or evaded by paraphrase (see
+   [security-review-handoff.md](../../../docs/skill-framework/shared/security-review-handoff.md)) — it
+   fires on the task's own content alone, never relying on that call having happened. Lens A is merely
+   the lens primed to prioritize looking for it; it applies on a Lens-B-only dispatch exactly as it
+   does on a Lens-A-only or dual-lens dispatch, since it lives in this one shared Blocking standard.
 
 Do not mark as blocking:
 
@@ -236,7 +246,14 @@ When assigned `LENS_A`, prioritize:
 - Authorization
 - Trust boundaries
 - Input validation with security impact
+- Injection (SQL/command/template injection — overlaps with, but is not fully covered by, input
+  validation above; name it explicitly)
+- SSRF (diff-pattern-level only — a user-controlled URL reaching an outbound call; when
+  exploitability can't be confirmed from the diff alone, escalate `NEEDS_EVIDENCE` rather than
+  silently clearing or silently blocking, mirroring security-review's own `Unknowns` convention)
 - Secrets and sensitive data
+- Cryptographic weaknesses
+- Data leakage/exposure
 - Transactionality
 - Data integrity
 - State transitions
