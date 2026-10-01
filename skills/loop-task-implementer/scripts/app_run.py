@@ -45,10 +45,24 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlsplit
 
+# --- repo-root import bootstrap (mirrors the sys.path convention already used by sibling skill
+# scripts -- e.g. convention_capture.py, this skill's own sibling script, for `scripts.task_lease`;
+# also k8s-overprovisioning-datadog/scripts/validate_decision_graph.py,
+# migration-program-manager/scripts/aggregate_migration_status.py -- for locating a repository-root
+# module from inside skills/<name>/scripts/). Not the yaml-safety GENERATED bootstrap (that one is
+# specific to scripts/yaml_safety.py's load_unique_yaml_file file-reading variant, machine-managed
+# by `make generate` for a fixed skill list that doesn't include this one); this script parses a
+# caller-supplied YAML *string* value, not a file path, so it wants load_unique_yaml instead.
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_REPO_ROOT = _SCRIPT_DIR.parents[2]
+if (_REPO_ROOT / "skills.yaml").is_file() and str(_REPO_ROOT) not in sys.path:
+    sys.path.append(str(_REPO_ROOT))
+
 try:
-    import yaml
-except ImportError:  # pragma: no cover - PyYAML is an existing repo-wide dependency
-    yaml = None  # type: ignore[assignment]
+    from scripts.yaml_safety import YAML_SAFETY_ERRORS, load_unique_yaml
+except ImportError:  # pragma: no cover - only reachable outside a source checkout of this repo
+    YAML_SAFETY_ERRORS = ()  # type: ignore[assignment]  # never read: load_unique_yaml is None guards all uses
+    load_unique_yaml = None  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -113,11 +127,11 @@ def resolve_app_run_policy(raw: Any) -> AppRunPolicy | None:
 
     data: Any = raw
     if isinstance(raw, (str, bytes)):
-        if yaml is None:  # pragma: no cover - PyYAML always present in this repo's environment
+        if load_unique_yaml is None:  # pragma: no cover - PyYAML always present in this repo's environment
             return None
         try:
-            data = yaml.safe_load(raw)
-        except yaml.YAMLError:
+            data = load_unique_yaml(raw)
+        except YAML_SAFETY_ERRORS:
             return None
 
     if not isinstance(data, dict):
