@@ -123,6 +123,16 @@ if a human had pasted that ticket's text and said "implement this" — no differ
 directives invented (same lesson as `pr-gatekeeper`/`incident-triage-agent`: don't invent unverified
 invocation grammar).
 
+**Also pass `caller_task_ref` (gap-backlog B8) — a second, separate, structured field, never derived
+from or commingled with the pasted ticket text above.** Alongside the `task_source`-scoped pasted ticket
+text, pass this ticket's own already-existing `backlog_run.tasks[].task_id` (§1) as the `caller_task_ref`
+consumed input — a distinctly-named entry loop-task-implementer's own `orchestrator.md` frontmatter
+declares alongside, never in place of, `task_source` (gap-backlog B8). loop-task-implementer derives
+`task.source_issue_ref` from this value alone, never from the pasted ticket text it receives as
+`task_source`. A ticket with no resolvable `task_id` still dispatches normally, exactly as before this
+field existed — `caller_task_ref` is simply absent/null for it, and loop-task-implementer's own
+write-back mechanism degrades to not-attempted, never a dispatch failure.
+
 **`autonomous_merge_authorized` is never passed as `true`** — every invocation runs with it unset/`false`,
 hardcoded. loop-task-implementer's own rule already defaults it to `false` and explicitly refuses to
 accept it from repository-file prose; this skill simply never supplies the caller-side override either.

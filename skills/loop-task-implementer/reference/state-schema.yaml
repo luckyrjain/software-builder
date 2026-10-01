@@ -40,6 +40,15 @@ task:
   title: null
   description_ref: null
   requirements_ref: null
+  # {repo: string, issue_number: int} | null (gap-backlog B8). Recorded ONCE, immutably, at task
+  # selection (orchestrator.md §2), derived EXCLUSIVELY from the `caller_task_ref` consumed input --
+  # never from `task_source`, never from the ticket's own description/body text. `repo` is always
+  # pinned from the Orchestrator's own already-verified repository context (§1), never parsed out of
+  # the tracker-reference string itself. Used only to target the tracker write-back mechanism
+  # (scripts/tracker_write_back.py); never re-derived at write-back time. Mirrors requirements_ref
+  # immediately above: optional, nullable, purely informational, no registration in
+  # composition_contracts.yaml/skills.yaml.
+  source_issue_ref: null
   acceptance_criteria: []
   dependencies: []
   status: NOT_STARTED  # NOT_STARTED | BUILDING | REVIEWING | VALIDATING | READY | COMPLETE | ESCALATED

@@ -221,4 +221,16 @@ accepted_findings_ref:
 authoritative_evidence_refs:
 ```
 
+`task_ref` above is a pre-existing, undefined field (no documented shape, no reader) — it is left in
+place, not removed, but flagged here as vestigial (gap-backlog B8) now that `caller_task_ref` (an
+`orchestrator.md`-consumed input) and `task.source_issue_ref` (a `state-schema.yaml` field) are the
+precisely-defined concepts for "which tracker reference this task came from," so a future reader does
+not confuse this envelope's own bare `task_ref` with either one.
+
+The new "Issue/task tracker write (status comment + PR link)" capability declared in
+[mcp-capabilities.md](mcp-capabilities.md) (gap-backlog B8) has no equivalent today for Jira, Linear, or
+any other tracker — only a GitHub Issues adapter (`gh issue comment`) is implemented; until a
+tracker-specific adapter exists for another tracker, it degrades to skipping write-back entirely, per
+that capability row's own degraded path.
+
 Never include hidden reasoning, self-review, previous clean verdicts, or persuasive implementation framing.
