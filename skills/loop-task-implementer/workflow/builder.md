@@ -189,8 +189,8 @@ involves the Reviewer at all, per the converged design — it is evaluated entir
 
 When `run_app_run` captures a screenshot (`AppRunOutcome.screenshot_path`), that path must be
 explicitly excluded from whatever §6 Commit and publish's staging step does — see
-`resolve_screenshot_path`'s git-exclusion guarantee below, and never force-add a captured
-screenshot path into a commit.
+`resolve_screenshot_path` in `scripts/app_run.py` for its git-exclusion guarantee, and never
+force-add a captured screenshot path into a commit.
 
 ---
 
