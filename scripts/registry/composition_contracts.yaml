@@ -117,6 +117,7 @@ artifact_schemas:
     - session_token_budget
     - output_dir
     - regression_gate
+    - app_run
   implementation_pr:
     fields:
     - pr_url

@@ -26,6 +26,13 @@ Natural-language examples:
 
 Use subagents or fresh sessions for role isolation. Use worktrees when Builder and Reviewer need separate repository contexts.
 
+The "Screenshot capture for app-run/UI verification" capability declared in
+[mcp-capabilities.md](mcp-capabilities.md) has a concrete bridge on this host: Claude Code's own
+`Claude_Browser` tooling (`preview_start` to launch/attach to the running app, then its screenshot
+action) satisfies this sub-capability directly — no new installation needed. The process-start/
+readiness/teardown sub-capability still requires this host's native subprocess/process-group
+primitives (POSIX `setsid`/`killpg`), independent of `Claude_Browser`.
+
 ## ChatGPT / Codex
 
 Install under the runtime’s supported skills directory, commonly:
@@ -49,6 +56,13 @@ permission grant on this host yet — `.claude/settings.json` is Claude-Code-spe
 its own equivalent allow-list or approval mechanism before the eligibility gate can run here; until then
 it degrades to the existing, unchanged ambiguous-failure judgment call.
 
+The "Local process start + port/readiness probe + process-group teardown for app-run/UI
+verification" and "Screenshot capture for app-run/UI verification" capabilities declared in
+[mcp-capabilities.md](mcp-capabilities.md) have no equivalent today on this host — `Claude_Browser`
+is Claude-Code-specific, so this host needs its own equivalent subprocess/process-group and
+browser-automation primitives before this tier can run here; until then it degrades to skipping the
+tier entirely, per that capability row's own degraded path.
+
 ## Cursor
 
 Keep the canonical skill folder in the repository and use `.cursor/rules/loop-task-implementer.mdc` for discovery.
@@ -66,6 +80,13 @@ The "CI job/run structured metadata (`conclusion` field) for the exact head" cap
 permission grant on this host yet — `.claude/settings.json` is Claude-Code-specific, so this host needs
 its own equivalent allow-list or approval mechanism before the eligibility gate can run here; until then
 it degrades to the existing, unchanged ambiguous-failure judgment call.
+
+The "Local process start + port/readiness probe + process-group teardown for app-run/UI
+verification" and "Screenshot capture for app-run/UI verification" capabilities declared in
+[mcp-capabilities.md](mcp-capabilities.md) have no equivalent today on this host — `Claude_Browser`
+is Claude-Code-specific, so this host needs its own equivalent subprocess/process-group and
+browser-automation primitives before this tier can run here; until then it degrades to skipping the
+tier entirely, per that capability row's own degraded path.
 
 ## GitHub Copilot
 
@@ -99,6 +120,13 @@ permission grant on this host yet — `.claude/settings.json` is Claude-Code-spe
 its own equivalent allow-list or approval mechanism before the eligibility gate can run here; until then
 it degrades to the existing, unchanged ambiguous-failure judgment call.
 
+The "Local process start + port/readiness probe + process-group teardown for app-run/UI
+verification" and "Screenshot capture for app-run/UI verification" capabilities declared in
+[mcp-capabilities.md](mcp-capabilities.md) have no equivalent today on this host — `Claude_Browser`
+is Claude-Code-specific, so this host needs its own equivalent subprocess/process-group and
+browser-automation primitives before this tier can run here; until then it degrades to skipping the
+tier entirely, per that capability row's own degraded path.
+
 ## Kiro
 
 Keep the canonical skill folder in the repository and use `.kiro/steering/loop-task-implementer.md` for discovery.
@@ -116,6 +144,13 @@ The "CI job/run structured metadata (`conclusion` field) for the exact head" cap
 permission grant on this host yet — `.claude/settings.json` is Claude-Code-specific, so this host needs
 its own equivalent allow-list or approval mechanism before the eligibility gate can run here; until then
 it degrades to the existing, unchanged ambiguous-failure judgment call.
+
+The "Local process start + port/readiness probe + process-group teardown for app-run/UI
+verification" and "Screenshot capture for app-run/UI verification" capabilities declared in
+[mcp-capabilities.md](mcp-capabilities.md) have no equivalent today on this host — `Claude_Browser`
+is Claude-Code-specific, so this host needs its own equivalent subprocess/process-group and
+browser-automation primitives before this tier can run here; until then it degrades to skipping the
+tier entirely, per that capability row's own degraded path.
 
 ## Sequential role simulation (last-resort fallback)
 

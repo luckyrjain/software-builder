@@ -167,6 +167,31 @@ Record the run in `advisory_checks` like any other local check. This is advisory
 Builder's own iteration — it never replaces, and is never replaced by, the Reviewer's own
 independent dual-worktree execution of the same command against both the base and head commits.
 
+### `app_run` handling
+
+When the task input carries a non-null `implementation_task.app_run` (the process-lifecycle/
+UI-verification grant resolved by the Orchestrator — see `workflow/orchestrator.md` §1 and
+`scripts/app_run.py`), after local tests and any `regression_gate.command` run above, and before
+§5 Inspect the final diff, the Builder invokes `scripts/app_run.py`'s `run_app_run` entry point
+against the task's resolved `app_run.process`/`app_run.screenshot` fields.
+
+The Builder calls into `run_app_run` as-is — it never reimplements any of `app_run.py`'s own
+logic. The module itself enforces its full numbered check order (capability presence →
+`readiness_url` host/userinfo validation → port pre-start check → process start →
+liveness-aware readiness poll → smoke test → optional screenshot → mandatory teardown on every
+exit path); the Builder's only responsibility is to invoke it with the resolved policy and record
+the outcome it returns.
+
+Record the resulting `app_run: <outcome>` string (`run_app_run`'s returned `AppRunOutcome.render()`)
+in `advisory_checks` exactly like `regression_gate.command`'s own result — advisory only, never a
+gate, never replacing or replaced by anything the Reviewer does. This skill's app_run tier never
+involves the Reviewer at all, per the converged design — it is evaluated entirely Builder-side.
+
+When `run_app_run` captures a screenshot (`AppRunOutcome.screenshot_path`), that path must be
+explicitly excluded from whatever §6 Commit and publish's staging step does — see
+`resolve_screenshot_path` in `scripts/app_run.py` for its git-exclusion guarantee, and never
+force-add a captured screenshot path into a commit.
+
 ---
 
 ## 5. Inspect the final diff
