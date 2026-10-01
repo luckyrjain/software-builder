@@ -16,6 +16,7 @@ isolation capability from whichever host agent is running it.
 | `host.scm.actor.permission` | Optional | Same source | Narrow actor-scoping to CODEOWNERS-membership only, and explicitly disclose this narrowing in the completion report — never silently default to trusting every commenter |
 | `host.scm.comment.reply` | Optional | Same source | Skip reply-and-verify; findings are still adjudicated and remediated, just not announced back to the originating thread |
 | `host.scm.review.request` | Optional | Same source | Skip re-request-review; the human reviewer is not automatically re-pinged |
+| PR review-comment read for cross-run convention-capture (`fetch_and_score`) | Optional | Host agent's repo connector or local `gh`/`glab` CLI (same class as this skill's existing PR-comment-read capability) | Convention-scan/Reviewer-side similarity check cannot run; the scan skips affected candidates (scanner side) or the finding becomes `NEEDS_EVIDENCE` (Reviewer side) — never silently treated as passed |
 
 **Phase 0 equivalent:** the Orchestrator's policy-discovery step (`workflow/orchestrator.md` §1)
 serves the same purpose other skills give a Phase 0 MCP-profile announcement — it records which of
