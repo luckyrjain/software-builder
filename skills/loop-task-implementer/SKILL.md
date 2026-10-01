@@ -82,7 +82,7 @@ discover policy
 
 ## Review lenses
 
-- **Lens A — Safety and State:** authentication, authorization, trust boundaries, secrets, transactions, data integrity, state transitions, idempotency, retries, races, security-relevant failure handling.
+- **Lens A — Safety and State:** authentication, authorization, trust boundaries, secrets, transactions, data integrity, state transitions, idempotency, retries, races, security-relevant failure handling, injection (including where input validation already partially applies), SSRF (diff-pattern-level — see the NEEDS_EVIDENCE escalation note), cryptographic weaknesses, data leakage/exposure.
 - **Lens B — Contracts and Operations:** acceptance criteria, API/event/schema compatibility, one-hop consumers, errors, concurrency, performance, timeouts, deployment, rollback, operability, test sufficiency.
 
 Both lenses must be lifecycle-clean with positive integer `review_generation` values, `review_evidence_generation == review_generation`, and valid shared `review_evidence` for the **same current `change_identity`**. Portable evidence is built after Orchestrator adjudication: accepted/open blockers are defects; rejected proposals remain in rich audit history but are not portable defects. A matching head SHA or legacy fingerprint alone is insufficient lifecycle proof.
