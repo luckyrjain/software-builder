@@ -65,17 +65,16 @@ def _free_port() -> int:
         "http://",  # scheme present, hostname empty
         "http:///path",
         "http://localhost.evil.com/",  # suffix trick, different shape
-        "ftp://localhost/",  # scheme present and host is local -- still fine per parser, but
-        # included here only to document that scheme is not restricted by this function; port/
-        # protocol-level restriction is the probe's job, not the host validator's.
+        "ftp://localhost/",  # hostname/userinfo alone would pass -- but the scheme is not
+        # http(s), so this must be REJECTED: an accepted ftp:// URL would let probe_url's opener
+        # reach FTPHandler, a genuine non-network side effect for what is documented as a pure
+        # HTTP readiness/smoke-test probe (Finding 2).
+        "file://localhost/etc/hosts",  # same bypass shape via FileHandler -- local filesystem
+        # read as a side effect of URL "validation" would be far worse than FTP; must be rejected
+        # on scheme alone, independent of the hostname matching the local allowlist.
     ],
 )
 def test_validate_readiness_url_rejects_every_known_bypass_shape(ar, url):
-    if url == "ftp://localhost/":
-        # This function only validates host/userinfo, not scheme -- it is expected to accept this;
-        # kept in the parametrize list as explicit documentation, not a rejection case.
-        assert ar.validate_readiness_url(url) is True
-        return
     assert ar.validate_readiness_url(url) is False, url
 
 
@@ -166,6 +165,75 @@ def test_probe_url_accepts_200(ar):
 def test_probe_url_reports_connection_failure_without_raising(ar):
     port = _free_port()  # nothing listening here
     result = ar.probe_url(f"http://127.0.0.1:{port}/", timeout=0.5)
+    assert result.ok is False
+    assert result.status is None
+
+
+def test_probe_url_scheme_confusion_never_touches_the_filesystem(ar, monkeypatch, tmp_path):
+    """Finding 2 regression: even if a non-http(s) URL reached `probe_url` directly (bypassing
+    `validate_readiness_url` through some other path), the opener must not be able to reach
+    `FileHandler`/`FTPHandler`/`DataHandler` -- this tests the defense-in-depth layer (the
+    explicit minimal handler set) directly, independent of the scheme check in
+    `validate_readiness_url`.
+
+    Instrumented the same way the original finding's reproduction was: a `builtins.open` spy
+    proves the local filesystem's `open()` is never invoked, and the call must return
+    `ProbeResult(ok=False, ...)` without raising -- not the uncaught `TypeError` the original
+    finding reproduced (a file-handler response object has no numeric HTTP status).
+    """
+    import builtins
+
+    probe_file = tmp_path / "probe-target.txt"
+    probe_file.write_text("should never be read by probe_url", encoding="utf-8")
+
+    real_open = builtins.open
+    open_calls = []
+
+    def spy_open(file, *args, **kwargs):
+        open_calls.append(file)
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", spy_open)
+
+    result = ar.probe_url(probe_file.as_uri(), timeout=2.0)
+
+    assert result.ok is False
+    assert not any(str(probe_file) in str(call) for call in open_calls), (
+        "probe_url must never trigger a local filesystem open() as a side effect of a "
+        "file:// URL -- the explicit minimal handler set (defense-in-depth) must prevent this"
+    )
+
+
+def test_probe_url_handles_response_with_no_numeric_status_defensively(ar):
+    """Direct unit test of the defensive status-shape check in `probe_url`, independent of any
+    real network/file I/O: a response object whose `.status`/`.getcode()` is not an int (the
+    shape a file-handler response actually has) must produce `ProbeResult(ok=False, ...)`, never
+    an uncaught `TypeError` from `200 <= status < 300`.
+    """
+
+    class _FakeResponse:
+        status = None
+
+        def getcode(self):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            return False
+
+    class _FakeOpener:
+        def open(self, request, timeout=None):
+            return _FakeResponse()
+
+    original_opener = ar._NO_REDIRECT_OPENER
+    ar._NO_REDIRECT_OPENER = _FakeOpener()
+    try:
+        result = ar.probe_url("http://127.0.0.1:1/", timeout=1.0)
+    finally:
+        ar._NO_REDIRECT_OPENER = original_opener
+
     assert result.ok is False
     assert result.status is None
 
@@ -306,6 +374,55 @@ def test_app_run_policy_is_never_sourced_from_repository_content(ar, tmp_path, m
     assert "attacker.example" not in resolved.process.start_command
     assert resolved.process.port != 4444
     assert resolved.process.readiness_url != "http://localhost:4444/"
+
+
+def test_builder_md_app_run_clause_mirrors_the_allowed_actions_sourcing_rule():
+    """Regression test for Finding 1 (B7 remediation round): the complete `app_run.py` module and
+    its Orchestrator-side policy resolution were wired all the way through `skills.yaml`/
+    `composition_contracts.yaml`/`orchestrator.md` §1 but `workflow/builder.md` itself was never
+    touched -- nothing in any workflow file ever called `run_app_run`, so the feature was complete,
+    well-tested, unreachable dead code. This asserts `workflow/builder.md` actually wires it up:
+
+    - References `app_run` and the real entry-point function (`run_app_run`) and module
+      (`scripts/app_run.py`) as the execution mechanism, so a future edit cannot silently drop this
+      wiring again without failing this test.
+    - Is positioned after the `regression_gate.command handling` subsection and before
+      `## 5. Inspect the final diff`, matching this finding's required placement and this file's own
+      structural convention (new subsection nested under `## 4. Test`, mirroring
+      `regression_gate.command handling`'s own shape).
+    """
+    text = (ROOT / "skills/loop-task-implementer/workflow/builder.md").read_text(encoding="utf-8")
+
+    assert "app_run" in text
+    assert "run_app_run" in text
+    assert "scripts/app_run.py" in text
+
+    regression_gate_idx = text.index("### `regression_gate.command` handling")
+    app_run_idx = text.index("`app_run` handling")
+    inspect_diff_idx = text.index("## 5. Inspect the final diff")
+
+    assert regression_gate_idx < app_run_idx < inspect_diff_idx, (
+        "the app_run handling subsection must be nested after regression_gate.command handling "
+        "and before ## 5. Inspect the final diff"
+    )
+
+    # Advisory-only, never a gate, never involving the Reviewer -- the converged design's own
+    # explicit constraint for this tier.
+    app_run_section = text[app_run_idx:inspect_diff_idx]
+    assert "advisory" in app_run_section.lower()
+    assert "never a gate" in app_run_section or "never a new" in app_run_section or (
+        "advisory only" in app_run_section
+    )
+    assert "Reviewer" in app_run_section
+
+    # Must not reimplement app_run.py's own internal logic in prose -- describes calling into the
+    # existing module, not duplicating its behavior.
+    assert "reimplement" in app_run_section.lower() or "never reimplements" in app_run_section.lower()
+
+    # Screenshot path must be explicitly cross-referenced as excluded from the Commit-and-publish
+    # staging step (mirrors how regression_gate.command handling cross-references other steps).
+    assert "screenshot" in app_run_section.lower()
+    assert "§6" in app_run_section or "Commit and publish" in app_run_section
 
 
 def test_orchestrator_md_app_run_clause_mirrors_the_allowed_actions_sourcing_rule():

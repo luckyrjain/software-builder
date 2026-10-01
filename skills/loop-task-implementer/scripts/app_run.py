@@ -189,6 +189,10 @@ def validate_readiness_url(url: str) -> bool:
       and an empty hostname — rejected outright, never specially handled.
     - `http://[::1]:3000/` parses `.hostname` to the unbracketed, normalized `::1` — accepted,
       matching the design's round-3 wording fix (never compare against the literal `[::1]`).
+    - `file://localhost/<any path>` or `ftp://localhost/...` — hostname/userinfo alone pass (the
+      hostname is `localhost`), but a non-`http`/`https` scheme reaches handlers
+      (`FileHandler`/`FTPHandler`/`DataHandler`) this function must never authorize for a readiness
+      probe — rejected on scheme alone, independent of the hostname check.
     """
     if not isinstance(url, str) or not url:
         return False
@@ -197,6 +201,8 @@ def validate_readiness_url(url: str) -> bool:
     except ValueError:
         return False
     if not parsed.scheme:
+        return False
+    if parsed.scheme.lower() not in ("http", "https"):
         return False
     if parsed.username is not None or parsed.password is not None:
         return False
@@ -221,7 +227,28 @@ class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
         return None
 
 
-_NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirectHandler)
+# Built from an explicit, minimal handler set via `OpenerDirector.add_handler` directly — never
+# `urllib.request.build_opener(...)`, even when passed specific handler classes. `build_opener`
+# only *skips* a default handler class when a passed-in handler is that class or a **subclass** of
+# it; `HTTPHandler`/`HTTPSHandler` are not subclasses of `FileHandler`/`FTPHandler`/`DataHandler`,
+# so passing them to `build_opener` does not exclude those from its full default chain — it still
+# installs every one of them alongside whatever was passed in. Constructing the opener by hand,
+# adding only the handlers this probe actually needs, is the only way to guarantee
+# `FileHandler`/`FTPHandler`/`DataHandler` are never installed. `validate_readiness_url`'s scheme
+# check is the primary defense against a `file://`/`ftp://` URL ever reaching this opener; this is
+# the defense-in-depth layer — even if such a URL reached `probe_url` through some other path,
+# there is no handler installed here that is able to act on it.
+_NO_REDIRECT_OPENER = urllib.request.OpenerDirector()
+for _handler_cls in (
+    urllib.request.UnknownHandler,
+    urllib.request.HTTPHandler,
+    urllib.request.HTTPDefaultErrorHandler,
+    _NoRedirectHandler,
+    urllib.request.HTTPErrorProcessor,
+    urllib.request.HTTPSHandler,
+):
+    _NO_REDIRECT_OPENER.add_handler(_handler_cls())
+del _handler_cls
 
 
 @dataclass
@@ -237,11 +264,21 @@ def probe_url(url: str, *, method: str = "GET", timeout: float = 2.0) -> ProbeRe
     A 3xx response is treated as a non-2xx result and is never followed — this closes the
     SSRF-via-redirect gap identified in round 1 without adding a second host-check layer for the
     `Location` header.
+
+    Reports connection failure, and any unexpected response shape (e.g. a non-http(s) handler
+    response with no numeric status), as `ProbeResult(ok=False, ...)` — this function's documented
+    contract is to report failure without ever raising, so a malformed/unexpected response object
+    is handled defensively rather than left to crash on an unguarded status comparison.
     """
     request = urllib.request.Request(url, method=method)
     try:
         with _NO_REDIRECT_OPENER.open(request, timeout=timeout) as response:
-            status = getattr(response, "status", None) or response.getcode()
+            status = getattr(response, "status", None)
+            if status is None:
+                getcode = getattr(response, "getcode", None)
+                status = getcode() if callable(getcode) else None
+            if not isinstance(status, int):
+                return ProbeResult(ok=False, status=None, error="response had no numeric status")
             return ProbeResult(ok=200 <= status < 300, status=status)
     except urllib.error.HTTPError as exc:
         # Includes blocked redirects (3xx) as well as genuine 4xx/5xx — all non-2xx.
@@ -249,6 +286,8 @@ def probe_url(url: str, *, method: str = "GET", timeout: float = 2.0) -> ProbeRe
     except urllib.error.URLError as exc:
         return ProbeResult(ok=False, status=None, error=str(exc.reason))
     except OSError as exc:
+        return ProbeResult(ok=False, status=None, error=str(exc))
+    except Exception as exc:  # defensive: never let an unexpected response shape escape uncaught
         return ProbeResult(ok=False, status=None, error=str(exc))
 
 
