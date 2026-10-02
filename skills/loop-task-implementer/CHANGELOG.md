@@ -11,12 +11,16 @@ the neutral review package carries no `state`. Every gated dispatch would have e
 `base_commit_checkout: SETUP_ERROR`.
 
 - `orchestrator.md` §6: the package's `Base commit` is now defined as the change-identity `merge_base_sha`,
-  which the Orchestrator computes from a freshly fetched remote-tracking base ref; `Base branch` is added
-  as an informational input drawn only from the run-level input.
+  which the Orchestrator takes from the rebuilt identity and cross-checks with a recipe (validated branch
+  name, `git fetch origin`, `rev-parse --verify` on the remote-tracking ref, `git merge-base`; empty on
+  any failure); `Base branch` is added as an informational input drawn only from the run-level input.
+  The Builder's choice of branch point via rebase is a disclosed residual.
 - `reviewer.md` §Regression gate step 1: check out exactly the package's `Base commit` after an
-  `--is-ancestor` check against the Head commit; no recompute and no local-branch fallback. Any failure is
-  `base_commit_checkout: SETUP_ERROR`. A merge-base stays correct after a clean rebase and gives every
-  lens and rerun the same base.
+  `--is-ancestor` check against the Head commit (a stale/mismatch detector, not authentication); no
+  recompute and no local-branch fallback. Any failure, including exit 128 for a missing object, is
+  `base_commit_checkout: SETUP_ERROR`. A merge-base stays correct after a clean rebase and is the same
+  for every lens and rerun for the same head and base state. `reviewed_base_commit` is annotated as
+  received, and the Orchestrator re-dispatches a report whose value differs from the package's.
 - Reworded the stale references in the three `docs/skill-framework/shared/*-handoff.md` files and the
   gate's evidence example, and added a revision note to the B3 design doc.
 - `state-schema.yaml` gets an "unused" comment only; its shape and `validate_loop_lifecycle.py` are unchanged.

@@ -247,7 +247,7 @@ schema unmodified**. This design adds zero new enforcement code. What it does ad
 convention (round 4, Software Architect suggestion — tightened from "must name the gate" to an exact,
 greppable literal): the finding's `evidence` field must begin with the exact literal prefix
 `"regression_gate: "` (e.g. `"regression_gate: base-commit test unexpectedly passed — cannot confirm the
-diagnosed bug reproduces at the task's starting point"`). This is still not machine-validated — no field
+diagnosed bug reproduces at the merge-base"`). This is still not machine-validated — no field
 in `reviewer.md`'s existing finding schema is — but a fixed literal prefix is unambiguously greppable by a
 human or a future tool, unlike free-form "mention the gate somewhere" phrasing.
 
