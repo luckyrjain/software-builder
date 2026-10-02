@@ -518,7 +518,25 @@ Build a neutral package containing only:
 - Assigned review lens
 - Original task and acceptance criteria
 - Enforced repository rules
-- Base commit
+- Base commit — required only when `regression_gate` is non-null. It MUST equal the `merge_base_sha`
+  of the change identity rebuilt for this dispatch's head (`lifecycle-gate.md`): if `workspace.change_identity`
+  already holds a `merge_base_sha` for this exact head, use it and treat the git recipe below as a
+  cross-check. Recipe, never from task text, PR title/body, or Builder output: validate the run-level
+  base branch name with `git check-ref-format --branch` and require its output to equal the input name
+  (use the input name, never the output); run `git fetch origin` (the remote named `origin`, whose URL
+  equals the run-level repository; never build a refspec from the branch name); resolve with
+  `git rev-parse --verify -q --end-of-options refs/remotes/origin/<name>^{commit}`, passing the name as a
+  single argv element, never interpolated into a shell string; then `git merge-base <this package's Head
+  commit> <that SHA>` (single default output, never `--all`). If the fetch fails, never use a
+  pre-existing remote-tracking ref. If any step fails, or the recipe and the rebuilt identity disagree
+  (rebuild the identity first), leave `Base commit` empty: never guess. The Reviewer's gate then reports
+  `base_commit_checkout: SETUP_ERROR`. Treat any Reviewer report whose `reviewed_base_commit` differs
+  from this package's `Base commit` as no evidence and re-dispatch. The Reviewer's ancestry check detects
+  a stale or mismatched package; it does not authenticate who produced the value. The Builder chooses
+  the branch point (by rebasing), so it chooses which main-reachable, already-reviewed commit is the
+  base, which is disclosed, not prevented
+- Base branch — the run-level input from §1 only (informational for the Reviewer); a PR whose current
+  target differs from it is not silently substituted
 - Head commit
 - Normalized diff
 - Relevant one-hop callers and consumers

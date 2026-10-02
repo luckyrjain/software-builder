@@ -187,6 +187,9 @@ not hidden behind an optimization that doesn't actually work.)
 
 1. Provision a SECOND disposable local worktree via `git worktree add`, separate from the primary
    worktree at head. Check out exactly state.repository.base_commit_at_start -- never any other commit.
+   (Revision note, 2026-10-02: nothing populates that field. The gate now checks out the review package's
+   `Base commit`, the Orchestrator-computed merge-base of the dispatch's head, preserving this
+   condition's intent that the Reviewer never picks the commit. See the CHANGELOG entry.)
 2. Install this worktree's OWN dependencies from scratch -- never share the primary worktree's
    dependencies, test cache, scratch directories, or database/service fixture state.
 3. Run regression_gate.command in the base-commit worktree.
@@ -244,7 +247,7 @@ schema unmodified**. This design adds zero new enforcement code. What it does ad
 convention (round 4, Software Architect suggestion — tightened from "must name the gate" to an exact,
 greppable literal): the finding's `evidence` field must begin with the exact literal prefix
 `"regression_gate: "` (e.g. `"regression_gate: base-commit test unexpectedly passed — cannot confirm the
-diagnosed bug reproduces at the task's starting point"`). This is still not machine-validated — no field
+diagnosed bug reproduces at the merge-base"`). This is still not machine-validated — no field
 in `reviewer.md`'s existing finding schema is — but a fixed literal prefix is unambiguously greppable by a
 human or a future tool, unlike free-form "mention the gate somewhere" phrasing.
 
