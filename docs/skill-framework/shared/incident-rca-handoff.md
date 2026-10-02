@@ -68,8 +68,11 @@ This doc cites the contract; read the module docstring and tests for the authori
   `{alert, dashboard, runbook, rollback, scal, autoscal, capacit, monitor, architect, refactor, redesign, decoupl,
   migrat, terraform, cloudformation, waf, firewall, iam, kube, k8s, helm, ingress, gateway, nginx, envoy,
   istio, ansible, pulumi, cdk, vpc, subnet, acl, dns, polic, s3, ec2, credential, secret, password, token}`
-  excludes, plus the phrases `{network policy, security group, load balancer, roll back}` matched after
-  normalizing `[\s_-]+` to a single space. Known over-matches, accepted as the safe direction: `tokenizer`,
+  excludes, plus the phrases `{network policy, security group, load balancer, roll back}` matched as
+  substrings of the lowercased text with every non-alphanumeric run removed, so camelCase and concatenated
+  spellings (`LoadBalancer`, `SecurityGroup`, `NetworkPolicy`, `loadbalancer`) are caught along with spaced,
+  hyphenated and underscored ones (the squashed match can also hit across word boundaries, e.g. `scroll back`
+  contains `rollback`). Known over-matches, accepted as the safe direction: `tokenizer`,
   `retry policy`, `helmet`, `scalar`, `gateway`.
 - **No proximity window.** Unlike `classify_security_finding`'s multi-sentence `Recommendation` column, a
   Preventive `Action` cell is a short phrase, so a word-distance window is nearly vacuous.
@@ -95,7 +98,10 @@ and tested at
 - **Neither form** (a bare `.env`, `.`) returns `None`.
 - **Deny list**, casefolded, applied to both forms and to the **resolved** path relative to the root (so a
   symlink into `.git` is caught): `.git`/`.ssh`/`.aws` components; names `.env*`, `.netrc`, `.npmrc`,
-  `id_rsa*`, `credentials*`; suffixes `.pem`, `.key`, `.p12`, `.pfx`, `.tfvars`.
+  `.htpasswd`, `.pgpass`, `kubeconfig*`, `credentials*`, `id_rsa*`, `id_dsa*`, `id_ecdsa*`, `id_ed25519*`;
+  suffixes `.pem`, `.key`, `.p12`, `.pfx`, `.p8`, `.jks`, `.tfvars`. A generic `id_*` prefix is not used (it
+  would reject ordinary names such as `id_generator`). Each component is also checked with any `:line` or
+  `#fragment` tail removed (the symbol regex admits both), so `server.pem:12` and `server.pem#L10` are denied.
 - **No subprocess, no git** — "exists in the worktree" is the only existence check.
 - `repo_root` is **caller-supplied** (the repository the Orchestrator is already operating in), never
   derived from RCA text. A mismatch between the RCA's `service` and that repository is a human check at
@@ -145,7 +151,7 @@ error, or no SCM/run-log access, passes `None`.
 - **(a) Provenance.** Extract the PR/MR references and SHAs the RCA already cites (Evidence matrix, Unified
   timeline, Recovery's `Mitigation` row, the Post-RCA `PR review` target row). RCA text may use GitLab-style
   `MR !482` or GitHub `#482`/PR-URL forms; extract both and resolve against the repository's own SCM. Check
-  whether each maps to a `loop-task-implementer` task via the shared-state `working_branch`/`pr_url` fields.
+  whether each maps to a `loop-task-implementer` task via the shared-state `workspace.working_branch` / `workspace.pull_request_id` / `workspace.pull_request_url` fields.
   A `Deploy` or `Software defect` RCA that cites **no** causative PR/MR is "provenance unknown" and is
   **not** `False`.
 - **(b) Duplication.** Derive a deterministic
@@ -200,7 +206,7 @@ classification, and regardless of which lens(es) the dispatch runs.
 - **Keyword evasion.** The axis-6 lists are a best-effort first gate. A qualifying verb plus an infra noun
   that is in none of the lists ("Fix the data-store replication config") classifies `QUALIFYING`. Other
   compound words that embed an excluded stem mid-token (for example `rescaling`) are not caught by prefix
-  matching; over-matching is the safe direction, but prefix matching cannot see mid-token stems. Condition 9's diff-path gate, not keyword classification, is the real
+  matching (the four multi-word phrases are not subject to this: they match as squashed substrings); over-matching is the safe direction, but prefix matching cannot see mid-token stems. Condition 9's diff-path gate, not keyword classification, is the real
   control for infra changes.
 - **Condition 9 is best-effort and layout-dependent.** The path set is not identical to the keyword
   exclusions (`nginx`, `envoy`, `istio`, `ansible` have no path pattern), a repository with an unusual infra
