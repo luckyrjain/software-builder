@@ -235,6 +235,29 @@ A finding may be marked `PROPOSED_BLOCKING` only when it has concrete repository
    which lens(es) this dispatch actually runs. A finding raised under this condition is an ordinary
    `PROPOSED_BLOCKING` finding using the existing finding schema unmodified, and its `evidence` field
    must begin with the literal prefix `"dependency_hop: "`.
+9. A task whose own `specialist_inputs.incident_rca_origin` is `true` and whose PR's actual changed-path
+   list contains any path matching `*.tf`, `*.tfvars`, `*.hcl`, `*.rego`, `terraform/**`,
+   `cloudformation/**`, `helm/**`, `charts/**`, `k8s/**`, `kubernetes/**`, `manifests/**`, `iam/**`,
+   `policies/**`, `.github/workflows/**`, `.gitlab-ci.yml`, `Jenkinsfile`, `.circleci/**`,
+   `kustomization.yaml`, `cdk.json`, `Pulumi.*.yaml`, `Dockerfile*` or `docker-compose*.yml` is itself
+   Blocking-standard condition 9, regardless of whether tests pass or what the task's keyword
+   classification said. The changed-path list is computed by you, the Reviewer, as
+   `git diff --name-only --no-renames` against the base (so a rename out of `terraform/` is still seen) —
+   never taken from the task's own text. Patterns match at **any directory depth** (`infra/terraform/**`
+   and `deploy/helm/**` match; anchoring at the repository root would miss them). The accepted cost is a
+   false block on fixtures (`tests/fixtures/manifests/`) and on application code in a directory merely
+   named `iam/` or `policies/`, which escalate to a human — a safe-direction error. The path set is
+   best-effort and layout-dependent: it is not identical to the keyword exclusions in
+   `classify_incident_preventive_action` (for example `nginx`, `envoy`, `istio` and `ansible` have no
+   path pattern here), and a repository with an unusual infra layout needs its own paths added. This is
+   the independent downstream backstop for an incident-rca-derived Preventive-action task that
+   evaded the authoring-time keyword gate (see
+   [incident-rca-handoff.md](../../../docs/skill-framework/shared/incident-rca-handoff.md)) — in an
+   infrastructure-as-code repository an ordinary merged PR is the live change, which condition 7 (scoped
+   to credential/identity/secrets systems) does not cover. It fires on the PR's own actual diff,
+   regardless of which lens(es) this dispatch actually runs. A finding raised under this condition is an
+   ordinary `PROPOSED_BLOCKING` finding using the existing finding schema unmodified, and its `evidence`
+   field must begin with the literal prefix `"incident_rca_infra: "`.
 
 Do not mark as blocking:
 
