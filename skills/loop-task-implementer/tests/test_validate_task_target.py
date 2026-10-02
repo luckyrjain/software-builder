@@ -185,6 +185,17 @@ def test_sibling_directory_with_shared_prefix_rejected(repo, tmp_path):
         "cert.p12",
         "cert.pfx",
         "signing.key",
+        "id_ed25519",
+        "id_ed25519.pub",
+        "id_ecdsa",
+        "id_dsa",
+        "ID_ED25519",
+        "AuthKey_ABC123.p8",
+        "release.jks",
+        "kubeconfig",
+        "kubeconfig.yaml",
+        ".htpasswd",
+        ".pgpass",
     ],
 )
 def test_bare_sensitive_names_rejected(repo, denied):
@@ -203,3 +214,37 @@ def test_existing_sensitive_files_in_path_form_rejected(repo):
     assert validate_task_target(repo, "./.env") is None
     assert validate_task_target(repo, "./server.pem") is None
     assert validate_task_target(repo, "./terraform.tfvars") is None
+
+
+@pytest.mark.parametrize(
+    "denied",
+    [
+        "server.pem:12",
+        "server.pem#L10",
+        "prod.key:3",
+        "SERVER.PEM:12",
+        "cert.p12#frag",
+        "AuthKey_ABC123.p8:1",
+        "release.jks:2",
+        "terraform.tfvars:9",
+        "server.pem:12:5",
+        "server.pem::x",
+        ".env:1",
+        ".netrc#L1",
+        ".htpasswd:4",
+        ".pgpass#x",
+        "id_ed25519:7",
+    ],
+)
+def test_location_tail_does_not_evade_deny_list(repo, denied):
+    assert validate_task_target(repo, denied) is None
+
+
+@pytest.mark.parametrize("symbol", ["handler.py:12", "Mod::fn", "handler.process#L10", "id_generator", "id_map.py:3"])
+def test_location_tail_on_harmless_symbols_still_accepted(repo, symbol):
+    assert validate_task_target(repo, symbol) == symbol
+
+
+def test_location_tail_in_path_form_rejected_for_denied_base(repo):
+    (repo / "src" / "server.pem:12").write_text("pem\n")
+    assert validate_task_target(repo, "src/server.pem:12") is None

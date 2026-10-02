@@ -49,8 +49,12 @@ Why each of the six axes exists (all six must hold; any other value is ``NOT_QUA
    The qualifying side is strict whole-token equality against an inflected verb set; at least one
    must be present. The exclusion side is stem-*prefix* matching and deliberately over-matches
    (``tokenizer``, ``retry policy``, ``scalar``, ``helmet`` are all excluded) because over-matching
-   only yields a false ``NOT_QUALIFYING``, the safe direction. Four multi-word phrases are matched
-   after normalizing ``[\\s_-]+`` to a single space.
+   only yields a false ``NOT_QUALIFYING``, the safe direction. Four multi-word phrases (network policy,
+   security group, load balancer, roll back) are matched as substrings of the lowercased text with
+   every non-alphanumeric run removed, so camelCase and concatenated spellings (``LoadBalancer``,
+   ``SecurityGroup``, ``NetworkPolicy``, ``loadbalancer``) are caught as well as spaced, hyphenated and
+   underscored ones. The squashed match can also hit across word boundaries (``scroll back`` contains
+   ``rollback``); that over-match is the safe direction.
 
 **Disclosed evasion residual (stated honestly, not claimed solved).** The converse of the exclusion
 list still qualifies: a qualifying verb plus an infrastructure noun that appears in none of the lists
@@ -80,7 +84,7 @@ _ALLOWED_INCIDENT_CLASSES = frozenset({"Software defect", "Deploy"})
 _MAX_ACTION_TEXT_CHARS = 200
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
-_PHRASE_SEPARATOR_RE = re.compile(r"[\s_-]+")
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 
 # Qualifying side: strict whole-token equality. Inflections are listed explicitly, so "attestation"
 # and "protest" never match "test".
@@ -105,8 +109,10 @@ _EXCLUSION_STEMS = (
     "credential", "secret", "password", "token",
 )
 
-# Multi-word exclusion phrases, matched on the lowercased text after [\s_-]+ -> " " normalization.
-_EXCLUSION_PHRASES = ("network policy", "security group", "load balancer", "roll back")
+# Multi-word exclusion phrases, stored without separators: they are matched against the lowercased text
+# with every non-alphanumeric run removed, so "load balancer", "load-balancer", "LoadBalancer" and
+# "loadbalancer" all hit.
+_EXCLUSION_PHRASES = ("networkpolicy", "securitygroup", "loadbalancer", "rollback")
 
 
 def _confidence_ok(confidence: object) -> bool:
@@ -134,8 +140,8 @@ def _action_text_ok(action_text: object) -> bool:
     if any(tok.startswith(_EXCLUSION_STEMS) for tok in tokens):
         return False
 
-    normalized = _PHRASE_SEPARATOR_RE.sub(" ", lowered)
-    if any(phrase in normalized for phrase in _EXCLUSION_PHRASES):
+    squashed = _NON_ALNUM_RE.sub("", lowered)
+    if any(phrase in squashed for phrase in _EXCLUSION_PHRASES):
         return False
     return True
 

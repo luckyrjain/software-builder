@@ -83,6 +83,15 @@ def test_disclosed_residual_qualifying_verb_plus_unlisted_infra_noun_still_quali
         "Fix the wаf rule",  # Cyrillic a: non-ASCII
         "Fix the load balancer health check",
         "Fix the roll back procedure",
+        "Fix the LoadBalancer health check",  # camelCase spelling of an exclusion phrase
+        "Fix the SecurityGroup rules",
+        "Fix the NetworkPolicy",
+        "Fix the loadbalancer timeout",  # concatenated
+        "Fix the securitygroup rule",
+        "Fix the networkpolicy",
+        "Fix the Roll-Back procedure",
+        "Fix the load_balancer config",
+        "Fix the scroll back handler",  # accepted cross-boundary over-match ("rollback"), safe direction
         "Fix the scaling config",
         "Fix the autoscaling config",
         "Fix the autoscaler threshold",
@@ -223,3 +232,10 @@ def test_non_str_arguments_fail_closed_and_never_raise(field, bad):
 
 def test_all_valid_baseline_is_qualifying():
     assert _call() == "QUALIFYING"
+
+
+def test_disclosed_residual_mid_token_stem_is_not_caught():
+    # DISCLOSED RESIDUAL: exclusion stems match token prefixes only, so a stem embedded mid-token
+    # ("rescaling" contains "scal") is not excluded. Only the four multi-word phrases match as squashed
+    # substrings. Condition 9's diff-path check, not this gate, is the control for infra changes.
+    assert _call(action_text="Fix the rescaling config") == "QUALIFYING"

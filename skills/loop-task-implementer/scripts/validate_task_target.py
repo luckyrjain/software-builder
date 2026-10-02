@@ -28,9 +28,16 @@ Contract: ``validate_task_target(repo_root, target) -> str | None`` returns the 
 root as well as the input string (so a symlink ``docs/x -> ../.git/config`` inside the repo is
 caught), with every component casefolded first (macOS filesystems are case-insensitive: ``.GIT/config``
 and ``KEY.PEM`` otherwise evade): a ``.git``, ``.ssh`` or ``.aws`` component; names ``.env*``,
-``.netrc``, ``.npmrc``, ``id_rsa*``, ``credentials*``; suffixes ``.pem``, ``.key``, ``.p12``, ``.pfx``,
-``.tfvars``. A bare filename such as ``server.pem`` matches the symbol regex, so the deny list must run
-on symbols too. Over-matching (a class named ``Credentials`` is rejected) is the safe direction.
+``.netrc``, ``.npmrc``, ``.htpasswd``, ``.pgpass``, ``kubeconfig*``, ``credentials*``, and the SSH key
+names ``id_rsa*``, ``id_dsa*``, ``id_ecdsa*``, ``id_ed25519*``; suffixes ``.pem``, ``.key``, ``.p12``,
+``.pfx``, ``.p8``, ``.jks``, ``.tfvars``. A bare filename such as ``server.pem`` matches the symbol
+regex, so the deny list must run on symbols too. Over-matching (a class named ``Credentials`` is
+rejected) is the safe direction. The generic ``id_*`` prefix is deliberately not used: it would reject
+ordinary code names such as ``id_generator``.
+
+The symbol regex admits ``:`` and ``#``, so a ``:line`` or ``#fragment`` tail (``server.pem:12``,
+``server.pem#L10``) would defeat the suffix check. Every component is therefore also checked with the
+tail from the first ``:`` or ``#`` removed.
 
 No subprocess and no git: "exists in the worktree" is the only existence check.
 
@@ -49,21 +56,26 @@ _SYMBOL_RE = re.compile(r"[A-Za-z_][\w.:$#-]{0,127}", re.ASCII)
 _MAX_PATH_CHARS = 200
 
 _DENIED_COMPONENTS = frozenset({".git", ".ssh", ".aws"})
-_DENIED_NAMES_EXACT = frozenset({".netrc", ".npmrc"})
-_DENIED_NAME_PREFIXES = (".env", "id_rsa", "credentials")
-_DENIED_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".tfvars")
+_DENIED_NAMES_EXACT = frozenset({".netrc", ".npmrc", ".htpasswd", ".pgpass"})
+_DENIED_NAME_PREFIXES = (
+    ".env", "credentials", "kubeconfig", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
+)
+_DENIED_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".p8", ".jks", ".tfvars")
+
+_LOCATION_TAIL_RE = re.compile(r"[:#].*", re.DOTALL)
 
 
 def _is_denied(parts: list[str] | tuple[str, ...]) -> bool:
-    """True iff any casefolded component matches the deny list."""
+    """True iff any casefolded component, with or without a ``:line``/``#frag`` tail, is denied."""
     for part in parts:
         folded = part.casefold()
-        if folded in _DENIED_COMPONENTS or folded in _DENIED_NAMES_EXACT:
-            return True
-        if folded.startswith(_DENIED_NAME_PREFIXES):
-            return True
-        if folded.endswith(_DENIED_SUFFIXES):
-            return True
+        for candidate in (folded, _LOCATION_TAIL_RE.sub("", folded)):
+            if candidate in _DENIED_COMPONENTS or candidate in _DENIED_NAMES_EXACT:
+                return True
+            if candidate.startswith(_DENIED_NAME_PREFIXES):
+                return True
+            if candidate.endswith(_DENIED_SUFFIXES):
+                return True
     return False
 
 
