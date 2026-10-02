@@ -97,7 +97,7 @@ _QUALIFYING_TOKENS = frozenset(
 
 # Exclusion side: any token that STARTS WITH one of these stems excludes. Deliberately over-matching.
 _EXCLUSION_STEMS = (
-    "alert", "dashboard", "runbook", "rollback", "scal", "capacit", "monitor",
+    "alert", "dashboard", "runbook", "rollback", "scal", "autoscal", "capacit", "monitor",
     "architect", "refactor", "redesign", "decoupl", "migrat",
     "terraform", "cloudformation", "waf", "firewall", "iam", "kube", "k8s", "helm",
     "ingress", "gateway", "nginx", "envoy", "istio", "ansible", "pulumi", "cdk",

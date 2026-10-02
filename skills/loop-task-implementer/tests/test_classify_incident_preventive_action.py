@@ -84,6 +84,8 @@ def test_disclosed_residual_qualifying_verb_plus_unlisted_infra_noun_still_quali
         "Fix the load balancer health check",
         "Fix the roll back procedure",
         "Fix the scaling config",
+        "Fix the autoscaling config",
+        "Fix the autoscaler threshold",
         "Fix the Terraform-managed bucket",
         "Fix the s3 bucket path",
         "Update the runbook",  # no qualifying token, excluded stem

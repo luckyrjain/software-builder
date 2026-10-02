@@ -65,7 +65,7 @@ This doc cites the contract; read the module docstring and tests for the authori
   against `{fix, fixes, fixing, patch, patches, patching, validate, validates, validating, validation,
   handle, handles, handling, correct, corrects, correcting, test, tests, testing}`; at least one must be
   present. **Exclusion side — stem-prefix, deliberately over-matching**: any token that starts with one of
-  `{alert, dashboard, runbook, rollback, scal, capacit, monitor, architect, refactor, redesign, decoupl,
+  `{alert, dashboard, runbook, rollback, scal, autoscal, capacit, monitor, architect, refactor, redesign, decoupl,
   migrat, terraform, cloudformation, waf, firewall, iam, kube, k8s, helm, ingress, gateway, nginx, envoy,
   istio, ansible, pulumi, cdk, vpc, subnet, acl, dns, polic, s3, ec2, credential, secret, password, token}`
   excludes, plus the phrases `{network policy, security group, load balancer, roll back}` matched after
@@ -198,9 +198,9 @@ classification, and regardless of which lens(es) the dispatch runs.
 ## Disclosed residuals
 
 - **Keyword evasion.** The axis-6 lists are a best-effort first gate. A qualifying verb plus an infra noun
-  that is in none of the lists ("Fix the data-store replication config") classifies `QUALIFYING`. Stem-prefix
-  matching also does not cover compounds that do not *start* with a listed stem (for example `autoscaling`
-  starts with `auto`, not `scal`). Condition 9's diff-path gate, not keyword classification, is the real
+  that is in none of the lists ("Fix the data-store replication config") classifies `QUALIFYING`. Other
+  compound words that embed an excluded stem mid-token (for example `rescaling`) are not caught by prefix
+  matching; over-matching is the safe direction, but prefix matching cannot see mid-token stems. Condition 9's diff-path gate, not keyword classification, is the real
   control for infra changes.
 - **Condition 9 is best-effort and layout-dependent.** The path set is not identical to the keyword
   exclusions (`nginx`, `envoy`, `istio`, `ansible` have no path pattern), a repository with an unusual infra
