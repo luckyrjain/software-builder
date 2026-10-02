@@ -2,6 +2,29 @@
 
 For earlier history, see the `## loop-task-implementer` section in the repository root `CHANGELOG.md`.
 
+## Unreleased — B3 regression gate base is the Orchestrator-computed merge-base (2026-10-02)
+
+Fixes a dead input in the B3 regression gate. `reviewer.md` told the Reviewer to check out
+`state.repository.base_commit_at_start`. No script or workflow step writes that field (the only reader
+was `reviewer.md`; elsewhere it appears only in `state-schema.yaml`, default `null`, and in docs), and
+the neutral review package carries no `state`. Every gated dispatch would have ended in
+`base_commit_checkout: SETUP_ERROR`.
+
+- `orchestrator.md` §6: the package's `Base commit` is now defined as the change-identity `merge_base_sha`,
+  which the Orchestrator takes from the rebuilt identity and cross-checks with a recipe (validated branch
+  name, `git fetch origin`, `rev-parse --verify` on the remote-tracking ref, `git merge-base`; empty on
+  any failure); `Base branch` is added as an informational input drawn only from the run-level input.
+  The Builder's choice of branch point via rebase is a disclosed residual.
+- `reviewer.md` §Regression gate step 1: check out exactly the package's `Base commit` after an
+  `--is-ancestor` check against the Head commit (a stale/mismatch detector, not authentication); no
+  recompute and no local-branch fallback. Any failure, including exit 128 for a missing object, is
+  `base_commit_checkout: SETUP_ERROR`. A merge-base stays correct after a clean rebase and is the same
+  for every lens and rerun for the same head and base state. `reviewed_base_commit` is annotated as
+  received, and the Orchestrator re-dispatches a report whose value differs from the package's.
+- Reworded the stale references in the three `docs/skill-framework/shared/*-handoff.md` files and the
+  gate's evidence example, and added a revision note to the B3 design doc.
+- `state-schema.yaml` gets an "unused" comment only; its shape and `validate_loop_lifecycle.py` are unchanged.
+
 ## Unreleased — durable plan-state store and Builder checkpoint (2026-09-25)
 
 Closes gap-backlog ticket A5: `plan_execution_state` had zero persistence code anywhere in the

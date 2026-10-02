@@ -65,7 +65,7 @@ task:
 repository:
   repo: null
   base_branch: null
-  base_commit_at_start: null
+  base_commit_at_start: null  # unused: nothing writes it. The B3 regression gate uses the review package's merge-base `Base commit`
   repository_instructions_ref: null
   branch_protection:
     required_checks: []
