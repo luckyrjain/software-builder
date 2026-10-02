@@ -70,6 +70,22 @@ below.
 
 ## 1. Understand before changing code
 
+### Dependency-hop precondition check
+
+When the task's own `specialist_inputs.dependency_upgrade_origin` is `true`, before any other step-1
+activity below: extract the dependency's actual resolved version per the lockfile contract in
+[dependency-upgrade-handoff.md](../../../docs/skill-framework/shared/dependency-upgrade-handoff.md)
+(the real per-ecosystem lockfile, or the round-4 non-lockfile exact-pin fallback — never the
+manifest's own declared range), then call `verify_dependency_hop_precondition(manifest_pinned_version,
+expected_current_version)` from
+[`scripts/verify_dependency_hop_precondition.py`](../scripts/verify_dependency_hop_precondition.py).
+
+If it returns `False`, stop immediately and report `BLOCKED` with the mismatch as evidence — never
+proceed to Plan or Implement for this task. This converts the stepwise hop's starting-state assumption
+into a real, code-enforced precondition rather than a convention a human applies by eye; see
+[dependency-upgrade-handoff.md](../../../docs/skill-framework/shared/dependency-upgrade-handoff.md)
+for the full extraction contract and the independent downstream Reviewer backstop.
+
 Inspect:
 
 - Relevant source files
