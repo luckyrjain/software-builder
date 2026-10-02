@@ -1,0 +1,812 @@
+{
+  "assessment_target": {
+    "repo": "luckyrjain/software-builder"
+  },
+  "execution_waves": [
+    [
+      "TASK-001-4e0a4619"
+    ],
+    [
+      "TASK-002-d5897500"
+    ],
+    [
+      "TASK-003-54d62e42"
+    ],
+    [
+      "TASK-004-2a536fe9"
+    ],
+    [
+      "TASK-005-67220b12"
+    ],
+    [
+      "TASK-006-1af4e5f7"
+    ],
+    [
+      "TASK-007-9e7b0d89"
+    ],
+    [
+      "TASK-008-1483f314"
+    ]
+  ],
+  "external_dependencies": [],
+  "plan_id": "PLANSET-99d540518dad-ef4a510c",
+  "plan_set_id": "PLANSET-99d540518dad",
+  "planning_path": {
+    "asserted_by": null,
+    "eligibility_category": null,
+    "mode": "FULL"
+  },
+  "readiness": "READY",
+  "sequencing_constraints": [
+    "Tasks execute in deterministic dependency-wave order."
+  ],
+  "source_refs": [
+    "architecture_review_report:da4f246ab30fa0976d9dffb4b705755efaf706609ae323978eda639f8b6674e7",
+    "change_impact_report:6ad8281850e0e7793d15f33a848014aed97a965ce6786bf671268e2a55e6beb7",
+    "system_design_spec:11c8041b331e5a9e431a624dda944ef6575d2a51c40f1c59d6372bbdcaa14f37"
+  ],
+  "target_repo": "luckyrjain/software-builder",
+  "tasks": [
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for docs/skill-framework/shared/cross-skill-escalation.md."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path docs/skill-framework/shared/cross-skill-escalation.md in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "design-action:action-6",
+        "design-action:action-7",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5",
+        "architecture-action:action-6",
+        "architecture-action:action-7"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "docs/skill-framework/shared/cross-skill-escalation.md"
+      ],
+      "task_id": "TASK-001-4e0a4619",
+      "task_type": "code",
+      "title": "Implement changes under docs/skill-framework/shared/cross-skill-escalation.md",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for docs/skill-framework/shared/dependency-upgrade-handoff.md."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [
+        "TASK-001-4e0a4619"
+      ],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path docs/skill-framework/shared/dependency-upgrade-handoff.md in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "design-action:action-6",
+        "design-action:action-7",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5",
+        "architecture-action:action-6",
+        "architecture-action:action-7"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "docs/skill-framework/shared/dependency-upgrade-handoff.md"
+      ],
+      "task_id": "TASK-002-d5897500",
+      "task_type": "code",
+      "title": "Implement changes under docs/skill-framework/shared/dependency-upgrade-handoff.md",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/loop-task-implementer/scripts/classify_dependency_upgrade.py."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [
+        "TASK-002-d5897500"
+      ],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path skills/loop-task-implementer/scripts/classify_dependency_upgrade.py in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "design-action:action-6",
+        "design-action:action-7",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5",
+        "architecture-action:action-6",
+        "architecture-action:action-7"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "skills/loop-task-implementer/scripts/classify_dependency_upgrade.py"
+      ],
+      "task_id": "TASK-003-54d62e42",
+      "task_type": "code",
+      "title": "Implement changes under skills/loop-task-implementer/scripts/classify_dependency_upgrade.py",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/loop-task-implementer/scripts/verify_dependency_hop_precondition.py."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [
+        "TASK-003-54d62e42"
+      ],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path skills/loop-task-implementer/scripts/verify_dependency_hop_precondition.py in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "design-action:action-6",
+        "design-action:action-7",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5",
+        "architecture-action:action-6",
+        "architecture-action:action-7"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "skills/loop-task-implementer/scripts/verify_dependency_hop_precondition.py"
+      ],
+      "task_id": "TASK-004-2a536fe9",
+      "task_type": "code",
+      "title": "Implement changes under skills/loop-task-implementer/scripts/verify_dependency_hop_precondition.py",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/loop-task-implementer/tests/test_classify_dependency_upgrade.py."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [
+        "TASK-004-2a536fe9"
+      ],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path skills/loop-task-implementer/tests/test_classify_dependency_upgrade.py in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "design-action:action-6",
+        "design-action:action-7",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5",
+        "architecture-action:action-6",
+        "architecture-action:action-7"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "skills/loop-task-implementer/tests/test_classify_dependency_upgrade.py"
+      ],
+      "task_id": "TASK-005-67220b12",
+      "task_type": "code",
+      "title": "Implement changes under skills/loop-task-implementer/tests/test_classify_dependency_upgrade.py",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/loop-task-implementer/tests/test_verify_dependency_hop_precondition.py."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [
+        "TASK-005-67220b12"
+      ],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 69,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path skills/loop-task-implementer/tests/test_verify_dependency_hop_precondition.py in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "design-action:action-6",
+        "design-action:action-7",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5",
+        "architecture-action:action-6",
+        "architecture-action:action-7"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "skills/loop-task-implementer/tests/test_verify_dependency_hop_precondition.py"
+      ],
+      "task_id": "TASK-006-1af4e5f7",
+      "task_type": "code",
+      "title": "Implement changes under skills/loop-task-implementer/tests/test_verify_dependency_hop_precondition.py",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/loop-task-implementer/workflow/builder.md."
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [
+        "TASK-006-1af4e5f7"
+      ],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 68,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path skills/loop-task-implementer/workflow/builder.md in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "design-action:action-6",
+        "design-action:action-7",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5",
+        "architecture-action:action-6",
+        "architecture-action:action-7"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "skills/loop-task-implementer/workflow/builder.md"
+      ],
+      "task_id": "TASK-007-9e7b0d89",
+      "task_type": "code",
+      "title": "Implement changes under skills/loop-task-implementer/workflow/builder.md",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    },
+    {
+      "acceptance_criteria": [
+        "Implement the approved behavior for skills/loop-task-implementer/workflow/reviewer.md.",
+        "pytest skills/loop-task-implementer/tests/test_classify_dependency_upgrade.py",
+        "pytest skills/loop-task-implementer/tests/test_verify_dependency_hop_precondition.py",
+        "pytest skills/loop-task-implementer/tests/test_packaged_runtime_isolation.py",
+        "make generate-check",
+        "make validate-registry",
+        "make lint-loop-task-implementer"
+      ],
+      "completion_evidence": [
+        "Committed diff, focused tests, authoritative CI, and review evidence."
+      ],
+      "dependencies": [
+        "TASK-007-9e7b0d89"
+      ],
+      "estimated_scope": {
+        "changed_lines_upper_bound": 68,
+        "confidence": "MEDIUM",
+        "estimate_known": true,
+        "files_upper_bound": 1
+      },
+      "executor": "loop-task-implementer",
+      "required_tests": [
+        "pytest skills/loop-task-implementer/tests/test_classify_dependency_upgrade.py",
+        "pytest skills/loop-task-implementer/tests/test_verify_dependency_hop_precondition.py",
+        "pytest skills/loop-task-implementer/tests/test_packaged_runtime_isolation.py",
+        "make generate-check",
+        "make validate-registry",
+        "make lint-loop-task-implementer"
+      ],
+      "rollout_notes": [
+        "Use the repository's existing review, CI, and deployment gates."
+      ],
+      "scope": "Implement the approved change impact for target path skills/loop-task-implementer/workflow/reviewer.md in luckyrjain/software-builder.",
+      "source_action_refs": [
+        "design-action:action-1",
+        "design-action:action-2",
+        "design-action:action-3",
+        "design-action:action-4",
+        "design-action:action-5",
+        "design-action:action-6",
+        "design-action:action-7",
+        "architecture-action:action-1",
+        "architecture-action:action-2",
+        "architecture-action:action-3",
+        "architecture-action:action-4",
+        "architecture-action:action-5",
+        "architecture-action:action-6",
+        "architecture-action:action-7"
+      ],
+      "source_condition_refs": [
+        "design-condition:condition-1",
+        "design-condition:condition-2",
+        "design-condition:condition-3",
+        "design-condition:condition-4",
+        "design-condition:condition-5",
+        "architecture-condition:condition-1",
+        "architecture-condition:condition-2",
+        "architecture-condition:condition-3",
+        "architecture-condition:condition-4",
+        "architecture-condition:condition-5"
+      ],
+      "target_paths": [
+        "skills/loop-task-implementer/workflow/reviewer.md"
+      ],
+      "task_id": "TASK-008-1483f314",
+      "task_type": "code",
+      "title": "Implement changes under skills/loop-task-implementer/workflow/reviewer.md",
+      "verification": [
+        "Run every required test and repository gate for this task."
+      ]
+    }
+  ],
+  "title": "C2: dependency-upgrade-review -> executor handoff",
+  "traceability": {
+    "action_coverage": {
+      "architecture-action:action-1": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "architecture-action:action-2": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "architecture-action:action-3": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "architecture-action:action-4": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "architecture-action:action-5": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "architecture-action:action-6": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "architecture-action:action-7": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "design-action:action-1": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "design-action:action-2": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "design-action:action-3": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "design-action:action-4": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "design-action:action-5": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "design-action:action-6": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "design-action:action-7": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ]
+    },
+    "condition_coverage": {
+      "architecture-condition:condition-1": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "architecture-condition:condition-2": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "architecture-condition:condition-3": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "architecture-condition:condition-4": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "architecture-condition:condition-5": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "design-condition:condition-1": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "design-condition:condition-2": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "design-condition:condition-3": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "design-condition:condition-4": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ],
+      "design-condition:condition-5": [
+        "TASK-001-4e0a4619",
+        "TASK-002-d5897500",
+        "TASK-003-54d62e42",
+        "TASK-004-2a536fe9",
+        "TASK-005-67220b12",
+        "TASK-006-1af4e5f7",
+        "TASK-007-9e7b0d89",
+        "TASK-008-1483f314"
+      ]
+    },
+    "required_test_coverage": {
+      "make generate-check": [
+        "TASK-008-1483f314"
+      ],
+      "make lint-loop-task-implementer": [
+        "TASK-008-1483f314"
+      ],
+      "make validate-registry": [
+        "TASK-008-1483f314"
+      ],
+      "pytest skills/loop-task-implementer/tests/test_classify_dependency_upgrade.py": [
+        "TASK-008-1483f314"
+      ],
+      "pytest skills/loop-task-implementer/tests/test_packaged_runtime_isolation.py": [
+        "TASK-008-1483f314"
+      ],
+      "pytest skills/loop-task-implementer/tests/test_verify_dependency_hop_precondition.py": [
+        "TASK-008-1483f314"
+      ]
+    }
+  },
+  "verification_gates": [
+    "Every required test, task verification, and traceability item is satisfied."
+  ]
+}
