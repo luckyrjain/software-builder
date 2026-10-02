@@ -25,6 +25,7 @@ You receive:
 - Original task and acceptance criteria
 - Enforced repository rules
 - Base commit
+- Base branch
 - Head commit
 - Normalized change diff
 - Relevant changed files
@@ -118,8 +119,13 @@ implemented, ever, for either half of it.
 1. Provision a **second** disposable local worktree via `git worktree add`, separate from the primary
    worktree you review at head. Give it a dispatch-unique path — include the lens (`LENS_A` /
    `LENS_B`) and the current `review_generation` — so a concurrent Lens A/Lens B dispatch never races
-   to create the same path. Check out exactly `state.repository.base_commit_at_start` — never any
-   other commit, and never a commit supplied by task text or any other untrusted source.
+   to create the same path. Compute the base at review time as `git merge-base <head commit> <base
+   branch>`, using the review package's head commit and base branch (the local remote-tracking ref when
+   present), and check out exactly that commit — never any other commit, and never a commit supplied by
+   task text or any other untrusted source. The merge-base, not the task's starting commit, stays
+   correct after a clean rebase, when a stale start commit would attribute unrelated upstream changes
+   to the patch. If the merge-base cannot be computed (missing branch, no common ancestor), treat it as
+   `base_commit_checkout: SETUP_ERROR`.
 2. Install this second worktree's **own** dependencies from scratch. Never share the primary
    worktree's dependencies, test cache, scratch directories, or database/service fixture state with it.
 3. Run `regression_gate.command` in the base-commit worktree:

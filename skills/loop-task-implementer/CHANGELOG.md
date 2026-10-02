@@ -2,6 +2,21 @@
 
 For earlier history, see the `## loop-task-implementer` section in the repository root `CHANGELOG.md`.
 
+## Unreleased — B3 regression gate computes its base at review time (2026-10-02)
+
+Fixes a dead input in the B3 regression gate. `reviewer.md` told the Reviewer to check out
+`state.repository.base_commit_at_start`, but no script or workflow step ever wrote that field
+(`git grep base_commit_at_start` finds only `state-schema.yaml`, default `null`, and this one read), and
+the neutral review package carries no `state`. Every gated dispatch would have ended in
+`base_commit_checkout: SETUP_ERROR`.
+
+- `reviewer.md` §Regression gate step 1: the base is now `git merge-base <head commit> <base branch>`,
+  computed at review time, so it stays correct after a clean rebase. Failure to compute it is
+  `base_commit_checkout: SETUP_ERROR`.
+- `reviewer.md` Inputs and `orchestrator.md` §6: the review package now lists `Base branch`.
+- `state-schema.yaml` and `validate_loop_lifecycle.py` are unchanged; `base_commit_at_start` stays an
+  unused, optional field.
+
 ## Unreleased — durable plan-state store and Builder checkpoint (2026-09-25)
 
 Closes gap-backlog ticket A5: `plan_execution_state` had zero persistence code anywhere in the

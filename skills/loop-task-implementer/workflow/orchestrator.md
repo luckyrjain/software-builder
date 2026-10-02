@@ -519,6 +519,7 @@ Build a neutral package containing only:
 - Original task and acceptance criteria
 - Enforced repository rules
 - Base commit
+- Base branch
 - Head commit
 - Normalized diff
 - Relevant one-hop callers and consumers
