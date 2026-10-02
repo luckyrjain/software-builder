@@ -27,17 +27,22 @@ Contract: ``validate_task_target(repo_root, target) -> str | None`` returns the 
 **Deny list**, applied to BOTH forms and, for the path form, to the RESOLVED path relative to the
 root as well as the input string (so a symlink ``docs/x -> ../.git/config`` inside the repo is
 caught), with every component casefolded first (macOS filesystems are case-insensitive: ``.GIT/config``
-and ``KEY.PEM`` otherwise evade): a ``.git``, ``.ssh`` or ``.aws`` component; names ``.env*``,
-``.netrc``, ``.npmrc``, ``.htpasswd``, ``.pgpass``, ``kubeconfig*``, ``credentials*``, and the SSH key
-names ``id_rsa*``, ``id_dsa*``, ``id_ecdsa*``, ``id_ed25519*``; suffixes ``.pem``, ``.key``, ``.p12``,
-``.pfx``, ``.p8``, ``.jks``, ``.tfvars``. A bare filename such as ``server.pem`` matches the symbol
+and ``KEY.PEM`` otherwise evade): a ``.git``, ``.ssh``, ``.aws``, ``.kube``, ``.docker`` or ``.gnupg``
+component; names ``.env*``, ``.netrc``, ``.npmrc``, ``.htpasswd``, ``.pgpass``, ``.pypirc``,
+``.git-credentials``, ``kubeconfig*``, ``credentials*``, ``terraform.tfstate*``, and the SSH key names
+``id_rsa*``, ``id_dsa*``, ``id_ecdsa*``, ``id_ed25519*``; suffixes ``.pem``, ``.key``, ``.p12``, ``.pfx``,
+``.p8``, ``.jks``, ``.keystore``, ``.tfvars``, ``.tfstate``. A bare filename such as ``server.pem`` matches the symbol
 regex, so the deny list must run on symbols too. Over-matching (a class named ``Credentials`` is
 rejected) is the safe direction. The generic ``id_*`` prefix is deliberately not used: it would reject
 ordinary code names such as ``id_generator``.
 
 The symbol regex admits ``:`` and ``#``, so a ``:line`` or ``#fragment`` tail (``server.pem:12``,
 ``server.pem#L10``) would defeat the suffix check. Every component is therefore also checked with the
-tail from the first ``:`` or ``#`` removed.
+tail from the first ``:`` or ``#`` removed. The same tail makes a path-form hint on a real file
+(``src/handler.py:12``) fail the literal-existence check, so such a hint is dropped (returns ``None``):
+callers must pass the bare path. Only ``:`` and ``#`` tails are stripped: a ``?`` suffix or trailing
+whitespace (``a/x.pem?x``, ``a/a.pem `` ) is not, which matters only if a file with that literal name
+exists in the repository; this residual is unchanged from before the tail handling was added.
 
 No subprocess and no git: "exists in the worktree" is the only existence check.
 
@@ -55,12 +60,17 @@ _SYMBOL_RE = re.compile(r"[A-Za-z_][\w.:$#-]{0,127}", re.ASCII)
 
 _MAX_PATH_CHARS = 200
 
-_DENIED_COMPONENTS = frozenset({".git", ".ssh", ".aws"})
-_DENIED_NAMES_EXACT = frozenset({".netrc", ".npmrc", ".htpasswd", ".pgpass"})
-_DENIED_NAME_PREFIXES = (
-    ".env", "credentials", "kubeconfig", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
+_DENIED_COMPONENTS = frozenset({".git", ".ssh", ".aws", ".kube", ".docker", ".gnupg"})
+_DENIED_NAMES_EXACT = frozenset(
+    {".netrc", ".npmrc", ".htpasswd", ".pgpass", ".pypirc", ".git-credentials"}
 )
-_DENIED_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".p8", ".jks", ".tfvars")
+_DENIED_NAME_PREFIXES = (
+    ".env", "credentials", "kubeconfig", "terraform.tfstate",
+    "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
+)
+_DENIED_SUFFIXES = (
+    ".pem", ".key", ".p12", ".pfx", ".p8", ".jks", ".keystore", ".tfvars", ".tfstate",
+)
 
 _LOCATION_TAIL_RE = re.compile(r"[:#].*", re.DOTALL)
 

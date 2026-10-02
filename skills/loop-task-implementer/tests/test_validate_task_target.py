@@ -248,3 +248,39 @@ def test_location_tail_on_harmless_symbols_still_accepted(repo, symbol):
 def test_location_tail_in_path_form_rejected_for_denied_base(repo):
     (repo / "src" / "server.pem:12").write_text("pem\n")
     assert validate_task_target(repo, "src/server.pem:12") is None
+
+
+@pytest.mark.parametrize(
+    "denied",
+    [
+        "terraform.tfstate",
+        "terraform.tfstate.backup",
+        "prod.tfstate",
+        ".git-credentials",
+        ".pypirc",
+        "release.keystore",
+        ".kube/config",
+        ".docker/config.json",
+        ".gnupg/pubring.kbx",
+        "src/.Kube/config",
+        "terraform.tfstate:4",
+        ".pypirc#L2",
+    ],
+)
+def test_state_and_tooling_credential_names_rejected(repo, denied):
+    assert validate_task_target(repo, denied) is None
+
+
+def test_path_form_hint_with_location_tail_on_real_file_is_dropped(repo):
+    # Documented: a ":line"/"#frag" tail makes the literal-existence check fail, so callers must pass
+    # the bare path. Fails closed; the bare path still works.
+    assert validate_task_target(repo, "src/handler.py:12") is None
+    assert validate_task_target(repo, "src/handler.py#L3") is None
+    assert validate_task_target(repo, "src/handler.py") == "src/handler.py"
+
+
+def test_disclosed_residual_question_mark_suffix_on_existing_file_not_stripped(repo):
+    # DISCLOSED RESIDUAL: only ":" and "#" tails are stripped. A "?" suffix is not, so a real file with
+    # that literal name passes. Matters only if such a file exists; target is only a hint string.
+    (repo / "src" / "x.pem?x").write_text("pem\n")
+    assert validate_task_target(repo, "src/x.pem?x") == "src/x.pem?x"

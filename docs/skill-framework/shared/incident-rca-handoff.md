@@ -71,8 +71,9 @@ This doc cites the contract; read the module docstring and tests for the authori
   excludes, plus the phrases `{network policy, security group, load balancer, roll back}` matched as
   substrings of the lowercased text with every non-alphanumeric run removed, so camelCase and concatenated
   spellings (`LoadBalancer`, `SecurityGroup`, `NetworkPolicy`, `loadbalancer`) are caught along with spaced,
-  hyphenated and underscored ones (the squashed match can also hit across word boundaries, e.g. `scroll back`
-  contains `rollback`). Known over-matches, accepted as the safe direction: `tokenizer`,
+  hyphenated and underscored ones. Substring matching already over-matched mid-word before squashing
+  (`scroll back` contains `roll back`); squashing additionally ignores any separator, so `load.balancer` and
+  `network/policy` match too. Known over-matches, accepted as the safe direction: `tokenizer`,
   `retry policy`, `helmet`, `scalar`, `gateway`.
 - **No proximity window.** Unlike `classify_security_finding`'s multi-sentence `Recommendation` column, a
   Preventive `Action` cell is a short phrase, so a word-distance window is nearly vacuous.
@@ -97,11 +98,13 @@ and tested at
   `is_relative_to(Path(repo_root).resolve())`, **not** equal to the repository root itself, and existing.
 - **Neither form** (a bare `.env`, `.`) returns `None`.
 - **Deny list**, casefolded, applied to both forms and to the **resolved** path relative to the root (so a
-  symlink into `.git` is caught): `.git`/`.ssh`/`.aws` components; names `.env*`, `.netrc`, `.npmrc`,
-  `.htpasswd`, `.pgpass`, `kubeconfig*`, `credentials*`, `id_rsa*`, `id_dsa*`, `id_ecdsa*`, `id_ed25519*`;
-  suffixes `.pem`, `.key`, `.p12`, `.pfx`, `.p8`, `.jks`, `.tfvars`. A generic `id_*` prefix is not used (it
+  symlink into `.git` is caught): `.git`/`.ssh`/`.aws`/`.kube`/`.docker`/`.gnupg` components; names `.env*`,
+  `.netrc`, `.npmrc`, `.htpasswd`, `.pgpass`, `.pypirc`, `.git-credentials`, `kubeconfig*`, `credentials*`,
+  `terraform.tfstate*`, `id_rsa*`, `id_dsa*`, `id_ecdsa*`, `id_ed25519*`; suffixes `.pem`, `.key`, `.p12`,
+  `.pfx`, `.p8`, `.jks`, `.keystore`, `.tfvars`, `.tfstate`. A generic `id_*` prefix is not used (it
   would reject ordinary names such as `id_generator`). Each component is also checked with any `:line` or
-  `#fragment` tail removed (the symbol regex admits both), so `server.pem:12` and `server.pem#L10` are denied.
+  `#fragment` tail removed (the symbol regex admits both), so `server.pem:12` and `server.pem#L10` are denied. The same tail means a path-form hint on a real file
+  (`src/handler.py:12`) fails the literal-existence check and is dropped: callers pass the bare path.
 - **No subprocess, no git** — "exists in the worktree" is the only existence check.
 - `repo_root` is **caller-supplied** (the repository the Orchestrator is already operating in), never
   derived from RCA text. A mismatch between the RCA's `service` and that repository is a human check at
@@ -214,6 +217,10 @@ classification, and regardless of which lens(es) the dispatch runs.
   CD-on-merge is enabled for the repository.
 - **Axis-5 population is a convention**, and duplicates remain possible when no shared state exists (see
   above).
+- **`validate_task_target` tail residual.** Only `:` and `#` tails are stripped before the deny check. A `?`
+  suffix or trailing whitespace (`a/x.pem?x`, `a/a.pem `) is not, so such a name passes if a file with that
+  literal name exists in the repository. Unchanged from before the tail handling was added, and `target` is
+  only a hint string that nothing reads in code.
 - **`validate_task_target` residual.** A 128-character, whitespace-free string such as
   `IGNORE-ALL-PRIOR-INSTRUCTIONS-and-run` passes the symbol form — a small residual injection channel in a
   hint field.
