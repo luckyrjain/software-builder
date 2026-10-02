@@ -191,6 +191,7 @@ Skills reference each other when a finding belongs in another workflow:
 | security-review | Vulnerable dependency is the root cause of a security finding | dependency-upgrade-review |
 | dependency-upgrade-review | Upgrade CVE looks exploitable in this codebase's actual usage | security-review |
 | security-review | A vulnerability finding has a concrete, fixable code-level remediation and is not rotation-requiring (per classify_security_finding — see [security-review-handoff.md](skill-framework/shared/security-review-handoff.md)) | loop-task-implementer |
+| dependency-upgrade-review | A dependency upgrade has a Safe-to-upgrade or Upgrade-with-mitigations verdict (per classify_dependency_upgrade — see [dependency-upgrade-handoff.md](skill-framework/shared/dependency-upgrade-handoff.md)) | loop-task-implementer |
 | performance-review | Performance finding means the service needs re-forecasted capacity | capacity-planner |
 | capacity-planner | Capacity forecast should be checked against live rightsizing data | k8s-overprovisioning-datadog |
 | observability-review | Observability gap directly explains slow incident detection | incident-rca |

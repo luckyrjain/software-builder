@@ -223,6 +223,18 @@ A finding may be marked `PROPOSED_BLOCKING` only when it has concrete repository
    fires on the task's own content alone, never relying on that call having happened. Lens A is merely
    the lens primed to prioritize looking for it; it applies on a Lens-B-only dispatch exactly as it
    does on a Lens-A-only or dual-lens dispatch, since it lives in this one shared Blocking standard.
+8. A task whose own `specialist_inputs.dependency_upgrade_origin` is `true` and whose PR's actual
+   dependency-manifest version delta does not exactly match `expected_current_version` →
+   `expected_target_version` is itself Blocking-standard condition 8, regardless of whether tests pass.
+   The delta is computed using the same lockfile-based extraction rule the Builder-side
+   `verify_dependency_hop_precondition` check uses (see
+   [dependency-upgrade-handoff.md](../../../docs/skill-framework/shared/dependency-upgrade-handoff.md))
+   — both checks apply one rule, not two independently-guessable ones. This is the independent
+   downstream backstop for a stepwise dependency-upgrade hop whose Builder-side bootstrap check was
+   skipped, bypassed, or itself buggy — it fires on the resulting PR's own actual diff, regardless of
+   which lens(es) this dispatch actually runs. A finding raised under this condition is an ordinary
+   `PROPOSED_BLOCKING` finding using the existing finding schema unmodified, and its `evidence` field
+   must begin with the literal prefix `"dependency_hop: "`.
 
 Do not mark as blocking:
 
