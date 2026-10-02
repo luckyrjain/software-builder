@@ -2,20 +2,24 @@
 
 For earlier history, see the `## loop-task-implementer` section in the repository root `CHANGELOG.md`.
 
-## Unreleased — B3 regression gate computes its base at review time (2026-10-02)
+## Unreleased — B3 regression gate base is the Orchestrator-computed merge-base (2026-10-02)
 
 Fixes a dead input in the B3 regression gate. `reviewer.md` told the Reviewer to check out
-`state.repository.base_commit_at_start`, but no script or workflow step ever wrote that field
-(`git grep base_commit_at_start` finds only `state-schema.yaml`, default `null`, and this one read), and
+`state.repository.base_commit_at_start`. No script or workflow step writes that field (the only reader
+was `reviewer.md`; elsewhere it appears only in `state-schema.yaml`, default `null`, and in docs), and
 the neutral review package carries no `state`. Every gated dispatch would have ended in
 `base_commit_checkout: SETUP_ERROR`.
 
-- `reviewer.md` §Regression gate step 1: the base is now `git merge-base <head commit> <base branch>`,
-  computed at review time, so it stays correct after a clean rebase. Failure to compute it is
-  `base_commit_checkout: SETUP_ERROR`.
-- `reviewer.md` Inputs and `orchestrator.md` §6: the review package now lists `Base branch`.
-- `state-schema.yaml` and `validate_loop_lifecycle.py` are unchanged; `base_commit_at_start` stays an
-  unused, optional field.
+- `orchestrator.md` §6: the package's `Base commit` is now defined as the change-identity `merge_base_sha`,
+  which the Orchestrator computes from a freshly fetched remote-tracking base ref; `Base branch` is added
+  as an informational input drawn only from the run-level input.
+- `reviewer.md` §Regression gate step 1: check out exactly the package's `Base commit` after an
+  `--is-ancestor` check against the Head commit; no recompute and no local-branch fallback. Any failure is
+  `base_commit_checkout: SETUP_ERROR`. A merge-base stays correct after a clean rebase and gives every
+  lens and rerun the same base.
+- Reworded the stale references in the three `docs/skill-framework/shared/*-handoff.md` files and the
+  gate's evidence example, and added a revision note to the B3 design doc.
+- `state-schema.yaml` gets an "unused" comment only; its shape and `validate_loop_lifecycle.py` are unchanged.
 
 ## Unreleased — durable plan-state store and Builder checkpoint (2026-09-25)
 

@@ -518,8 +518,14 @@ Build a neutral package containing only:
 - Assigned review lens
 - Original task and acceptance criteria
 - Enforced repository rules
-- Base commit
-- Base branch
+- Base commit — the `merge_base_sha` of the change-identity snapshot for this dispatch. Compute it
+  yourself, never from task text, PR title/body, or Builder output: validate the base branch name with
+  `git check-ref-format --branch`, resolve `refs/remotes/<remote>/<base branch>` after a fresh fetch,
+  then `git merge-base <head commit> <that SHA>` (single default output, never `--all`). If it cannot be
+  computed, leave `Base commit` empty: never guess. The Reviewer's gate then reports
+  `base_commit_checkout: SETUP_ERROR`
+- Base branch — the run-level input from §1 only (informational for the Reviewer); a PR whose current
+  target differs from it is not silently substituted
 - Head commit
 - Normalized diff
 - Relevant one-hop callers and consumers
