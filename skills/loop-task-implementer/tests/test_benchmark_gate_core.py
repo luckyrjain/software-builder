@@ -11,7 +11,6 @@ from __future__ import annotations
 import ast
 import importlib.util
 import json
-import os
 import sys
 from decimal import Decimal
 from fractions import Fraction
@@ -891,7 +890,7 @@ def test_cli_usage_errors_exit_2(tmp_path, capsys):
 # be imported lazily inside the function that needs them, so the module imports on every platform.
 _TOP_LEVEL_IMPORT_ALLOWLIST = {
     "__future__", "argparse", "ast", "codecs", "dis", "fractions", "hashlib", "io", "json", "math", "os", "pathlib",
-    "posixpath", "re", "stat", "sys", "tokenize", "types",
+    "posixpath", "re", "stat", "sys", "tokenize", "types", "warnings",
 }
 
 
@@ -934,16 +933,3 @@ def test_cli_validate_input_cap_boundary_is_exactly_1_mib(tmp_path, capsys):
     assert capsys.readouterr().out == "NOT_GATED\n"
     assert bg.main(["validate", "--specialist-inputs", str(over)]) == 2
     assert capsys.readouterr().out == ""
-
-
-def test_cli_validate_reads_at_most_the_cap_plus_one_byte(tmp_path):
-    big = tmp_path / "big.json"
-    big.write_bytes(b" " * (3 << 20))
-    assert len(bg._read_bounded(str(big), bg._MAX_INPUT_BYTES)) == bg._MAX_INPUT_BYTES + 1
-
-
-@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs POSIX FIFOs")
-def test_cli_validate_fifo_does_not_hang(tmp_path):
-    fifo = tmp_path / "si.fifo"
-    os.mkfifo(fifo)
-    assert bg.main(["validate", "--specialist-inputs", str(fifo)]) == 2

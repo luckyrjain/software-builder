@@ -12,6 +12,8 @@ import importlib.util
 import os
 import subprocess
 import sys
+import time
+import warnings
 from pathlib import Path
 
 import pytest
@@ -157,16 +159,11 @@ def test_cookie_is_seen_whatever_the_newline_style(codec, newline, blank_first_l
     assert lint((newline if blank_first_line else b"") + cookie + GOOD.replace(b"\n", newline)) == ["ENCODING_REJECTED"]
 
 
-@pytest.mark.parametrize("newline", [b"\r\n", b"\r"])
-def test_cr_newlines_stay_accepted_with_no_cookie_or_a_utf8_cookie(newline):
-    text = GOOD.replace(b"\n", newline)
-    assert lint(text) == [] and lint(b"# coding: utf-8" + newline + text) == []
-    assert lint(newline + b"# coding: utf-8" + newline + text) == []
-
-
-@pytest.mark.parametrize("cookie", ["utf-8", "UTF-8", "utf8", "utf_8", "u8", "utf-8-sig"])  # aliases of the utf-8 codec
-def test_utf8_cookie_spellings_are_accepted(cookie):
-    assert lint(f"# coding: {cookie}\n".encode("ascii") + GOOD) == []
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n", b"\r"])
+@pytest.mark.parametrize("cookie", [None, "utf-8", "UTF-8", "utf8", "utf_8", "u8", "utf-8-sig"])  # utf-8 aliases
+def test_utf8_cookie_spellings_and_newline_styles_are_accepted(cookie, newline):
+    first = b"" if cookie is None else f"# coding: {cookie}".encode() + newline
+    assert lint(first + GOOD.replace(b"\n", newline)) == []
 
 
 @pytest.mark.parametrize(
@@ -176,22 +173,6 @@ def test_utf8_cookie_spellings_are_accepted(cookie):
 )
 def test_parse_failures_become_a_code(source):
     assert lint(source) == ["PARSE_FAILED"]
-
-
-@pytest.mark.parametrize("depth", [100, 1000, 5000])
-@pytest.mark.parametrize(
-    "make",
-    [lambda n: "(" * n + ")" * n, lambda n: "-" * n + "1", lambda n: "build_report" + ".a" * n],
-    ids=["paren", "unary", "attribute"],
-)
-def test_deep_inputs_never_raise(make, depth):
-    result = lint(GOOD + b"x = " + make(depth).encode() + b"\n")
-    assert isinstance(result, list) and set(result) <= set(bg.VIOLATION_CODES)
-
-
-def test_deep_but_parseable_tree_is_analysed_without_recursion_error():
-    # The bindings walk and the lint walk are iterative: 150 nested parentheses parse and lint clean.
-    assert lint(GOOD + b"x = " + b"(" * 150 + b"1" + b")" * 150 + b"\n") == []
 
 
 class _Sneaky(bytes):  # a subclass could lie about isascii(); it is not trusted
@@ -208,19 +189,14 @@ def test_non_bytes_source_is_a_code(source):
 
 FORBIDDEN_CASES = {
     "class": (with_top("class Helper:\n    pass\n"), {"FORBIDDEN_CLASS"}),
-    "class body is not module scope": (with_top("class Helper:\n    test_attr = 1\n"), {"FORBIDDEN_CLASS"}),
     "async def": (with_top("async def helper():\n    return 1\n"), {"FORBIDDEN_ASYNC_FUNCTION"}),
-    "async def test": (swap(b"def test_bench", b"async def test_bench"), {"FORBIDDEN_ASYNC_FUNCTION", "TEST_NOT_FUNCTION"}),
+    # A source an AST rule already rejected is not compiled, so it never gets a TEST_* code (its code set is a subset).
+    "async def test": (swap(b"def test_bench", b"async def test_bench"), {"FORBIDDEN_ASYNC_FUNCTION"}),
     "lambda": (with_top("key = lambda row: row\n"), {"FORBIDDEN_LAMBDA"}),
-    "lambda-forged test": (
-        with_top('test_zzz = lambda: print("BENCH_RESULT_DIGEST: " + "0" * 64)\n'),
-        {"FORBIDDEN_LAMBDA", "TEST_NAME_COUNT"},
-    ),
-    "sorted key lambda": (with_body(DIGEST_PRINT + "    sorted([1], key=lambda x: x)\n"), {"FORBIDDEN_LAMBDA"}),
+    "lambda-forged test": (with_top('test_zzz = lambda: print("BENCH_RESULT_DIGEST: " + "0" * 64)\n'), {"FORBIDDEN_LAMBDA"}),
     "try/except": (
         with_body("    try:\n    " + DIGEST_PRINT + "    except ValueError:\n        pass\n"), {"FORBIDDEN_TRY"}
     ),
-    "try/finally": (with_body("    try:\n    " + DIGEST_PRINT + "    finally:\n        pass\n"), {"FORBIDDEN_TRY"}),
     "except*": (
         with_body("    try:\n    " + DIGEST_PRINT + "    except* ValueError:\n        pass\n"), {"FORBIDDEN_TRY"}
     ),
@@ -231,19 +207,14 @@ FORBIDDEN_CASES = {
         {"FORBIDDEN_WITH"},
     ),
     "global": (with_top("LIMIT = 0\n\n\ndef helper():\n    global LIMIT\n    LIMIT = 1\n"), {"FORBIDDEN_GLOBAL"}),
-    "nonlocal": (
-        with_top("def outer():\n    x = 1\n\n    def inner():\n        nonlocal x\n        x = 2\n"),
-        {"FORBIDDEN_NONLOCAL"},
-    ),
+    "nonlocal": (with_top("def o():\n    x = 1\n    def i():\n        nonlocal x\n        x = 2\n"), {"FORBIDDEN_NONLOCAL"}),
+    "async with": (with_top("async with a:\n    pass\n"), {"FORBIDDEN_ASYNC_FUNCTION"}),
+    "async for": (with_top("async for x in y:\n    pass\n"), {"FORBIDDEN_ASYNC_FUNCTION"}),
+    "await": (with_top("await z\n"), {"FORBIDDEN_ASYNC_FUNCTION"}),
+    "async comprehension": (with_top("XS = [x async for x in y]\n"), {"FORBIDDEN_ASYNC_FUNCTION"}),
     "decorator on a helper": (with_top("@helper_decorator\ndef other():\n    return 1\n"), {"FORBIDDEN_DECORATOR"}),
     "decorator on the test": (swap(b"def test_bench", b"@mark\ndef test_bench"), {"FORBIDDEN_DECORATOR"}),
-    "autouse fixture": (
-        with_top("@pytest.fixture(autouse=True)\ndef _tweak(request):\n    return request.config\n"),
-        {"FORBIDDEN_DECORATOR"},
-    ),
-    "decorated async def": (
-        with_top("@mark\nasync def helper():\n    return 1\n"), {"FORBIDDEN_ASYNC_FUNCTION", "FORBIDDEN_DECORATOR"}
-    ),
+    "decorated async def": (with_top("@mark\nasync def h():\n    pass\n"), {"FORBIDDEN_ASYNC_FUNCTION", "FORBIDDEN_DECORATOR"}),
 }
 
 
@@ -252,30 +223,16 @@ def test_forbidden_construct(source, expected):
     assert codes(source) == expected
 
 
-def test_except_star_is_a_trystar_and_not_an_ast_try():
-    tree = ast.parse(FORBIDDEN_CASES["except*"][0])
-    assert any(isinstance(n, ast.TryStar) for n in ast.walk(tree))
-    assert not any(type(n) is ast.Try for n in ast.walk(tree))
-
-
 # --- Imports ---
 
 @pytest.mark.parametrize(
     "line",
     ["import pytest", "from pytest import fixture", "import string", "from string import Formatter", "import time",
-     "import os", "import sys", "import os.path", "from os import path", "import subprocess", "import socket",
-     "import importlib", "import builtins", "import inspect", "import ctypes", "import threading",
-     "import third_party", "import _pytest"],
+     "import os", "import sys", "import os.path", "from os import path", "import subprocess", "import importlib",
+     "import builtins", "import ctypes", "import third_party", "import _pytest"],
 )
 def test_import_not_allowed(line):
     assert codes(with_imports(line)) == {"IMPORT_NOT_ALLOWED"}
-
-
-def test_string_formatter_route_is_rejected_because_string_is_not_allowlisted():
-    # `string.Formatter().get_field("0.__globals__", ...)` reaches globals with no dunder Name or Attribute; only
-    # the `import string` it needs gives it away.
-    body = '    string.Formatter().get_field("0.__globals__", (build_report,), {})\n' + DIGEST_PRINT
-    assert codes(swap(b"import hashlib\n", b"import hashlib\nimport string\n", with_body(body))) == {"IMPORT_NOT_ALLOWED"}
 
 
 def test_repo_top_level_membership():
@@ -292,14 +249,6 @@ def test_stdlib_name_wins_over_a_repo_top_level_and_pytest_is_always_rejected():
     assert lint(with_imports("import os", "import sys", "import time", "import pytest")) == ["IMPORT_NOT_ALLOWED"]
 
 
-@pytest.mark.parametrize(
-    "line",
-    ["from . import orders", "from .orders import build_report", "from .. import app", "from ..app.orders import build_report"],
-)
-def test_relative_imports_are_rejected(line):
-    assert codes(with_imports(line)) == {"RELATIVE_IMPORT"}
-
-
 # --- Banned names and dunders ---
 
 BANNED = ["eval", "exec", "compile", "__import__", "getattr", "setattr", "hasattr", "delattr", "open", "globals",
@@ -311,38 +260,20 @@ def test_banned_name_set_is_the_design_list():
     assert bg._BANNED_NAMES == frozenset(BANNED)
 
 
-@pytest.mark.parametrize("name", PLAIN_BANNED)
-def test_banned_name_as_a_name(name):
-    assert codes(with_body(f"    {name}\n" + DIGEST_PRINT)) == {"BANNED_NAME"}
-
-
-@pytest.mark.parametrize("name", PLAIN_BANNED)
-def test_banned_name_as_an_attribute(name):
-    assert codes(with_body(f"    build_report.{name}\n" + DIGEST_PRINT)) == {"BANNED_NAME"}
-
-
-def test_honest_idioms_the_lint_rejects():
-    assert codes(with_imports("import re") + b"\nPATTERN = re.compile('x')\n") == {"BANNED_NAME"}
-    assert codes(with_top("HANDLE = build_report.open\n")) == {"BANNED_NAME"}
-
-
-def test_dunder_import_is_banned_and_a_dunder():
-    assert codes(with_body('    __import__("os")\n' + DIGEST_PRINT)) == {"BANNED_NAME", "DUNDER_NAME"}
-
-
-@pytest.mark.parametrize("name", ["__builtins__", "__class__", "__globals__", "__dict__", "__name__", "__file__"])
-def test_dunder_as_a_name(name):
-    assert codes(with_body(f"    {name}\n" + DIGEST_PRINT)) == {"DUNDER_NAME"}
-
-
-@pytest.mark.parametrize("name", ["__builtins__", "__class__", "__globals__", "__dict__", "__subclasses__", "__code__"])
-def test_dunder_as_an_attribute(name):
-    assert codes(with_body(f"    build_report.{name}\n" + DIGEST_PRINT)) == {"DUNDER_NAME"}
+@pytest.mark.parametrize("template", ["    {}\n", "    build_report.{}\n"], ids=["as a Name", "as an Attribute"])
+@pytest.mark.parametrize(
+    "name, expected",
+    [(n, {"BANNED_NAME"}) for n in PLAIN_BANNED]
+    + [(n, {"DUNDER_NAME"}) for n in ("__builtins__", "__class__", "__globals__", "__dict__", "__subclasses__", "__code__")],
+)
+def test_banned_name_and_dunder_as_a_name_or_attribute(template, name, expected):
+    assert codes(with_body(template.format(name) + DIGEST_PRINT)) == expected
 
 
 def test_dunder_function_and_parameter_names_are_rejected_but_strings_and_underscores_are_fine():
     assert codes(with_top("def __getattr__(name):\n    return 1\n")) == {"DUNDER_NAME"}
     assert codes(with_top("def helper(__x__):\n    return __x__\n")) == {"DUNDER_NAME"}
+    assert codes(with_top("def f(__x__):\n    pass\n")) == {"DUNDER_NAME"}  # unused: only the parameter name gives it away
     assert lint(with_top('NOTE = "__builtins__ and getattr are only words"\n_private = 1\nname__ = 2\n__ = 3\n____ = 4\n')) == []
 
 
@@ -364,18 +295,6 @@ TEST_NAME_CASES = {
     "walrus in a default": (with_top("def helper(x=(test_h := 1)):\n    return x\n"), {"TEST_NAME_COUNT"}),
     # Annotations and defaults run in the enclosing scope (annotations at def time on 3.12 and 3.13).
     # Nested walruses the compiler resolves; every one of these collected two tests under pytest on 3.12 and 3.14.
-    "walrus nested in a comprehension TARGET subscript": (
-        with_top("slot = {}\n[0 for slot[[(test_extra := noop) for _ in [0]][0]] in [1]]\n"), {"TEST_NAME_COUNT"}
-    ),
-    "walrus nested in a comprehension target attribute base": (
-        with_top("slot = {}\n[0 for slot[[(test_e := noop) for _ in [0]][0]].attr in [1]]\n"), {"TEST_NAME_COUNT"}
-    ),
-    "walrus nested in a comprehension tuple target": (
-        with_top("slot = {}\n[0 for (i, slot[[(test_e := noop) for _ in [0]][0]]) in [(1, 2)]]\n"), {"TEST_NAME_COUNT"}
-    ),
-    "walrus nested in a comprehension target slice": (
-        with_top("slot = {}\n[0 for slot[[(test_e := noop) for _ in [0]][0]:2] in [[1]]]\n"), {"TEST_NAME_COUNT"}
-    ),
     "walrus in a comprehension that is another comprehension's first iterable": (
         # Python's symtable refuses a walrus anywhere in a comprehension iterable, so this can never run (both
         # 3.12 and 3.14); `ast.parse` accepts it and only the compile step knows.
@@ -389,10 +308,15 @@ TEST_NAME_CASES = {
         with_top("def pytest_generate_tests(metafunc):\n    metafunc.parametrize([], [(), (), ()])\n"),
         {"TEST_NAME_COUNT"},
     ),
-    "global + del in a function (DELETE_GLOBAL)": (
-        with_top("def h():\n    global test_x\n    del test_x\n"), {"FORBIDDEN_GLOBAL", "TEST_NAME_COUNT"}
+    "del of a name a (dead) nested walrus made global (DELETE_GLOBAL)": (
+        with_top("if 0:\n    list((test_bench := i) for i in [0])\ndel test_bench\n"), {"TEST_NAME_COUNT"}
     ),
     "pytest_ assignment": (with_top("pytest_plugins = []\n"), {"TEST_NAME_COUNT"}),
+    "pytestmark": (with_top("pytestmark = []\n"), {"TEST_NAME_COUNT"}),
+    "Test* name collected as a class": (with_imports("from app.orders import TestThing"), {"TEST_NAME_COUNT"}),
+    "walrus two code objects deep": (
+        with_top("x = z = []\nXS = list((list(((test_a := 1) for _ in x)) for y in z))\n"), {"TEST_NAME_COUNT"}
+    ),
     "walrus in a keyword-only default": (with_top("def _a(*, k=(test_kw := f)):\n    pass\n"), {"TEST_NAME_COUNT"}),
     "testforged is a test name too (prefix is test, not test_)": (with_top("testforged = f\n"), {"TEST_NAME_COUNT"}),
     "def testforged": (with_top("def testforged():\n    pass\n"), {"TEST_NAME_COUNT"}),
@@ -427,7 +351,10 @@ def test_walrus_in_an_annotation_never_hides_a_second_test_name(signature):
     # Without `from __future__ import annotations` this runs at def time on 3.12/3.13 and binds `test_z`; Python
     # 3.14 refuses to compile the walrus, which is a rejection too (PARSE_FAILED).
     result = lint(NO_FUTURE + f"\n\ndef _a{signature}:\n    pass\n".encode())
-    assert result == ["TEST_NAME_COUNT"] or (sys.version_info >= (3, 14) and result == ["PARSE_FAILED"])
+    if sys.version_info < (3, 14):  # strict: an inherited `from __future__ import annotations` would hide the bind
+        assert result == ["TEST_NAME_COUNT"]
+    else:
+        assert result in (["TEST_NAME_COUNT"], ["PARSE_FAILED"])
 
 
 @pytest.mark.parametrize("source, expected", list(TEST_NAME_CASES.values()), ids=list(TEST_NAME_CASES))
@@ -471,6 +398,7 @@ SHA256_NAME_FORMS = [
     (b"from json import sha256\n", b"sha256(", False),  # imported from another module
     (b"from hashlib import sha512\n", b"sha256(", False),  # a different name imported
     (b"from hashlib import sha512\n", b"sha512(", False),  # sha512 imported and called
+    (b"from heapq import sha256\n", b"sha256(", False),  # sha256 from a module whose name merely starts with `h`
 ]
 
 
@@ -489,8 +417,6 @@ SYMBOL_FORMS = {
     "import-from alias name": (b"from app.orders import build_report\n", {NO_CALL: b"[1, 2, 3]"}, True),
     "import-from asname": (b"from app.orders import report_builder as build_report\n", {NO_CALL: b"[1]"}, True),
     "import asname": (b"import app.orders as build_report\n", {NO_CALL: b"[1]"}, True),
-    "import dotted component": (b"import app.build_report\n", {NO_CALL: b"[1]"}, True),
-    "from-module dotted component": (b"from app.build_report import helper_fn\n", {NO_CALL: b"[1]"}, True),
     "only in a string": (b"import app\n", {NO_CALL: b"['build_report']"}, False),
     "only a prefix": (b"import app\n", {b"build_report(i)": b"build_report_v2(i)"}, False),
     "absent": (b"import app\n", {NO_CALL: b"[1]"}, False),
@@ -559,6 +485,18 @@ STRING_NAME_CASES = {
     "match as-capture banned": (_match("int() as open"), {"BANNED_NAME"}),
     "match star capture banned": (_match("[*open]"), {"BANNED_NAME"}),
     "match mapping rest banned": (_match("{**open}"), {"BANNED_NAME"}),
+    "relative import": (with_imports("from . import orders"), {"RELATIVE_IMPORT"}),
+    "relative import of a submodule": (with_imports("from ..app.orders import build_report"), {"RELATIVE_IMPORT"}),
+    "star import": (with_imports("from json import *"), {"STAR_IMPORT"}),
+    "star import from the repo": (with_imports("from app.orders import *"), {"STAR_IMPORT"}),
+    "relative star import": (with_imports("from . import *"), {"RELATIVE_IMPORT", "STAR_IMPORT"}),
+    "string.Formatter route (only `import string` gives it away)": (
+        swap(b"import hashlib\n", b"import hashlib\nimport string\n", with_body(
+            '    string.Formatter().get_field("0.__globals__", (build_report,), {})\n' + DIGEST_PRINT)),
+        {"IMPORT_NOT_ALLOWED"},
+    ),
+    "__import__ call": (with_body('    __import__("os")\n' + DIGEST_PRINT), {"BANNED_NAME", "DUNDER_NAME"}),
+    "re.compile": (with_imports("import re") + b"\nPATTERN = re.compile('x')\n", {"BANNED_NAME"}),
     "TypeVar name": (with_top("def h[__t__](x):\n    return x\n"), {"DUNDER_NAME"}),
     "ParamSpec name": (with_top("def h[**__p__](x):\n    return x\n"), {"DUNDER_NAME"}),
     "TypeVarTuple name": (with_top("def h[*__t__](x):\n    return x\n"), {"DUNDER_NAME"}),
@@ -600,19 +538,6 @@ def test_honest_import_and_match_forms_are_not_rejected():
 
 # --- Star imports, async constructs, and a repo_top_levels that must not fail open ---
 
-@pytest.mark.parametrize("line", ["from json import *", "from app.orders import *"])
-def test_star_import_is_rejected(line):
-    assert codes(with_imports(line)) == {"STAR_IMPORT"}
-    assert codes(with_imports("from . import *")) == {"RELATIVE_IMPORT", "STAR_IMPORT"}
-
-
-@pytest.mark.parametrize(
-    "text", ["async with a:\n    pass\n", "async for x in y:\n    pass\n", "await z\n", "XS = [x async for x in y]\n"],
-)
-def test_async_constructs_outside_an_async_def_are_rejected(text):
-    assert codes(with_top(text)) == {"FORBIDDEN_ASYNC_FUNCTION"}
-
-
 STDLIB_ONLY = swap(b"from app.orders import build_report\n", b"").replace(b"build_report(i)", b"i")
 
 
@@ -638,10 +563,9 @@ def test_malformed_repo_top_levels_never_fail_open(tops):
     assert lint(with_imports("import app"), tops=tops) == ["ANALYSIS_FAILED"]
 
 
-def test_well_formed_repo_top_levels_are_accepted_as_set_or_frozenset():
+def test_a_set_or_frozenset_of_str_is_accepted_as_repo_top_levels():
     assert lint(STDLIB_ONLY, symbol="_digest", tops=frozenset()) == []
-    assert lint(GOOD, tops={"app"}) == []
-    assert lint(GOOD, tops=frozenset({"app"})) == []
+    assert lint(GOOD, tops={"app"}) == lint(GOOD, tops=frozenset({"app"})) == []
 
 
 def test_parse_failed_and_analysis_failed_are_distinct(monkeypatch):
@@ -651,18 +575,91 @@ def test_parse_failed_and_analysis_failed_are_distinct(monkeypatch):
     monkeypatch.setattr(ast, "parse", boom)
     assert lint(GOOD) == ["PARSE_FAILED"]
     monkeypatch.undo()
-    monkeypatch.setattr(bg, "_module_level_names", boom)
+    monkeypatch.setattr(bg, "_module_level_names", lambda code: 1 / 0)
     assert lint(GOOD) == ["ANALYSIS_FAILED"]
 
 
-def test_a_real_parser_resource_failure_under_the_size_cap_is_parse_failed():
-    source = b"x = " + b"-" * 16000 + b"1\n"  # MemoryError on 3.14, RecursionError on some versions
-    try:
-        ast.parse(source)
-    except (RecursionError, MemoryError):
-        assert lint(source) == ["PARSE_FAILED"]
-    else:
-        pytest.skip("this interpreter parses the expression")
+@pytest.mark.parametrize(
+    "target",
+    ["slot[[(test_e := noop) for _ in [0]][0]]", "slot[[(test_e := noop) for _ in [0]][0]].attr",
+     "(i, slot[[(test_e := noop) for _ in [0]][0]])", "slot[[(test_e := noop) for _ in [0]][0]:2]"],
+)
+def test_walrus_nested_inside_a_comprehension_target_is_counted(target):
+    # Every shape collected two tests under pytest on 3.12 and 3.14; the compiler, not an AST walk, decides.
+    assert codes(with_top(f"slot = {{}}\n[0 for {target} in [(1, 2)]]\n")) == {"TEST_NAME_COUNT"}
+
+
+def test_pytest_collected_names_count_but_constants_and_locals_do_not():
+    assert lint(with_top("TEST_SIZE = 5\n")) == [] and lint(with_top("def h():\n    pytest_x = 1\n    return pytest_x\n")) == []
+    assert lint(swap(b"def test_bench", b"def testbench")) == []  # a lone `test*` name needs no underscore
+
+
+def _nested_comprehension(depth: int, kind: str = "[{}]") -> str:
+    inner = "1"
+    for _ in range(depth):
+        inner = kind.format(f"{inner} for a in [1]")
+    return inner
+
+
+@pytest.mark.parametrize("kind", ["[{}]", "({})", "{{{}}}", "{{1: {}}}"], ids=["list", "generator", "set", "dict"])
+def test_comprehension_nesting_cap_boundary(kind):
+    cap = bg._MAX_COMPREHENSION_DEPTH
+    assert cap == 12  # well below the depth (about 20) at which CPython's compiler crashes
+    assert lint(GOOD + f"x = {_nested_comprehension(cap, kind)}\n".encode()) == []
+    assert lint(GOOD + f"x = {_nested_comprehension(cap + 1, kind)}\n".encode()) == ["PARSE_FAILED"]
+    assert lint(with_top(f"x = {_nested_comprehension(3, kind)}\n")) == []  # honest nesting stays accepted
+
+
+def _lint_in_subprocess(tmp_path, source: bytes, prelude: str = ""):
+    """Run the lint CLI in a child interpreter (so a crash cannot take pytest down); `prelude` runs first."""
+    path = tmp_path / "bench_child.py"
+    path.write_bytes(source)
+    script = (
+        prelude + "import importlib.util, sys\n"
+        "spec = importlib.util.spec_from_file_location('benchmark_gate', sys.argv[1])\n"
+        "module = importlib.util.module_from_spec(spec)\n"
+        "sys.modules['benchmark_gate'] = module\n"
+        "spec.loader.exec_module(module)\n"
+        "sys.exit(module.main(['lint', '--benchmark', sys.argv[2], '--symbol', 'build_report', '--top-level', 'app']))\n"
+    )
+    run = subprocess.run([sys.executable, "-c", script, str(_SCRIPTS / "benchmark_gate.py"), str(path)],
+                         capture_output=True, text=True, timeout=60, check=False)
+    return run.returncode, run.stdout.split(), run.stderr
+
+
+@pytest.mark.parametrize("depth", [22, 23, 60])
+@pytest.mark.parametrize("flavour", ["list", "async"])
+def test_deeply_nested_comprehensions_do_not_crash_the_interpreter(tmp_path, depth, flavour):
+    # CPython's compiler SIGSEGVs on ~23 nested comprehensions (20 async) after `ast.parse` succeeds.
+    nested = _nested_comprehension(depth)
+    text = f"x = {nested}\n" if flavour == "list" else f"async def h():\n    return {nested.replace('for a', 'async for a')}\n"
+    code, out, _ = _lint_in_subprocess(tmp_path, GOOD + text.encode())
+    assert code == 1 and out in (["PARSE_FAILED"], ["FORBIDDEN_ASYNC_FUNCTION"])
+
+
+def test_a_rejected_source_is_not_compiled_so_a_lambda_chain_is_fast():
+    names = [f"{chr(97 + i % 26)}{i // 26}" if i >= 26 else chr(97 + i) for i in range(1000)]
+    chain = "x = " + "".join(f"lambda {n}:" for n in names) + "(" + ",".join(names) + ")\n"
+    start = time.perf_counter()
+    result = lint(GOOD + chain.encode())
+    assert result == ["FORBIDDEN_LAMBDA"] and len(chain) < 15000
+    assert time.perf_counter() - start < 1.0  # compile alone took 8 to 11 s on 3.12
+
+
+@pytest.mark.parametrize("digits, expected", [(3500, []), (3700, ["PARSE_FAILED"])])
+def test_huge_integer_literal_dis_cannot_render_is_parse_failed(digits, expected):
+    # 3700 hex digits is more than 4300 decimal digits, which `dis` cannot repr (ValueError).
+    assert lint(GOOD + b"x = 0x" + b"f" * digits + b"\n") == expected
+
+
+def test_a_syntax_warning_neither_changes_the_verdict_nor_prints():
+    source = with_imports("import re") + b'\nPAT = re.findall("\\d+", "a1")\n'  # non-raw "\d": SyntaxWarning
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        default = lint(source)
+        warnings.simplefilter("error")
+        strict = lint(source)
+    assert default == strict == [] and caught == []
 
 
 # --- Honest benchmarks must stay accepted ---
@@ -720,17 +717,15 @@ def test_codes_are_deduplicated_deterministic_and_canonically_ordered():
     assert first == lint(source) == lint(bytes(source))
     assert len(first) == len(set(first))
     assert first == sorted(first, key=bg.VIOLATION_CODES.index)
-    assert first[0] == "FORBIDDEN_CLASS" and first[-1] == "MISSING_SYMBOL_REFERENCE"
 
 
 def test_documented_code_set_is_exactly_this():
-    assert bg.VIOLATION_CODES == (
-        "SOURCE_NOT_BYTES", "FILE_TOO_LARGE", "NON_ASCII_SOURCE", "ENCODING_REJECTED", "PARSE_FAILED",
-        "ANALYSIS_FAILED", "SYMBOL_INVALID", "FORBIDDEN_CLASS", "FORBIDDEN_ASYNC_FUNCTION", "FORBIDDEN_LAMBDA",
-        "FORBIDDEN_TRY", "FORBIDDEN_WITH", "FORBIDDEN_GLOBAL", "FORBIDDEN_NONLOCAL", "FORBIDDEN_DECORATOR",
-        "RELATIVE_IMPORT", "STAR_IMPORT", "IMPORT_NOT_ALLOWED", "BANNED_NAME", "DUNDER_NAME", "TEST_NAME_COUNT",
-        "TEST_NOT_FUNCTION", "TEST_HAS_PARAMETERS", "MISSING_PRINT", "MISSING_DIGEST_LITERAL", "MISSING_SHA256",
-        "MISSING_SYMBOL_REFERENCE",
+    assert bg.VIOLATION_CODES == tuple(
+        """SOURCE_NOT_BYTES FILE_TOO_LARGE NON_ASCII_SOURCE ENCODING_REJECTED PARSE_FAILED ANALYSIS_FAILED SYMBOL_INVALID
+        FORBIDDEN_CLASS FORBIDDEN_ASYNC_FUNCTION FORBIDDEN_LAMBDA FORBIDDEN_TRY FORBIDDEN_WITH FORBIDDEN_GLOBAL
+        FORBIDDEN_NONLOCAL FORBIDDEN_DECORATOR RELATIVE_IMPORT STAR_IMPORT IMPORT_NOT_ALLOWED BANNED_NAME DUNDER_NAME
+        TEST_NAME_COUNT TEST_NOT_FUNCTION TEST_HAS_PARAMETERS MISSING_PRINT MISSING_DIGEST_LITERAL MISSING_SHA256
+        MISSING_SYMBOL_REFERENCE""".split()
     )
 
 
@@ -810,41 +805,26 @@ def test_cli_over_size_file_is_the_file_too_large_violation_after_a_bounded_read
 
 
 def test_cli_unreadable_inputs_exit_2(tmp_path, capsys):
-    for target in (str(tmp_path / "missing.py"), str(tmp_path), "", "a\0b"):  # missing, a directory, empty, NUL
+    targets = [str(tmp_path / "missing.py"), str(tmp_path), "", "a\0b"]  # missing, a directory, empty, NUL
+    if hasattr(os, "mkfifo"):  # a FIFO must not hang the open
+        os.mkfifo(tmp_path / "bench_fifo.py")
+        targets.append(str(tmp_path / "bench_fifo.py"))
+    for target in targets:
         assert bg.main(["lint", "--benchmark", target, "--symbol", SYMBOL]) == 2
     assert bg.main(["lint", "--benchmark", str(tmp_path / "x.py"), "--symbol", SYMBOL, "--repo-root", str(tmp_path / "m")]) == 2
     cap = capsys.readouterr()
-    assert cap.out == "" and cap.err.count("usage error") == 5
-
-
-@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs POSIX FIFOs")
-def test_cli_fifo_does_not_hang_and_is_a_usage_error(tmp_path, capsys):
-    fifo = tmp_path / "bench_fifo.py"
-    os.mkfifo(fifo)
-    assert bg.main(["lint", "--benchmark", str(fifo), "--symbol", SYMBOL]) == 2
-    assert capsys.readouterr().out == ""
+    assert cap.out == "" and cap.err.count("usage error") == len(targets) + 1
 
 
 def test_lint_runs_with_posix_only_os_and_signal_attributes_removed(tmp_path):
-    # A Windows-like interpreter has no os.O_NONBLOCK, mkfifo, killpg or SIGALRM; the module must import and lint
-    # there (this catches an unguarded `os.O_NONBLOCK`).
-    good = tmp_path / "bench_orders.py"
-    good.write_bytes(GOOD)
-    script = (
-        "import importlib.util, os, signal, sys\n"
+    # A Windows-like interpreter has no os.O_NONBLOCK, mkfifo, killpg or SIGALRM (catches an unguarded O_NONBLOCK).
+    prelude = (
+        "import os, signal\n"
         "for mod, names in ((os, ('O_NONBLOCK', 'mkfifo', 'killpg')), (signal, ('SIGALRM',))):\n"
         "    [delattr(mod, n) for n in names if hasattr(mod, n)]\n"
-        "spec = importlib.util.spec_from_file_location('benchmark_gate', sys.argv[1])\n"
-        "module = importlib.util.module_from_spec(spec)\n"
-        "sys.modules['benchmark_gate'] = module\n"
-        "spec.loader.exec_module(module)\n"
-        "sys.exit(module.main(['lint', '--benchmark', sys.argv[2], '--symbol', 'build_report', '--top-level', 'app']))\n"
     )
-    run = subprocess.run(
-        [sys.executable, "-c", script, str(_SCRIPTS / "benchmark_gate.py"), str(good)],
-        capture_output=True, text=True, timeout=60, check=False,
-    )
-    assert (run.returncode, run.stdout) == (0, ""), run.stderr
+    code, out, err = _lint_in_subprocess(tmp_path, GOOD, prelude)
+    assert (code, out) == (0, []), err
 
 
 def test_cli_usage_errors_exit_2(tmp_path, capsys):

@@ -36,6 +36,7 @@ import stat
 import sys
 import tokenize
 import types
+import warnings
 from fractions import Fraction
 from pathlib import Path
 
@@ -552,24 +553,38 @@ def _is_dunder(name: object) -> bool:
     return isinstance(name, str) and len(name) > 4 and name.startswith("__") and name.endswith("__")
 
 
-_NAME_BINDING_OPS = frozenset({"STORE_NAME", "DELETE_NAME", "STORE_GLOBAL", "DELETE_GLOBAL"})
-_GLOBAL_BINDING_OPS = frozenset({"STORE_GLOBAL", "DELETE_GLOBAL"})
+_NAME_BINDING_OPS = frozenset({"STORE_NAME", "DELETE_NAME", "STORE_GLOBAL", "DELETE_GLOBAL"})  # a nested walrus makes the name global
+_COMPREHENSIONS = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+# CPython's compiler crashes (SIGSEGV on 3.12 and 3.14) on about 23 nested comprehensions, 20 if async: deeper
+# nesting is rejected without compiling it.
+_MAX_COMPREHENSION_DEPTH = 12
+
+
+def _comprehension_depth(tree: ast.AST) -> int:
+    """Maximum nesting depth of list/set/dict comprehensions and generator expressions. Iterative."""
+    deepest = 0
+    stack = [(tree, 0)]
+    while stack:
+        node, depth = stack.pop()
+        depth += isinstance(node, _COMPREHENSIONS)
+        deepest = max(deepest, depth)
+        stack.extend((child, depth) for child in ast.iter_child_nodes(node))
+    return deepest
 
 
 def _module_level_names(code: types.CodeType) -> list[str]:
     """Every name the compiled module binds or deletes in module scope, one entry per bytecode occurrence.
 
     The COMPILER decides what binds a module-level name, not a hand-written AST walk (which needed a new patch
-    each review round). In the module's own code object that is ``STORE_NAME``/``DELETE_NAME``; in every nested
-    code object only ``STORE_GLOBAL``/``DELETE_GLOBAL`` count (how a walrus in a generator expression binds the
-    module's name). Names bound only in a function or class body, or as a comprehension's own variable, do not
+    each review round). In the module's own code object that is ``STORE_NAME``/``DELETE_NAME`` (or the ``*_GLOBAL``
+    forms, when a nested walrus makes the name global); in every nested code object only ``STORE_GLOBAL`` counts (how a walrus in a generator expression binds the module's name). Names bound only in a function or class body, or as a comprehension's own variable, do not
     appear; a redefinition counts twice. Iterative (nested code via ``co_consts``); nothing is executed.
     """
     names: list[str] = []
     pending = [(code, True)]
     while pending:
         current, is_module = pending.pop()
-        wanted = _NAME_BINDING_OPS if is_module else _GLOBAL_BINDING_OPS
+        wanted = _NAME_BINDING_OPS if is_module else {"STORE_GLOBAL"}
         names.extend(ins.argval for ins in dis.get_instructions(current) if ins.opname in wanted)
         pending.extend((const, False) for const in current.co_consts if isinstance(const, types.CodeType))
     return names
@@ -603,7 +618,9 @@ def _content_violations(source: object, symbol: object, repo_top_levels: frozens
     if early:
         return early  # nothing is parsed from a file that already failed a byte-level rule
     try:
-        tree = ast.parse(source)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # a SyntaxWarning (invalid escape) must neither print nor change the verdict
+            tree = ast.parse(source)
     except Exception:  # noqa: BLE001 -- SyntaxError, ValueError (null byte), RecursionError, MemoryError ...
         return {"PARSE_FAILED"}
 
@@ -711,18 +728,23 @@ def _content_violations(source: object, symbol: object, repo_top_levels: frozens
     if symbol_ok and not symbol_seen:
         found.add("MISSING_SYMBOL_REFERENCE")
 
+    if found:
+        return found  # already rejected: do not spend (or risk) a compile on it; its code set is a subset
+    if _comprehension_depth(tree) > _MAX_COMPREHENSION_DEPTH:
+        return {"PARSE_FAILED"}
     try:
-        code = compile(source, "<benchmark>", "exec", dont_inherit=True)  # compiles, never executes
-    except Exception:  # noqa: BLE001 -- e.g. a module-level ``await``, or a 3.14 walrus in an annotation
-        # ``compile`` is stricter than ``ast.parse``. If an AST rule already rejected the source nothing is lost;
-        # otherwise the binding count cannot be trusted, so fail closed.
-        if not found:
-            found.add("PARSE_FAILED")
-        return found
-    names = _module_level_names(code)
-    bound = [name for name in names if name.startswith("test")]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            code = compile(source, "<benchmark>", "exec", dont_inherit=True)  # compiles, never executes
+        names = _module_level_names(code)
+    except (SyntaxError, ValueError, RecursionError, MemoryError):
+        # ``compile`` is stricter than ``ast.parse`` (a 3.14 walrus in an annotation, a walrus in a comprehension
+        # iterable), and ``dis`` cannot render a huge integer constant (ValueError): the count cannot be trusted.
+        return {"PARSE_FAILED"}
+    tests = [name for name in names if name.startswith("test")]
     top_level_tests = [s for s in tree.body if isinstance(s, ast.FunctionDef) and s.name.startswith("test")]
-    if len(bound) != 1 or any(name.startswith("pytest_") for name in names):
+    # pytest also collects ``Test*`` names and acts on ``pytest_*`` hooks and ``pytestmark``.
+    if len(tests) != 1 or any(name.startswith(("pytest", "Test")) for name in names):
         found.add("TEST_NAME_COUNT")
     elif len(top_level_tests) != 1:
         found.add("TEST_NOT_FUNCTION")
@@ -760,10 +782,16 @@ def validate_benchmark_content(source: bytes, symbol: str, repo_top_levels: froz
     import ``alias.name``/``asname`` or a dotted component of an import's module.
 
     The one-test rule is counted from the COMPILED module (``_module_level_names``), not an AST walk: exactly one
-    module-level name beginning ``test`` (a redefinition, ``del`` and a walrus anywhere count) and none beginning
-    ``pytest_`` (a module-level ``pytest_generate_tests`` makes pytest run the test several times); it must be a
-    ``def`` with no parameters. ``compile`` is stricter than ``ast.parse``: when it fails and no other rule fired
-    the result is ``PARSE_FAILED``. Note ``from __future__ import annotations`` stops annotations being evaluated.
+    module-level name beginning ``test`` (a redefinition, ``del`` and a walrus anywhere count), none beginning
+    ``pytest`` (``pytest_*`` hooks, ``pytestmark``) or ``Test`` (collected classes; ``TEST_SIZE`` is fine), and the
+    one name must be a ``def`` with no parameters. ``compile`` runs ONLY when no other rule fired, so a rejected
+    source gets only AST codes (its code set is a subset, and not stable across Python versions). It is stricter
+    than ``ast.parse`` and ``dis`` cannot render a huge integer constant: both are ``PARSE_FAILED``, as is
+    comprehension nesting beyond ``_MAX_COMPREHENSION_DEPTH`` (CPython's compiler crashes on about 23 nested
+    comprehensions, so such a source is never compiled). Residual: ``compile`` runs in-process on input that passed
+    the AST rules, so a compiler crash class beyond that guarded family would end the process, which callers
+    (``compare``, the CLI) treat as fail-closed (exit 2 / no JSON). ``sys.stdlib_module_names`` differs between
+    Python versions, so ``compare`` must lint with the harness's own Python. Warnings are silenced during parsing.
 
     Beyond the table (stricter): a dunder function or parameter name, a star import, and an invalid ``symbol``
     (``SYMBOL_INVALID``) are rejected.
