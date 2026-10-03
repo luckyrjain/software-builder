@@ -1,5 +1,6 @@
-"""Tests for the C4c-1 filesystem and git pieces of `benchmark_gate.py`: `export_tree`, tree hash and seal,
-`cleanup_root` / `claim_root`, and the `export` / `cleanup` CLIs.
+"""Tests for the C4c filesystem and git pieces of `benchmark_gate.py`: `export_tree`, tree hash and seal,
+`cleanup_root`, `overlay_benchmark_file`, `protected_path_changes`, `benchmark_aware_tokens`, the venv snapshot and
+its `.pth` content check, and the `export` / `snapshot-venv` / `cleanup` CLIs.
 
 Everything git-related runs against real temporary repositories (no network, no hooks, no signing). Hostile trees
 (`.git` entries, `..`, case collisions, escaping symlinks) are built with `git mktree`, since `git add` refuses them.
@@ -552,6 +553,417 @@ def test_cleanup_cli_exit_codes(root, capsys):
 
 
 # ---------------------------------------------------------------------------
+# overlay_benchmark_file
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def pair(tmp_path):
+    """Two commits: base has `benchmarks/bench_pre.py` and no `bench_orders.py`; head adds the latter."""
+    repo = make_repo(tmp_path)
+    base = commit(repo, {"src/app.py": "a = 1\n", "benchmarks/bench_pre.py": BENCH_SRC})
+    head = commit(repo, {BENCH: BENCH_SRC})
+    base_root = bg.export_tree(repo, base, dest("base"))
+    head_root = bg.export_tree(repo, head, dest("head"))
+    return repo, base, head, base_root, head_root
+
+
+def test_overlay_copies_a_builder_authored_benchmark_and_reports_pre_existing_ones(pair):
+    _, base, _, base_root, head_root = pair
+    assert bg.overlay_benchmark_file(base_root, head_root, base, BENCH) == "BUILDER_AUTHORED"
+    assert (base_root / BENCH).read_bytes() == BENCH_SRC and stat.S_IMODE((base_root / BENCH).stat().st_mode) == 0o644
+    assert bg.overlay_benchmark_file(base_root, head_root, base, "benchmarks/bench_pre.py") == "PRE_EXISTING"
+    assert bg.overlay_benchmark_file(base_root, head_root, base, BENCH) == "PRE_EXISTING"  # now present at base, equal bytes
+
+
+def test_overlay_creates_missing_parent_directories_only_inside_base(pair):
+    _, base, _, base_root, head_root = pair
+    deep = "perf/deep/bench_deep.py"
+    (head_root / "perf/deep").mkdir(parents=True)
+    (head_root / deep).write_bytes(BENCH_SRC)
+    assert bg.overlay_benchmark_file(base_root, head_root, base, deep) == "BUILDER_AUTHORED"
+    assert (base_root / deep).read_bytes() == BENCH_SRC
+
+
+def test_overlay_refuses_to_overwrite_a_different_base_file(pair):
+    _, base, _, base_root, head_root = pair
+    (head_root / "benchmarks/bench_pre.py").write_bytes(BENCH_SRC + b"# changed\n")
+    with pytest.raises(Err) as info:
+        bg.overlay_benchmark_file(base_root, head_root, base, "benchmarks/bench_pre.py")
+    assert info.value.code == "BENCHMARK_MODIFIED" and (base_root / "benchmarks/bench_pre.py").read_bytes() == BENCH_SRC
+
+
+def test_overlay_rejections(pair, tmp_path):
+    _, base, head, base_root, head_root = pair
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    secret = tmp_path / "secret.py"
+    secret.write_bytes(BENCH_SRC)
+
+    def reject(*args, code="OVERLAY_REJECTED"):
+        with pytest.raises(Err) as info:
+            bg.overlay_benchmark_file(*args)
+        assert info.value.code == code, (args, info.value.code, info.value.detail)
+
+    for path in ("../x.py", "/abs/bench_x.py", "benchmarks/../bench_orders.py", "src/app.py", "benchmarks/bench_orders.pyc",
+                 "benchmarks/bench_orders.py\n", "", None, 5, "benchmarks/.git/bench_x.py"):
+        reject(base_root, head_root, base, path)
+    reject(base_root, head_root, head, BENCH)  # not an export of that commit
+    reject(base_root, head_root, "a" * 40, BENCH)
+    reject(base_root, head_root, "xyz", BENCH, code="COMMIT_INVALID")
+    reject(base_root, base_root, base, BENCH)
+    reject(base_root, base_root / "sub", base, BENCH)
+    reject(tmp_path / "missing", head_root, base, BENCH)
+    (head_root / BENCH).unlink()
+    reject(base_root, head_root, base, BENCH)  # missing at head
+    (head_root / BENCH).symlink_to(secret)
+    reject(base_root, head_root, base, BENCH)  # symlink at head
+    (head_root / BENCH).unlink()
+    (head_root / BENCH).write_bytes(b"#" * (16 * 1024 + 1))
+    reject(base_root, head_root, base, BENCH)  # over 16 KiB
+    (head_root / BENCH).unlink()
+    (head_root / "benchmarks").rename(head_root / "benchmarks_moved")
+    (outside / "bench_orders.py").write_bytes(BENCH_SRC)
+    (head_root / "benchmarks").symlink_to(outside)
+    reject(base_root, head_root, base, BENCH)  # symlinked parent at head
+    (head_root / "benchmarks").unlink()
+    (head_root / "benchmarks_moved").rename(head_root / "benchmarks")
+    (head_root / BENCH).write_bytes(BENCH_SRC)
+    (outside / "bench_orders.py").unlink()
+    (base_root / "benchmarks").rename(base_root / "benchmarks_moved")
+    (base_root / "benchmarks").symlink_to(outside)
+    reject(base_root, head_root, base, BENCH)  # symlinked parent at base: nothing may be written through it
+    assert not list(outside.iterdir())
+    (base_root / "benchmarks").unlink()
+    (base_root / "benchmarks_moved").rename(base_root / "benchmarks")
+    (base_root / BENCH).mkdir()
+    reject(base_root, head_root, base, BENCH)  # a directory squats the name
+    (base_root / BENCH).rmdir()
+    Path(str(base_root) + ".export.json").unlink()
+    reject(base_root, head_root, base, BENCH)  # no sidecar: not one of our exports
+
+
+def test_overlay_exact_name_lookup_does_not_confuse_case_variants(pair):
+    _, base, _, base_root, head_root = pair
+    variant = "benchmarks/bench_Pre.py"  # differs from base's bench_pre.py only by case
+    (head_root / variant).write_bytes(BENCH_SRC + b"# other\n")
+    try:
+        assert bg.overlay_benchmark_file(base_root, head_root, base, variant) == "BUILDER_AUTHORED"
+    except Err as exc:  # a case-insensitive filesystem cannot hold both files: it must fail closed
+        assert exc.code == "OVERLAY_REJECTED"
+    assert (base_root / "benchmarks/bench_pre.py").read_bytes() == BENCH_SRC
+
+
+# ---------------------------------------------------------------------------
+# protected_path_changes
+# ---------------------------------------------------------------------------
+
+PROTECTED = [
+    "conftest.py", "sub/dir/conftest.py", "a/Conftest.PY", "sitecustomize.py", "a/b/sitecustomize.py", "usercustomize.py",
+    "src/sitecustomize.py", "sitecustomize_x.py", "b/SiteCustomize.py", "sitecustomize/__init__.py", "x.pth", "a/x.PTH",
+    "pytest.ini", "pyproject.toml", "setup.cfg", "setup.py", "tox.ini", "noxfile.py", "MANIFEST.in", "requirements.txt",
+    "requirements-dev.txt", "requirements/dev.txt", "a/requirements/b.txt", "constraints.txt", "constraints-3.txt",
+    "deps.in", "environment.yml", "Pipfile", "Pipfile.lock", "poetry.lock", "uv.lock", "pdm.lock", "pylock.toml",
+    "pylock.x.toml", "json.py", "src/json.py", "typing/__init__.py", "src/types/__init__.py", "os.cpython-312-x.so",
+    "src/Json/x.py", "a.pyc", "pkg/__pycache__/x.cpython-312.pyc", "__pycache__/f.txt", "benchmarks/__init__.py",
+    "benchmarks/helper.py", "benchmarks/sub/deep.py", "-dash/conftest.py", "sp ace/conftest.py",
+    "café/conftest.py", "new\nline/conftest.py",
+]
+UNPROTECTED = [
+    "README.md", "src/app/core.py", "docs/requirements.md", "tests/test_x.py", "benchmarks_extra/x.py", BENCH, "src/jsonx.py",
+    "lib/json.py", "notconftest.py", "docs/conftest.txt", "src/app/types.py", "setup.py.txt", "requirements.md", "b.py",
+]
+
+
+@pytest.fixture
+def two(tmp_path):
+    repo = make_repo(tmp_path)
+    return repo, commit(repo, {"a.py": "a\n", "app.py": "x\n", "setup.py": "s\n", "conftest.py": "c\n"})
+
+
+def changes(repo, base, head, bench=BENCH):
+    return bg.protected_path_changes(repo, base, head, bench)
+
+
+def test_protected_paths_are_flagged_and_ordinary_ones_are_not(two):
+    repo, base = two
+    commit(repo, {path: "x\n" for path in PROTECTED + UNPROTECTED})
+    # `Benchmarks/` would merge into `benchmarks/` on a case-insensitive filesystem: add it to the index only.
+    git(repo, "update-index", "--add", "--cacheinfo", f"100644,{blob(repo)},Benchmarks/x.py")
+    git(repo, "commit", "-q", "-m", "case")
+    head = git(repo, "rev-parse", "HEAD")
+    got = changes(repo, base, head)
+    assert got == sorted({*PROTECTED, "Benchmarks/x.py"}, key=os.fsencode)  # conftest.py exists at base: modified, still listed
+    assert set(UNPROTECTED).isdisjoint(got) and changes(repo, head, head) == []
+
+
+def test_protected_case_variants_at_the_root(tmp_path):
+    for path in ("JSON.py", "Conftest.py", "SITECUSTOMIZE.PY"):
+        repo = make_repo(tmp_path, name="r" + path)
+        base = commit(repo, {"a.py": "a\n"})
+        assert changes(repo, base, commit(repo, {path: "x\n"})) == [path]
+
+
+@pytest.mark.parametrize("kind", ["rename", "delete", "mode", "type"])
+def test_protected_operations_count_even_when_git_would_call_it_a_rename(two, kind):
+    repo, base = two
+    if kind == "rename":  # rename detection is OFF: identical content moved is a delete plus an add
+        (repo / "setup.py").rename(repo / "build.txt")
+        (repo / "conftest.py").rename(repo / "docs_conf.py")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "mv")
+        expected = ["conftest.py", "setup.py"]
+    elif kind == "delete":
+        commit(repo, {"conftest.py": None})
+        expected = ["conftest.py"]
+    elif kind == "mode":
+        (repo / "setup.py").chmod(0o755)
+        (repo / "app.py").chmod(0o755)
+        git(repo, "commit", "-q", "-am", "chmod")
+        expected = ["setup.py"]
+    else:
+        (repo / "conftest.py").unlink()
+        commit(repo, {"conftest.py": ("link", "app.py")})
+        expected = ["conftest.py"]
+    assert changes(repo, base, git(repo, "rev-parse", "HEAD")) == expected
+
+
+def test_protected_diff_arguments_fail_closed(two):
+    repo, base = two
+    for args, code in ((("x", base), "COMMIT_INVALID"), ((base, "A" * 40), "COMMIT_INVALID"), ((base, "1" * 64), "COMMIT_INVALID"),
+                       (("1" * 64, base), "COMMIT_INVALID"), ((base, "1" * 40), "COMMIT_NOT_FOUND"), (("1" * 40, base), "COMMIT_NOT_FOUND")):
+        with pytest.raises(Err) as info:
+            changes(repo, *args)
+        assert info.value.code == code, args
+    for bench in ("../x.py", "a.py", None):
+        with pytest.raises(Err) as info:
+            changes(repo, base, base, bench)
+        assert info.value.code == "PROTECTED_DIFF_FAILED"
+
+
+def test_diff_commands_never_run_the_repositorys_drivers(two, tmp_path):
+    repo, base = two
+    canary = tmp_path / "canary"
+    (repo / ".gitattributes").write_text("*.py diff=evil\n")
+    git(repo, "config", "diff.evil.textconv", f"touch {canary}; cat")
+    git(repo, "config", "diff.external", f"touch {canary}; true")
+    head = commit(repo, {"setup.py": "t\n", "a.py": "sys.argv\n"})
+    assert changes(repo, base, head) == [".gitattributes", "setup.py"][1:] and bg.benchmark_aware_tokens(repo, base, head, BENCH)
+    assert not canary.exists()
+
+
+# ---------------------------------------------------------------------------
+# benchmark_aware_tokens
+# ---------------------------------------------------------------------------
+
+def test_tripwire_reports_added_lines_with_a_token_outside_the_benchmark(two):
+    repo, base = two
+    files = {
+        "src/a.py": "import os\nx = os.environ['PYTEST_CURRENT_TEST']\n", "src/b.py": "d = 'BENCH_RESULT_DIGEST'\n",
+        "src/c.py": "t = 'BENCH_TRACE_LINES'\n", "src/d.py": "os._exit(0)\n", "src/e.py": "import sys\nsys.argv\n",
+        "src/f.py": f"p = '{BENCH}'\n", "src/sys.argv.py": "x = 1\n", "src/plus.py": "++ sys.argv\n", "-dash.py": "sys.argv\n", "new\nline.py": "sys.argv\n",
+        BENCH: BENCH_SRC + b"os._exit(0)  # the benchmark itself is not scanned\n", "src/clean.py": "x = 1\n",
+        "bin.dat": b"\x00\x01os._exit\x00\xff\xfe", "latin.py": b"caf\xe9 = 'sys.argv'\n",
+    }
+    head = commit(repo, files)
+    hits = bg.benchmark_aware_tokens(repo, base, head, BENCH)
+    assert {h.split(": ")[0] for h in hits} == {
+        "src/a.py", "src/b.py", "src/c.py", "src/d.py", "src/e.py", "src/f.py", "src/plus.py", "'-dash.py", "new line.py", "bin.dat", "latin.py"}
+    assert {h.split(": ")[1] for h in hits} == {"PYTEST_CURRENT_TEST", "BENCH_RESULT_DIGEST", "BENCH_TRACE_LINES", "os._exit", "sys.argv", BENCH}
+    assert hits == bg.benchmark_aware_tokens(repo, base, head, BENCH) and all(h.isascii() and "\n" not in h for h in hits)
+
+
+def test_tripwire_ignores_context_removed_lines_and_deleted_files(tmp_path):
+    repo = make_repo(tmp_path)
+    base = commit(repo, {"old.py": "sys.argv\nkeep = 1\n", "gone.py": "os._exit\n", "chg.py": "sys.argv\nz = 1\n"})
+    head = commit(repo, {"old.py": "sys.argv\nkeep = 1\nnew = 2\n", "gone.py": None, "chg.py": "z = 1\n"})
+    assert bg.benchmark_aware_tokens(repo, base, head, BENCH) == []
+
+
+def test_tripwire_is_bounded_and_fails_closed(two, monkeypatch):
+    repo, base = two
+    head = commit(repo, {"a.py": "x\n" * 50, "b.py": "y\n"})
+    for name, value in (("_MAX_TRIPWIRE_FILES", 1), ("_TRIPWIRE_FILE_CAP", 20), ("_TRIPWIRE_TOTAL_CAP", 5)):
+        monkeypatch.setattr(bg, name, value)
+        with pytest.raises(Err) as info:
+            bg.benchmark_aware_tokens(repo, base, head, BENCH)
+        assert info.value.code == "TRIPWIRE_LIMIT", name
+        monkeypatch.undo()
+    with pytest.raises(Err):
+        bg.benchmark_aware_tokens(repo, base, head, "../x.py")
+    with pytest.raises(Err):
+        bg.benchmark_aware_tokens(repo, base, "1" * 40, BENCH)
+
+
+# ---------------------------------------------------------------------------
+# snapshot_venv and venv_addition_violations
+# ---------------------------------------------------------------------------
+
+def fake_venv(tmp_path, files=None):
+    """A venv without an interpreter: pyvenv.cfg, bin/, lib/python3.12/site-packages (and lib64 -> lib)."""
+    venv = Path(tempfile.mkdtemp(dir=tmp_path, prefix="venv-"))
+    (venv / "pyvenv.cfg").write_text("home = /usr/bin\n")
+    (venv / "bin").mkdir()
+    site = venv / "lib/python3.12/site-packages"
+    site.mkdir(parents=True)
+    (venv / "lib64").symlink_to("lib")
+    populate(site, files or {})
+    return venv, site
+
+
+def populate(site: Path, files: dict):
+    for name, value in files.items():
+        if isinstance(value, tuple) and value[0] == "link":
+            (site / name).symlink_to(value[1])
+        elif isinstance(value, tuple):
+            (site / name).mkdir()
+        else:
+            (site / name).write_bytes(value.encode() if isinstance(value, str) else value)
+
+
+@pytest.fixture
+def export_dir(tmp_path):
+    export = tmp_path / "export"
+    (export / "src").mkdir(parents=True)
+    (export / "linkdir").symlink_to(tmp_path)
+    (tmp_path / "export-evil").mkdir()
+    return export
+
+
+def violations(tmp_path, export, added, pre=None):
+    venv, site = fake_venv(tmp_path, pre)
+    before = bg.snapshot_venv(venv / "bin")
+    populate(site, added)
+    return bg.venv_addition_violations(before, bg.snapshot_venv(venv / "bin"), export)
+
+
+def editable_forms(export):
+    src = f"{export}/src"
+    return {
+        "setuptools finder": {"__editable__.proj-0.1.pth": "import __editable___proj_0_1_finder; __editable___proj_0_1_finder.install()\n"},
+        "setuptools path": {"__editable__.proj.pth": f"{src}\n"},
+        "hatchling path": {"_proj.pth": f"{src}\n"},
+        "hatchling impl import": {"_editable_impl_proj.pth": "import _editable_impl_proj\n"},
+        "hatchling impl path": {"_editable_impl_proj.pth": f"{src}\n"},
+        "pdm-backend": {"_editable_impl_proj.pth": f"# pdm\n{src}\n"},
+        "flit-core": {"proj.pth": f"{src}\n"},
+        "poetry-core": {"proj.pth": f"{export}\n{src}\n"},
+        "crlf, bom, blank lines": {"proj.pth": "﻿\r\n" + f"{src}\r\n\r\n"},
+    }
+
+
+def test_honest_editable_installs_are_accepted(tmp_path, export_dir):
+    for label, added in editable_forms(export_dir).items():
+        assert violations(tmp_path, export_dir, added) == [], label
+
+
+@pytest.mark.parametrize("added, expected", [
+    ({"a1_coverage.pth": "import coverage; coverage.process_startup()\n"}, ["PTH_IMPORT_LINE"]),
+    ({"x.pth": "import os; os._exit(0)\n"}, ["PTH_IMPORT_LINE"]),
+    ({"x.pth": "import\tos\n"}, ["PTH_IMPORT_LINE"]),
+    ({"x.pth": "import __editable___p_finder; evil()\n"}, ["PTH_IMPORT_LINE"]),
+    ({"x.pth": "import __editable___p_finder; __editable___q_finder.install()\n"}, ["PTH_IMPORT_LINE"]),
+    ({"x.pth": "import _editable_impl_p; evil()\n"}, ["PTH_IMPORT_LINE"]),
+    ({"x.pth": "@SRC@\nimport os\n"}, ["PTH_IMPORT_LINE"]),
+    ({"x.pth": "/etc\n"}, ["PTH_PATH_OUTSIDE_EXPORT"]),
+    ({"x.pth": "@EXPORT@/../other\n"}, ["PTH_PATH_OUTSIDE_EXPORT"]),
+    ({"x.pth": "@EXPORT@/src/../../export-evil\n"}, ["PTH_PATH_OUTSIDE_EXPORT"]),
+    ({"x.pth": "@EXPORT@-evil\n"}, ["PTH_PATH_OUTSIDE_EXPORT"]),
+    ({"x.pth": "@EXPORT@/linkdir\n"}, ["PTH_PATH_OUTSIDE_EXPORT"]),
+    ({"x.pth": "relative/dir\n"}, ["PTH_PATH_OUTSIDE_EXPORT"]),
+    ({"x.pth": "@SRC@/../src\n"}, ["PTH_PATH_OUTSIDE_EXPORT"]),  # resolves inside, but `..` is never an honest install's line
+    ({"x.pth": " import os\n"}, ["PTH_PATH_OUTSIDE_EXPORT"]),
+    ({"x.pth": "importlib\n"}, ["PTH_PATH_OUTSIDE_EXPORT"]),
+    ({"x.pth": "/etc\rimport os\r"}, ["PTH_IMPORT_LINE", "PTH_PATH_OUTSIDE_EXPORT"]),
+    ({"x.pth": "@SRC@; import os\n"}, ["PTH_PATH_NOT_DIRECTORY"]),
+    ({"x.pth": "@EXPORT@/missing\n"}, ["PTH_PATH_NOT_DIRECTORY"]),
+    ({"x.pth": "@SRC@\0\n"}, ["PTH_BAD_ENCODING"]),
+    ({"x.pth": b"\xff\xfe/x\n"}, ["PTH_BAD_ENCODING"]),
+    ({"x.pth": "#" * 5000}, ["PTH_UNREADABLE"]),
+    ({"evil.pth": ("link", "/etc/hosts")}, ["VENV_ENTRY_NOT_REGULAR"]),
+    ({"evil.pth": ("dir",)}, ["VENV_ENTRY_NOT_REGULAR"]),
+    ({"sitecustomize.py": "print(1)\n"}, ["STARTUP_FILE_ADDED"]),
+    ({"usercustomize.py": ""}, ["STARTUP_FILE_ADDED"]),
+    ({"SiteCustomize.PY": ""}, ["STARTUP_FILE_ADDED"]),
+    ({"sitecustomize": ("dir",)}, ["STARTUP_FILE_ADDED"]),
+    ({"sitecustomize.cpython-312.so": "x"}, ["STARTUP_FILE_ADDED"]),
+])
+def test_hostile_venv_additions_are_rejected_with_stable_codes(tmp_path, export_dir, added, expected):
+    added = {k: v.replace("@SRC@", f"{export_dir}/src").replace("@EXPORT@", str(export_dir)) if isinstance(v, str) else v
+             for k, v in added.items()}
+    assert violations(tmp_path, export_dir, added) == expected
+
+
+def test_a_relative_line_is_rejected_even_when_it_resolves_inside_the_export(tmp_path, export_dir, monkeypatch):
+    monkeypatch.chdir(export_dir)  # `src` relative to the cwd IS a directory inside the export
+    assert violations(tmp_path, export_dir, {"x.pth": "src\n"}) == ["PTH_PATH_OUTSIDE_EXPORT"]
+
+
+def test_only_new_lines_are_judged_and_removals_are_ignored(tmp_path, export_dir):
+    venv, site = fake_venv(tmp_path, {"base.pth": "import legacy_hook\n", "gone.pth": "import x\n"})
+    before = bg.snapshot_venv(venv / "bin")
+    (site / "gone.pth").unlink()
+    assert bg.venv_addition_violations(before, bg.snapshot_venv(venv / "bin"), export_dir) == []
+    (site / "base.pth").write_text(f"import legacy_hook\n{export_dir}/src\n")  # an honest line appended
+    assert bg.venv_addition_violations(before, bg.snapshot_venv(venv / "bin"), export_dir) == []
+    (site / "base.pth").write_text("import legacy_hook\nimport evil\n")  # a new hostile line in an existing file
+    assert bg.venv_addition_violations(before, bg.snapshot_venv(venv / "bin"), export_dir) == ["PTH_IMPORT_LINE"]
+
+
+@pytest.mark.parametrize("bad", [None, {}, [], {"format": 2, "files": {}}, {"format": 1, "files": []}, {"format": 1},
+                                 {"format": 1, "files": {"a": 1}}, {"format": 1, "files": {"a": {"kind": "x"}}}])
+def test_invalid_snapshots_are_a_violation_not_a_crash(export_dir, bad):
+    good = {"format": 1, "files": {}}
+    assert bg.venv_addition_violations(bad, good, export_dir) == ["SNAPSHOT_INVALID"]
+    assert bg.venv_addition_violations(good, bad, export_dir) == ["SNAPSHOT_INVALID"]
+    assert bg.venv_addition_violations(good, good, export_dir) == []
+
+
+def test_snapshot_format_and_cli_round_trip(tmp_path, capsys):
+    venv, _ = fake_venv(tmp_path, {"a.pth": "/x\n", "link.pth": ("link", "/etc/hosts"), "notwatched.txt": "x", "big.pth": "#" * 5000})
+    out = tmp_path / "snap.json"
+    assert bg.main(["snapshot-venv", "--bin", str(venv / "bin"), "--out", str(out)]) == 0
+    snap = bg.load_snapshot(out)
+    assert snap == bg.snapshot_venv(venv / "bin") and snap["format"] == 1
+    key = "lib/python3.12/site-packages/"  # lib64 -> lib is deduplicated: one set of keys
+    assert sorted(snap["files"]) == [key + "a.pth", key + "big.pth", key + "link.pth"]
+    assert snap["files"][key + "a.pth"] == {"kind": "file", "size": 3, "sha256": bg.hashlib.sha256(b"/x\n").hexdigest(), "hex": b"/x\n".hex()}
+    assert snap["files"][key + "big.pth"]["hex"] is None and snap["files"][key + "link.pth"] == {"kind": "symlink", "target": "/etc/hosts"}
+    assert capsys.readouterr().out == ""
+
+
+def test_snapshot_fails_closed(tmp_path, monkeypatch, capsys):
+    venv, _ = fake_venv(tmp_path)
+    (venv / "pyvenv.cfg").unlink()
+    with pytest.raises(Err) as info:
+        bg.snapshot_venv(venv / "bin")
+    assert info.value.code == "SNAPSHOT_FAILED"
+    assert bg.main(["snapshot-venv", "--bin", str(venv / "bin"), "--out", str(tmp_path / "no.json")]) == 2
+    assert not (tmp_path / "no.json").exists() and capsys.readouterr().out == ""
+    escaping, _ = fake_venv(tmp_path)  # a site-packages directory that is a symlink out of the venv
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (escaping / "lib/python3.12/site-packages").rmdir()
+    (escaping / "lib/python3.12/site-packages").symlink_to(elsewhere)
+    with pytest.raises(Err):
+        bg.snapshot_venv(escaping / "bin")
+    crowded, site = fake_venv(tmp_path, {"a.pth": "", "b.pth": ""})
+    monkeypatch.setattr(bg, "_MAX_SNAPSHOT_ENTRIES", 1)
+    with pytest.raises(Err):
+        bg.snapshot_venv(crowded / "bin")
+    monkeypatch.undo()
+    if not IS_ROOT:
+        (site / "a.pth").chmod(0)
+        with pytest.raises(Err):
+            bg.snapshot_venv(crowded / "bin")  # unreadable file => fail closed
+    for text in ("", "{", "[]x"):
+        (tmp_path / "bad.json").write_text(text)
+        with pytest.raises(Err):
+            bg.load_snapshot(tmp_path / "bad.json")
+    with pytest.raises(Err):
+        bg.load_snapshot(tmp_path / "missing.json")
+
+
+# ---------------------------------------------------------------------------
 # CLI and vocabularies
 # ---------------------------------------------------------------------------
 
@@ -561,7 +973,7 @@ def test_export_cli_prints_the_path_records_the_owner_and_rejects_bad_usage(repo
     cap = capsys.readouterr()
     assert cap.out == dest() + "\n" and cap.err == ""
     assert json.loads((Path(dest()).parent / bg._MARKER_NAME).read_text())["pid"] == 1
-    for argv in (["export"], ["export", "--repo", "r", "--commit", sha], ["cleanup", "--root"]):
+    for argv in (["export"], ["export", "--repo", "r", "--commit", sha], ["snapshot-venv", "--bin", "b"], ["cleanup", "--root"]):
         assert bg.main(argv) == 2
 
 
@@ -570,10 +982,15 @@ def test_code_vocabularies_are_pinned():
         "EXPORT_PATH_REJECTED EXPORT_PATH_COLLISION EXPORT_ENTRY_MODE EXPORT_TOO_LARGE EXPORT_SYMLINK_ESCAPES EXPORT_VERIFY_FAILED".split())
     assert bg.CLEANUP_CODES == tuple(
         "REMOVED ABSENT NOT_UNDER_FIXED_PARENT NOT_A_DIRECTORY NOT_OWNED MARKER_MISSING MARKER_INVALID OWNER_ALIVE REMOVE_FAILED".split())
+    assert bg.VENV_VIOLATION_CODES == tuple(
+        """SNAPSHOT_INVALID PTH_IMPORT_LINE PTH_PATH_OUTSIDE_EXPORT PTH_PATH_NOT_DIRECTORY PTH_BAD_ENCODING PTH_UNREADABLE
+        VENV_ENTRY_NOT_REGULAR STARTUP_FILE_ADDED""".split())
     assert bg.ERROR_CODES == tuple(
         """COMMIT_INVALID COMMIT_NOT_FOUND REPO_UNREADABLE DEST_REJECTED GIT_FAILED GIT_TIMEOUT GIT_OUTPUT_TOO_LARGE TREE_UNREADABLE
-        TREE_TOO_LARGE SEAL_FAILED MARKER_MISSING MARKER_INVALID""".split())
-    for vocabulary in (bg.EXPORT_REFUSAL_CODES, bg.CLEANUP_CODES, bg.ERROR_CODES):
+        TREE_TOO_LARGE SEAL_FAILED SNAPSHOT_FAILED TRIPWIRE_LIMIT PROTECTED_DIFF_FAILED MARKER_MISSING MARKER_INVALID
+        OVERLAY_REJECTED BENCHMARK_MODIFIED""".split())
+    assert bg.BENCHMARK_AWARE_CODE == "BENCHMARK_AWARE_CODE"
+    for vocabulary in (bg.EXPORT_REFUSAL_CODES, bg.CLEANUP_CODES, bg.VENV_VIOLATION_CODES, bg.ERROR_CODES):
         assert len(set(vocabulary)) == len(vocabulary)
         assert all(code.isascii() and code.replace("_", "").isalpha() and bg.escape_diagnostic(code) == code for code in vocabulary)
 

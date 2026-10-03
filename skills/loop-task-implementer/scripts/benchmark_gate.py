@@ -4,11 +4,9 @@
 **This module is not wired into anything yet.** It is delivered by a series of six PRs for gap-backlog ticket
 C4 (C4a core, C4b lint, C4c exports, C4d harness, C4e classifier/docs, C4f wiring); no workflow file,
 lifecycle validator or other script calls it until C4f. So far it holds the pure, string-level and arithmetic
-pieces (``validate``, ``lint``) and the first half of C4c (C4c-1): ``export``, ``cleanup`` and the library
-functions ``compare`` will call (``export_tree``, ``hash_tree``, ``seal_tree``, ``unseal_tree``, ``cleanup_root``,
-``claim_root``). The second half (C4c-2) adds the benchmark overlay, the protected-path diff, the token tripwire and
-the venv ``.pth`` check with ``snapshot-venv``; C4d adds measurement, the trace, ``compare`` and ``run-once``, C4e
-the classifier and docs, C4f the workflow wiring. Specification (revision 5, the converged result of four review
+pieces (``validate``, ``lint``) and the filesystem/git pieces of C4c (``export``, ``snapshot-venv``,
+``cleanup`` and the library functions ``compare`` will call); C4d adds measurement, the trace, ``compare`` and
+``run-once``, C4e the classifier and docs, C4f the workflow wiring. Specification (revision 5, the converged result of four review
 rounds): ``docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md`` (APIs table,
 Data model, Capacity, Threat model). This docstring states each function's own contract and the reason each
 rule exists; it does not re-derive the design.
@@ -31,6 +29,7 @@ import ast
 import codecs
 import dis
 import hashlib
+import importlib.util
 import io
 import json
 import keyword
@@ -50,6 +49,7 @@ import unicodedata
 import warnings
 from fractions import Fraction
 from pathlib import Path
+from typing import Literal
 
 # ---------------------------------------------------------------------------
 # benchmark_symbol_from_location
@@ -844,13 +844,15 @@ EXPORT_REFUSAL_CODES = (
 )
 ERROR_CODES = (
     "COMMIT_INVALID", "COMMIT_NOT_FOUND", "REPO_UNREADABLE", "DEST_REJECTED", "GIT_FAILED", "GIT_TIMEOUT",
-    "GIT_OUTPUT_TOO_LARGE", "TREE_UNREADABLE", "TREE_TOO_LARGE", "SEAL_FAILED", "MARKER_MISSING", "MARKER_INVALID",
+    "GIT_OUTPUT_TOO_LARGE", "TREE_UNREADABLE", "TREE_TOO_LARGE", "SEAL_FAILED", "SNAPSHOT_FAILED", "TRIPWIRE_LIMIT",
+    "PROTECTED_DIFF_FAILED", "MARKER_MISSING", "MARKER_INVALID", "OVERLAY_REJECTED", "BENCHMARK_MODIFIED",
 )
 CLEANUP_CODES = (
     "REMOVED", "ABSENT",        # success (exit 0); the rest are refusals (exit 1)
     "NOT_UNDER_FIXED_PARENT", "NOT_A_DIRECTORY", "NOT_OWNED", "MARKER_MISSING", "MARKER_INVALID", "OWNER_ALIVE",
     "REMOVE_FAILED",
 )
+BENCHMARK_AWARE_CODE = "BENCHMARK_AWARE_CODE"  # the `compare` result code a token-tripwire hit maps to
 
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}", re.ASCII)
 _EMPTY_TREE = {  # git knows the empty tree without it being in the object store
@@ -1402,9 +1404,378 @@ def export_tree(repo: str | os.PathLike, commit: str, dest: str | os.PathLike, *
     an EMPTY directory and an LFS pointer stays pointer text (both named by the CLI on stderr). A symlink is written as a
     symlink and the export is REFUSED if any resolves outside `dest` (stricter than "never follow": a legitimate absolute
     symlink fails closed); unsafe or colliding paths and oversize trees are refused too. A sidecar `<leaf>.export.json`
-    beside `dest` records the commit so the benchmark overlay (C4c-2) can bind its `base_ref_commit` to this export. On failure `dest`
+    beside `dest` records the commit so `overlay_benchmark_file` can bind `base_ref_commit` to it. On failure `dest`
     (and a root this call created) is removed."""
     return _export(repo, commit, dest, owner_pid)[0]
+
+
+# --- overlay_benchmark_file ---------------------------------------------------------------------------------------
+
+_validate_task_target_module = None
+
+
+def _load_validate_task_target():
+    """Load the sibling `validate_task_target.py` by path (scripts/ ships wholesale but is not a package)."""
+    global _validate_task_target_module
+    if _validate_task_target_module is None:
+        name = "_bg_validate_task_target"
+        spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name("validate_task_target.py"))
+        try:
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[name] = module
+            spec.loader.exec_module(module)
+        except Exception as exc:
+            sys.modules.pop(name, None)
+            raise BenchmarkGateError("OVERLAY_REJECTED", "cannot load validate_task_target") from exc
+        _validate_task_target_module = module
+    return _validate_task_target_module
+
+
+def _exact_entry(root: str, rel: str) -> os.stat_result | None:
+    """`lstat` of `root/rel`, found by listing each directory and comparing names EXACTLY (a case-folding filesystem
+    must not report `Bench_X.py` present when only `bench_x.py` is); `None` when absent; a non-directory parent raises."""
+    current = root
+    parts = rel.split("/")
+    for index, part in enumerate(parts):
+        if part not in os.listdir(current):
+            return None
+        current = os.path.join(current, part)
+        st = os.lstat(current)
+        if index < len(parts) - 1 and not stat.S_ISDIR(st.st_mode):
+            raise BenchmarkGateError("OVERLAY_REJECTED", "a parent of the benchmark is a symlink or not a directory")
+    return st
+
+
+def overlay_benchmark_file(
+    base_root: str | os.PathLike, head_root: str | os.PathLike, base_ref_commit: str, path: str
+) -> Literal["PRE_EXISTING", "BUILDER_AUTHORED"]:
+    """Make the head's benchmark exist in the base export and say where it came from.
+
+    `path` must pass `_benchmark_path_ok` and the merged `validate_task_target(head_root, path)`; the head file must be a
+    regular non-symlink file of at most 16 KiB with no symlinked parent. Pre-existence is decided from the BASE EXPORT's
+    own listing (exact names), as the design row says; `base_ref_commit` is bound to that export through the sidecar
+    `export_tree` wrote (a mismatch is `OVERLAY_REJECTED`), so the listing is provably that commit's. Present: bytes must
+    equal head's else `BENCHMARK_MODIFIED`, origin `PRE_EXISTING`. Absent: parents are created inside `base_root` only, the
+    file is written `O_EXCL`/`O_NOFOLLOW` mode 0644, origin `BUILDER_AUTHORED`. Residual: a build hook that ran during the
+    base install could have created the file and reads as `PRE_EXISTING`; the Orchestrator re-derives the origin with
+    `git cat-file -e <base>:<path>`. Raises `BenchmarkGateError` (`OVERLAY_REJECTED`, `BENCHMARK_MODIFIED`, `COMMIT_INVALID`)."""
+    _check_commits(base_ref_commit)
+
+    def reject(why: str) -> BenchmarkGateError:
+        return BenchmarkGateError("OVERLAY_REJECTED", why)
+
+    if type(path) is not str or not _benchmark_path_ok(path):
+        raise reject("path is not an acceptable benchmark path")
+    try:
+        base, head = os.path.realpath(os.fspath(base_root)), os.path.realpath(os.fspath(head_root))
+        if (base == head or not os.path.isdir(base) or not os.path.isdir(head)
+                or head.startswith(base + os.sep) or base.startswith(head + os.sep)):
+            raise reject("the two roots must be distinct, separate directories")
+        try:
+            sidecar = json.loads(_read_bounded(base + ".export.json", 4096, nofollow=True).decode("ascii"))
+        except (OSError, ValueError):
+            sidecar = None
+        if not isinstance(sidecar, dict) or sidecar.get("commit") != base_ref_commit:
+            raise reject("base_root is not an export of base_ref_commit")
+        if _load_validate_task_target().validate_task_target(head, path) is None:
+            raise reject("validate_task_target rejected the path")
+        head_stat = _exact_entry(head, path)
+        if head_stat is None or not stat.S_ISREG(head_stat.st_mode) or head_stat.st_size > _MAX_BENCHMARK_BYTES:
+            raise reject("head benchmark is missing, not a regular file, or over 16 KiB")
+        content = _read_bounded(os.path.join(head, path), _MAX_BENCHMARK_BYTES, nofollow=True)
+        base_stat = _exact_entry(base, path)
+        if base_stat is not None:
+            if not stat.S_ISREG(base_stat.st_mode):
+                raise reject("the base entry is not a regular file")
+            if _read_bounded(os.path.join(base, path), _MAX_BENCHMARK_BYTES, nofollow=True) != content:
+                raise BenchmarkGateError("BENCHMARK_MODIFIED", "the benchmark exists at base with different bytes")
+            return "PRE_EXISTING"
+        directory = base
+        for part in path.split("/")[:-1]:
+            directory = os.path.join(directory, part)
+            if not os.path.lexists(directory):
+                os.mkdir(directory, 0o755)
+            elif not stat.S_ISDIR(os.lstat(directory).st_mode):
+                raise reject("a parent of the benchmark is a symlink or not a directory")
+        target = os.path.join(base, path)
+        if os.path.realpath(target) != target:
+            raise reject("the target resolves outside base_root")
+        with os.fdopen(os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o644), "wb") as handle:
+            handle.write(content)
+            os.fchmod(handle.fileno(), 0o644)
+        return "BUILDER_AUTHORED"
+    except (OSError, ValueError) as exc:
+        raise reject(escape_diagnostic(str(exc), 120)) from exc
+
+
+# --- protected-path diff and token tripwire -----------------------------------------------------------------------
+
+_PROTECTED_BASENAMES = frozenset({
+    "conftest.py", "pytest.ini", "pyproject.toml", "setup.cfg", "setup.py", "tox.ini", "noxfile.py", "manifest.in",
+    "environment.yml", "poetry.lock", "uv.lock", "pdm.lock", "pylock.toml",
+})
+_STARTUP_STEMS = ("sitecustomize", "usercustomize")
+_MAX_DIFF_ENTRIES = 50_000
+_MAX_TRIPWIRE_FILES = 500
+_TRIPWIRE_FILE_CAP = 4 << 20
+_TRIPWIRE_TOTAL_CAP = 32 << 20
+_TRIPWIRE_TOKENS = (b"PYTEST_CURRENT_TEST", b"BENCH_RESULT_DIGEST", b"BENCH_TRACE_LINES", b"os._exit", b"sys.argv")
+
+
+def _is_protected(rel: str, benchmark_path: str, stdlib_names: frozenset[str]) -> bool:
+    """One changed path against the design's protected list, compared NFC-casefolded (a case-insensitive filesystem
+    makes `Conftest.PY` and `JSON.py` the same files)."""
+    folded = unicodedata.normalize("NFC", rel).casefold()
+    parts = folded.split("/")
+    base = parts[-1]
+    if (
+        base in _PROTECTED_BASENAMES
+        or base.endswith((".pth", ".pyc", ".in"))
+        or (base.startswith(("requirements", "constraints")) and base.endswith(".txt"))
+        or (len(parts) > 1 and parts[-2] == "requirements" and base.endswith(".txt"))
+        or base.startswith("pipfile")
+        or (base.startswith("pylock.") and base.endswith(".toml"))  # PEP 751 `pylock.<name>.toml` (beyond the list)
+        or "__pycache__" in parts
+        or any(part.startswith(_STARTUP_STEMS) and (i < len(parts) - 1 or part.endswith((".py", ".pyi", ".so", ".pyd")))
+               for i, part in enumerate(parts))
+    ):
+        return True
+    # Could shadow a standard-library module once installed: a module or package at the root or directly under `src/`
+    # (an editable install puts `src` on `sys.path`); `.so`/`.pyd` shadow too. `test` and `types` are stdlib names, so a
+    # top-level `test/` directory has every change under it protected, per the design.
+    importable = [(parts[0], len(parts) == 1)] + ([(parts[1], len(parts) == 2)] if parts[0] == "src" and len(parts) > 1 else [])
+    for name, is_file in importable:
+        stem, _, extension = name.partition(".")
+        if (is_file and extension.rpartition(".")[2] in ("py", "so", "pyd") and stem in stdlib_names) or (
+            not is_file and name in stdlib_names
+        ):
+            return True
+    return rel != benchmark_path and folded.startswith(posixpath.dirname(benchmark_path).casefold() + "/")
+
+
+def _changed_paths(git: "_PrivateGit", base_commit: str, head_commit: str) -> list[tuple[str, bytes]]:
+    git.require_commit(base_commit)
+    git.require_commit(head_commit)
+    raw = git.run("diff", "--name-status", "-z", "--no-renames", "--no-ext-diff", "--no-textconv", base_commit, head_commit, "--",
+                  cap=16 << 20)
+    fields = raw.split(b"\0")
+    if fields.pop() != b"" or len(fields) % 2 or len(fields) // 2 > _MAX_DIFF_ENTRIES:
+        raise BenchmarkGateError("PROTECTED_DIFF_FAILED", "unparseable or oversize diff output")
+    return [(fields[i].decode("ascii", "replace"), fields[i + 1]) for i in range(0, len(fields), 2)]
+
+
+def protected_path_changes(repo, base_commit: str, head_commit: str, benchmark_path: str) -> list[str]:
+    """Protected paths that differ between the two commits (the `compare` row's list); empty means none.
+
+    `git diff --name-status -z --no-renames` in a `_PrivateGit`: rename detection is OFF (moving `conftest.py` is a delete
+    plus an add), `-z` keeps spaces, newlines and non-ASCII intact, no external diff or textconv runs. Protected: any
+    `conftest.py`; any path component starting `sitecustomize`/`usercustomize`; `*.pth`, `*.pyc`, `*.in`, `__pycache__`;
+    `pytest.ini`, `pyproject.toml`, `setup.cfg`, `setup.py`, `tox.ini`, `noxfile.py`, `MANIFEST.in`, `requirements*.txt`,
+    `requirements/*.txt`, `constraints*.txt`, `environment.yml`, `Pipfile*`, `poetry.lock`, `uv.lock`, `pdm.lock`,
+    `pylock.toml`; a root-level or `src/`-level module or package named like a standard-library one; and any path under the
+    benchmark's directory other than the benchmark (descendants too, a deliberate widening: `from benchmarks.sub import x`
+    passes the lint). A path ADDED, MODIFIED, mode- or type-changed or DELETED counts (deleting a base `conftest.py` changes
+    what is collected; the design says "added or changed"). `benchmark_path` is a fourth argument the design's
+    three-argument signature lacks, needed for the directory rule. Returns unique paths sorted by bytes. Known false
+    positive, per the design: `test` and `types` are standard-library names, so a repository with a top-level `test/`
+    directory has every change under it protected."""
+    length = _check_commits(base_commit, head_commit)
+    if type(benchmark_path) is not str or not _benchmark_path_ok(benchmark_path):
+        raise BenchmarkGateError("PROTECTED_DIFF_FAILED", "benchmark_path is not an acceptable benchmark path")
+    stdlib = frozenset(name.casefold() for name in sys.stdlib_module_names)
+    with _PrivateGit(repo, length) as git:
+        changed = _changed_paths(git, base_commit, head_commit)
+    paths = (os.fsdecode(raw) for _, raw in sorted(changed, key=lambda item: item[1]))
+    return [path for path in paths if _is_protected(path, benchmark_path, stdlib)]
+
+
+def benchmark_aware_tokens(repo, base_commit: str, head_commit: str, benchmark_path: str) -> list[str]:
+    """Token tripwire: ADDED lines of every changed file other than the benchmark containing `PYTEST_CURRENT_TEST`,
+    `BENCH_RESULT_DIGEST`, `BENCH_TRACE_LINES`, `os._exit`, `sys.argv` or the benchmark's own path; `compare` maps a
+    non-empty result to `BENCHMARK_AWARE_CODE` (a match may be innocent, so the human sees the lines). Entries are
+    `"<path>: <token>: <line>"`, escaped and truncated.
+
+    One `git diff -a -U0` per changed file (`-a` forces a text diff of binary files, so they are scanned as bytes, not
+    skipped; `GIT_LITERAL_PATHSPECS` plus `--` make a `-`-prefixed name safe). Bytes are never decoded. Bounded and failing
+    closed: over 500 changed files, a diff over 4 MiB, or 32 MiB in total raises `TRIPWIRE_LIMIT`. Deleted files have no
+    added lines. A token split across lines or built at run time passes (a tripwire, not a proof)."""
+    length = _check_commits(base_commit, head_commit)
+    if type(benchmark_path) is not str or not _benchmark_path_ok(benchmark_path):
+        raise BenchmarkGateError("TRIPWIRE_LIMIT", "benchmark_path is not an acceptable benchmark path")
+    tokens = (*_TRIPWIRE_TOKENS, benchmark_path.encode("ascii"))
+    hits: list[str] = []
+    total = 0
+    with _PrivateGit(repo, length) as git:
+        changed = [(s, p) for s, p in _changed_paths(git, base_commit, head_commit)
+                   if not s.startswith("D") and os.fsdecode(p) != benchmark_path]
+        if len(changed) > _MAX_TRIPWIRE_FILES:
+            raise BenchmarkGateError("TRIPWIRE_LIMIT", f"more than {_MAX_TRIPWIRE_FILES} changed files")
+        for _, raw_path in sorted(changed, key=lambda item: item[1]):
+            try:
+                out = git.run("diff", "-a", "-U0", "--no-renames", "--no-ext-diff", "--no-textconv", "--no-color",
+                              base_commit, head_commit, "--", raw_path, cap=_TRIPWIRE_FILE_CAP)
+            except BenchmarkGateError as exc:
+                if exc.code != "GIT_OUTPUT_TOO_LARGE":
+                    raise
+                raise BenchmarkGateError("TRIPWIRE_LIMIT", "a file's diff is over 4 MiB") from exc
+            total += len(out)
+            if total > _TRIPWIRE_TOTAL_CAP:
+                raise BenchmarkGateError("TRIPWIRE_LIMIT", "the diffs total over 32 MiB")
+            in_hunk = False
+            for line in out.split(b"\n"):
+                if line.startswith(b"@@"):
+                    in_hunk = True
+                elif in_hunk and line.startswith(b"+"):
+                    hits += [f"{escape_diagnostic(os.fsdecode(raw_path), 120)}: {token.decode('ascii')}: "
+                             f"{escape_diagnostic(line[1:121].decode('ascii', 'replace'), 120)}" for token in tokens if token in line]
+    return hits
+
+
+# --- venv snapshot and the .pth / startup-file content check ------------------------------------------------------
+
+VENV_VIOLATION_CODES = (  # canonical order
+    "SNAPSHOT_INVALID",         # before or after is not a well-formed snapshot
+    "PTH_IMPORT_LINE",          # a new `import ...` line that is not a recognised editable-finder form
+    "PTH_PATH_OUTSIDE_EXPORT",  # a new path line that is relative, has `..`, or resolves outside the export
+    "PTH_PATH_NOT_DIRECTORY",   # a new path line that is not an existing directory (this includes `<path>; code`)
+    "PTH_BAD_ENCODING",         # a new .pth with a NUL byte or invalid UTF-8
+    "PTH_UNREADABLE",           # a new .pth whose content was too large to snapshot
+    "VENV_ENTRY_NOT_REGULAR",   # a new watched entry that is a symlink, directory or special file
+    "STARTUP_FILE_ADDED",       # a new or changed `sitecustomize*` / `usercustomize*` entry
+)
+_SNAPSHOT_CONTENT_CAP = 4096
+_MAX_SNAPSHOT_ENTRIES = 1000
+_EDITABLE_FINDER_RE = re.compile(r"import (__editable___\w+_finder); \1\.install\(\)", re.ASCII)
+_EDITABLE_IMPL_RE = re.compile(r"import _editable_impl_\w+", re.ASCII)
+
+
+def snapshot_venv(bin_dir: str | os.PathLike) -> dict:
+    """Snapshot the files of a venv that run code at interpreter start, executing nothing in it.
+
+    `bin_dir` is the venv's `bin` directory with `pyvenv.cfg` one level up. Format: `{"format": 1, "files": {<path
+    relative to the venv root>: <entry>}}`, an entry being `{"kind": "file", "size": n, "sha256": hex, "hex": <first 4096
+    bytes as hex, or null if larger>}`, `{"kind": "symlink", "target": text}`, `{"kind": "dir"}` or `{"kind": "other"}`.
+    Watched, in each `site-packages`: names ending `.pth` and names starting `sitecustomize` or `usercustomize`
+    (case-insensitive). Each `site-packages` must resolve inside the venv (`lib64 -> lib` is deduplicated). An unreadable
+    file or more than 1000 watched entries is `SNAPSHOT_FAILED` (fail closed)."""
+    try:
+        venv = os.path.realpath(os.path.dirname(os.path.abspath(os.fspath(bin_dir))))
+        if not stat.S_ISREG(os.lstat(os.path.join(venv, "pyvenv.cfg")).st_mode):
+            raise BenchmarkGateError("SNAPSHOT_FAILED", "pyvenv.cfg is not a regular file")
+        sites: list[str] = []
+        for lib in ("lib", "lib64", "Lib"):
+            lib_path = os.path.join(venv, lib)
+            if not os.path.isdir(lib_path):
+                continue
+            candidates = [os.path.join(lib_path, "site-packages")]
+            candidates += [os.path.join(lib_path, n, "site-packages") for n in sorted(os.listdir(lib_path)) if n.startswith("python")]
+            for candidate in filter(os.path.isdir, candidates):
+                real = os.path.realpath(candidate)
+                if not real.startswith(venv + os.sep):
+                    raise BenchmarkGateError("SNAPSHOT_FAILED", "a site-packages directory resolves outside the venv")
+                if not any(os.path.samefile(real, seen) for seen in sites):  # `lib64 -> lib`; `Lib` is `lib` on macOS
+                    sites.append(real)
+        files: dict[str, dict] = {}
+        for site in sorted(sites):
+            for name in sorted(os.listdir(site)):
+                if not (name.casefold().endswith(".pth") or name.casefold().startswith(_STARTUP_STEMS)):
+                    continue
+                if len(files) >= _MAX_SNAPSHOT_ENTRIES:
+                    raise BenchmarkGateError("SNAPSHOT_FAILED", "too many watched entries")
+                path = os.path.join(site, name)
+                st = os.lstat(path)
+                if stat.S_ISREG(st.st_mode):
+                    digest, head = _file_digest(path, st, _SNAPSHOT_CONTENT_CAP)
+                    entry = {"kind": "file", "size": st.st_size, "sha256": digest.hex(),
+                             "hex": head.hex() if st.st_size <= _SNAPSHOT_CONTENT_CAP else None}
+                elif stat.S_ISLNK(st.st_mode):
+                    entry = {"kind": "symlink", "target": os.readlink(path)}
+                else:
+                    entry = {"kind": "dir" if stat.S_ISDIR(st.st_mode) else "other"}
+                files[os.path.relpath(path, venv).replace(os.sep, "/")] = entry
+    except OSError as exc:
+        raise BenchmarkGateError("SNAPSHOT_FAILED", str(exc)) from exc
+    return {"format": 1, "files": files}
+
+
+def load_snapshot(path: str | os.PathLike) -> dict:
+    """Read a `snapshot-venv` file (regular file, at most 16 MiB). `SNAPSHOT_FAILED` if unreadable, oversize or not JSON;
+    structural validation is `venv_addition_violations`'s job."""
+    try:
+        raw = _read_bounded(os.fspath(path), 16 << 20)
+        if len(raw) > 16 << 20:
+            raise ValueError("snapshot too large")
+        return json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError, RecursionError) as exc:
+        raise BenchmarkGateError("SNAPSHOT_FAILED", escape_diagnostic(str(exc), 120)) from exc
+
+
+def _pth_lines(entry: object) -> list[str] | None:
+    """The lines of a snapshot `.pth` entry as `site.py` splits them, or `None` without usable text (NUL, bad UTF-8)."""
+    try:
+        text = bytes.fromhex(entry["hex"]).decode("utf-8-sig")  # site.py reads .pth files as utf-8-sig
+    except (KeyError, TypeError, ValueError):
+        return None
+    return None if "\0" in text else re.split(r"\r\n|\r|\n", text)
+
+
+def venv_addition_violations(before: object, after: object, export_root: str | os.PathLike) -> list[str]:
+    """Judge what the project install added to a venv; return `VENV_VIOLATION_CODES` (empty means acceptable).
+
+    `before` is the `snapshot_venv` taken after the venv was created and BEFORE the install, `after` one taken now,
+    `export_root` this side's export. A new or changed watched entry is judged by CONTENT (revision 4's filename allowlist
+    rejected hatchling, pdm, flit and poetry editable installs): `sitecustomize*`/`usercustomize*` is always a violation; a
+    symlink, directory or special file is a violation; a `.pth` must be UTF-8 without NUL, and each NEW line (blank lines
+    and `#` comments ignored, as `site.py` does) must be an ABSOLUTE path without `..` whose real path is an existing
+    directory inside `export_root`, or an editable-finder line, `import __editable___<pkg>_finder;
+    __editable___<pkg>_finder.install()` (setuptools) or `import _editable_impl_<pkg>`. Any other line `site.py` would execute
+    (`import ` or `import<TAB>`; `a1_coverage.pth` from pytest-cov) is rejected, as is `<path>; code` (not a directory).
+    Removed entries are ignored. Known over-rejection: setuptools' `distutils-precedence.pth` (an import line) fails if a
+    dependency pulls setuptools in; the design lists no exemption. Residual: code reached by other means (a build backend's own
+    hooks) is outside every in-process control."""
+    def files(snapshot: object) -> dict | None:
+        table = snapshot.get("files") if isinstance(snapshot, dict) and snapshot.get("format") == 1 else None
+        ok = isinstance(table, dict) and all(
+            isinstance(k, str) and isinstance(v, dict) and v.get("kind") in ("file", "symlink", "dir", "other") for k, v in table.items()
+        )
+        return table if ok else None
+
+    old, new = files(before), files(after)
+    if old is None or new is None:
+        return ["SNAPSHOT_INVALID"]
+    found: set[str] = set()
+    export_real = os.path.realpath(os.fspath(export_root))
+    for key, entry in new.items():
+        if old.get(key) == entry:
+            continue
+        if key.rsplit("/", 1)[-1].casefold().startswith(_STARTUP_STEMS):
+            found.add("STARTUP_FILE_ADDED")
+        elif entry["kind"] != "file":
+            found.add("VENV_ENTRY_NOT_REGULAR")
+        elif not isinstance(entry.get("hex"), str):
+            found.add("PTH_UNREADABLE")
+        elif (lines := _pth_lines(entry)) is None:
+            found.add("PTH_BAD_ENCODING")
+        else:
+            known = set(_pth_lines(old[key]) or []) if old.get(key, {}).get("kind") == "file" else set()
+            for line in (raw.rstrip() for raw in lines):
+                if not line or line.startswith("#") or line in known:
+                    continue
+                if line.startswith(("import ", "import\t")):
+                    if _EDITABLE_FINDER_RE.fullmatch(line) is None and _EDITABLE_IMPL_RE.fullmatch(line) is None:
+                        found.add("PTH_IMPORT_LINE")
+                    continue
+                try:
+                    real = os.path.realpath(line)
+                except (OSError, ValueError):
+                    real = ""
+                if not os.path.isabs(line) or ".." in line.replace("\\", "/").split("/") or not (
+                    real == export_real or real.startswith(export_real + os.sep)
+                ):
+                    found.add("PTH_PATH_OUTSIDE_EXPORT")
+                elif not os.path.isdir(real):
+                    found.add("PTH_PATH_NOT_DIRECTORY")
+    return sorted(found, key=VENV_VIOLATION_CODES.index)
 
 
 # ---------------------------------------------------------------------------
@@ -1549,6 +1920,18 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_snapshot_venv(args: argparse.Namespace) -> int:
+    """Write ``snapshot_venv(--bin)`` to ``--out`` (atomically). Exit 0, or 2 on any failure (fail closed)."""
+    try:
+        _write_json_atomic(args.out, snapshot_venv(args.bin))
+    except BenchmarkGateError as exc:
+        return _fail(exc)
+    except (OSError, ValueError) as exc:
+        print(f"usage error: cannot snapshot: {escape_diagnostic(str(exc), 200)}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def _cmd_cleanup(args: argparse.Namespace) -> int:
     """Remove one dispatch-unique root. The result code is printed on stdout: exit 0 for ``REMOVED``/``ABSENT``, 1
     for a refusal (``CLEANUP_CODES``)."""
@@ -1558,10 +1941,10 @@ def _cmd_cleanup(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point: ``validate`` (C4a), ``lint`` (C4b), ``export`` and ``cleanup`` (C4c-1). Later
-    PRs add ``snapshot-venv`` (C4c-2), ``compare`` and ``run-once`` (C4d) by adding a subparser with ``set_defaults(func=...)``. There is no catch-all
+    """CLI entry point: ``validate`` (C4a), ``lint`` (C4b), ``export``, ``snapshot-venv`` and ``cleanup`` (C4c). Later
+    PRs add ``compare`` and ``run-once`` by adding a subparser with ``set_defaults(func=...)``. There is no catch-all
     here on purpose: C4d owns the exit-code contract for a crash."""
-    parser = argparse.ArgumentParser(prog="benchmark_gate.py", description="Benchmark gate (C4a-C4c-1).")
+    parser = argparse.ArgumentParser(prog="benchmark_gate.py", description="Benchmark gate (C4a-C4c).")
     sub = parser.add_subparsers(dest="command", required=True)
     validate = sub.add_parser("validate", help="validate specialist_inputs.benchmark_gate")
     validate.add_argument("--specialist-inputs", required=True, metavar="FILE")
@@ -1578,6 +1961,10 @@ def main(argv: list[str] | None = None) -> int:
     export.add_argument("--dest", required=True, metavar="DIR", help="<fixed parent>/<root>/<leaf>; must not exist")
     export.add_argument("--owner-pid", type=int, metavar="PID", help="pid recorded in the root's marker (default: this process)")
     export.set_defaults(func=_cmd_export)
+    snap = sub.add_parser("snapshot-venv", help="snapshot a venv's .pth and startup files (run BEFORE the project install)")
+    snap.add_argument("--bin", required=True, metavar="DIR")
+    snap.add_argument("--out", required=True, metavar="FILE")
+    snap.set_defaults(func=_cmd_snapshot_venv)
     cleanup = sub.add_parser("cleanup", help="remove a dispatch-unique root (exit 0 removed/absent, 1 refused)")
     cleanup.add_argument("--root", required=True, metavar="DIR")
     cleanup.set_defaults(func=_cmd_cleanup)
