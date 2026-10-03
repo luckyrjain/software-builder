@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Validation and statistics core of the performance-review -> loop-task-implementer benchmark gate (Epic C, C4a).
+"""Validation, lint and statistics core of the performance-review -> loop-task-implementer benchmark gate (Epic C).
 
-**This module is not wired into anything yet.** It is the first of a series of six PRs delivering gap-backlog
-ticket C4 (C4a core, C4b lint, C4c exports, C4d harness, C4e classifier/docs, C4f wiring); no workflow file,
-lifecycle validator or other script calls it until C4f. C4a ships only the pure, string-level and
-arithmetic pieces plus a ``validate`` CLI. Specification (revision 5, the converged result of four review
+**This module is not wired into anything yet.** It is delivered by a series of six PRs for gap-backlog ticket
+C4 (C4a core, C4b lint, C4c exports, C4d harness, C4e classifier/docs, C4f wiring); no workflow file,
+lifecycle validator or other script calls it until C4f, and the ``lint`` subcommand added by C4b is called by
+nothing until C4d/C4e/C4f. So far it holds only the pure, string-level and arithmetic pieces plus the
+``validate`` and ``lint`` CLIs. Specification (revision 5, the converged result of four review
 rounds): ``docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md`` (APIs table,
 Data model, Capacity, Threat model). This docstring states each function's own contract and the reason each
 rule exists; it does not re-derive the design.
@@ -21,12 +22,21 @@ repo-root packages, and nothing platform-specific happens at import time (Window
 from __future__ import annotations
 
 import argparse
+import ast
+import codecs
+import dis
 import hashlib
+import io
 import json
 import math
+import os
 import posixpath
 import re
+import stat
 import sys
+import tokenize
+import types
+import warnings
 from fractions import Fraction
 from pathlib import Path
 
@@ -34,30 +44,35 @@ from pathlib import Path
 # benchmark_symbol_from_location
 # ---------------------------------------------------------------------------
 
-_LINE_TAIL_RE = re.compile(r"(?::\d+(?::\d+)?|#L\d+| L\d+)\Z")
+# ``re.ASCII``: without it ``\d`` also matches Arabic-Indic and other Unicode digits, so such a tail would strip.
+_LINE_TAIL_RE = re.compile(r"(?::\d+(?::\d+)?|#L\d+| L\d+)\Z", re.ASCII)
 _SYMBOL_RE = re.compile(r"[A-Za-z_]\w*", re.ASCII)
 _SYMBOL_DENYLIST = frozenset(
     {"print", "hashlib", "sha256", "main", "data", "sort", "load", "list", "item", "time", "test", "bench", "run", "get", "set"}
 )
-_SYMBOL_BAD_NAMES = frozenset({"__init__", "__main__"})
 # A bare ``a.b`` with no ``/`` is ambiguous between a dotted symbol (``OrderService.list_orders``) and a file
 # (``orders.js``); only these extensions are treated as files in that ambiguous case. With a ``/`` any
 # extension means a file.
 _KNOWN_FILE_EXTENSIONS = frozenset(
-    {"js", "jsx", "ts", "tsx", "pyi", "pyc", "go", "rs", "java", "kt", "rb", "php", "c", "h", "cc", "cpp", "cs",
-     "sql", "sh", "md", "json", "yaml", "yml", "toml", "txt", "html", "css"}
+    {"js", "jsx", "ts", "tsx", "pyi", "pyc", "pyw", "pyx", "pxd", "go", "rs", "java", "kt", "rb", "php", "c", "h",
+     "cc", "cpp", "cs", "scala", "swift", "lua", "dart", "sql", "sh", "md", "json", "yaml", "yml", "toml", "txt",
+     "html", "css"}
 )
 
 
 def _valid_symbol(name: object) -> bool:
     """True iff ``name`` is an ASCII identifier of 3 to 64 characters that the lint's own required elements
     or trivial builtins could not satisfy by accident. ``fullmatch`` (not ``$``) so a trailing newline fails.
-    Replaces revision 3's 4-character rule, which excluded real symbols (``fib``, ``api``) yet admitted ``main``."""
+    Replaces revision 3's 4-character rule, which excluded real symbols (``fib``, ``api``) yet admitted ``main``.
+
+    Beyond the design's 15 denied names, EVERY dunder is rejected (the design named only ``__init__`` and
+    ``__main__``): the lint rejects a dunder as a ``Name``, ``Attribute`` or alias, so a benchmark could never
+    reference ``Order.__eq__`` and the task would loop on an unfixable lint rejection."""
     return (
         isinstance(name, str)
         and _SYMBOL_RE.fullmatch(name) is not None
         and 3 <= len(name) <= 64
-        and name not in _SYMBOL_BAD_NAMES
+        and not _is_dunder(name)
         and name not in _SYMBOL_DENYLIST
     )
 
@@ -72,6 +87,16 @@ def benchmark_symbol_from_location(location: object) -> str | None:
     naming any other file extension (``.ts``, ``.js``, ``.pyi``, ``.PY``) is ``None``: the gate is
     Python-only and this is where that is enforced. The result must pass ``_valid_symbol``.
 
+    Design deviation (stricter, fail closed): a symbol derived from a ``::``, dotted-method or bare-name form
+    (``app/db.py::Database.open``, ``input()``) is ``None`` when it is one of the lint's ``_BANNED_NAMES``, as is
+    any dunder: no benchmark could reference it without the lint rejecting it. The file-level module-stem branch
+    is exempt (``app/open.py`` -> ``open``; a module path is accepted). The design lists exactly 15 denied names.
+
+    Known limit, by design: a bare ``name.ext`` with no ``/`` and no ``::`` is indistinguishable from a dotted
+    symbol (``OrderService.list_orders``), so only the extensions in ``_KNOWN_FILE_EXTENSIONS`` make it a file
+    (``None``); any other bare ``name.ext`` (``orders.rake``) is read as a dotted symbol and yields ``ext``.
+    With a ``/`` or ``::`` every non-``.py`` extension is a file.
+
     No ``.strip()`` anywhere, and the tail regex ends in ``\\Z`` (``$`` would match before a trailing
     newline): a trailing newline must make the result fail, not be silently repaired.
     """
@@ -84,6 +109,7 @@ def benchmark_symbol_from_location(location: object) -> str | None:
     if text.endswith("()"):
         text = text[:-2]
 
+    module_stem = False
     if "::" in text:
         head, _, tail = text.rpartition("::")
         head_base = head.rsplit("/", 1)[-1]
@@ -94,10 +120,13 @@ def benchmark_symbol_from_location(location: object) -> str | None:
         base = text.rsplit("/", 1)[-1]
         if text.endswith(".py"):
             name = base[:-3]
+            module_stem = True
         elif "." in base and ("/" in text or base.rpartition(".")[2].casefold() in _KNOWN_FILE_EXTENSIONS):
             return None
         else:
             name = base.rsplit(".", 1)[-1]
+    if name in _BANNED_NAMES and not module_stem:
+        return None
     return name if _valid_symbol(name) else None
 
 
@@ -266,14 +295,16 @@ def _is_real_int(value: object) -> bool:
 
 
 def _real_number_fraction(value: object) -> Fraction | None:
-    """``Fraction(str(x))`` for a finite real ``float`` or ``int``; else ``None``.
+    """``Fraction(str(x))`` for a finite real ``float``, ``Fraction(x)`` for an ``int``; else ``None``.
 
     ``bool``, ``str``, ``Decimal`` and ``Fraction`` are rejected EXPLICITLY (by exact type) because
     ``Fraction(str(x))`` would otherwise accept every one of them. ``str(float)`` is used rather than
-    ``Fraction(0.10)``, which is the binary value and is greater than 1/10 (revision 3 prototype)."""
-    if type(value) not in (int, float):
-        return None
-    if type(value) is float and not math.isfinite(value):
+    ``Fraction(0.10)``, which is the binary value and is greater than 1/10 (revision 3 prototype). An ``int``
+    goes in directly: ``str(int)`` raises ``ValueError`` above 4300 digits, and a huge int must reach the bounds
+    check (``BOUNDS_REJECTED`` / ``INVALID_INPUT``), not raise."""
+    if type(value) is int:
+        return Fraction(value)
+    if type(value) is not float or not math.isfinite(value):
         return None
     return Fraction(str(value))
 
@@ -288,8 +319,8 @@ def validate_benchmark_gate(gate: object) -> tuple[dict | None, str]:
     length is not exactly one), ``SYMBOL_REJECTED``, ``COMMAND_REJECTED``, ``BOUNDS_REJECTED`` (also for
     NaN and infinity) and ``BUDGET_REJECTED``. The budget cap
     ``(warmup_runs + repeats + 3) * 2 * per_run_timeout_seconds <= 1800`` keeps one Lens B dispatch inside its
-    wait; the ``+3`` is the untimed trace run, allowed 3x a timed run, per side. Defaults use 1600 s and
-    ``repeats`` 8 needs a timeout of at most 75.
+    wait; the ``+3`` is the untimed trace run, allowed 3x a timed run, per side. Defaults use 1600 s; at
+    ``repeats`` 8 the timeout may be at most 81 with ``warmup_runs`` 0, 75 with 1 and 69 with 2.
     """
     if not isinstance(gate, dict):
         return None, "GATE_MISSING"
@@ -448,6 +479,335 @@ def escape_diagnostic(text: object, limit: int = 2048) -> str:
 
 
 # ---------------------------------------------------------------------------
+# validate_benchmark_content (the AST lint)
+# ---------------------------------------------------------------------------
+
+_MAX_BENCHMARK_BYTES = 16 * 1024
+_DIGEST_LITERAL = "BENCH_RESULT_DIGEST: "
+
+# The stable set of violation codes, in the canonical order ``validate_benchmark_content`` returns them in.
+# Codes are fixed strings (never built from the source), so they are safe to print and to compare.
+VIOLATION_CODES = (
+    "SOURCE_NOT_BYTES",           # source is not a ``bytes`` object
+    "FILE_TOO_LARGE",             # over 16 KiB
+    "NON_ASCII_SOURCE",           # any byte >= 0x80 (this includes a BOM)
+    "ENCODING_REJECTED",          # a PEP 263 cookie other than utf-8, or an invalid cookie
+    "PARSE_FAILED",               # ``ast.parse`` raised anything (SyntaxError, null byte, RecursionError, ...)
+    "ANALYSIS_FAILED",            # bad ``repo_top_levels`` argument, or an unexpected internal error
+    "SYMBOL_INVALID",             # ``symbol`` fails ``_valid_symbol``, so no reference to it can be required
+    "FORBIDDEN_CLASS",
+    "FORBIDDEN_ASYNC_FUNCTION",
+    "FORBIDDEN_LAMBDA",
+    "FORBIDDEN_TRY",              # ``Try`` and ``TryStar`` (``except*``)
+    "FORBIDDEN_WITH",
+    "FORBIDDEN_GLOBAL",
+    "FORBIDDEN_NONLOCAL",
+    "FORBIDDEN_DECORATOR",        # a decorator on any function
+    "RELATIVE_IMPORT",
+    "STAR_IMPORT",                # ``from X import *`` hides which names (``open``, dunders) arrive
+    "IMPORT_NOT_ALLOWED",
+    "BANNED_NAME",                # a banned name as ``Name``, ``Attribute``, bound import name, ``match``, type parameter
+    "DUNDER_NAME",                # any dunder in those places or a module path, plus function and parameter names
+    "TEST_NAME_COUNT",            # not exactly one module-level name beginning ``test``
+    "TEST_NOT_FUNCTION",          # that one name is not a module-level ``def``
+    "TEST_HAS_PARAMETERS",
+    "MISSING_PRINT",
+    "MISSING_DIGEST_LITERAL",
+    "MISSING_SHA256",
+    "MISSING_SYMBOL_REFERENCE",
+)
+_VIOLATION_ORDER = {code: index for index, code in enumerate(VIOLATION_CODES)}
+
+# Stdlib modules a benchmark may import; ``pytest``, ``string``, ``time``, ``os``, ``sys`` and every other stdlib
+# module are rejected. A stdlib name wins over ``repo_top_levels``: a repo-top-level ``hashlib.py`` must not be
+# importable in place of the real one.
+_STDLIB_IMPORT_ALLOWLIST = frozenset(
+    {"__future__", "hashlib", "json", "math", "statistics", "itertools", "functools", "collections", "re", "decimal",
+     "fractions", "heapq", "bisect", "copy", "random", "io", "enum", "sqlite3"}
+)
+# Rejected even when the repository itself ships them (benchmarking pytest's own code, for instance): the harness
+# owns the runner and a benchmark must never touch it.
+_IMPORT_ALWAYS_REJECTED = frozenset({"pytest", "_pytest"})
+_BANNED_NAMES = frozenset(
+    {"eval", "exec", "compile", "__import__", "getattr", "setattr", "hasattr", "delattr", "open", "globals", "locals",
+     "vars", "dir", "breakpoint", "input"}
+)
+_FORBIDDEN_NODES = {
+    ast.ClassDef: "FORBIDDEN_CLASS",
+    ast.AsyncFunctionDef: "FORBIDDEN_ASYNC_FUNCTION",
+    ast.Lambda: "FORBIDDEN_LAMBDA",
+    ast.Try: "FORBIDDEN_TRY",
+    ast.TryStar: "FORBIDDEN_TRY",
+    ast.With: "FORBIDDEN_WITH",
+    ast.Global: "FORBIDDEN_GLOBAL",
+    ast.Nonlocal: "FORBIDDEN_NONLOCAL",
+    # ``ast.parse`` accepts these outside an ``async def`` (they only fail at compile time), so banning
+    # ``AsyncFunctionDef`` alone leaves them parseable; the same code covers every async construct.
+    ast.AsyncWith: "FORBIDDEN_ASYNC_FUNCTION",
+    ast.AsyncFor: "FORBIDDEN_ASYNC_FUNCTION",
+    ast.Await: "FORBIDDEN_ASYNC_FUNCTION",
+}
+
+
+def _is_dunder(name: object) -> bool:
+    return isinstance(name, str) and len(name) > 4 and name.startswith("__") and name.endswith("__")
+
+
+_NAME_BINDING_OPS = frozenset({"STORE_NAME", "DELETE_NAME", "STORE_GLOBAL", "DELETE_GLOBAL"})  # a nested walrus makes the name global
+_COMPREHENSIONS = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+# CPython's compiler crashes (SIGSEGV on 3.12 and 3.14) on about 23 nested comprehensions, 20 if async: deeper
+# nesting is rejected without compiling it.
+_MAX_COMPREHENSION_DEPTH = 12
+
+
+def _comprehension_depth(tree: ast.AST) -> int:
+    """Maximum nesting depth of list/set/dict comprehensions and generator expressions. Iterative."""
+    deepest = 0
+    stack = [(tree, 0)]
+    while stack:
+        node, depth = stack.pop()
+        depth += isinstance(node, _COMPREHENSIONS)
+        deepest = max(deepest, depth)
+        stack.extend((child, depth) for child in ast.iter_child_nodes(node))
+    return deepest
+
+
+def _module_level_names(code: types.CodeType) -> list[str]:
+    """Every name the compiled module binds or deletes in module scope, one entry per bytecode occurrence.
+
+    The COMPILER decides what binds a module-level name, not a hand-written AST walk (which needed a new patch
+    each review round). In the module's own code object that is ``STORE_NAME``/``DELETE_NAME`` (or the ``*_GLOBAL``
+    forms, when a nested walrus makes the name global); in every nested code object only ``STORE_GLOBAL`` counts (how a walrus in a generator expression binds the module's name). Names bound only in a function or class body, or as a comprehension's own variable, do not
+    appear; a redefinition counts twice. Iterative (nested code via ``co_consts``); nothing is executed.
+    """
+    names: list[str] = []
+    pending = [(code, True)]
+    while pending:
+        current, is_module = pending.pop()
+        wanted = _NAME_BINDING_OPS if is_module else {"STORE_GLOBAL"}
+        names.extend(ins.argval for ins in dis.get_instructions(current) if ins.opname in wanted)
+        pending.extend((const, False) for const in current.co_consts if isinstance(const, types.CodeType))
+    return names
+
+
+def _content_violations(source: object, symbol: object, repo_top_levels: frozenset[str]) -> set[str]:
+    # Exactly a set or frozenset of str: a str would make ``in`` a substring test and a custom container could
+    # answer True to everything, so anything else is rejected outright rather than failing open.
+    if type(repo_top_levels) not in (set, frozenset) or any(type(name) is not str for name in repo_top_levels):
+        return {"ANALYSIS_FAILED"}
+    if type(source) is not bytes:
+        return {"SOURCE_NOT_BYTES"}
+    early: set[str] = set()
+    if len(source) > _MAX_BENCHMARK_BYTES:
+        early.add("FILE_TOO_LARGE")
+    else:
+        try:
+            # ``detect_encoding`` splits on ``\n`` only, the C tokenizer also at a bare ``\r``: normalize, or
+            # ``b"\r# coding: hz\r..."`` hides a cookie the parser honours.
+            normalized = source.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+            encoding, _ = tokenize.detect_encoding(io.BytesIO(normalized).readline)
+        except (SyntaxError, ValueError, LookupError):
+            early.add("ENCODING_REJECTED")
+        else:
+            # ``detect_encoding`` only normalizes some spellings (``utf8`` comes back as written); every alias of
+            # the utf-8 codec decodes ASCII identically, so compare the codec, not the cookie text.
+            if codecs.lookup(encoding).name != "utf-8":
+                early.add("ENCODING_REJECTED")
+    if not source.isascii():
+        early.add("NON_ASCII_SOURCE")
+    if early:
+        return early  # nothing is parsed from a file that already failed a byte-level rule
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # a SyntaxWarning (invalid escape) must neither print nor change the verdict
+            tree = ast.parse(source)
+    except Exception:  # noqa: BLE001 -- SyntaxError, ValueError (null byte), RecursionError, MemoryError ...
+        return {"PARSE_FAILED"}
+
+    found: set[str] = set()
+    symbol_ok = _valid_symbol(symbol)
+    if not symbol_ok:
+        found.add("SYMBOL_INVALID")
+    sha256_names: set[str] = set()  # names bound by ``from hashlib import sha256 [as x]``
+    called: list[ast.expr] = []
+    symbol_seen = digest_seen = False
+
+    def check_import(module: str) -> None:
+        top = module.split(".")[0]
+        allowed = top in _STDLIB_IMPORT_ALLOWLIST or (
+            top not in sys.stdlib_module_names and top not in _IMPORT_ALWAYS_REJECTED and top in repo_top_levels
+        )
+        if not allowed:
+            found.add("IMPORT_NOT_ALLOWED")
+
+    def flag(name: str | None, banned: bool = True) -> None:
+        """A name that is only a string in the AST (import aliases, ``match`` captures and class-pattern attributes,
+        type parameters) is as dangerous as a ``Name`` node (``from json import __builtins__ as bb``).
+        ``banned=False`` checks dunders only, for a module-path component that is never bound or fetched."""
+        if banned and name in _BANNED_NAMES:
+            found.add("BANNED_NAME")
+        if _is_dunder(name):
+            found.add("DUNDER_NAME")
+
+    for node in ast.walk(tree):
+        kind = type(node)
+        if kind in _FORBIDDEN_NODES:
+            found.add(_FORBIDDEN_NODES[kind])
+        if kind is ast.FunctionDef:
+            if node.decorator_list:
+                found.add("FORBIDDEN_DECORATOR")
+            if _is_dunder(node.name):
+                found.add("DUNDER_NAME")
+        elif kind is ast.AsyncFunctionDef:
+            if node.decorator_list:
+                found.add("FORBIDDEN_DECORATOR")
+        elif kind is ast.arg:
+            if _is_dunder(node.arg):
+                found.add("DUNDER_NAME")
+        elif kind is ast.Name or kind is ast.Attribute:
+            name = node.id if kind is ast.Name else node.attr
+            flag(name)
+            symbol_seen = symbol_seen or name == symbol
+        elif kind is ast.Import:
+            for alias in node.names:
+                check_import(alias.name)
+                parts = alias.name.split(".")
+                for index, part in enumerate(parts):
+                    # ``import a.b`` binds only ``a``, and ``import a.b as c`` binds only ``c`` (checked below)
+                    flag(part, banned=index == 0 and alias.asname is None)
+                flag(alias.asname)
+                symbol_seen = symbol_seen or symbol in (*parts, alias.asname)
+        elif kind is ast.ImportFrom:
+            module = node.module or ""
+            if node.level > 0:
+                found.add("RELATIVE_IMPORT")
+            else:
+                check_import(module)
+                if module == "hashlib":
+                    sha256_names.update(alias.asname or alias.name for alias in node.names if alias.name == "sha256")
+            if module != "__future__":  # the one module whose own name is a dunder
+                for part in module.split("."):
+                    flag(part, banned=False)  # ``from a.b import c`` binds only ``c``
+            symbol_seen = symbol_seen or symbol in module.split(".")
+            for alias in node.names:
+                if alias.name == "*":
+                    found.add("STAR_IMPORT")
+                flag(alias.name)
+                flag(alias.asname)
+                symbol_seen = symbol_seen or symbol in (alias.name, alias.asname)
+        elif kind is ast.MatchClass:
+            for attr in node.kwd_attrs:
+                flag(attr)
+        elif kind in (ast.MatchAs, ast.MatchStar, ast.TypeVar, ast.ParamSpec, ast.TypeVarTuple):
+            flag(node.name)
+        elif kind is ast.MatchMapping:
+            flag(node.rest)
+        elif kind is ast.comprehension:
+            if node.is_async:
+                found.add("FORBIDDEN_ASYNC_FUNCTION")
+        elif kind is ast.Constant:
+            digest_seen = digest_seen or (isinstance(node.value, str) and _DIGEST_LITERAL in node.value)
+        elif kind is ast.Call:
+            called.append(node.func)
+
+    if not any(isinstance(func, ast.Name) and func.id == "print" for func in called):
+        found.add("MISSING_PRINT")
+    if not digest_seen:
+        found.add("MISSING_DIGEST_LITERAL")
+    if not any(
+        (
+            isinstance(func, ast.Attribute)
+            and func.attr == "sha256"
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "hashlib"
+        )
+        or (isinstance(func, ast.Name) and func.id in sha256_names)
+        for func in called
+    ):
+        found.add("MISSING_SHA256")
+    if symbol_ok and not symbol_seen:
+        found.add("MISSING_SYMBOL_REFERENCE")
+
+    if found:
+        return found  # already rejected: do not spend (or risk) a compile on it; its code set is a subset
+    if _comprehension_depth(tree) > _MAX_COMPREHENSION_DEPTH:
+        return {"PARSE_FAILED"}
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            code = compile(source, "<benchmark>", "exec", dont_inherit=True)  # compiles, never executes
+        names = _module_level_names(code)
+    except (SyntaxError, ValueError, RecursionError, MemoryError):
+        # ``compile`` is stricter than ``ast.parse`` (a 3.14 walrus in an annotation, a walrus in a comprehension
+        # iterable), and ``dis`` cannot render a huge integer constant (ValueError): the count cannot be trusted.
+        return {"PARSE_FAILED"}
+    tests = [name for name in names if name.startswith("test")]
+    top_level_tests = [s for s in tree.body if isinstance(s, ast.FunctionDef) and s.name.startswith("test")]
+    # pytest also collects ``Test*`` names and acts on ``pytest_*`` hooks and ``pytestmark``.
+    if len(tests) != 1 or any(name.startswith(("pytest", "Test")) for name in names):
+        found.add("TEST_NAME_COUNT")
+    elif len(top_level_tests) != 1:
+        found.add("TEST_NOT_FUNCTION")
+    else:
+        args = top_level_tests[0].args
+        if args.posonlyargs or args.args or args.vararg or args.kwonlyargs or args.kwarg:
+            found.add("TEST_HAS_PARAMETERS")
+    return found
+
+
+def validate_benchmark_content(source: bytes, symbol: str, repo_top_levels: frozenset[str]) -> list[str]:
+    """Lint one benchmark file; return violation codes (``VIOLATION_CODES``), empty meaning accepted.
+
+    NEVER raises. A parser failure is ``PARSE_FAILED``; ``ANALYSIS_FAILED`` is a ``repo_top_levels`` that is not
+    exactly a ``set``/``frozenset`` of ``str`` (checked first, so nothing fails open) or an unexpected internal
+    error. The result is de-duplicated in the canonical ``VIOLATION_CODES`` order. A file failing a byte-level rule
+    (``FILE_TOO_LARGE``, ``NON_ASCII_SOURCE``, ``ENCODING_REJECTED``) is not parsed.
+
+    Operates on BYTES: ``ast.parse(bytes)`` honours a PEP 263 coding cookie, so an ASCII file declaring another
+    codec would be read differently from a text-mode lint. ``tokenize.detect_encoding`` (fed newline-normalized
+    bytes: it splits on ``\\n`` only while the C tokenizer also ends a line at a bare ``\\r``) must say utf-8,
+    and every byte must be ASCII.
+
+    Rules (design APIs table). No ``ClassDef``, async construct (``async def``/``with``/``for``, ``await``, async
+    comprehension: ``ast.parse`` accepts them outside an ``async def``), ``Lambda``, ``Try``/``TryStar``, ``With``,
+    ``Global``, ``Nonlocal``, no decorator. Imports: a stdlib module must be in ``_STDLIB_IMPORT_ALLOWLIST``
+    (``pytest`` is rejected even if ``repo_top_levels`` names it), any other top-level name must be in
+    ``repo_top_levels``; relative imports and ``from X import *`` are rejected. ``_BANNED_NAMES`` and every dunder
+    are rejected as ``Name``/``Attribute`` and wherever a name is only a string in the AST: import aliases, ``match``
+    captures and class-pattern attributes, type parameters. Module-PATH components bind nothing (``import a.b``
+    binds ``a``, ``from a.b import c`` binds ``c``), so a banned name there is fine (``from app.open import go``)
+    and only a dunder is rejected; the ``__future__`` module itself is exempt. Required: a ``print(...)`` call, the
+    literal ``BENCH_RESULT_DIGEST: `` in a string constant, a ``hashlib.sha256(...)`` call (or a call of the name
+    from ``from hashlib import sha256``), and a reference to ``symbol`` as ``Name.id``, ``Attribute.attr``, an
+    import ``alias.name``/``asname`` or a dotted component of an import's module.
+
+    The one-test rule is counted from the COMPILED module (``_module_level_names``), not an AST walk: exactly one
+    module-level name beginning ``test`` (a redefinition, ``del`` and a walrus anywhere count), none beginning
+    ``pytest`` (``pytest_*`` hooks, ``pytestmark``) or ``Test`` (collected classes; ``TEST_SIZE`` is fine), and the
+    one name must be a ``def`` with no parameters. ``compile`` runs ONLY when no other rule fired, so a rejected
+    source gets only AST codes (its code set is a subset, and not stable across Python versions). It is stricter
+    than ``ast.parse`` and ``dis`` cannot render a huge integer constant: both are ``PARSE_FAILED``, as is
+    comprehension nesting beyond ``_MAX_COMPREHENSION_DEPTH`` (CPython's compiler crashes on about 23 nested
+    comprehensions, so such a source is never compiled). Residual: ``compile`` runs in-process on input that passed
+    the AST rules, so a compiler crash class beyond that guarded family would end the process, which callers
+    (``compare``, the CLI) treat as fail-closed (exit 2 / no JSON). ``sys.stdlib_module_names`` differs between
+    Python versions, so ``compare`` must lint with the harness's own Python. Warnings are silenced during parsing.
+
+    Beyond the table (stricter): a dunder function or parameter name, a star import, and an invalid ``symbol``
+    (``SYMBOL_INVALID``) are rejected.
+
+    This is a TRIPWIRE, not a sandbox. Allowlists are better than denylists but are still evadable
+    (``string.Formatter().get_field``, ``type()``-built context managers, objects reached through the code under
+    test), a constant digest and a dead reference pass it, and the code under test is not linted at all. The
+    controls that do not depend on enumerating names are the harness trace, the exports and human acceptance.
+    """
+    try:
+        return sorted(_content_violations(source, symbol, repo_top_levels), key=_VIOLATION_ORDER.__getitem__)
+    except Exception:  # noqa: BLE001 -- the contract is "never raises" (RecursionError and MemoryError included)
+        return ["ANALYSIS_FAILED"]
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -460,18 +820,57 @@ def gate_sha256(normalized_gate: dict) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _read_bounded(path: str, limit: int) -> bytes:
+    """Read at most ``limit + 1`` bytes of a REGULAR file; the caller treats ``len > limit`` as too large.
+
+    A bounded read rather than ``stat().st_size``: a size taken before the read is not a cap, and a FIFO or a
+    device (``/dev/zero``) reports no useful size. The file is opened ``O_NONBLOCK`` (where the platform has it)
+    so opening a FIFO with no writer cannot hang, then ``fstat`` on the opened descriptor must say regular file.
+    Raises ``OSError`` or ``ValueError``; both are usage errors to the CLI.
+    """
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError("not a regular file")
+        handle = os.fdopen(fd, "rb")  # ``fdopen`` itself raises on a directory, so check before it, and close on failure
+    except BaseException:
+        os.close(fd)
+        raise
+    with handle:
+        return handle.read(limit + 1)
+
+
+def _repo_top_levels(root: Path) -> set[str]:
+    """Top-level importable names under ``root`` and ``root/src``: every directory (a namespace package is
+    importable too) and every ``*.py`` module stem whose name is an ASCII identifier. Raises ``OSError`` or
+    ``ValueError`` when ``root`` is not a readable directory. ``root/src`` is optional."""
+    if not root.is_dir():
+        raise ValueError("repo root is not a directory")
+    names: set[str] = set()
+    for base in (root, root / "src"):
+        if not base.is_dir():
+            continue
+        for entry in base.iterdir():
+            name = entry.stem if entry.suffix == ".py" and entry.is_file() else entry.name if entry.is_dir() else ""
+            if name.isascii() and name.isidentifier():
+                names.add(name)
+    return names
+
+
 def _cmd_validate(args: argparse.Namespace) -> int:
     """Exit codes: 0 ``OK`` (then ``gate_sha256: <hex>``), 1 ``REJECT:<code>``, 3 ``NOT_GATED``, 2 usage.
 
     The origin flag is tested with ``is True`` so ``"true"``, ``1`` and ``false`` are not set. A key present
-    with ANY value, including ``null``, is gated, so both mismatch directions are executable.
+    with ANY value, including ``null``, is gated, so both mismatch directions are executable. Unreadable,
+    oversize, non-regular (a pipe or ``/dev/stdin`` is refused on purpose), non-UTF-8, malformed or too deeply
+    nested input is a usage error with nothing on stdout.
     """
-    path = Path(args.specialist_inputs)
     try:
-        if path.stat().st_size > _MAX_INPUT_BYTES:
+        data = _read_bounded(args.specialist_inputs, _MAX_INPUT_BYTES)
+        if len(data) > _MAX_INPUT_BYTES:
             raise ValueError("input too large")
-        inputs = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
+        inputs = json.loads(data.decode("utf-8"))
+    except (OSError, ValueError, RecursionError) as exc:
         print(f"usage error: cannot read specialist_inputs: {escape_diagnostic(str(exc), 200)}", file=sys.stderr)
         return 2
     if not isinstance(inputs, dict):
@@ -498,17 +897,48 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_lint(args: argparse.Namespace) -> int:
+    """Lint one benchmark file. Exit codes: 0 clean (nothing printed), 1 violations (one code per line on stdout,
+    in ``VIOLATION_CODES`` order), 2 usage (bad arguments, unreadable or non-regular file, bad ``--repo-root``).
+
+    The repository's importable top-level names come from ``--repo-root DIR`` (its directories and ``*.py``
+    stems, plus those under ``DIR/src``; point it at the BASE export so a head-added package cannot allow
+    itself) and/or repeated ``--top-level NAME``; with neither, only stdlib-allowlist imports pass. An over-size
+    file is not a usage error: at most 16 KiB + 1 byte is read and ``FILE_TOO_LARGE`` is a violation like any other.
+    """
+    try:
+        source = _read_bounded(args.benchmark, _MAX_BENCHMARK_BYTES)
+        top_levels = set(args.top_level)
+        if args.repo_root is not None:
+            top_levels |= _repo_top_levels(Path(args.repo_root))
+    except (OSError, ValueError) as exc:
+        print(f"usage error: cannot lint: {escape_diagnostic(str(exc), 200)}", file=sys.stderr)
+        return 2
+    violations = validate_benchmark_content(source, args.symbol, frozenset(top_levels))
+    for code in violations:
+        print(code)
+    return 1 if violations else 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point. C4a has only ``validate``; later PRs add ``lint``, ``export``, ``compare`` and others."""
-    parser = argparse.ArgumentParser(prog="benchmark_gate.py", description="Benchmark gate validation core (C4a).")
+    """CLI entry point: ``validate`` (C4a) and ``lint`` (C4b). Later PRs add ``export``, ``compare`` and others
+    by adding a subparser with ``set_defaults(func=...)``; nothing else here changes."""
+    parser = argparse.ArgumentParser(prog="benchmark_gate.py", description="Benchmark gate validation core (C4a/C4b).")
     sub = parser.add_subparsers(dest="command", required=True)
     validate = sub.add_parser("validate", help="validate specialist_inputs.benchmark_gate")
     validate.add_argument("--specialist-inputs", required=True, metavar="FILE")
+    validate.set_defaults(func=_cmd_validate)
+    lint = sub.add_parser("lint", help="lint one benchmark file (exit 0 clean, 1 violations, 2 usage)")
+    lint.add_argument("--benchmark", required=True, metavar="FILE")
+    lint.add_argument("--symbol", required=True, metavar="SYMBOL")
+    lint.add_argument("--repo-root", metavar="DIR", help="derive the repo's top-level names from DIR and DIR/src")
+    lint.add_argument("--top-level", action="append", default=[], metavar="NAME", help="add one top-level name")
+    lint.set_defaults(func=_cmd_lint)
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:  # argparse exits 2 on usage errors (and 0 on --help)
         return exc.code if isinstance(exc.code, int) else 2
-    return _cmd_validate(args)
+    return args.func(args)
 
 
 if __name__ == "__main__":

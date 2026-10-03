@@ -8,6 +8,7 @@ Covers the design's revision-5 contracts for `benchmark_symbol_from_location`, t
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import sys
@@ -59,7 +60,6 @@ GOOD_GATE = {
         ("`build_report`", "build_report"),
         ("`app/orders.py::build_report`", "build_report"),
         ("app/orders.py::build_report:42", "build_report"),
-        ("fib" * 1, "fib"),
         ("x" * 64, "x" * 64),
     ],
 )
@@ -80,6 +80,10 @@ def test_symbol_accepted_shapes(location, expected):
         "app/orders.ts::build_report",
         "orders.js",
         "orders.pyi",
+        "lib/orders.scala",
+        "orders.scala",
+        "orders.pyw",
+        "app/orders.py:\u0664\u0662",  # Arabic-Indic digits are not a line tail (re.ASCII), so this is not .py
         "ab",  # under 3 characters
         "app/db.py",
         "x" * 65,
@@ -90,6 +94,8 @@ def test_symbol_accepted_shapes(location, expected):
         "app/orders.py\n",
         "app/orders.py:42\n",
         "utils/",
+        "/",
+        "::",
         "",
         "``",
         None,
@@ -102,10 +108,52 @@ def test_symbol_rejected_shapes(location):
     assert bg.benchmark_symbol_from_location(location) is None
 
 
-def test_symbol_utils_directory_does_not_crash():
-    assert bg.benchmark_symbol_from_location("utils/") is None
-    assert bg.benchmark_symbol_from_location("/") is None
-    assert bg.benchmark_symbol_from_location("::") is None
+def test_symbol_denylist_is_the_design_list():  # the rejected-shape cases above are generated from the set itself
+    assert bg._SYMBOL_DENYLIST == frozenset(
+        {"print", "hashlib", "sha256", "main", "data", "sort", "load", "list", "item", "time", "test", "bench", "run", "get", "set"}
+    )
+
+
+def test_symbol_known_file_extension_set_is_pinned():  # the parametrized test below iterates this set
+    assert bg._KNOWN_FILE_EXTENSIONS == frozenset(
+        "js jsx ts tsx pyi pyc pyw pyx pxd go rs java kt rb php c h cc cpp cs scala swift lua dart sql sh md json yaml "
+        "yml toml txt html css".split()
+    )
+
+
+@pytest.mark.parametrize("ext", sorted(bg._KNOWN_FILE_EXTENSIONS))
+def test_symbol_every_known_bare_file_extension_is_a_file_not_a_symbol(ext):
+    assert bg.benchmark_symbol_from_location(f"orders.{ext}") is None
+    assert bg.benchmark_symbol_from_location(f"orders.{ext.upper()}") is None  # matched casefolded
+
+
+@pytest.mark.parametrize("name", sorted(n for n in bg._BANNED_NAMES if not n.startswith("__")))
+def test_symbol_derived_from_a_method_or_function_named_like_a_banned_builtin_is_none(name):
+    # The lint rejects these names as Name, Attribute and alias, so no benchmark could reference such a symbol.
+    for location in (f"app/db.py::Database.{name}", f"app/db.py::{name}", f"Database.{name}", f"{name}()", f"`{name}`"):
+        assert bg.benchmark_symbol_from_location(location) is None, location
+
+
+@pytest.mark.parametrize("name", ["__eq__", "__hash__", "__mul__", "__contains__", "__iter__", "__init__", "__main__"])
+def test_symbol_derived_dunder_is_none_and_the_gate_rejects_it(name):
+    for location in (f"app/orders.py::Order.{name}", f"Order.{name}", f"{name}()"):
+        assert bg.benchmark_symbol_from_location(location) is None, location
+    assert bg.validate_benchmark_gate(_gate(benchmark_symbol=name)) == (None, "SYMBOL_REJECTED")
+
+
+def test_symbol_file_level_module_stem_named_like_a_builtin_stays_derivable():
+    # `src/app/open.py` -> `open` is satisfiable as a module path (`from app.open import go`), unlike a method.
+    assert bg.benchmark_symbol_from_location("src/app/open.py") == "open"
+    assert bg.benchmark_symbol_from_location("app/eval.py:42") == "eval"
+    assert bg.validate_benchmark_gate(_gate(benchmark_symbol="open"))[1] == "OK"
+
+
+def test_symbol_bare_dotted_name_with_an_unlisted_extension_is_a_dotted_symbol():
+    # Documented limit: `OrderService.list_orders` must yield `list_orders`, so a bare `name.ext` whose extension is
+    # not in _KNOWN_FILE_EXTENSIONS cannot be told apart from a dotted symbol. With a `/` it is always a file.
+    assert bg.benchmark_symbol_from_location("config.JSON") is None  # a listed extension is matched casefolded
+    assert bg.benchmark_symbol_from_location("orders.rake") == "rake"
+    assert bg.benchmark_symbol_from_location("lib/orders.rake") is None
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +279,12 @@ def test_command_layer2_rejects(command):
     assert bg.validate_benchmark_command(command, PATH) == (None, "COMMAND_REJECTED")
 
 
+def test_command_layer1_is_invoked_before_layer2():
+    # Layer 2 alone would accept this (one positional, equal to the path); only Layer 1's "[\s=:-]/" marker rejects it.
+    assert bg.validate_repro_command("pytest -q /abs/bench.py") is None
+    assert bg.validate_benchmark_command("pytest -q /abs/bench.py", "/abs/bench.py") == (None, "COMMAND_REJECTED")
+
+
 def test_command_option_is_classified_before_comparing_to_the_path():
     # A path that starts with '-' must never be accepted as a positional.
     assert bg.validate_benchmark_command("pytest -q", "-q") == (None, "COMMAND_REJECTED")
@@ -350,6 +404,9 @@ def test_gate_type_rejected(overrides):
         "benchmarks/credentials_bench.py",
         "benchmarks/id_rsa_bench.py",
         "benchmarks/kubeconfig_bench.py",
+        "benchmarks/Credentials_bench.py",  # the deny list is matched casefolded (macOS filesystems fold case)
+        "perf/ID_RSA/bench_a.py",
+        "benchmarks/x.PEM/bench_a.py",
         ".git/benchmarks/bench_orders.py",
         ".aws/perf/bench_orders.py",
         "perf/.ssh/bench_orders.py",
@@ -469,9 +526,25 @@ def test_gate_budget_boundary_is_inclusive():
     assert bg.validate_benchmark_gate(_gate(per_run_timeout_seconds=90))[1] == "OK"  # 10*2*90 == 1800
 
 
-def test_gate_int_valued_float_thresholds_are_accepted_as_numbers():
-    # An int is a real number for the two thresholds, but 0 and 1 are out of bounds.
+def test_gate_int_thresholds_are_numbers_but_out_of_bounds():
+    # An int is a real number for the two thresholds (so not TYPE_REJECTED), but 0 and 1 are out of bounds.
     assert bg.validate_benchmark_gate(_gate(min_improvement=1)) == (None, "BOUNDS_REJECTED")
+
+
+@pytest.mark.parametrize("field", ["min_improvement", "max_noise"])
+@pytest.mark.parametrize("huge", [10**5000, -(10**5000)], ids=["positive", "negative"])
+def test_gate_huge_int_threshold_is_bounds_rejected_not_a_crash(field, huge):
+    # str(int) raises ValueError above 4300 digits; the thresholds must reach the bounds check instead.
+    assert bg.validate_benchmark_gate(_gate(**{field: huge})) == (None, "BOUNDS_REJECTED")
+
+
+@pytest.mark.parametrize("warmup, largest", [(0, 81), (1, 75), (2, 69)])
+def test_gate_budget_largest_timeout_at_repeats_8_per_warmup(warmup, largest):
+    # The figures in validate_benchmark_gate's docstring.
+    gate = _gate(warmup_runs=warmup, repeats=8, per_run_timeout_seconds=largest)
+    assert bg.validate_benchmark_gate(gate)[1] == "OK"
+    gate["per_run_timeout_seconds"] = largest + 1
+    assert bg.validate_benchmark_gate(gate) == (None, "BUDGET_REJECTED")
 
 
 # ---------------------------------------------------------------------------
@@ -551,6 +624,21 @@ def test_noisy():
     base = [1000] * 6
     head = [500, 1500, 600, 1400, 700, 1300]
     assert _ev(base, head) == ("INCONCLUSIVE", "NOISY")
+
+
+def test_noise_exactly_at_the_limit_is_not_noisy():
+    # ratios .9 .9 1 1 1.1 1.1: median 1, MAD 0.1, so MAD / median == max_noise exactly; the gate is strict `>`.
+    head = [900, 900, 1000, 1000, 1100, 1100]
+    assert _ev([1000] * 6, head, max_noise=0.10) == ("NOT_IMPROVED", "BELOW_HALF_THRESHOLD")
+    assert _ev([1000] * 6, head, max_noise=0.099) == ("INCONCLUSIVE", "NOISY")
+
+
+def test_noise_is_relative_to_the_median():
+    # ratios 2 2 2.2 2.2 2.4 2.4: MAD 0.2 but median 2.2, so MAD / median is 0.0909 (< 0.10). An undivided MAD
+    # (0.2) would wrongly be NOISY.
+    head = [2000, 2000, 2200, 2200, 2400, 2400]
+    assert _ev([1000] * 6, head) == ("NOT_IMPROVED", "BELOW_HALF_THRESHOLD")
+    assert _ev([1000] * 6, head, max_noise=0.09) == ("INCONCLUSIVE", "NOISY")
 
 
 def test_even_count_median_is_mean_of_middle_two():
@@ -635,6 +723,11 @@ def test_invalid_parameters(kwargs):
     assert bg.evaluate_paired_samples([1000] * 6, [900] * 6, **params) == INVALID
 
 
+def test_huge_int_threshold_is_invalid_input_not_a_crash():
+    assert _ev([1000] * 6, [900] * 6, min_improvement=10**5000) == INVALID
+    assert _ev([1000] * 6, [900] * 6, max_noise=-(10**5000)) == INVALID
+
+
 def test_parameter_bounds_are_inclusive():
     assert _ev([1000] * 6, [900] * 6, min_improvement=0.05, max_noise=0.02)[0] == "IMPROVED"
     assert _ev([1000] * 6, [100] * 6, min_improvement=0.90, max_noise=0.30)[0] == "IMPROVED"
@@ -675,8 +768,8 @@ def test_escape_backticks_newlines_and_pipes():
 
 @pytest.mark.parametrize("lead", ["#", ">", "-", "*", "+"])
 def test_escape_neutralizes_leading_markdown(lead):
-    assert not bg.escape_diagnostic(f"{lead} heading").startswith(lead)
-    assert not bg.escape_diagnostic(f"\n\n  {lead} heading").startswith(lead)
+    assert bg.escape_diagnostic(f"{lead} heading") == f"'{lead} heading"
+    assert bg.escape_diagnostic(f"\n\n  {lead} heading") == f"'{lead} heading"
     assert bg.escape_diagnostic(f"x {lead} y") == f"x {lead} y"
 
 
@@ -793,6 +886,50 @@ def test_cli_usage_errors_exit_2(tmp_path, capsys):
     assert bg.main(["validate", "--specialist-inputs", str(directory)]) == 2
 
 
-def test_module_imports_without_platform_specific_modules():
-    source = (_SCRIPTS / "benchmark_gate.py").read_text(encoding="utf-8")
-    assert "import resource" not in source and "killpg" not in source
+# Everything the module may import at import time. Platform-specific modules (resource, fcntl, termios, ...) must
+# be imported lazily inside the function that needs them, so the module imports on every platform.
+_TOP_LEVEL_IMPORT_ALLOWLIST = {
+    "__future__", "argparse", "ast", "codecs", "dis", "fractions", "hashlib", "io", "json", "math", "os", "pathlib",
+    "posixpath", "re", "stat", "sys", "tokenize", "types", "warnings",
+}
+
+
+def test_module_imports_only_portable_modules_at_top_level():
+    tree = ast.parse((_SCRIPTS / "benchmark_gate.py").read_text(encoding="utf-8"))
+    imported = set()
+    for statement in tree.body:
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue  # a lazy import inside a function is the sanctioned way to use a platform-specific module
+        for node in ast.walk(statement):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name.split(".")[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                imported.add((node.module or "").split(".")[0])
+    assert imported, "the walk found no imports; the test is broken"
+    assert imported <= _TOP_LEVEL_IMPORT_ALLOWLIST, sorted(imported - _TOP_LEVEL_IMPORT_ALLOWLIST)
+
+
+# --- CLI: validate hardening (bounded read, deep JSON) ---
+
+def test_cli_validate_deeply_nested_json_is_exit_2_with_nothing_on_stdout(tmp_path, capsys):
+    code, cap = _run(tmp_path, capsys, None, raw="[" * 500000 + "]" * 500000)  # under the 1 MiB cap
+    assert (code, cap.out) == (2, "")
+
+
+def test_cli_validate_huge_int_gate_value_is_a_rejection_not_a_crash(tmp_path, capsys):
+    # 4000 digits is under the interpreter's int-parsing limit, so json accepts it and the gate must reject it.
+    gate = {**GOOD_GATE, "min_improvement": 10**4000}
+    code, cap = _run(tmp_path, capsys, {"performance_review_origin": True, "benchmark_gate": gate})
+    assert (code, cap.out) == (1, "REJECT:BOUNDS_REJECTED\n")
+
+
+def test_cli_validate_input_cap_boundary_is_exactly_1_mib(tmp_path, capsys):
+    exact = tmp_path / "exact.json"
+    exact.write_bytes(b"{}" + b" " * (bg._MAX_INPUT_BYTES - 2))
+    over = tmp_path / "over.json"
+    over.write_bytes(b"{}" + b" " * (bg._MAX_INPUT_BYTES - 1))
+    assert bg._MAX_INPUT_BYTES == 1 << 20
+    assert bg.main(["validate", "--specialist-inputs", str(exact)]) == 3
+    assert capsys.readouterr().out == "NOT_GATED\n"
+    assert bg.main(["validate", "--specialist-inputs", str(over)]) == 2
+    assert capsys.readouterr().out == ""
