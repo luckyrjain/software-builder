@@ -478,7 +478,8 @@ VIOLATION_CODES = (
     "NON_ASCII_SOURCE",           # any byte >= 0x80 (this includes a BOM)
     "ENCODING_REJECTED",          # a PEP 263 cookie other than utf-8, or an invalid cookie
     "PARSE_FAILED",               # ``ast.parse`` raised anything (SyntaxError, null byte, RecursionError, ...)
-    "ANALYSIS_FAILED",            # the checks themselves raised (for example on a pathologically deep tree)
+    "ANALYSIS_FAILED",            # bad ``repo_top_levels`` argument, or an unexpected internal error (the AST walks
+                                  # are iterative, so deep input is PARSE_FAILED, not this)
     "SYMBOL_INVALID",             # ``symbol`` fails ``_valid_symbol``, so no reference to it can be required
     "FORBIDDEN_CLASS",
     "FORBIDDEN_ASYNC_FUNCTION",
@@ -489,9 +490,11 @@ VIOLATION_CODES = (
     "FORBIDDEN_NONLOCAL",
     "FORBIDDEN_DECORATOR",        # a decorator on any function
     "RELATIVE_IMPORT",
+    "STAR_IMPORT",                # ``from X import *`` hides which names (``open``, dunders) arrive
     "IMPORT_NOT_ALLOWED",
-    "BANNED_NAME",                # a banned name as ``Name`` or ``Attribute``
-    "DUNDER_NAME",                # any dunder as ``Name``, ``Attribute``, function name or parameter name
+    "BANNED_NAME",                # a banned name anywhere a name is spelled: ``Name``, ``Attribute``, import
+                                  # components and aliases, ``match`` captures and class-pattern attributes, type parameters
+    "DUNDER_NAME",                # any dunder in those places, plus function and parameter names
     "TEST_NAME_COUNT",            # not exactly one module-level name beginning ``test``
     "TEST_NOT_FUNCTION",          # that one name is not a module-level ``def``
     "TEST_HAS_PARAMETERS",
@@ -525,6 +528,11 @@ _FORBIDDEN_NODES = {
     ast.With: "FORBIDDEN_WITH",
     ast.Global: "FORBIDDEN_GLOBAL",
     ast.Nonlocal: "FORBIDDEN_NONLOCAL",
+    # ``ast.parse`` accepts these outside an ``async def`` (they only fail at compile time), so banning
+    # ``AsyncFunctionDef`` alone leaves them parseable; the same code covers every async construct.
+    ast.AsyncWith: "FORBIDDEN_ASYNC_FUNCTION",
+    ast.AsyncFor: "FORBIDDEN_ASYNC_FUNCTION",
+    ast.Await: "FORBIDDEN_ASYNC_FUNCTION",
 }
 
 
@@ -566,7 +574,7 @@ def _module_level_bindings(tree: ast.Module) -> list[str]:
             )
         else:
             if not local:
-                if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):  # ``del x`` is a binding too
                     names.append(node.id)
                 elif isinstance(node, (ast.Import, ast.ImportFrom)):
                     names.extend(alias.asname or alias.name.split(".")[0] for alias in node.names)
@@ -579,6 +587,10 @@ def _module_level_bindings(tree: ast.Module) -> list[str]:
 
 
 def _content_violations(source: object, symbol: object, repo_top_levels: frozenset[str]) -> set[str]:
+    # Exactly a set or frozenset of str. A str would make ``top in repo_top_levels`` a substring test, and a custom
+    # container could answer True to everything: neither may fail open, so anything else is rejected outright.
+    if type(repo_top_levels) not in (set, frozenset) or any(type(name) is not str for name in repo_top_levels):
+        return {"ANALYSIS_FAILED"}
     if type(source) is not bytes:
         return {"SOURCE_NOT_BYTES"}
     early: set[str] = set()
@@ -619,6 +631,15 @@ def _content_violations(source: object, symbol: object, repo_top_levels: frozens
         if not allowed:
             found.add("IMPORT_NOT_ALLOWED")
 
+    def flag(name: str | None) -> None:
+        """A name spelled as a plain string in the AST (import components and aliases, ``match`` captures and
+        class-pattern attributes, type parameters) is as dangerous as a ``Name`` node: ``from json import
+        __builtins__ as bb`` reaches ``eval`` with no ``Name`` or ``Attribute`` that says so."""
+        if name in _BANNED_NAMES:
+            found.add("BANNED_NAME")
+        if _is_dunder(name):
+            found.add("DUNDER_NAME")
+
     for node in ast.walk(tree):
         kind = type(node)
         if kind in _FORBIDDEN_NODES:
@@ -636,14 +657,13 @@ def _content_violations(source: object, symbol: object, repo_top_levels: frozens
                 found.add("DUNDER_NAME")
         elif kind is ast.Name or kind is ast.Attribute:
             name = node.id if kind is ast.Name else node.attr
-            if name in _BANNED_NAMES:
-                found.add("BANNED_NAME")
-            if _is_dunder(name):
-                found.add("DUNDER_NAME")
+            flag(name)
             symbol_seen = symbol_seen or name == symbol
         elif kind is ast.Import:
             for alias in node.names:
                 check_import(alias.name)
+                for part in (*alias.name.split("."), alias.asname):
+                    flag(part)
                 symbol_seen = symbol_seen or symbol in (*alias.name.split("."), alias.asname)
         elif kind is ast.ImportFrom:
             module = node.module or ""
@@ -653,9 +673,26 @@ def _content_violations(source: object, symbol: object, repo_top_levels: frozens
                 check_import(module)
                 if module == "hashlib":
                     sha256_names.update(alias.asname or alias.name for alias in node.names if alias.name == "sha256")
+            if module != "__future__":  # the one module whose own name is a dunder
+                for part in module.split("."):
+                    flag(part)
             symbol_seen = symbol_seen or symbol in module.split(".")
             for alias in node.names:
+                if alias.name == "*":
+                    found.add("STAR_IMPORT")
+                for part in (*alias.name.split("."), alias.asname):
+                    flag(part)
                 symbol_seen = symbol_seen or symbol in (alias.name, alias.asname)
+        elif kind is ast.MatchClass:
+            for attr in node.kwd_attrs:
+                flag(attr)
+        elif kind in (ast.MatchAs, ast.MatchStar, ast.TypeVar, ast.ParamSpec, ast.TypeVarTuple):
+            flag(node.name)
+        elif kind is ast.MatchMapping:
+            flag(node.rest)
+        elif kind is ast.comprehension:
+            if node.is_async:
+                found.add("FORBIDDEN_ASYNC_FUNCTION")
         elif kind is ast.Constant:
             digest_seen = digest_seen or (isinstance(node.value, str) and _DIGEST_LITERAL in node.value)
         elif kind is ast.Call:
@@ -695,8 +732,10 @@ def _content_violations(source: object, symbol: object, repo_top_levels: frozens
 def validate_benchmark_content(source: bytes, symbol: str, repo_top_levels: frozenset[str]) -> list[str]:
     """Lint one benchmark file; return violation codes (``VIOLATION_CODES``), empty meaning accepted.
 
-    NEVER raises: any failure of the parser or of the checks themselves becomes ``PARSE_FAILED`` or
-    ``ANALYSIS_FAILED``. The result is de-duplicated and in the canonical ``VIOLATION_CODES`` order, so equal
+    NEVER raises: any failure of the parser becomes ``PARSE_FAILED`` (deep nesting, ``RecursionError``, a null
+    byte), and ``ANALYSIS_FAILED`` is for a ``repo_top_levels`` that is not exactly a ``set``/``frozenset`` of
+    ``str`` (checked first, so a stdlib-only source cannot get past a bad argument) or an unexpected error in the
+    checks. The result is de-duplicated and in the canonical ``VIOLATION_CODES`` order, so equal
     inputs give equal output. A file that fails a byte-level rule (``FILE_TOO_LARGE``, ``NON_ASCII_SOURCE``,
     ``ENCODING_REJECTED``) is not parsed, so those codes are never mixed with AST codes.
 
@@ -711,7 +750,12 @@ def validate_benchmark_content(source: bytes, symbol: str, repo_top_levels: froz
     decorator on any function (module-level helper functions and constants are fine). Imports: a stdlib module
     must be in ``_STDLIB_IMPORT_ALLOWLIST`` (``pytest`` is rejected even if ``repo_top_levels`` names it), any other
     top-level name must be in ``repo_top_levels`` (the top-level packages and modules of the base export), and a
-    relative import is rejected. ``_BANNED_NAMES`` and every dunder are rejected as ``Name`` or ``Attribute``.
+    relative import and ``from X import *`` are rejected. ``_BANNED_NAMES`` and every dunder are rejected as
+    ``Name`` or ``Attribute`` and also wherever a name is only a string in the AST: every dotted component of an
+    import's module and aliases (``from json import __builtins__ as bb``; the ``__future__`` module itself is
+    exempt), ``match`` captures and class-pattern attributes, and type-parameter names. Every async construct
+    (``async def``/``with``/``for``, ``await``, an async comprehension) is ``FORBIDDEN_ASYNC_FUNCTION``: the
+    parser accepts the latter ones outside an ``async def``. ``del test_x`` counts as a binding of ``test_x``.
     Required: a ``print(...)`` call, the literal ``BENCH_RESULT_DIGEST: `` in a string constant, a
     ``hashlib.sha256(...)`` call (or a call of the name bound by ``from hashlib import sha256``), and a reference to
     ``symbol`` as ``Name.id``, ``Attribute.attr``, an import ``alias.name``/``asname``, or a dotted component of an

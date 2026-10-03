@@ -116,6 +116,24 @@ def test_symbol_denylist_is_the_design_list():
     )
 
 
+def test_symbol_known_file_extension_set_is_pinned():
+    # The parametrized test below iterates this set, so pin its literal contents here.
+    assert bg._KNOWN_FILE_EXTENSIONS == frozenset(
+        "js jsx ts tsx pyi pyc pyw pyx pxd go rs java kt rb php c h cc cpp cs scala swift lua dart sql sh md json yaml "
+        "yml toml txt html css".split()
+    )
+
+
+@pytest.mark.parametrize("ext", sorted(bg._KNOWN_FILE_EXTENSIONS))
+def test_symbol_every_known_bare_file_extension_is_a_file_not_a_symbol(ext):
+    assert bg.benchmark_symbol_from_location(f"orders.{ext}") is None
+    assert bg.benchmark_symbol_from_location(f"orders.{ext.upper()}") is None  # matched casefolded
+
+
+def test_symbol_bare_uppercase_extension_is_a_file():
+    assert bg.benchmark_symbol_from_location("config.JSON") is None
+
+
 def test_symbol_bare_dotted_name_with_an_unlisted_extension_is_a_dotted_symbol():
     # Documented limit: `OrderService.list_orders` must yield `list_orders`, so a bare `name.ext` whose extension is
     # not in _KNOWN_FILE_EXTENSIONS cannot be told apart from a dotted symbol. With a `/` it is always a file.
@@ -890,6 +908,18 @@ def test_cli_validate_huge_int_gate_value_is_a_rejection_not_a_crash(tmp_path, c
     gate = {**GOOD_GATE, "min_improvement": 10**4000}
     code, cap = _run(tmp_path, capsys, {"performance_review_origin": True, "benchmark_gate": gate})
     assert (code, cap.out) == (1, "REJECT:BOUNDS_REJECTED\n")
+
+
+def test_cli_validate_input_cap_boundary_is_exactly_1_mib(tmp_path, capsys):
+    exact = tmp_path / "exact.json"
+    exact.write_bytes(b"{}" + b" " * (bg._MAX_INPUT_BYTES - 2))
+    over = tmp_path / "over.json"
+    over.write_bytes(b"{}" + b" " * (bg._MAX_INPUT_BYTES - 1))
+    assert bg._MAX_INPUT_BYTES == 1 << 20
+    assert bg.main(["validate", "--specialist-inputs", str(exact)]) == 3
+    assert capsys.readouterr().out == "NOT_GATED\n"
+    assert bg.main(["validate", "--specialist-inputs", str(over)]) == 2
+    assert capsys.readouterr().out == ""
 
 
 def test_cli_validate_reads_at_most_the_cap_plus_one_byte(tmp_path):

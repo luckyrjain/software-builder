@@ -389,6 +389,12 @@ TEST_NAME_CASES = {
     "walrus": (with_top("while (test_w := 0):\n    pass\n"), {"TEST_NAME_COUNT"}),
     "walrus in a comprehension": (with_top("XS = [(test_w := x) for x in range(2)]\n"), {"TEST_NAME_COUNT"}),
     "walrus in a default": (with_top("def helper(x=(test_h := 1)):\n    return x\n"), {"TEST_NAME_COUNT"}),
+    "match star capture": (with_top("LIMIT = 1\nmatch LIMIT:\n    case [*test_m]:\n        pass\n"), {"TEST_NAME_COUNT"}),
+    "match mapping rest": (with_top("LIMIT = 1\nmatch LIMIT:\n    case {**test_m}:\n        pass\n"), {"TEST_NAME_COUNT"}),
+    "del of the test name": (with_top("del test_bench\n"), {"TEST_NAME_COUNT"}),
+    "walrus in a comprehension if clause": (
+        with_top("XS = [x for x in range(3) if (test_w := x)]\n"), {"TEST_NAME_COUNT"}
+    ),
     "match capture": (with_top("LIMIT = 1\nmatch LIMIT:\n    case test_m:\n        pass\n"), {"TEST_NAME_COUNT"}),
     "only name is an assignment": (
         swap(b"def test_bench():", b"def helper_bench():") + b"\ntest_bench = helper_bench\n", {"TEST_NOT_FUNCTION"}
@@ -496,6 +502,190 @@ def test_invalid_symbol_is_a_violation_not_a_free_pass(symbol):
     assert lint(GOOD, symbol=symbol) == ["SYMBOL_INVALID"]
 
 
+def test_more_required_element_forms():
+    assert codes(swap(b"hashlib.sha256(repr(value).encode())", b"hashlib.md5(repr(value).encode())")) == {"MISSING_SHA256"}
+    # The design says the literal is "in a string constant", not at its start.
+    assert lint(swap(b'"BENCH_RESULT_DIGEST: "', b'"x BENCH_RESULT_DIGEST: "')) == []
+    sha512 = swap(b"import hashlib\n", b"from hashlib import sha512\n").replace(b"hashlib.sha256(", b"sha512(")
+    assert codes(sha512) == {"MISSING_SHA256"}
+
+
+def test_dunder_means_both_underscores_and_a_nested_def_is_not_module_level():
+    assert lint(with_top("def h(__private):\n    return __private\n")) == []
+    assert lint(with_top("def h():\n    def test_x():\n        return 1\n    return test_x\n")) == []
+    assert lint(with_top("def h():\n    test_x = 1\n    del test_x\n")) == []
+
+
+# ---------------------------------------------------------------------------
+# Names that are only strings in the AST (no Name or Attribute node says so)
+# ---------------------------------------------------------------------------
+
+MY_TOPS = frozenset({"app", "mypkg"})
+
+
+def _match(pattern: str) -> bytes:
+    return with_top(f"def h(fib):\n    match fib:\n        case {pattern}:\n            return 1\n")
+
+
+STRING_NAME_CASES = {
+    "from-import dunder as alias (eval via __builtins__)": (
+        with_imports("from json import __builtins__ as bb") + b"\n\ndef h():\n    return bb['eval']('6*7')\n",
+        {"DUNDER_NAME"},
+    ),
+    "from-import dunder, no alias": (with_imports("from json import __builtins__"), {"DUNDER_NAME"}),
+    "import as dunder": (with_imports("import json as __builtins__"), {"DUNDER_NAME"}),
+    "from-import banned as alias": (with_imports("from mypkg import open as o"), {"BANNED_NAME"}),
+    "from-import banned asname only": (with_imports("from mypkg import thing as open"), {"BANNED_NAME"}),
+    "stdlib from-import of a banned name": (with_imports("from re import compile"), {"BANNED_NAME"}),
+    "dunder module component": (with_imports("import mypkg.__main__"), {"DUNDER_NAME"}),
+    "dunder from-module component": (with_imports("from mypkg.__main__ import thing"), {"DUNDER_NAME"}),
+    "banned module component": (with_imports("import mypkg.open"), {"BANNED_NAME"}),
+    "banned from-module component": (with_imports("from mypkg.open import thing"), {"BANNED_NAME"}),
+    "class pattern dunder attribute": (_match("object(__globals__=g)"), {"DUNDER_NAME"}),
+    "class pattern banned attribute": (_match("object(open=o)"), {"BANNED_NAME"}),
+    "match as-capture dunder": (_match("int() as __builtins__"), {"DUNDER_NAME"}),
+    "match as-capture banned": (_match("int() as open"), {"BANNED_NAME"}),
+    "match star capture banned": (_match("[*open]"), {"BANNED_NAME"}),
+    "match star capture dunder": (_match("[*__rest__]"), {"DUNDER_NAME"}),
+    "match mapping rest banned": (_match("{**open}"), {"BANNED_NAME"}),
+    "match mapping rest dunder": (_match("{**__rest__}"), {"DUNDER_NAME"}),
+    "TypeVar name": (with_top("def h[__t__](x):\n    return x\n"), {"DUNDER_NAME"}),
+    "TypeVar banned name": (with_top("def h[open](x):\n    return x\n"), {"BANNED_NAME"}),
+    "ParamSpec name": (with_top("def h[**__p__](x):\n    return x\n"), {"DUNDER_NAME"}),
+    "TypeVarTuple name": (with_top("def h[*__t__](x):\n    return x\n"), {"DUNDER_NAME"}),
+}
+
+
+@pytest.mark.parametrize("source, expected", list(STRING_NAME_CASES.values()), ids=list(STRING_NAME_CASES))
+def test_names_spelled_only_as_strings_are_rejected(source, expected):
+    assert codes(source, tops=MY_TOPS) == expected
+
+
+def test_honest_import_and_match_forms_are_not_rejected():
+    for imports in ("from json import loads as x", "import json", "from __future__ import annotations", "import json.decoder"):
+        assert lint(with_imports(imports)) == []
+    assert lint(_match("int() as number")) == [] and lint(_match("object(real=g)")) == []
+    assert lint(with_top("def h[T](x: T) -> T:\n    return x\n")) == []
+
+
+# ---------------------------------------------------------------------------
+# Star imports, async constructs, and a repo_top_levels that must not fail open
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("line", ["from json import *", "from app.orders import *"])
+def test_star_import_is_rejected(line):
+    assert codes(with_imports(line)) == {"STAR_IMPORT"}
+    assert codes(with_imports("from . import *")) == {"RELATIVE_IMPORT", "STAR_IMPORT"}
+
+
+@pytest.mark.parametrize(
+    "text", ["async with a:\n    pass\n", "async for x in y:\n    pass\n", "await z\n", "XS = [x async for x in y]\n"],
+)
+def test_async_constructs_outside_an_async_def_are_rejected(text):
+    assert codes(with_top(text)) == {"FORBIDDEN_ASYNC_FUNCTION"}
+
+
+STDLIB_ONLY = swap(b"from app.orders import build_report\n", b"").replace(b"build_report(i)", b"i")
+
+
+class _AlwaysTrue:
+    def __contains__(self, item):
+        return True
+
+
+class _FrozenSub(frozenset):
+    pass
+
+
+BAD_TOP_LEVELS = [
+    "app", ["app"], ("app",), {"app": 1}, None, 5, _AlwaysTrue(), {"app", 5}, frozenset({b"app"}), _FrozenSub({"app"}),
+    iter(["app"]),
+]
+
+
+@pytest.mark.parametrize("tops", BAD_TOP_LEVELS, ids=[type(t).__name__ for t in BAD_TOP_LEVELS])
+def test_malformed_repo_top_levels_never_fail_open(tops):
+    # Even a stdlib-only source: the argument is rejected before anything else is looked at.
+    assert lint(STDLIB_ONLY, symbol="_digest", tops=tops) == ["ANALYSIS_FAILED"]
+    assert lint(with_imports("import app"), tops=tops) == ["ANALYSIS_FAILED"]
+
+
+def test_well_formed_repo_top_levels_are_accepted_as_set_or_frozenset():
+    assert lint(STDLIB_ONLY, symbol="_digest", tops=frozenset()) == []
+    assert lint(GOOD, tops={"app"}) == []
+    assert lint(GOOD, tops=frozenset({"app"})) == []
+
+
+def test_parse_failed_and_analysis_failed_are_distinct(monkeypatch):
+    def boom(*args, **kwargs):
+        raise RecursionError("maximum recursion depth exceeded")
+
+    monkeypatch.setattr(ast, "parse", boom)
+    assert lint(GOOD) == ["PARSE_FAILED"]
+    monkeypatch.undo()
+    monkeypatch.setattr(bg, "_module_level_bindings", boom)
+    assert lint(GOOD) == ["ANALYSIS_FAILED"]
+
+
+def test_a_real_parser_resource_failure_under_the_size_cap_is_parse_failed():
+    # The 16 KiB cap keeps almost every deep input away from the parser's recursion limit; 16000 unary minus signs
+    # still defeat it (MemoryError on 3.14, RecursionError on some versions), and must be a code, not a crash.
+    source = b"x = " + b"-" * 16000 + b"1\n"
+    try:
+        ast.parse(source)
+    except (RecursionError, MemoryError):
+        assert len(source) < 16 * 1024 and lint(source) == ["PARSE_FAILED"]
+    else:
+        pytest.skip("this interpreter parses the expression")
+
+
+# ---------------------------------------------------------------------------
+# Honest benchmarks must stay accepted
+# ---------------------------------------------------------------------------
+
+HONEST = {
+    "fib loop": (
+        b"import hashlib\nfrom app.maths import fib\n\n\ndef _checksum(values):\n"
+        b"    return hashlib.sha256(repr(values).encode()).hexdigest()\n\n\ndef test_bench():\n"
+        b"    total = 0\n    values = []\n    for n in range(20):\n        total += fib(n)\n        values.append(total)\n"
+        b'    print("BENCH_RESULT_DIGEST: " + _checksum(values))\n',
+        "fib",
+    ),
+    "sqlite3 N+1 fixture": (
+        b"import hashlib\nimport sqlite3\nfrom app.orders import load_orders\n\n\ndef _setup():\n"
+        b'    conn = sqlite3.connect(":memory:")\n    conn.execute("CREATE TABLE t (id INTEGER, v INTEGER)")\n'
+        b'    conn.executemany("INSERT INTO t VALUES (?, ?)", [(i, i * 2) for i in range(100)])\n    return conn\n\n\n'
+        b"def test_bench():\n    conn = _setup()\n"
+        b'    rows = [conn.execute("SELECT v FROM t WHERE id = ?", (i,)).fetchone()[0] for i in range(100)]\n'
+        b'    conn.close()\n    print("BENCH_RESULT_DIGEST: " + hashlib.sha256(repr((rows, load_orders)).encode()).hexdigest())\n',
+        "load_orders",
+    ),
+    "from hashlib import sha256 with Counter": (
+        b"from collections import Counter\nfrom hashlib import sha256\nfrom app.text import word_count\n\n\n"
+        b'def test_bench():\n    counts = Counter(word_count("a b a c"))\n'
+        b'    print("BENCH_RESULT_DIGEST: " + sha256(repr(sorted(counts.items())).encode()).hexdigest())\n',
+        "word_count",
+    ),
+    "lru_cache call form": (
+        b"import functools\nimport hashlib\nfrom app.maths import fib\n\n\ndef test_bench():\n"
+        b"    cached = functools.lru_cache(maxsize=None)(fib)\n"
+        b'    print("BENCH_RESULT_DIGEST: " + hashlib.sha256(repr(cached(25)).encode()).hexdigest())\n',
+        "fib",
+    ),
+    "from json import loads as x": (
+        b"import hashlib\nfrom json import loads as x\nfrom app.orders import build_report\n\n\ndef test_bench():\n"
+        b'    rows = x("[1, 2]") + [build_report(1)]\n'
+        b'    print("BENCH_RESULT_DIGEST: " + hashlib.sha256(repr(rows).encode()).hexdigest())\n',
+        "build_report",
+    ),
+}
+
+
+@pytest.mark.parametrize("source, symbol", list(HONEST.values()), ids=list(HONEST))
+def test_honest_benchmark_idioms_stay_accepted(source, symbol):
+    assert lint(source, symbol=symbol) == []
+
+
 # ---------------------------------------------------------------------------
 # Output contract: de-duplicated, deterministic, canonical order, stable code set
 # ---------------------------------------------------------------------------
@@ -514,7 +704,7 @@ def test_documented_code_set_is_exactly_this():
         "SOURCE_NOT_BYTES", "FILE_TOO_LARGE", "NON_ASCII_SOURCE", "ENCODING_REJECTED", "PARSE_FAILED",
         "ANALYSIS_FAILED", "SYMBOL_INVALID", "FORBIDDEN_CLASS", "FORBIDDEN_ASYNC_FUNCTION", "FORBIDDEN_LAMBDA",
         "FORBIDDEN_TRY", "FORBIDDEN_WITH", "FORBIDDEN_GLOBAL", "FORBIDDEN_NONLOCAL", "FORBIDDEN_DECORATOR",
-        "RELATIVE_IMPORT", "IMPORT_NOT_ALLOWED", "BANNED_NAME", "DUNDER_NAME", "TEST_NAME_COUNT",
+        "RELATIVE_IMPORT", "STAR_IMPORT", "IMPORT_NOT_ALLOWED", "BANNED_NAME", "DUNDER_NAME", "TEST_NAME_COUNT",
         "TEST_NOT_FUNCTION", "TEST_HAS_PARAMETERS", "MISSING_PRINT", "MISSING_DIGEST_LITERAL", "MISSING_SHA256",
         "MISSING_SYMBOL_REFERENCE",
     )
@@ -529,6 +719,7 @@ def test_every_code_is_reachable():
         reached.update(lint(sample))
     reached.update(lint(GOOD, symbol="ab"))
     reached.update(lint(GOOD, tops=5))
+    reached.update(lint(with_imports("from json import *")))
     reached.update(lint(swap(b"def test_bench():", b"def test_bench(x):")))
     assert reached == set(bg.VIOLATION_CODES)
 
@@ -580,6 +771,16 @@ def test_cli_repo_root_derives_top_levels_and_combines_with_top_level(tmp_path, 
     code, cap = _lint_cli(tmp_path, capsys, with_imports("import bad_name"), "--repo-root", str(root))
     assert (code, cap.out) == (1, "IMPORT_NOT_ALLOWED\n")
     code, cap = _lint_cli(tmp_path, capsys, with_imports("import extra"), "--repo-root", str(root), "--top-level", "extra")
+    assert (code, cap.out) == (0, "")
+
+
+def test_cli_repo_root_ignores_non_ascii_names_without_crashing(tmp_path, capsys):
+    root = tmp_path / "repo"
+    (root / "app").mkdir(parents=True)
+    (root / "café").mkdir()
+    (root / "café.py").write_text("x = 1\n", encoding="utf-8")
+    assert bg._repo_top_levels(root) == {"app"}
+    code, cap = _lint_cli(tmp_path, capsys, GOOD, "--repo-root", str(root))
     assert (code, cap.out) == (0, "")
 
 
