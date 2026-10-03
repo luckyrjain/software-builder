@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import json
+import os
 import sys
 from decimal import Decimal
 from fractions import Fraction
@@ -889,8 +890,9 @@ def test_cli_usage_errors_exit_2(tmp_path, capsys):
 # Everything the module may import at import time. Platform-specific modules (resource, fcntl, termios, ...) must
 # be imported lazily inside the function that needs them, so the module imports on every platform.
 _TOP_LEVEL_IMPORT_ALLOWLIST = {
-    "__future__", "argparse", "ast", "codecs", "dis", "fractions", "hashlib", "io", "json", "math", "os", "pathlib",
-    "posixpath", "re", "stat", "sys", "tokenize", "types", "warnings",
+    "__future__", "argparse", "ast", "codecs", "dis", "fractions", "hashlib", "io", "json", "keyword", "math",
+    "os", "pathlib", "posixpath", "re", "shutil", "stat", "subprocess", "sys", "tempfile", "time", "tokenize", "types",
+    "unicodedata", "warnings",
 }
 
 
@@ -933,3 +935,30 @@ def test_cli_validate_input_cap_boundary_is_exactly_1_mib(tmp_path, capsys):
     assert capsys.readouterr().out == "NOT_GATED\n"
     assert bg.main(["validate", "--specialist-inputs", str(over)]) == 2
     assert capsys.readouterr().out == ""
+
+
+# --- C4b review carry-overs (B1): `validate` input handling ---
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs os.mkfifo")
+def test_cli_validate_fifo_is_a_usage_error_and_does_not_hang(tmp_path, capsys):
+    fifo = tmp_path / "si.fifo"
+    os.mkfifo(fifo)  # no writer: a blocking open would hang the test run
+    assert bg.main(["validate", "--specialist-inputs", str(fifo)]) == 2
+    assert capsys.readouterr().out == ""
+
+
+def test_cli_validate_invalid_utf8_is_a_usage_error_not_a_rejection(tmp_path, capsys):
+    path = tmp_path / "si.json"
+    path.write_bytes(b'{"performance_review_origin": true, "x": "\xff"}')
+    assert bg.main(["validate", "--specialist-inputs", str(path)]) == 2
+    assert capsys.readouterr().out == ""  # exit 2 (usage), not 3 (NOT_GATED) or 1 (REJECT)
+
+
+def test_cli_validate_reads_at_most_the_input_cap(tmp_path, monkeypatch, capsys):
+    limits = []
+    real = bg._read_bounded
+    monkeypatch.setattr(bg, "_read_bounded", lambda path, limit, *a, **k: limits.append(limit) or real(path, limit, *a, **k))
+    path = tmp_path / "si.json"
+    path.write_text("{}", encoding="utf-8")
+    assert bg.main(["validate", "--specialist-inputs", str(path)]) == 3
+    assert limits == [bg._MAX_INPUT_BYTES]
