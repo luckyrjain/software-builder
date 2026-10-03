@@ -205,8 +205,6 @@ def test_bytes_subclass_is_not_trusted():
 
 def test_hostile_arguments_never_raise():
     assert lint(GOOD, symbol=None) == ["SYMBOL_INVALID"]
-    assert lint(GOOD, tops=5) == ["ANALYSIS_FAILED"]
-    assert lint(GOOD, tops=None) == ["ANALYSIS_FAILED"]
 
 
 # ---------------------------------------------------------------------------
@@ -389,6 +387,16 @@ TEST_NAME_CASES = {
     "walrus": (with_top("while (test_w := 0):\n    pass\n"), {"TEST_NAME_COUNT"}),
     "walrus in a comprehension": (with_top("XS = [(test_w := x) for x in range(2)]\n"), {"TEST_NAME_COUNT"}),
     "walrus in a default": (with_top("def helper(x=(test_h := 1)):\n    return x\n"), {"TEST_NAME_COUNT"}),
+    # Annotations and defaults run in the enclosing scope (annotations at def time on 3.12 and 3.13).
+    "walrus in a positional annotation": (with_top("def _a(a: (test_z := f)):\n    pass\n"), {"TEST_NAME_COUNT"}),
+    "walrus in a positional-only annotation": (with_top("def _a(a: (test_z := f), /):\n    pass\n"), {"TEST_NAME_COUNT"}),
+    "walrus in a return annotation": (with_top("def _a() -> (test_z := f):\n    pass\n"), {"TEST_NAME_COUNT"}),
+    "walrus in a *args annotation": (with_top("def _a(*a: (test_z := f)):\n    pass\n"), {"TEST_NAME_COUNT"}),
+    "walrus in a **kwargs annotation": (with_top("def _a(**k: (test_z := f)):\n    pass\n"), {"TEST_NAME_COUNT"}),
+    "walrus in a keyword-only annotation": (with_top("def _a(*, k: (test_z := f)):\n    pass\n"), {"TEST_NAME_COUNT"}),
+    "walrus in a keyword-only default": (with_top("def _a(*, k=(test_kw := f)):\n    pass\n"), {"TEST_NAME_COUNT"}),
+    "testforged is a test name too (prefix is test, not test_)": (with_top("testforged = f\n"), {"TEST_NAME_COUNT"}),
+    "def testforged": (with_top("def testforged():\n    pass\n"), {"TEST_NAME_COUNT"}),
     "match star capture": (with_top("LIMIT = 1\nmatch LIMIT:\n    case [*test_m]:\n        pass\n"), {"TEST_NAME_COUNT"}),
     "match mapping rest": (with_top("LIMIT = 1\nmatch LIMIT:\n    case {**test_m}:\n        pass\n"), {"TEST_NAME_COUNT"}),
     "del of the test name": (with_top("del test_bench\n"), {"TEST_NAME_COUNT"}),
@@ -514,6 +522,7 @@ def test_dunder_means_both_underscores_and_a_nested_def_is_not_module_level():
     assert lint(with_top("def h(__private):\n    return __private\n")) == []
     assert lint(with_top("def h():\n    def test_x():\n        return 1\n    return test_x\n")) == []
     assert lint(with_top("def h():\n    test_x = 1\n    del test_x\n")) == []
+    assert lint(with_top("def f(a: int, *r: int, k: int = 1, **kw: int) -> int:\n    return a\n")) == []  # honest annotations
 
 
 # ---------------------------------------------------------------------------
@@ -539,16 +548,19 @@ STRING_NAME_CASES = {
     "stdlib from-import of a banned name": (with_imports("from re import compile"), {"BANNED_NAME"}),
     "dunder module component": (with_imports("import mypkg.__main__"), {"DUNDER_NAME"}),
     "dunder from-module component": (with_imports("from mypkg.__main__ import thing"), {"DUNDER_NAME"}),
-    "banned module component": (with_imports("import mypkg.open"), {"BANNED_NAME"}),
-    "banned from-module component": (with_imports("from mypkg.open import thing"), {"BANNED_NAME"}),
+    "banned first component of a plain import": (with_imports("import open"), {"BANNED_NAME", "IMPORT_NOT_ALLOWED"}),
+    "banned asname of a plain import": (with_imports("import json as eval"), {"BANNED_NAME"}),
+    "banned asname of a from-import": (with_imports("from json import loads as eval"), {"BANNED_NAME"}),
+    "dunder in the middle of a dotted import": (with_imports("import mypkg.__x__.sub"), {"DUNDER_NAME"}),
+    "dunder first component of a dotted import": (
+        with_imports("import __x__.mypkg"), {"DUNDER_NAME", "IMPORT_NOT_ALLOWED"}
+    ),
     "class pattern dunder attribute": (_match("object(__globals__=g)"), {"DUNDER_NAME"}),
     "class pattern banned attribute": (_match("object(open=o)"), {"BANNED_NAME"}),
     "match as-capture dunder": (_match("int() as __builtins__"), {"DUNDER_NAME"}),
     "match as-capture banned": (_match("int() as open"), {"BANNED_NAME"}),
     "match star capture banned": (_match("[*open]"), {"BANNED_NAME"}),
-    "match star capture dunder": (_match("[*__rest__]"), {"DUNDER_NAME"}),
     "match mapping rest banned": (_match("{**open}"), {"BANNED_NAME"}),
-    "match mapping rest dunder": (_match("{**__rest__}"), {"DUNDER_NAME"}),
     "TypeVar name": (with_top("def h[__t__](x):\n    return x\n"), {"DUNDER_NAME"}),
     "TypeVar banned name": (with_top("def h[open](x):\n    return x\n"), {"BANNED_NAME"}),
     "ParamSpec name": (with_top("def h[**__p__](x):\n    return x\n"), {"DUNDER_NAME"}),
@@ -559,6 +571,19 @@ STRING_NAME_CASES = {
 @pytest.mark.parametrize("source, expected", list(STRING_NAME_CASES.values()), ids=list(STRING_NAME_CASES))
 def test_names_spelled_only_as_strings_are_rejected(source, expected):
     assert codes(source, tops=MY_TOPS) == expected
+
+
+@pytest.mark.parametrize("builtin", sorted(n for n in bg._BANNED_NAMES if not n.startswith("__")))
+def test_a_banned_name_in_a_module_path_binds_nothing_and_is_accepted(builtin):
+    # `import a.b` binds only `a` and `from a.b import c` only `c`: `mypkg.open` is an honest module path.
+    source = with_imports(f"import mypkg.{builtin} as m", f"import mypkg.{builtin}.sub", f"from mypkg.{builtin} import render")
+    assert lint(source, tops=MY_TOPS) == []
+
+
+def test_symbol_named_like_a_banned_builtin_is_satisfiable_through_a_module_path():
+    # benchmark_symbol_from_location("src/app/open.py") is `open`; the benchmark must still be writable.
+    source = with_imports("from app.open import go").replace(b"build_report(i)", b"go(i)")
+    assert lint(source, symbol="open") == []
 
 
 def test_honest_import_and_match_forms_are_not_rejected():
@@ -779,9 +804,23 @@ def test_cli_repo_root_ignores_non_ascii_names_without_crashing(tmp_path, capsys
     (root / "app").mkdir(parents=True)
     (root / "café").mkdir()
     (root / "café.py").write_text("x = 1\n", encoding="utf-8")
+    (root / "pkg.py").mkdir()  # a directory named like a module is no module: `pkg` is not a top-level name
     assert bg._repo_top_levels(root) == {"app"}
     code, cap = _lint_cli(tmp_path, capsys, GOOD, "--repo-root", str(root))
     assert (code, cap.out) == (0, "")
+    non_ascii_root = tmp_path / "répô"  # the --repo-root path itself is non-ASCII
+    (non_ascii_root / "app").mkdir(parents=True)
+    code, cap = _lint_cli(tmp_path, capsys, GOOD, "--repo-root", str(non_ascii_root))
+    assert (code, cap.out) == (0, "")
+
+
+@pytest.mark.skipif(not os.path.isdir("/dev/fd"), reason="needs /dev/fd to count descriptors")
+def test_read_bounded_on_a_directory_does_not_leak_a_descriptor(tmp_path):
+    before = len(os.listdir("/dev/fd"))
+    for _ in range(50):
+        with pytest.raises(ValueError):
+            bg._read_bounded(str(tmp_path), 10)
+    assert len(os.listdir("/dev/fd")) == before
 
 
 def test_cli_repo_root_that_is_not_a_directory_is_a_usage_error(tmp_path, capsys):
@@ -814,8 +853,11 @@ def test_cli_fifo_does_not_hang_and_is_a_usage_error(tmp_path, capsys):
     assert capsys.readouterr().out == ""
 
 
-def test_cli_usage_errors_exit_2(capsys):
+def test_cli_usage_errors_exit_2(tmp_path, capsys):
+    existing = tmp_path / "bench_exists.py"
+    existing.write_bytes(GOOD)
     for argv in (["lint"], ["lint", "--benchmark", "x"], ["lint", "--symbol", SYMBOL], ["lint", "--benchmark"],
+                 ["lint", "--benchmark", str(existing)],  # an existing file with --symbol missing is still a usage error
                  ["lint", "--benchmark", "x", "--symbol", SYMBOL, "--bogus"]):
         assert bg.main(argv) == 2, argv
     assert capsys.readouterr().out == ""

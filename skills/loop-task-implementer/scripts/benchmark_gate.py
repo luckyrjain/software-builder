@@ -558,8 +558,16 @@ def _module_level_bindings(tree: ast.Module) -> list[str]:
             if isinstance(node, ast.ClassDef):
                 stack.extend((child, True) for child in node.body)
                 continue
-            # Decorators and defaults are evaluated in the enclosing scope; the body is not.
-            outer = [*node.decorator_list, *node.args.defaults, *(d for d in node.args.kw_defaults if d is not None)]
+            # Decorators, defaults and annotations are evaluated in the enclosing scope (annotations at def time
+            # on 3.12 and 3.13, so ``def f(x: (test_b := g))`` binds ``test_b`` there); the body is not.
+            args = node.args
+            every_arg = [*args.posonlyargs, *args.args, *args.kwonlyargs, *(a for a in (args.vararg, args.kwarg) if a)]
+            outer = [
+                *node.decorator_list, *args.defaults, *(d for d in args.kw_defaults if d is not None),
+                *(a.annotation for a in every_arg if a.annotation is not None),
+            ]
+            if node.returns is not None:
+                outer.append(node.returns)
             stack.extend((child, local) for child in outer)
             stack.extend((child, True) for child in node.body)
         elif isinstance(node, ast.Lambda):
@@ -631,11 +639,12 @@ def _content_violations(source: object, symbol: object, repo_top_levels: frozens
         if not allowed:
             found.add("IMPORT_NOT_ALLOWED")
 
-    def flag(name: str | None) -> None:
+    def flag(name: str | None, banned: bool = True) -> None:
         """A name spelled as a plain string in the AST (import components and aliases, ``match`` captures and
         class-pattern attributes, type parameters) is as dangerous as a ``Name`` node: ``from json import
-        __builtins__ as bb`` reaches ``eval`` with no ``Name`` or ``Attribute`` that says so."""
-        if name in _BANNED_NAMES:
+        __builtins__ as bb`` reaches ``eval`` with no ``Name`` or ``Attribute`` that says so. ``banned=False``
+        checks dunders only, for a module-path component that is never bound or fetched as a name."""
+        if banned and name in _BANNED_NAMES:
             found.add("BANNED_NAME")
         if _is_dunder(name):
             found.add("DUNDER_NAME")
@@ -662,9 +671,11 @@ def _content_violations(source: object, symbol: object, repo_top_levels: frozens
         elif kind is ast.Import:
             for alias in node.names:
                 check_import(alias.name)
-                for part in (*alias.name.split("."), alias.asname):
-                    flag(part)
-                symbol_seen = symbol_seen or symbol in (*alias.name.split("."), alias.asname)
+                parts = alias.name.split(".")
+                for index, part in enumerate(parts):
+                    flag(part, banned=index == 0)  # ``import a.b`` binds only ``a``
+                flag(alias.asname)
+                symbol_seen = symbol_seen or symbol in (*parts, alias.asname)
         elif kind is ast.ImportFrom:
             module = node.module or ""
             if node.level > 0:
@@ -675,13 +686,13 @@ def _content_violations(source: object, symbol: object, repo_top_levels: frozens
                     sha256_names.update(alias.asname or alias.name for alias in node.names if alias.name == "sha256")
             if module != "__future__":  # the one module whose own name is a dunder
                 for part in module.split("."):
-                    flag(part)
+                    flag(part, banned=False)  # ``from a.b import c`` binds only ``c``
             symbol_seen = symbol_seen or symbol in module.split(".")
             for alias in node.names:
                 if alias.name == "*":
                     found.add("STAR_IMPORT")
-                for part in (*alias.name.split("."), alias.asname):
-                    flag(part)
+                flag(alias.name)
+                flag(alias.asname)
                 symbol_seen = symbol_seen or symbol in (alias.name, alias.asname)
         elif kind is ast.MatchClass:
             for attr in node.kwd_attrs:
@@ -797,9 +808,14 @@ def _read_bounded(path: str, limit: int) -> bytes:
     Raises ``OSError`` or ``ValueError``; both are usage errors to the CLI.
     """
     fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
-    with os.fdopen(fd, "rb") as handle:
-        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
             raise ValueError("not a regular file")
+        handle = os.fdopen(fd, "rb")  # ``fdopen`` itself raises on a directory, so check before it, and close on failure
+    except BaseException:
+        os.close(fd)
+        raise
+    with handle:
         return handle.read(limit + 1)
 
 
