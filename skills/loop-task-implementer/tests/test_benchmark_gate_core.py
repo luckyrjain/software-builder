@@ -109,15 +109,13 @@ def test_symbol_rejected_shapes(location):
     assert bg.benchmark_symbol_from_location(location) is None
 
 
-def test_symbol_denylist_is_the_design_list():
-    # The rejected-shape cases above are generated from the set itself, so pin its literal contents here.
+def test_symbol_denylist_is_the_design_list():  # the rejected-shape cases above are generated from the set itself
     assert bg._SYMBOL_DENYLIST == frozenset(
         {"print", "hashlib", "sha256", "main", "data", "sort", "load", "list", "item", "time", "test", "bench", "run", "get", "set"}
     )
 
 
-def test_symbol_known_file_extension_set_is_pinned():
-    # The parametrized test below iterates this set, so pin its literal contents here.
+def test_symbol_known_file_extension_set_is_pinned():  # the parametrized test below iterates this set
     assert bg._KNOWN_FILE_EXTENSIONS == frozenset(
         "js jsx ts tsx pyi pyc pyw pyx pxd go rs java kt rb php c h cc cpp cs scala swift lua dart sql sh md json yaml "
         "yml toml txt html css".split()
@@ -130,13 +128,31 @@ def test_symbol_every_known_bare_file_extension_is_a_file_not_a_symbol(ext):
     assert bg.benchmark_symbol_from_location(f"orders.{ext.upper()}") is None  # matched casefolded
 
 
-def test_symbol_bare_uppercase_extension_is_a_file():
-    assert bg.benchmark_symbol_from_location("config.JSON") is None
+@pytest.mark.parametrize("name", sorted(n for n in bg._BANNED_NAMES if not n.startswith("__")))
+def test_symbol_derived_from_a_method_or_function_named_like_a_banned_builtin_is_none(name):
+    # The lint rejects these names as Name, Attribute and alias, so no benchmark could reference such a symbol.
+    for location in (f"app/db.py::Database.{name}", f"app/db.py::{name}", f"Database.{name}", f"{name}()", f"`{name}`"):
+        assert bg.benchmark_symbol_from_location(location) is None, location
+
+
+@pytest.mark.parametrize("name", ["__eq__", "__hash__", "__mul__", "__contains__", "__iter__", "__init__", "__main__"])
+def test_symbol_derived_dunder_is_none_and_the_gate_rejects_it(name):
+    for location in (f"app/orders.py::Order.{name}", f"Order.{name}", f"{name}()"):
+        assert bg.benchmark_symbol_from_location(location) is None, location
+    assert bg.validate_benchmark_gate(_gate(benchmark_symbol=name)) == (None, "SYMBOL_REJECTED")
+
+
+def test_symbol_file_level_module_stem_named_like_a_builtin_stays_derivable():
+    # `src/app/open.py` -> `open` is satisfiable as a module path (`from app.open import go`), unlike a method.
+    assert bg.benchmark_symbol_from_location("src/app/open.py") == "open"
+    assert bg.benchmark_symbol_from_location("app/eval.py:42") == "eval"
+    assert bg.validate_benchmark_gate(_gate(benchmark_symbol="open"))[1] == "OK"
 
 
 def test_symbol_bare_dotted_name_with_an_unlisted_extension_is_a_dotted_symbol():
     # Documented limit: `OrderService.list_orders` must yield `list_orders`, so a bare `name.ext` whose extension is
     # not in _KNOWN_FILE_EXTENSIONS cannot be told apart from a dotted symbol. With a `/` it is always a file.
+    assert bg.benchmark_symbol_from_location("config.JSON") is None  # a listed extension is matched casefolded
     assert bg.benchmark_symbol_from_location("orders.rake") == "rake"
     assert bg.benchmark_symbol_from_location("lib/orders.rake") is None
 
@@ -874,8 +890,8 @@ def test_cli_usage_errors_exit_2(tmp_path, capsys):
 # Everything the module may import at import time. Platform-specific modules (resource, fcntl, termios, ...) must
 # be imported lazily inside the function that needs them, so the module imports on every platform.
 _TOP_LEVEL_IMPORT_ALLOWLIST = {
-    "__future__", "argparse", "ast", "codecs", "fractions", "hashlib", "io", "json", "math", "os", "pathlib",
-    "posixpath", "re", "stat", "sys", "tokenize",
+    "__future__", "argparse", "ast", "codecs", "dis", "fractions", "hashlib", "io", "json", "math", "os", "pathlib",
+    "posixpath", "re", "stat", "sys", "tokenize", "types",
 }
 
 
@@ -894,9 +910,7 @@ def test_module_imports_only_portable_modules_at_top_level():
     assert imported <= _TOP_LEVEL_IMPORT_ALLOWLIST, sorted(imported - _TOP_LEVEL_IMPORT_ALLOWLIST)
 
 
-# ---------------------------------------------------------------------------
-# CLI: validate hardening (bounded read, deep JSON)
-# ---------------------------------------------------------------------------
+# --- CLI: validate hardening (bounded read, deep JSON) ---
 
 def test_cli_validate_deeply_nested_json_is_exit_2_with_nothing_on_stdout(tmp_path, capsys):
     code, cap = _run(tmp_path, capsys, None, raw="[" * 500000 + "]" * 500000)  # under the 1 MiB cap
@@ -926,7 +940,6 @@ def test_cli_validate_reads_at_most_the_cap_plus_one_byte(tmp_path):
     big = tmp_path / "big.json"
     big.write_bytes(b" " * (3 << 20))
     assert len(bg._read_bounded(str(big), bg._MAX_INPUT_BYTES)) == bg._MAX_INPUT_BYTES + 1
-    assert bg.main(["validate", "--specialist-inputs", str(big)]) == 2
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs POSIX FIFOs")

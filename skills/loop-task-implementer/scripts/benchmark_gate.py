@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import ast
 import codecs
+import dis
 import hashlib
 import io
 import json
@@ -34,6 +35,7 @@ import re
 import stat
 import sys
 import tokenize
+import types
 from fractions import Fraction
 from pathlib import Path
 
@@ -47,7 +49,6 @@ _SYMBOL_RE = re.compile(r"[A-Za-z_]\w*", re.ASCII)
 _SYMBOL_DENYLIST = frozenset(
     {"print", "hashlib", "sha256", "main", "data", "sort", "load", "list", "item", "time", "test", "bench", "run", "get", "set"}
 )
-_SYMBOL_BAD_NAMES = frozenset({"__init__", "__main__"})
 # A bare ``a.b`` with no ``/`` is ambiguous between a dotted symbol (``OrderService.list_orders``) and a file
 # (``orders.js``); only these extensions are treated as files in that ambiguous case. With a ``/`` any
 # extension means a file.
@@ -61,12 +62,16 @@ _KNOWN_FILE_EXTENSIONS = frozenset(
 def _valid_symbol(name: object) -> bool:
     """True iff ``name`` is an ASCII identifier of 3 to 64 characters that the lint's own required elements
     or trivial builtins could not satisfy by accident. ``fullmatch`` (not ``$``) so a trailing newline fails.
-    Replaces revision 3's 4-character rule, which excluded real symbols (``fib``, ``api``) yet admitted ``main``."""
+    Replaces revision 3's 4-character rule, which excluded real symbols (``fib``, ``api``) yet admitted ``main``.
+
+    Beyond the design's 15 denied names, EVERY dunder is rejected (the design named only ``__init__`` and
+    ``__main__``): the lint rejects a dunder as a ``Name``, ``Attribute`` or alias, so a benchmark could never
+    reference ``Order.__eq__`` and the task would loop on an unfixable lint rejection."""
     return (
         isinstance(name, str)
         and _SYMBOL_RE.fullmatch(name) is not None
         and 3 <= len(name) <= 64
-        and name not in _SYMBOL_BAD_NAMES
+        and not _is_dunder(name)
         and name not in _SYMBOL_DENYLIST
     )
 
@@ -80,6 +85,11 @@ def benchmark_symbol_from_location(location: object) -> str | None:
     ``.py`` Location is file-level and yields the module stem; else the last dotted component. A Location
     naming any other file extension (``.ts``, ``.js``, ``.pyi``, ``.PY``) is ``None``: the gate is
     Python-only and this is where that is enforced. The result must pass ``_valid_symbol``.
+
+    Design deviation (stricter, fail closed): a symbol derived from a ``::``, dotted-method or bare-name form
+    (``app/db.py::Database.open``, ``input()``) is ``None`` when it is one of the lint's ``_BANNED_NAMES``, as is
+    any dunder: no benchmark could reference it without the lint rejecting it. The file-level module-stem branch
+    is exempt (``app/open.py`` -> ``open``; a module path is accepted). The design lists exactly 15 denied names.
 
     Known limit, by design: a bare ``name.ext`` with no ``/`` and no ``::`` is indistinguishable from a dotted
     symbol (``OrderService.list_orders``), so only the extensions in ``_KNOWN_FILE_EXTENSIONS`` make it a file
@@ -98,6 +108,7 @@ def benchmark_symbol_from_location(location: object) -> str | None:
     if text.endswith("()"):
         text = text[:-2]
 
+    module_stem = False
     if "::" in text:
         head, _, tail = text.rpartition("::")
         head_base = head.rsplit("/", 1)[-1]
@@ -108,10 +119,13 @@ def benchmark_symbol_from_location(location: object) -> str | None:
         base = text.rsplit("/", 1)[-1]
         if text.endswith(".py"):
             name = base[:-3]
+            module_stem = True
         elif "." in base and ("/" in text or base.rpartition(".")[2].casefold() in _KNOWN_FILE_EXTENSIONS):
             return None
         else:
             name = base.rsplit(".", 1)[-1]
+    if name in _BANNED_NAMES and not module_stem:
+        return None
     return name if _valid_symbol(name) else None
 
 
@@ -478,8 +492,7 @@ VIOLATION_CODES = (
     "NON_ASCII_SOURCE",           # any byte >= 0x80 (this includes a BOM)
     "ENCODING_REJECTED",          # a PEP 263 cookie other than utf-8, or an invalid cookie
     "PARSE_FAILED",               # ``ast.parse`` raised anything (SyntaxError, null byte, RecursionError, ...)
-    "ANALYSIS_FAILED",            # bad ``repo_top_levels`` argument, or an unexpected internal error (the AST walks
-                                  # are iterative, so deep input is PARSE_FAILED, not this)
+    "ANALYSIS_FAILED",            # bad ``repo_top_levels`` argument, or an unexpected internal error
     "SYMBOL_INVALID",             # ``symbol`` fails ``_valid_symbol``, so no reference to it can be required
     "FORBIDDEN_CLASS",
     "FORBIDDEN_ASYNC_FUNCTION",
@@ -492,9 +505,8 @@ VIOLATION_CODES = (
     "RELATIVE_IMPORT",
     "STAR_IMPORT",                # ``from X import *`` hides which names (``open``, dunders) arrive
     "IMPORT_NOT_ALLOWED",
-    "BANNED_NAME",                # a banned name anywhere a name is spelled: ``Name``, ``Attribute``, import
-                                  # components and aliases, ``match`` captures and class-pattern attributes, type parameters
-    "DUNDER_NAME",                # any dunder in those places, plus function and parameter names
+    "BANNED_NAME",                # a banned name as ``Name``, ``Attribute``, bound import name, ``match``, type parameter
+    "DUNDER_NAME",                # any dunder in those places or a module path, plus function and parameter names
     "TEST_NAME_COUNT",            # not exactly one module-level name beginning ``test``
     "TEST_NOT_FUNCTION",          # that one name is not a module-level ``def``
     "TEST_HAS_PARAMETERS",
@@ -540,63 +552,32 @@ def _is_dunder(name: object) -> bool:
     return isinstance(name, str) and len(name) > 4 and name.startswith("__") and name.endswith("__")
 
 
-def _module_level_bindings(tree: ast.Module) -> list[str]:
-    """Every name bound in module scope, one entry per binding (so a redefinition counts twice).
+_NAME_BINDING_OPS = frozenset({"STORE_NAME", "DELETE_NAME", "STORE_GLOBAL", "DELETE_GLOBAL"})
+_GLOBAL_BINDING_OPS = frozenset({"STORE_GLOBAL", "DELETE_GLOBAL"})
 
-    Counts ``def``/``class`` names, assignment and ``for``/``with``/walrus targets, ``import`` names and ``match``
-    captures, including bindings nested in module-level ``if``/``for``/``while``. Function and lambda bodies,
-    class bodies and comprehension iteration variables are their own scopes and do not count; a walrus inside a
-    comprehension does bind in the enclosing scope and does count. Iterative on purpose: the tree can be deep.
+
+def _module_level_names(code: types.CodeType) -> list[str]:
+    """Every name the compiled module binds or deletes in module scope, one entry per bytecode occurrence.
+
+    The COMPILER decides what binds a module-level name, not a hand-written AST walk (which needed a new patch
+    each review round). In the module's own code object that is ``STORE_NAME``/``DELETE_NAME``; in every nested
+    code object only ``STORE_GLOBAL``/``DELETE_GLOBAL`` count (how a walrus in a generator expression binds the
+    module's name). Names bound only in a function or class body, or as a comprehension's own variable, do not
+    appear; a redefinition counts twice. Iterative (nested code via ``co_consts``); nothing is executed.
     """
     names: list[str] = []
-    stack: list[tuple[ast.AST, bool]] = [(stmt, False) for stmt in tree.body]  # (node, inside another scope)
-    while stack:
-        node, local = stack.pop()
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            if not local:
-                names.append(node.name)
-            if isinstance(node, ast.ClassDef):
-                stack.extend((child, True) for child in node.body)
-                continue
-            # Decorators, defaults and annotations are evaluated in the enclosing scope (annotations at def time
-            # on 3.12 and 3.13, so ``def f(x: (test_b := g))`` binds ``test_b`` there); the body is not.
-            args = node.args
-            every_arg = [*args.posonlyargs, *args.args, *args.kwonlyargs, *(a for a in (args.vararg, args.kwarg) if a)]
-            outer = [
-                *node.decorator_list, *args.defaults, *(d for d in args.kw_defaults if d is not None),
-                *(a.annotation for a in every_arg if a.annotation is not None),
-            ]
-            if node.returns is not None:
-                outer.append(node.returns)
-            stack.extend((child, local) for child in outer)
-            stack.extend((child, True) for child in node.body)
-        elif isinstance(node, ast.Lambda):
-            stack.append((node.body, True))
-        elif isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
-            for generator in node.generators:
-                stack.append((generator.target, True))
-                stack.append((generator.iter, local))
-                stack.extend((cond, local) for cond in generator.ifs)
-            stack.extend(
-                (child, local) for child in ast.iter_child_nodes(node) if not isinstance(child, ast.comprehension)
-            )
-        else:
-            if not local:
-                if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):  # ``del x`` is a binding too
-                    names.append(node.id)
-                elif isinstance(node, (ast.Import, ast.ImportFrom)):
-                    names.extend(alias.asname or alias.name.split(".")[0] for alias in node.names)
-                elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name is not None:
-                    names.append(node.name)
-                elif isinstance(node, ast.MatchMapping) and node.rest is not None:
-                    names.append(node.rest)
-            stack.extend((child, local) for child in ast.iter_child_nodes(node))
+    pending = [(code, True)]
+    while pending:
+        current, is_module = pending.pop()
+        wanted = _NAME_BINDING_OPS if is_module else _GLOBAL_BINDING_OPS
+        names.extend(ins.argval for ins in dis.get_instructions(current) if ins.opname in wanted)
+        pending.extend((const, False) for const in current.co_consts if isinstance(const, types.CodeType))
     return names
 
 
 def _content_violations(source: object, symbol: object, repo_top_levels: frozenset[str]) -> set[str]:
-    # Exactly a set or frozenset of str. A str would make ``top in repo_top_levels`` a substring test, and a custom
-    # container could answer True to everything: neither may fail open, so anything else is rejected outright.
+    # Exactly a set or frozenset of str: a str would make ``in`` a substring test and a custom container could
+    # answer True to everything, so anything else is rejected outright rather than failing open.
     if type(repo_top_levels) not in (set, frozenset) or any(type(name) is not str for name in repo_top_levels):
         return {"ANALYSIS_FAILED"}
     if type(source) is not bytes:
@@ -606,7 +587,10 @@ def _content_violations(source: object, symbol: object, repo_top_levels: frozens
         early.add("FILE_TOO_LARGE")
     else:
         try:
-            encoding, _ = tokenize.detect_encoding(io.BytesIO(source).readline)
+            # ``detect_encoding`` splits on ``\n`` only, the C tokenizer also at a bare ``\r``: normalize, or
+            # ``b"\r# coding: hz\r..."`` hides a cookie the parser honours.
+            normalized = source.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+            encoding, _ = tokenize.detect_encoding(io.BytesIO(normalized).readline)
         except (SyntaxError, ValueError, LookupError):
             early.add("ENCODING_REJECTED")
         else:
@@ -640,10 +624,9 @@ def _content_violations(source: object, symbol: object, repo_top_levels: frozens
             found.add("IMPORT_NOT_ALLOWED")
 
     def flag(name: str | None, banned: bool = True) -> None:
-        """A name spelled as a plain string in the AST (import components and aliases, ``match`` captures and
-        class-pattern attributes, type parameters) is as dangerous as a ``Name`` node: ``from json import
-        __builtins__ as bb`` reaches ``eval`` with no ``Name`` or ``Attribute`` that says so. ``banned=False``
-        checks dunders only, for a module-path component that is never bound or fetched as a name."""
+        """A name that is only a string in the AST (import aliases, ``match`` captures and class-pattern attributes,
+        type parameters) is as dangerous as a ``Name`` node (``from json import __builtins__ as bb``).
+        ``banned=False`` checks dunders only, for a module-path component that is never bound or fetched."""
         if banned and name in _BANNED_NAMES:
             found.add("BANNED_NAME")
         if _is_dunder(name):
@@ -673,7 +656,8 @@ def _content_violations(source: object, symbol: object, repo_top_levels: frozens
                 check_import(alias.name)
                 parts = alias.name.split(".")
                 for index, part in enumerate(parts):
-                    flag(part, banned=index == 0)  # ``import a.b`` binds only ``a``
+                    # ``import a.b`` binds only ``a``, and ``import a.b as c`` binds only ``c`` (checked below)
+                    flag(part, banned=index == 0 and alias.asname is None)
                 flag(alias.asname)
                 symbol_seen = symbol_seen or symbol in (*parts, alias.asname)
         elif kind is ast.ImportFrom:
@@ -727,9 +711,18 @@ def _content_violations(source: object, symbol: object, repo_top_levels: frozens
     if symbol_ok and not symbol_seen:
         found.add("MISSING_SYMBOL_REFERENCE")
 
-    bound = [name for name in _module_level_bindings(tree) if name.startswith("test")]
+    try:
+        code = compile(source, "<benchmark>", "exec", dont_inherit=True)  # compiles, never executes
+    except Exception:  # noqa: BLE001 -- e.g. a module-level ``await``, or a 3.14 walrus in an annotation
+        # ``compile`` is stricter than ``ast.parse``. If an AST rule already rejected the source nothing is lost;
+        # otherwise the binding count cannot be trusted, so fail closed.
+        if not found:
+            found.add("PARSE_FAILED")
+        return found
+    names = _module_level_names(code)
+    bound = [name for name in names if name.startswith("test")]
     top_level_tests = [s for s in tree.body if isinstance(s, ast.FunctionDef) and s.name.startswith("test")]
-    if len(bound) != 1:
+    if len(bound) != 1 or any(name.startswith("pytest_") for name in names):
         found.add("TEST_NAME_COUNT")
     elif len(top_level_tests) != 1:
         found.add("TEST_NOT_FUNCTION")
@@ -743,37 +736,37 @@ def _content_violations(source: object, symbol: object, repo_top_levels: frozens
 def validate_benchmark_content(source: bytes, symbol: str, repo_top_levels: frozenset[str]) -> list[str]:
     """Lint one benchmark file; return violation codes (``VIOLATION_CODES``), empty meaning accepted.
 
-    NEVER raises: any failure of the parser becomes ``PARSE_FAILED`` (deep nesting, ``RecursionError``, a null
-    byte), and ``ANALYSIS_FAILED`` is for a ``repo_top_levels`` that is not exactly a ``set``/``frozenset`` of
-    ``str`` (checked first, so a stdlib-only source cannot get past a bad argument) or an unexpected error in the
-    checks. The result is de-duplicated and in the canonical ``VIOLATION_CODES`` order, so equal
-    inputs give equal output. A file that fails a byte-level rule (``FILE_TOO_LARGE``, ``NON_ASCII_SOURCE``,
-    ``ENCODING_REJECTED``) is not parsed, so those codes are never mixed with AST codes.
+    NEVER raises. A parser failure is ``PARSE_FAILED``; ``ANALYSIS_FAILED`` is a ``repo_top_levels`` that is not
+    exactly a ``set``/``frozenset`` of ``str`` (checked first, so nothing fails open) or an unexpected internal
+    error. The result is de-duplicated in the canonical ``VIOLATION_CODES`` order. A file failing a byte-level rule
+    (``FILE_TOO_LARGE``, ``NON_ASCII_SOURCE``, ``ENCODING_REJECTED``) is not parsed.
 
-    Operates on BYTES: ``ast.parse(bytes)`` honours a PEP 263 coding cookie, so a source that is ASCII but
-    declares another codec would be parsed differently from what a text-mode lint saw. Hence
-    ``tokenize.detect_encoding`` must report utf-8 (any other or invalid cookie is rejected) and every byte must
-    be ASCII.
+    Operates on BYTES: ``ast.parse(bytes)`` honours a PEP 263 coding cookie, so an ASCII file declaring another
+    codec would be read differently from a text-mode lint. ``tokenize.detect_encoding`` (fed newline-normalized
+    bytes: it splits on ``\\n`` only while the C tokenizer also ends a line at a bare ``\\r``) must say utf-8,
+    and every byte must be ASCII.
 
-    AST rules (design APIs table): exactly ONE module-level name beginning ``test`` (a ``def``, an assignment, an
-    import and a walrus all count, and so does a redefinition), which must be a ``def`` with no parameters; no
-    ``ClassDef``, ``AsyncFunctionDef``, ``Lambda``, ``Try``/``TryStar``, ``With``, ``Global``, ``Nonlocal`` and no
-    decorator on any function (module-level helper functions and constants are fine). Imports: a stdlib module
-    must be in ``_STDLIB_IMPORT_ALLOWLIST`` (``pytest`` is rejected even if ``repo_top_levels`` names it), any other
-    top-level name must be in ``repo_top_levels`` (the top-level packages and modules of the base export), and a
-    relative import and ``from X import *`` are rejected. ``_BANNED_NAMES`` and every dunder are rejected as
-    ``Name`` or ``Attribute`` and also wherever a name is only a string in the AST: every dotted component of an
-    import's module and aliases (``from json import __builtins__ as bb``; the ``__future__`` module itself is
-    exempt), ``match`` captures and class-pattern attributes, and type-parameter names. Every async construct
-    (``async def``/``with``/``for``, ``await``, an async comprehension) is ``FORBIDDEN_ASYNC_FUNCTION``: the
-    parser accepts the latter ones outside an ``async def``. ``del test_x`` counts as a binding of ``test_x``.
-    Required: a ``print(...)`` call, the literal ``BENCH_RESULT_DIGEST: `` in a string constant, a
-    ``hashlib.sha256(...)`` call (or a call of the name bound by ``from hashlib import sha256``), and a reference to
-    ``symbol`` as ``Name.id``, ``Attribute.attr``, an import ``alias.name``/``asname``, or a dotted component of an
-    import's module.
+    Rules (design APIs table). No ``ClassDef``, async construct (``async def``/``with``/``for``, ``await``, async
+    comprehension: ``ast.parse`` accepts them outside an ``async def``), ``Lambda``, ``Try``/``TryStar``, ``With``,
+    ``Global``, ``Nonlocal``, no decorator. Imports: a stdlib module must be in ``_STDLIB_IMPORT_ALLOWLIST``
+    (``pytest`` is rejected even if ``repo_top_levels`` names it), any other top-level name must be in
+    ``repo_top_levels``; relative imports and ``from X import *`` are rejected. ``_BANNED_NAMES`` and every dunder
+    are rejected as ``Name``/``Attribute`` and wherever a name is only a string in the AST: import aliases, ``match``
+    captures and class-pattern attributes, type parameters. Module-PATH components bind nothing (``import a.b``
+    binds ``a``, ``from a.b import c`` binds ``c``), so a banned name there is fine (``from app.open import go``)
+    and only a dunder is rejected; the ``__future__`` module itself is exempt. Required: a ``print(...)`` call, the
+    literal ``BENCH_RESULT_DIGEST: `` in a string constant, a ``hashlib.sha256(...)`` call (or a call of the name
+    from ``from hashlib import sha256``), and a reference to ``symbol`` as ``Name.id``, ``Attribute.attr``, an
+    import ``alias.name``/``asname`` or a dotted component of an import's module.
 
-    Beyond the table (stricter, same spirit): a dunder FUNCTION or PARAMETER name is ``DUNDER_NAME`` too, and an
-    invalid ``symbol`` is ``SYMBOL_INVALID`` rather than a silently satisfiable requirement.
+    The one-test rule is counted from the COMPILED module (``_module_level_names``), not an AST walk: exactly one
+    module-level name beginning ``test`` (a redefinition, ``del`` and a walrus anywhere count) and none beginning
+    ``pytest_`` (a module-level ``pytest_generate_tests`` makes pytest run the test several times); it must be a
+    ``def`` with no parameters. ``compile`` is stricter than ``ast.parse``: when it fails and no other rule fired
+    the result is ``PARSE_FAILED``. Note ``from __future__ import annotations`` stops annotations being evaluated.
+
+    Beyond the table (stricter): a dunder function or parameter name, a star import, and an invalid ``symbol``
+    (``SYMBOL_INVALID``) are rejected.
 
     This is a TRIPWIRE, not a sandbox. Allowlists are better than denylists but are still evadable
     (``string.Formatter().get_field``, ``type()``-built context managers, objects reached through the code under
@@ -841,7 +834,8 @@ def _cmd_validate(args: argparse.Namespace) -> int:
 
     The origin flag is tested with ``is True`` so ``"true"``, ``1`` and ``false`` are not set. A key present
     with ANY value, including ``null``, is gated, so both mismatch directions are executable. Unreadable,
-    oversize, non-regular, non-UTF-8, malformed or too deeply nested input is a usage error with nothing on stdout.
+    oversize, non-regular (a pipe or ``/dev/stdin`` is refused on purpose), non-UTF-8, malformed or too deeply
+    nested input is a usage error with nothing on stdout.
     """
     try:
         data = _read_bounded(args.specialist_inputs, _MAX_INPUT_BYTES)
