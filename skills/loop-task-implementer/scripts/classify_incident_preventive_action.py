@@ -53,8 +53,9 @@ Why each of the six axes exists (all six must hold; any other value is ``NOT_QUA
    security group, load balancer, roll back) are matched as substrings of the lowercased text with
    every non-alphanumeric run removed, so camelCase and concatenated spellings (``LoadBalancer``,
    ``SecurityGroup``, ``NetworkPolicy``, ``loadbalancer``) are caught as well as spaced, hyphenated and
-   underscored ones. The squashed match can also hit across word boundaries (``scroll back`` contains
-   ``rollback``); that over-match is the safe direction.
+   underscored ones. Substring matching already over-matched mid-word before squashing (``scroll back``
+   contains ``roll back``); squashing additionally ignores any separator, so ``load.balancer`` and
+   ``network/policy`` match too. Over-matching is the safe direction.
 
 **Disclosed evasion residual (stated honestly, not claimed solved).** The converse of the exclusion
 list still qualifies: a qualifying verb plus an infrastructure noun that appears in none of the lists
