@@ -4,9 +4,10 @@
 **This module is not wired into anything yet.** It is delivered by a series of eight PRs for gap-backlog ticket
 C4 (C4a core, C4b lint, C4c-1a export, C4c-1b seal/cleanup, C4c-2 overlay/diff/venv check, C4d harness, C4e classifier/docs, C4f wiring); no workflow file,
 lifecycle validator or other script calls it until C4f. So far it holds the pure, string-level and arithmetic
-pieces (``validate``, ``lint``) and the first part of C4c (C4c-1a): ``export``, ``fixed-parent`` and the library
-function ``export_tree``. C4c-1b adds ``seal_tree``, ``unseal_tree`` and ``cleanup``; C4c-2 adds the tree hash, the
-benchmark overlay, the protected-path diff, the token tripwire and the venv ``.pth`` check with ``snapshot-venv``; C4d adds measurement, the trace, ``compare`` and ``run-once``, C4e
+pieces (``validate``, ``lint``) and C4c-1 (a: export, b: seal and cleanup): ``export``, ``fixed-parent``, ``cleanup`` and the library
+functions ``compare`` will call (``export_tree``, ``seal_tree``, ``unseal_tree``, ``cleanup_root``). C4c-2
+adds the tree hash, the benchmark overlay, the protected-path diff, the token tripwire and the venv ``.pth``
+check with ``snapshot-venv``; C4d adds measurement, the trace, ``compare`` and ``run-once``, C4e
 the classifier and docs, C4f the workflow wiring. Specification (revision 5, the converged result of four review
 rounds): ``docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md`` (APIs table,
 Data model, Capacity, Threat model). This docstring states each function's own contract and the reason each
@@ -818,7 +819,7 @@ def validate_benchmark_content(source: bytes, symbol: str, repo_top_levels: froz
 
 
 # ---------------------------------------------------------------------------
-# C4c-1a: export
+# C4c-1: export (1a), seal and cleanup (1b)
 #
 # Runs on attacker-influenced input (a Builder's commit, a tree the code under test wrote into): argv lists only, a
 # scrubbed environment, bounded subprocesses, validated paths, no symlink followed out of a root. POSIX only.
@@ -833,9 +834,15 @@ EXPORT_REFUSAL_CODES = (
     "EXPORT_SYMLINK_ESCAPES",   # a symlink whose real target is outside the export
     "EXPORT_VERIFY_FAILED",     # the written tree differs from the commit's listing
 )
-ERROR_CODES = (  # MARKER_MISSING / MARKER_INVALID are also `cleanup` codes (C4c-1b): the same condition seen by `cleanup`
+ERROR_CODES = (  # MARKER_MISSING / MARKER_INVALID also appear in CLEANUP_CODES: the same condition seen by `cleanup`
     "COMMIT_INVALID", "COMMIT_NOT_FOUND", "REPO_UNREADABLE", "DEST_REJECTED", "GIT_FAILED", "GIT_TOO_OLD", "GIT_TIMEOUT",
-    "GIT_OUTPUT_TOO_LARGE", "TREE_UNREADABLE", "TREE_TOO_LARGE", "MARKER_MISSING", "MARKER_INVALID",
+    "GIT_OUTPUT_TOO_LARGE", "TREE_UNREADABLE", "TREE_TOO_LARGE", "SEAL_FAILED", "MARKER_MISSING", "MARKER_INVALID",
+)
+CLEANUP_CODES = (
+    "REMOVED", "ABSENT",        # success (exit 0); the rest are refusals (exit 1)
+    "NOT_UNDER_FIXED_PARENT", "NOT_A_DIRECTORY", "NOT_OWNED", "MARKER_MISSING", "MARKER_INVALID", "OWNER_ALIVE",
+    "ROOT_CHANGED",             # the root or the fixed parent was replaced between the checks and the removal
+    "REMOVE_FAILED",
 )
 
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}", re.ASCII)
@@ -870,7 +877,7 @@ class BenchmarkGateError(Exception):
 # --- the fixed parent, the dispatch-unique root and its marker ----------------------------------------------------
 
 def fixed_parent() -> Path:
-    """The only directory `export` creates roots in and `cleanup` (C4c-1b) removes them from:
+    """The only directory `export` creates roots in and `cleanup` removes them from:
     `<tempfile.gettempdir()>/software-builder-bench-<uid>` (plain name without a uid), fixed so containment is a `realpath`
     comparison, never a name pattern (a pattern delete could hit another live task's root; `task_lease` allows concurrent
     Orchestrators on one host). The per-user name does NOT stop another user who already owns that name from making `export`
@@ -959,12 +966,57 @@ def _read_marker(root: str) -> dict:
     return marker
 
 
+def _pid_alive(pid: int) -> bool:
+    """`os.kill(pid, 0)`: ESRCH is dead, anything else alive (fail closed); off POSIX always alive (Windows `os.kill` would
+    terminate the process). Residual: a recycled pid keeps a dead owner's root undeletable (the safe direction)."""
+    if os.name != "posix":
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except (OSError, OverflowError, ValueError):
+        return True
+    return True
+
+
 def _identity(path: str) -> tuple[int, int]:
     st = os.lstat(path)
     return st.st_dev, st.st_ino
 
 
-# --- tree walk (read-only: verifies a fresh export) ------------------------------------------------------------------------------
+def _checked_root(root: str | os.PathLike) -> tuple[str, tuple[tuple[int, int], tuple[int, int]]]:
+    """`(resolved path, (parent identity, root identity))` when the root is a real directory of ours directly under a private
+    fixed parent, else a `BenchmarkGateError` whose code is a `CLEANUP_CODES` entry. The identities let the caller notice a
+    swap before it removes anything."""
+    path = os.path.abspath(os.fspath(root))
+    try:
+        parent = os.path.realpath(os.path.dirname(path))
+        same_parent = parent == os.path.realpath(fixed_parent())
+    except (OSError, ValueError) as exc:  # EINVAL on a symlink loop being swapped under realpath, seen on Linux
+        raise BenchmarkGateError("NOT_UNDER_FIXED_PARENT", f"cannot resolve the path: {exc}") from exc
+    if not _ROOT_NAME_RE.fullmatch(os.path.basename(path)) or not same_parent:
+        raise BenchmarkGateError("NOT_UNDER_FIXED_PARENT", "root is not directly under the fixed parent")
+    try:
+        _check_parent(create=False)
+    except BenchmarkGateError as exc:
+        raise BenchmarkGateError("ABSENT" if exc.code == "ABSENT" else "NOT_UNDER_FIXED_PARENT", exc.detail) from exc
+    path = os.path.join(parent, os.path.basename(path))  # operate on the resolved path, never on the argument
+    try:
+        st = os.lstat(path)
+    except OSError as exc:
+        raise BenchmarkGateError("ABSENT" if isinstance(exc, FileNotFoundError) else "NOT_A_DIRECTORY", str(exc)) from exc
+    if not stat.S_ISDIR(st.st_mode):
+        raise BenchmarkGateError("NOT_A_DIRECTORY", "root is a symlink or not a directory")
+    if _foreign(st):
+        raise BenchmarkGateError("NOT_OWNED", "root belongs to another user")
+    try:
+        return path, (_identity(parent), (st.st_dev, st.st_ino))
+    except OSError as exc:
+        raise BenchmarkGateError("NOT_UNDER_FIXED_PARENT", str(exc)) from exc
+
+
+# --- tree walking, sealing, cleanup ------------------------------------------------------------------------------
 
 def _walk_tree(root: str):
     """Yield `(relpath, abspath, lstat)` for `root` ("" first) and everything below: depth first, names sorted, symlinks
@@ -989,6 +1041,204 @@ def _walk_tree(root: str):
                     stack.append((f"{rel}/{name}" if rel else name, child, os.lstat(child)))
     except OSError as exc:
         raise BenchmarkGateError("TREE_UNREADABLE", str(exc)) from exc
+
+
+def _chmod_dir_nofollow(parent_fd: int, name: str, st: os.stat_result) -> bool:
+    """`chmod 0700` on directory `name` of `parent_fd` (a directory that cannot be opened: mode 0), only if it is still the
+    object `st` described. Linux: an `O_PATH` descriptor pins the inode (a symlink is refused by `O_DIRECTORY`), its
+    identity is checked, then it is chmodded through `/proc/self/fd`: race-free. Where Python has `fchmodat(AT_SYMLINK_NOFOLLOW)`
+    (macOS): `name` is re-`stat`ed immediately before it, which narrows but cannot close the window. False where neither exists."""
+    def check(now: os.stat_result) -> None:
+        if (now.st_dev, now.st_ino) != (st.st_dev, st.st_ino):
+            raise OSError("entry changed while it was being repaired")
+
+    if os.chmod in os.supports_follow_symlinks:
+        check(os.stat(name, dir_fd=parent_fd, follow_symlinks=False))
+        os.chmod(name, 0o700, dir_fd=parent_fd, follow_symlinks=False)
+        return True
+    if hasattr(os, "O_PATH") and os.path.isdir("/proc/self/fd"):
+        fd = os.open(name, os.O_PATH | os.O_NOFOLLOW | os.O_DIRECTORY, dir_fd=parent_fd)
+        try:
+            check(os.fstat(fd))
+            os.chmod(f"/proc/self/fd/{fd}", 0o700)
+            return True
+        finally:
+            os.close(fd)
+    return False
+
+
+def _open_dir(parent_fd: int, name: str, st: os.stat_result, repair: bool) -> int:
+    """Open directory `name` under `parent_fd`, never through a symlink, and confirm it is the object `st` described.
+    `repair` (unseal, cleanup) first makes an unopenable directory openable, then gives it `u+rwx`."""
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        fd = os.open(name, flags, dir_fd=parent_fd)
+    except PermissionError:
+        if not (repair and _chmod_dir_nofollow(parent_fd, name, st)):
+            raise
+        fd = os.open(name, flags, dir_fd=parent_fd)
+    try:
+        after = os.fstat(fd)
+        if (after.st_dev, after.st_ino) != (st.st_dev, st.st_ino):
+            raise OSError("entry changed while it was being read")
+        if repair:
+            os.fchmod(fd, stat.S_IMODE(after.st_mode) | 0o700)
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
+
+def _listing(fd: int) -> list[str]:
+    """Names in `fd`, reversed (the walker pops from the end); closes `fd` if the listing fails, so no descriptor leaks."""
+    try:
+        return sorted(os.listdir(fd), reverse=True)
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _walk_fd(root: str, limit: int | None, repair: bool = False):
+    """Yield `(rel, parent_fd, name, lstat, dir_fd)` for `root` ("" first) and everything below, depth first, names sorted,
+    using ONLY descriptors: each child is `stat`ed and opened relative to its parent's descriptor with `O_NOFOLLOW` and checked
+    against the `stat` result, so a directory swapped for a symlink mid-walk is refused, never followed; no path-based chmod.
+    `dir_fd` is a directory's own descriptor (closed by the walker), else None. `limit` bounds the entries (None: unbounded,
+    for removal). `repair` also tolerates an entry vanishing (a concurrent cleanup). Raises `OSError` / `BenchmarkGateError`.
+    Cost: one open descriptor per directory level (`RLIMIT_NOFILE` bounds the depth) and every entry of a large tree is stat'ed."""
+    parent, name = os.path.split(os.path.abspath(root))
+    pfd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+    frames: list[tuple[str, int, list[str]]] = []
+    try:
+        st = os.stat(name, dir_fd=pfd, follow_symlinks=False)
+        if not stat.S_ISDIR(st.st_mode):
+            raise BenchmarkGateError("TREE_UNREADABLE", "root is not a real directory")
+        fd = _open_dir(pfd, name, st, repair)
+        frames.append(("", fd, _listing(fd)))
+        count = 1
+        yield "", pfd, name, st, fd
+        while frames:
+            rel, dfd, names = frames[-1]
+            if not names:
+                os.close(dfd)
+                frames.pop()
+                continue
+            child = names.pop()
+            try:
+                cst = os.stat(child, dir_fd=dfd, follow_symlinks=False)
+                cfd = _open_dir(dfd, child, cst, repair) if stat.S_ISDIR(cst.st_mode) else None
+                if cfd is not None:
+                    frames.append((f"{rel}/{child}" if rel else child, cfd, _listing(cfd)))
+            except FileNotFoundError:
+                if repair:
+                    continue
+                raise
+            count += 1
+            if limit is not None and count > limit:
+                raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {limit} entries")
+            yield (f"{rel}/{child}" if rel else child), dfd, child, cst, cfd
+    finally:
+        for _, open_fd, _ in frames:
+            os.close(open_fd)
+        os.close(pfd)
+
+
+def _fchmod_file(parent_fd: int, name: str, st: os.stat_result, clear: int, add: int) -> None:
+    """`fchmod` a regular file through a descriptor opened relative to `parent_fd` without following a symlink, checked
+    against `st`; refuses a hard-linked file (its inode is shared with a path outside the tree)."""
+    fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0), dir_fd=parent_fd)
+    try:
+        after = os.fstat(fd)
+        if not stat.S_ISREG(after.st_mode) or (after.st_dev, after.st_ino) != (st.st_dev, st.st_ino):
+            raise OSError("entry changed while it was being read")
+        if after.st_nlink > 1:
+            raise OSError("hard-linked file")
+        os.fchmod(fd, (stat.S_IMODE(after.st_mode) & ~clear) | add)
+    finally:
+        os.close(fd)
+
+
+def seal_tree(root: str | os.PathLike) -> None:
+    """Remove every write bit under `root` (symlinks and special files untouched), by descriptor only. `compare` seals AFTER
+    the install and the overlay (sealing before breaks `pip install -e`, verified). Fails closed (`SEAL_FAILED`), including
+    on a hard-linked file. NOT protected: a writer already holding a descriptor from before the seal; root ignores mode bits;
+    a same-user process can `chmod` back (a later tree hash would show it); the dispatch root itself (marker, venvs)."""
+    try:
+        for _, pfd, name, st, dfd in _walk_fd(os.fspath(root), _MAX_TREE_ENTRIES):
+            if dfd is not None:
+                os.fchmod(dfd, stat.S_IMODE(st.st_mode) & ~0o222)
+            elif stat.S_ISREG(st.st_mode):
+                _fchmod_file(pfd, name, st, 0o222, 0)
+    except OSError as exc:
+        raise BenchmarkGateError("SEAL_FAILED", str(exc)) from exc
+
+
+def unseal_tree(root: str | os.PathLike, *, bounded: bool = True) -> None:
+    """Inverse of `seal_tree` for `cleanup`, by descriptor only: directories `u+rwx` (an unopenable one via
+    `_chmod_dir_nofollow`; where that is unavailable it stays), regular files `u+w` (hard-linked or unopenable ones are
+    skipped: deleting a file needs write on its directory only). `bounded=False` lifts the entry bound."""
+    try:
+        for _, pfd, name, st, dfd in _walk_fd(os.fspath(root), _MAX_TREE_ENTRIES if bounded else None, repair=True):
+            if dfd is None and stat.S_ISREG(st.st_mode):
+                try:
+                    _fchmod_file(pfd, name, st, 0, 0o200)
+                except OSError:
+                    pass
+    except OSError as exc:
+        raise BenchmarkGateError("TREE_UNREADABLE", str(exc)) from exc
+
+
+def cleanup_root(root: str | os.PathLike) -> str:
+    """Remove a dispatch-unique root; return `REMOVED` / `ABSENT` or a refusal code (`CLEANUP_CODES`).
+
+    Only if the path is a directory directly under the private `fixed_parent()` (not a symlink), owned by this user, with a
+    valid marker whose pid is not alive. The root is opened by descriptor and given `u+rwx` first (a mode-0 root with a valid
+    marker is cleanable), then unsealed by descriptor WITHOUT the export entry bound (a legal root holds two exports and
+    venvs), then `shutil.rmtree` (descriptor based, refuses a symlink root) removes it. An entry vanishing underneath (a
+    concurrent cleanup) is not an error: the verdict is whether the root still exists. Never a name pattern.
+
+    The root's mode is repaired BEFORE the marker is read (a mode-0 root hides its marker), so a refused cleanup (bad marker,
+    live owner) can leave a 0500 root at 0700. Residual: the fixed parent and the root are validated BY PATH and their
+    identities are re-checked just before removal (`ROOT_CHANGED`), which narrows but cannot close the window; a same-uid
+    process can redirect it, gaining no capability (it can already write, chmod and delete those directories)."""
+    try:
+        path, identities = _checked_root(root)
+    except BenchmarkGateError as exc:
+        return exc.code
+    try:
+        parent, name = os.path.split(path)
+        pfd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.close(_open_dir(pfd, name, os.stat(name, dir_fd=pfd, follow_symlinks=False), repair=True))
+        finally:
+            os.close(pfd)
+        marker = _read_marker(path)
+    except BenchmarkGateError as exc:
+        return "ABSENT" if exc.code == "MARKER_MISSING" and not os.path.lexists(path) else exc.code
+    except FileNotFoundError:  # a concurrent cleanup removed it first
+        return "ABSENT"
+    except OSError:
+        return "REMOVE_FAILED"
+    if _pid_alive(marker["pid"]):
+        return "OWNER_ALIVE"
+
+    def ignore_missing(_func, _path, exc: BaseException) -> None:
+        if not isinstance(exc, FileNotFoundError):
+            raise exc
+
+    try:
+        unseal_tree(path, bounded=False)
+    except (BenchmarkGateError, OSError):
+        pass  # best effort: `rmtree` below decides, and the verdict is whether the root is gone
+    try:
+        if (_identity(os.path.dirname(path)), _identity(path)) != identities:
+            return "ROOT_CHANGED"
+    except OSError:
+        return "ROOT_CHANGED"
+    try:
+        shutil.rmtree(path, onexc=ignore_missing)
+    except Exception:  # noqa: BLE001 -- RecursionError on absurd nesting, OSError: reported by the existence check
+        pass
+    return "REMOVE_FAILED" if os.path.lexists(path) else "REMOVED"
 
 
 # --- git: a private repository over the real object store ---------------------------------------------------------
@@ -1288,7 +1538,7 @@ def export_tree(repo: str | os.PathLike, commit: str, dest: str | os.PathLike, *
     `DEST_REJECTED` and never touched); the root (`[A-Za-z0-9][A-Za-z0-9_-]{7,63}`, caller-chosen, dispatch-unique) is created
     mode 0700 together with its marker (pid, timestamp), atomically, or reused after its marker validates; concurrent exports
     into one new root are safe. The marker pid is `owner_pid` for the FIRST export of a root (later ones are ignored); by
-    default the short-lived exporting process, so `cleanup` (C4c-1b) is allowed right after export unless `--owner-pid` names a
+    default the short-lived exporting process, so `cleanup` is allowed right after export unless `--owner-pid` names a
     longer-lived owner. Put venvs at `<root>/venv-*`. `dest` is left WRITABLE: the install and the overlay still run.
 
     Built by `git read-tree` into a private index plus `git checkout-index` inside a `_PrivateGit` (never `git archive`,
@@ -1455,11 +1705,18 @@ def _cmd_fixed_parent(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_cleanup(args: argparse.Namespace) -> int:
+    """Remove one dispatch-unique root; print the result code: exit 0 for ``REMOVED``/``ABSENT``, 1 for a refusal."""
+    code = cleanup_root(args.root)
+    print(code)
+    return 0 if code in ("REMOVED", "ABSENT") else 1
+
+
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point: ``validate`` (C4a), ``lint`` (C4b), ``export`` and ``fixed-parent`` (C4c-1a). Later
-    PRs add ``cleanup`` (C4c-1b), ``snapshot-venv`` (C4c-2), ``compare`` and ``run-once`` (C4d) by adding a subparser with ``set_defaults(func=...)``. There is no catch-all
+    """CLI entry point: ``validate`` (C4a), ``lint`` (C4b), ``export``, ``fixed-parent`` (C4c-1a) and ``cleanup`` (C4c-1b). Later
+    PRs add ``snapshot-venv`` (C4c-2), ``compare`` and ``run-once`` (C4d) by adding a subparser with ``set_defaults(func=...)``. There is no catch-all
     here on purpose: C4d owns the exit-code contract for a crash."""
-    parser = argparse.ArgumentParser(prog="benchmark_gate.py", description="Benchmark gate: validate, lint, export, fixed-parent.")
+    parser = argparse.ArgumentParser(prog="benchmark_gate.py", description="Benchmark gate: validate, lint, export, fixed-parent, cleanup.")
     sub = parser.add_subparsers(dest="command", required=True)
     validate = sub.add_parser("validate", help="validate specialist_inputs.benchmark_gate")
     validate.add_argument("--specialist-inputs", required=True, metavar="FILE")
@@ -1480,6 +1737,9 @@ def main(argv: list[str] | None = None) -> int:
     export.set_defaults(func=_cmd_export)
     fixed = sub.add_parser("fixed-parent", help="print the per-user directory that roots live in")
     fixed.set_defaults(func=_cmd_fixed_parent)
+    cleanup = sub.add_parser("cleanup", help="remove a dispatch-unique root (exit 0 removed/absent, 1 refused)")
+    cleanup.add_argument("--root", required=True, metavar="DIR")
+    cleanup.set_defaults(func=_cmd_cleanup)
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:  # argparse exits 2 on usage errors (and 0 on --help)
