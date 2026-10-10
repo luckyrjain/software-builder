@@ -844,3 +844,55 @@ def test_cli_invalid_symbol_parse_failure_and_cookie_are_violations_not_usage_er
     assert (code, cap.out) == (1, "PARSE_FAILED\n")
     code, cap = _lint_cli(tmp_path, capsys, b"# coding: latin-1\n" + GOOD, "--top-level", "app")
     assert (code, cap.out) == (1, "ENCODING_REJECTED\n")
+
+
+# --- C4b review carry-overs (B2, B3, B4, B5, B7) ---
+
+def test_cli_repo_root_must_be_an_existing_directory(tmp_path, capsys):
+    bench = tmp_path / "bench_exists.py"
+    bench.write_bytes(GOOD)
+    plain = tmp_path / "plain.txt"
+    plain.write_text("x")
+    for root in (tmp_path / "missing", plain):  # the benchmark itself exists, so only --repo-root can be the cause
+        assert bg.main(["lint", "--benchmark", str(bench), "--symbol", SYMBOL, "--repo-root", str(root)]) == 2
+    assert capsys.readouterr().out == ""
+
+
+def test_a_long_ast_clean_binop_chain_does_not_recurse():
+    assert lint(GOOD + b"x = " + b"+".join([b"1"] * 3000) + b"\n") == []  # `_comprehension_depth`/`_module_level_names` stay iterative
+
+
+def test_the_counted_name_must_be_the_one_top_level_def():
+    # `test_a = print` is the only name the compiler binds: the def after the infinite loop is dead code and vanishes.
+    hidden = swap(b"def test_bench():", b"test_a = print\nwhile 1:\n    pass\n\n\ndef test_bench():")
+    assert lint(hidden) == ["TEST_NOT_FUNCTION"]
+    assert lint(GOOD) == [] and lint(swap(b"def test_bench():", b"def tester_bench():")) == []
+
+
+def test_symbol_must_be_an_exact_str_and_not_a_keyword():
+    class AlwaysEqual(str):
+        def __eq__(self, other):
+            return True
+
+        __hash__ = str.__hash__
+
+    assert lint(GOOD, symbol=AlwaysEqual("build_report")) == ["SYMBOL_INVALID"]
+    assert lint(GOOD, symbol=AlwaysEqual("zzz_not_referenced")) == ["SYMBOL_INVALID"]
+    assert not bg._valid_symbol(AlwaysEqual("build_report")) and bg._valid_symbol("build_report")
+    assert bg.benchmark_symbol_from_location("class") is None and bg.benchmark_symbol_from_location("app/x.py::None") is None
+    assert not bg._valid_symbol("lambda") and bg._valid_symbol("match")  # soft keywords are ordinary names
+
+
+def test_repo_top_levels_elements_must_be_exact_str():
+    class Name(str):
+        pass
+
+    assert lint(GOOD, tops=frozenset({Name("app")})) == ["ANALYSIS_FAILED"]
+    assert lint(GOOD, tops={"app"}) == []
+
+
+def test_test_prefix_rule_counts_tester_but_not_tes():
+    assert lint(with_top("tester = 1\n")) == ["TEST_NAME_COUNT"]  # `tester` starts with `test`: a second counted name
+    assert lint(with_top("tes = 1\n")) == []
+    assert lint(with_top("pytestmark = 1\n")) == ["TEST_NAME_COUNT"] and lint(with_top("TestX = 1\n")) == ["TEST_NAME_COUNT"]
+    assert lint(with_top("TEST_SIZE = 1\n")) == []
