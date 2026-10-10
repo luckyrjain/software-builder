@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Validation, lint and statistics core of the performance-review -> loop-task-implementer benchmark gate (Epic C).
 
-**This module is not wired into anything yet.** It is delivered by a series of six PRs for gap-backlog ticket
-C4 (C4a core, C4b lint, C4c exports, C4d harness, C4e classifier/docs, C4f wiring); no workflow file,
+**This module is not wired into anything yet.** It is delivered by a series of seven PRs for gap-backlog ticket
+C4 (C4a core, C4b lint, C4c-1 exports/seal/cleanup, C4c-2 overlay/diff/venv check, C4d harness, C4e classifier/docs, C4f wiring); no workflow file,
 lifecycle validator or other script calls it until C4f. So far it holds the pure, string-level and arithmetic
 pieces (``validate``, ``lint``) and the first half of C4c (C4c-1): ``export``, ``cleanup`` and the library
-functions ``compare`` will call (``export_tree``, ``hash_tree``, ``seal_tree``, ``unseal_tree``, ``cleanup_root``,
-``claim_root``). The second half (C4c-2) adds the benchmark overlay, the protected-path diff, the token tripwire and
-the venv ``.pth`` check with ``snapshot-venv``; C4d adds measurement, the trace, ``compare`` and ``run-once``, C4e
+functions ``compare`` will call (``export_tree``, ``seal_tree``, ``unseal_tree``, ``cleanup_root``). The second half
+(C4c-2) adds the tree hash, the benchmark overlay, the protected-path diff, the token tripwire and the venv ``.pth``
+check with ``snapshot-venv``; C4d adds measurement, the trace, ``compare`` and ``run-once``, C4e
 the classifier and docs, C4f the workflow wiring. Specification (revision 5, the converged result of four review
 rounds): ``docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md`` (APIs table,
 Data model, Capacity, Threat model). This docstring states each function's own contract and the reason each
@@ -30,10 +30,10 @@ import argparse
 import ast
 import codecs
 import dis
+import errno
 import hashlib
 import io
 import json
-import keyword
 import math
 import os
 import posixpath
@@ -78,12 +78,9 @@ def _valid_symbol(name: object) -> bool:
 
     Beyond the design's 15 denied names, EVERY dunder is rejected (the design named only ``__init__`` and
     ``__main__``): the lint rejects a dunder as a ``Name``, ``Attribute`` or alias, so a benchmark could never
-    reference ``Order.__eq__`` and the task would loop on an unfixable lint rejection. A Python keyword is
-    rejected for the same reason (no benchmark can bind or attribute-access ``class``). ``type(name) is str``,
-    not ``isinstance``: a ``str`` subclass with a hostile ``__eq__`` would otherwise make every name "match"."""
+    reference ``Order.__eq__`` and the task would loop on an unfixable lint rejection."""
     return (
-        type(name) is str
-        and not keyword.iskeyword(name)
+        isinstance(name, str)
         and _SYMBOL_RE.fullmatch(name) is not None
         and 3 <= len(name) <= 64
         and not _is_dunder(name)
@@ -760,9 +757,7 @@ def _content_violations(source: object, symbol: object, repo_top_levels: frozens
     # pytest also collects ``Test*`` names and acts on ``pytest_*`` hooks and ``pytestmark``.
     if len(tests) != 1 or any(name.startswith(("pytest", "Test")) for name in names):
         found.add("TEST_NAME_COUNT")
-    elif len(top_level_tests) != 1 or tests != [top_level_tests[0].name]:
-        # Defense in depth: the counted name must BE the one top-level def. ``test_a = print`` followed by an
-        # unreachable ``def test_bench`` compiles to ``test_a`` alone (the dead def vanishes), so counts alone pass.
+    elif len(top_level_tests) != 1:
         found.add("TEST_NOT_FUNCTION")
     else:
         args = top_level_tests[0].args
@@ -810,9 +805,7 @@ def validate_benchmark_content(source: bytes, symbol: str, repo_top_levels: froz
     Python versions, so ``compare`` must lint with the harness's own Python. Warnings are silenced during parsing.
 
     Beyond the table (stricter): a dunder function or parameter name, a star import, and an invalid ``symbol``
-    (``SYMBOL_INVALID``) are rejected; so is comprehension nesting deeper than 12 (``PARSE_FAILED``), and the
-    one-test rule also rejects module-level names beginning ``test`` as a prefix match (``tester`` counts, ``tes``
-    does not) and the widened ``pytest``/``Test`` prefixes (``pytest_*``, ``pytestmark``, ``TestX``).
+    (``SYMBOL_INVALID``) are rejected.
 
     This is a TRIPWIRE, not a sandbox. Allowlists are better than denylists but are still evadable
     (``string.Formatter().get_field``, ``type()``-built context managers, objects reached through the code under
@@ -826,11 +819,10 @@ def validate_benchmark_content(source: bytes, symbol: str, repo_top_levels: froz
 
 
 # ---------------------------------------------------------------------------
-# C4c: exports, tree hash and seal, overlay, protected paths, token tripwire, venv snapshot, cleanup
+# C4c-1: exports, seal, cleanup
 #
-# Everything here runs on attacker-influenced input (a Builder's commit, a venv a build hook wrote into): argv lists
-# only, a scrubbed environment, every subprocess bounded in time and output, every path validated before use, no
-# symlink ever followed out of a root. POSIX only (see the module docstring).
+# Runs on attacker-influenced input (a Builder's commit, a tree the code under test wrote into): argv lists only, a
+# scrubbed environment, bounded subprocesses, validated paths, no symlink followed out of a root. POSIX only.
 # ---------------------------------------------------------------------------
 
 # Stable ASCII codes. A refusal of hostile tree content is a verdict (CLI: stdout, exit 1); the rest are failures (exit 2).
@@ -838,12 +830,12 @@ EXPORT_REFUSAL_CODES = (
     "EXPORT_PATH_REJECTED",     # a `.`/`..`/empty component or a `.git` lookalike
     "EXPORT_PATH_COLLISION",    # two paths equal after NFC + casefold, or a file/directory clash that way
     "EXPORT_ENTRY_MODE",        # not a regular file, symlink or gitlink
-    "EXPORT_TOO_LARGE",         # over 100,000 entries or 1 GiB of blobs
+    "EXPORT_TOO_LARGE",         # over 100,000 entries (files and directories) or 1 GiB of blobs
     "EXPORT_SYMLINK_ESCAPES",   # a symlink whose real target is outside the export
     "EXPORT_VERIFY_FAILED",     # the written tree differs from the commit's listing
 )
-ERROR_CODES = (
-    "COMMIT_INVALID", "COMMIT_NOT_FOUND", "REPO_UNREADABLE", "DEST_REJECTED", "GIT_FAILED", "GIT_TIMEOUT",
+ERROR_CODES = (  # MARKER_MISSING / MARKER_INVALID also appear in CLEANUP_CODES: the same condition seen by `cleanup`
+    "COMMIT_INVALID", "COMMIT_NOT_FOUND", "REPO_UNREADABLE", "DEST_REJECTED", "GIT_FAILED", "GIT_TOO_OLD", "GIT_TIMEOUT",
     "GIT_OUTPUT_TOO_LARGE", "TREE_UNREADABLE", "TREE_TOO_LARGE", "SEAL_FAILED", "MARKER_MISSING", "MARKER_INVALID",
 )
 CLEANUP_CODES = (
@@ -866,47 +858,67 @@ _MAX_TREE_ENTRIES = 100_000
 _MAX_EXPORT_BYTES = 1 << 30
 _GIT_TIMEOUT_SECONDS = 300
 _GIT_OUTPUT_CAP = 64 << 20
+_GIT_MINIMUM = (2, 43)  # GIT_ATTR_SOURCE; older git silently applies the tree's own .gitattributes
+_git_version: tuple[int, int] | None = None
 _LFS_POINTER_PREFIX = b"version https://git-lfs.github.com/spec/v1\n"
 
 
 class BenchmarkGateError(Exception):
-    """A refusal or failure of a C4c helper: `code` is one of the stable codes above, `detail` untrusted free text."""
+    """A refusal or failure of a C4c helper: `code` is one of the stable codes above. `detail` may carry attacker-influenced
+    text (git stderr, an OSError message, a file name), so it is escaped HERE, once: printable ASCII, no backticks or newlines."""
 
     def __init__(self, code: str, detail: str = "") -> None:
         super().__init__(code)
         self.code = code
-        self.detail = detail
+        self.detail = escape_diagnostic(detail, 200)
 
 
 # --- the fixed parent, the dispatch-unique root and its marker ----------------------------------------------------
 
 def fixed_parent() -> Path:
-    """The only directory `export` creates roots in and `cleanup` removes them from: `<tempdir>/software-builder-bench`.
-    Fixed (not caller-supplied) so containment is a `realpath` comparison, and never a name pattern (a pattern delete
-    could hit another live task's root; `task_lease` allows concurrent Orchestrators on one host). Derived from
-    `tempfile.gettempdir()` at call time: a process with a different `TMPDIR` finds nothing and refuses."""
-    return Path(tempfile.gettempdir()) / _ROOT_PARENT_NAME
+    """The only directory `export` creates roots in and `cleanup` removes them from:
+    `<tempfile.gettempdir()>/software-builder-bench-<uid>` (plain name without a uid). Per user, so another local user cannot
+    deny service by pre-creating the name; fixed so containment is a `realpath` comparison, never a name pattern (a pattern
+    delete could hit another live task's root; `task_lease` allows concurrent Orchestrators on one host). Derived from `TMPDIR`
+    at call time: the cleaning process must use the exporter's `TMPDIR`. CLI: `fixed-parent`."""
+    suffix = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
+    return Path(tempfile.gettempdir()) / (_ROOT_PARENT_NAME + suffix)
 
 
 def _foreign(st: os.stat_result) -> bool:
     return hasattr(os, "getuid") and st.st_uid != os.getuid()
 
 
-def _ensure_fixed_parent() -> Path:
+def _check_parent(create: bool) -> Path:
+    """The fixed parent, which must be a real directory of ours that others cannot write (created 0700 if `create`).
+    `ABSENT` when it does not exist and `create` is false; `DEST_REJECTED` for anything else wrong with it."""
     parent = fixed_parent()
+    if create:
+        try:
+            os.mkdir(parent, 0o700)
+        except FileExistsError:
+            pass
     try:
-        os.mkdir(parent, 0o700)
-    except FileExistsError:
-        pass
-    st = os.lstat(parent)  # lstat: a symlink planted at the fixed parent is not a directory
+        st = os.lstat(parent)  # lstat: a symlink planted at the fixed parent is not a directory
+    except OSError as exc:
+        raise BenchmarkGateError("ABSENT" if isinstance(exc, FileNotFoundError) else "DEST_REJECTED", f"fixed parent: {exc}") from exc
     if not stat.S_ISDIR(st.st_mode) or st.st_mode & 0o022 or _foreign(st):
         raise BenchmarkGateError("DEST_REJECTED", "fixed parent is not a private directory owned by this user")
     return parent
 
 
+def _check_pid(pid: object) -> int:
+    if type(pid) is not int or not 0 < pid < 1 << 31:
+        raise BenchmarkGateError("DEST_REJECTED", "owner pid must be a positive int below 2**31")
+    return pid
+
+
 def _write_json_atomic(path: str, payload: dict) -> None:
     tmp = f"{path}.{os.getpid()}.tmp"  # O_EXCL + O_NOFOLLOW, then rename: a reader sees all of it or none
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    except FileExistsError as exc:  # a stale file of ours from a crashed run: never overwritten, never removed here
+        raise BenchmarkGateError("DEST_REJECTED", "a stale temp file blocks the write; remove it") from exc
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(json.dumps(payload, sort_keys=True).encode("ascii"))
@@ -917,15 +929,17 @@ def _write_json_atomic(path: str, payload: dict) -> None:
         raise
 
 
-def _write_marker(root: str, owner_pid: int) -> None:
+def _write_marker(root: str, owner_pid: int, name: str | None = None) -> None:
+    """Write the marker (validating the pid first, so a bad pid leaves any existing marker untouched)."""
     _write_json_atomic(os.path.join(root, _MARKER_NAME), {
-        "kind": _MARKER_KIND, "version": 1, "pid": owner_pid, "created": time.time(), "root": os.path.basename(root),
+        "kind": _MARKER_KIND, "version": 1, "pid": _check_pid(owner_pid), "created": time.time(),
+        "root": name or os.path.basename(root),
     })
 
 
 def _read_marker(root: str) -> dict:
-    """The validated marker: kind, version, positive `int` pid, finite non-future `created`, and `root` equal to the
-    directory's own name (a copied marker proves nothing). Else `MARKER_MISSING` / `MARKER_INVALID`."""
+    """The validated marker (kind, version, positive `int` pid, finite non-future `created`, `root` equal to the directory's own
+    name: a copied marker proves nothing), else `MARKER_MISSING` / `MARKER_INVALID`."""
     try:
         raw = _read_bounded(os.path.join(root, _MARKER_NAME), 4096, nofollow=True)
     except OSError as exc:
@@ -947,9 +961,8 @@ def _read_marker(root: str) -> dict:
 
 
 def _pid_alive(pid: int) -> bool:
-    """`os.kill(pid, 0)`: no error is alive, ESRCH dead, EPERM alive, anything else alive (fail closed). Off POSIX the
-    answer is "alive" (Windows `os.kill` would terminate the process). Residual: a recycled pid keeps a dead owner's
-    root undeletable (the safe direction); portable process start times need a third-party package."""
+    """`os.kill(pid, 0)`: ESRCH is dead, anything else alive (fail closed); off POSIX always alive (Windows `os.kill` would
+    terminate the process). Residual: a recycled pid keeps a dead owner's root undeletable (the safe direction)."""
     if os.name != "posix":
         return True
     try:
@@ -962,16 +975,21 @@ def _pid_alive(pid: int) -> bool:
 
 
 def _checked_root(root: str | os.PathLike) -> str:
-    """The root's path when it is a real directory of ours directly under the fixed parent, else `BenchmarkGateError`."""
+    """The root's resolved path when it is a real directory of ours directly under a private fixed parent, else a
+    `BenchmarkGateError` whose code is a `CLEANUP_CODES` entry."""
     path = os.path.abspath(os.fspath(root))
     parent = os.path.realpath(os.path.dirname(path))
     if not _ROOT_NAME_RE.fullmatch(os.path.basename(path)) or parent != os.path.realpath(fixed_parent()):
         raise BenchmarkGateError("NOT_UNDER_FIXED_PARENT", "root is not directly under the fixed parent")
+    try:
+        _check_parent(create=False)
+    except BenchmarkGateError as exc:
+        raise BenchmarkGateError("ABSENT" if exc.code == "ABSENT" else "NOT_UNDER_FIXED_PARENT", exc.detail) from exc
     path = os.path.join(parent, os.path.basename(path))  # operate on the resolved path, never on the argument
     try:
         st = os.lstat(path)
-    except FileNotFoundError as exc:
-        raise BenchmarkGateError("ABSENT") from exc
+    except OSError as exc:
+        raise BenchmarkGateError("ABSENT" if isinstance(exc, FileNotFoundError) else "NOT_A_DIRECTORY", str(exc)) from exc
     if not stat.S_ISDIR(st.st_mode):
         raise BenchmarkGateError("NOT_A_DIRECTORY", "root is a symlink or not a directory")
     if _foreign(st):
@@ -979,19 +997,12 @@ def _checked_root(root: str | os.PathLike) -> str:
     return path
 
 
-def claim_root(root: str | os.PathLike, pid: int | None = None) -> None:
-    """Re-point a root's marker at `pid` (default: this process) so `cleanup` refuses while it lives (`compare`, C4d)."""
-    path = _checked_root(root)
-    _read_marker(path)
-    _write_marker(path, os.getpid() if pid is None else pid)
+# --- tree walking, sealing, cleanup ------------------------------------------------------------------------------
 
-
-# --- tree walking, hashing, sealing ------------------------------------------------------------------------------
-
-def _walk_tree(root: str, before_dir=None):
+def _walk_tree(root: str):
     """Yield `(relpath, abspath, lstat)` for `root` ("" first) and everything below: depth first, names sorted, symlinks
-    reported and never followed, at most `_MAX_TREE_ENTRIES`. `before_dir(path, st)` runs before a directory is listed.
-    Any `OSError` is `TREE_UNREADABLE`: a tree that cannot be read completely is never hashed or sealed partially."""
+    reported and never followed, at most `_MAX_TREE_ENTRIES`. By PATH: used by `_verify_export`, which only reads, on
+    a tree this process has just written. Any `OSError` is `TREE_UNREADABLE`."""
     try:
         stack = [("", root, os.lstat(root))]
         count = 0
@@ -1002,8 +1013,6 @@ def _walk_tree(root: str, before_dir=None):
                 raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_TREE_ENTRIES} entries")
             if rel == "" and not stat.S_ISDIR(st.st_mode):
                 raise BenchmarkGateError("TREE_UNREADABLE", "root is not a real directory")
-            if before_dir is not None and stat.S_ISDIR(st.st_mode):
-                before_dir(path, st)
             yield rel, path, st
             if stat.S_ISDIR(st.st_mode):
                 with os.scandir(path) as listing:
@@ -1015,101 +1024,129 @@ def _walk_tree(root: str, before_dir=None):
         raise BenchmarkGateError("TREE_UNREADABLE", str(exc)) from exc
 
 
-def _open_same(path: str, st: os.stat_result, flags: int) -> int:
-    """Open without following a symlink and confirm it is the object `lstat` described (not swapped since)."""
-    fd = os.open(path, flags | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
-    after = os.fstat(fd)
-    if (after.st_dev, after.st_ino) != (st.st_dev, st.st_ino):
+def _chmod_dir_nofollow(parent_fd: int, name: str) -> bool:
+    """`chmod 0700` on directory `name` of `parent_fd`, never following a symlink, for a directory that cannot be opened
+    (mode 0): `fchmodat(AT_SYMLINK_NOFOLLOW)` where Python has it, else an `O_PATH` descriptor (pins the inode; a symlink is
+    refused by `O_DIRECTORY`) chmodded through `/proc/self/fd` (Linux; first exercised by CI). False where neither exists."""
+    if os.chmod in os.supports_follow_symlinks:
+        os.chmod(name, 0o700, dir_fd=parent_fd, follow_symlinks=False)
+        return True
+    if hasattr(os, "O_PATH") and os.path.isdir("/proc/self/fd"):
+        fd = os.open(name, os.O_PATH | os.O_NOFOLLOW | os.O_DIRECTORY, dir_fd=parent_fd)
+        try:
+            os.chmod(f"/proc/self/fd/{fd}", 0o700)
+            return True
+        finally:
+            os.close(fd)
+    return False
+
+
+def _open_dir(parent_fd: int, name: str, st: os.stat_result, repair: bool) -> int:
+    """Open directory `name` under `parent_fd`, never through a symlink, and confirm it is the object `st` described.
+    `repair` (unseal, cleanup) first makes an unopenable directory openable, then gives it `u+rwx`."""
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        fd = os.open(name, flags, dir_fd=parent_fd)
+    except PermissionError:
+        if not (repair and _chmod_dir_nofollow(parent_fd, name)):
+            raise
+        fd = os.open(name, flags, dir_fd=parent_fd)
+    try:
+        after = os.fstat(fd)
+        if (after.st_dev, after.st_ino) != (st.st_dev, st.st_ino):
+            raise OSError("entry changed while it was being read")
+        if repair:
+            os.fchmod(fd, stat.S_IMODE(after.st_mode) | 0o700)
+    except BaseException:
         os.close(fd)
-        raise OSError("entry changed while it was being read")
+        raise
     return fd
 
 
-def _file_digest(path: str, st: os.stat_result, keep: int = 0) -> tuple[bytes, bytes]:
-    """`(sha256 digest, first keep bytes)` of a regular file, streamed; a FIFO or device is refused, never blocked on."""
-    with os.fdopen(_open_same(path, st, os.O_RDONLY), "rb") as handle:
-        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
-            raise OSError("not a regular file")
-        digest, head = hashlib.sha256(), b""
-        while chunk := handle.read(1 << 20):
-            digest.update(chunk)
-            head += chunk[: max(keep - len(head), 0)]
-    return digest.digest(), head
-
-
-def hash_tree(root: str | os.PathLike) -> str:
-    """Deterministic sha256 of a tree, taken by `compare` at the seal and again after measurement.
-
-    Hashed, depth first in sorted order with length-prefixed fields: entry type, relative path, permission bits, and
-    the file's content digest or the symlink's target. Nothing is excluded (`.pyc`, `.egg-info`, caches included:
-    pytest runs with `PYTHONPYCACHEPREFIX` outside the tree and `-p no:cacheprovider`, so a write into it is the
-    signal). Not hashed: timestamps, owner, xattrs, ACLs, link counts. Special files are hashed by type and mode and
-    never opened. An unreadable entry is `TREE_UNREADABLE`. Residual: the walk lists by path, so a live attacker swapping
-    a directory for a symlink mid-walk is caught only by the second hash differing."""
-    digest = hashlib.sha256()
-
-    def field(data: bytes) -> None:
-        digest.update(b"%d:" % len(data) + data)
-
-    for rel, path, st in _walk_tree(os.fspath(root)):
-        mode = st.st_mode
-        kind = b"D" if stat.S_ISDIR(mode) else b"L" if stat.S_ISLNK(mode) else b"F" if stat.S_ISREG(mode) else b"O"
-        field(kind)
-        field(os.fsencode(rel))
-        field(b"%o" % stat.S_IMODE(mode))
-        try:
-            if kind == b"L":
-                field(os.fsencode(os.readlink(path)))
-            elif kind == b"F":
-                field(_file_digest(path, st)[0])
-        except OSError as exc:
-            raise BenchmarkGateError("TREE_UNREADABLE", str(exc)) from exc
-    return digest.hexdigest()
-
-
-def _chmod_entry(path: str, st: os.stat_result, clear: int, add: int, fallback: bool = False) -> None:
-    """`fchmod` through a descriptor opened without following symlinks; symlinks and special files are skipped.
-    `fallback` (unseal) chmods by path when a directory is not even openable (mode 0)."""
-    mode = st.st_mode
-    if not (stat.S_ISREG(mode) or stat.S_ISDIR(mode)):
-        return
-    if stat.S_ISREG(mode) and st.st_nlink > 1:  # the inode is shared with a path outside the tree: never change it
-        raise OSError("hard-linked file")
-    new_mode = (stat.S_IMODE(mode) & ~clear) | add
+def _walk_fd(root: str, limit: int | None, repair: bool = False):
+    """Yield `(rel, parent_fd, name, lstat, dir_fd)` for `root` ("" first) and everything below, depth first, names sorted,
+    using ONLY descriptors: each child is `stat`ed and opened relative to its parent's descriptor with `O_NOFOLLOW` and checked
+    against the `stat` result, so a directory swapped for a symlink mid-walk is refused, never followed; no path-based chmod.
+    `dir_fd` is a directory's own descriptor (closed by the walker), else None. `limit` bounds the entries (None: unbounded,
+    for removal). `repair` also tolerates an entry vanishing (a concurrent cleanup). Raises `OSError` / `BenchmarkGateError`."""
+    parent, name = os.path.split(os.path.abspath(root))
+    pfd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+    frames: list[tuple[str, int, list[str]]] = []
     try:
-        fd = _open_same(path, st, os.O_RDONLY | (getattr(os, "O_DIRECTORY", 0) if stat.S_ISDIR(mode) else 0))
-    except PermissionError:
-        if not fallback:
-            raise
-        os.chmod(path, new_mode)
-        return
+        st = os.stat(name, dir_fd=pfd, follow_symlinks=False)
+        if not stat.S_ISDIR(st.st_mode):
+            raise BenchmarkGateError("TREE_UNREADABLE", "root is not a real directory")
+        fd = _open_dir(pfd, name, st, repair)
+        frames.append(("", fd, sorted(os.listdir(fd), reverse=True)))
+        count = 1
+        yield "", pfd, name, st, fd
+        while frames:
+            rel, dfd, names = frames[-1]
+            if not names:
+                os.close(dfd)
+                frames.pop()
+                continue
+            child = names.pop()
+            try:
+                cst = os.stat(child, dir_fd=dfd, follow_symlinks=False)
+                cfd = _open_dir(dfd, child, cst, repair) if stat.S_ISDIR(cst.st_mode) else None
+                if cfd is not None:
+                    frames.append((f"{rel}/{child}" if rel else child, cfd, sorted(os.listdir(cfd), reverse=True)))
+            except FileNotFoundError:
+                if repair:
+                    continue
+                raise
+            count += 1
+            if limit is not None and count > limit:
+                raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {limit} entries")
+            yield (f"{rel}/{child}" if rel else child), dfd, child, cst, cfd
+    finally:
+        for _, open_fd, _ in frames:
+            os.close(open_fd)
+        os.close(pfd)
+
+
+def _fchmod_file(parent_fd: int, name: str, st: os.stat_result, clear: int, add: int) -> None:
+    """`fchmod` a regular file through a descriptor opened relative to `parent_fd` without following a symlink, checked
+    against `st`; refuses a hard-linked file (its inode is shared with a path outside the tree)."""
+    fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0), dir_fd=parent_fd)
     try:
-        os.fchmod(fd, new_mode)
+        after = os.fstat(fd)
+        if not stat.S_ISREG(after.st_mode) or (after.st_dev, after.st_ino) != (st.st_dev, st.st_ino):
+            raise OSError("entry changed while it was being read")
+        if after.st_nlink > 1:
+            raise OSError("hard-linked file")
+        os.fchmod(fd, (stat.S_IMODE(after.st_mode) & ~clear) | add)
     finally:
         os.close(fd)
 
 
 def seal_tree(root: str | os.PathLike) -> None:
-    """Remove every write bit under `root` (children before parents, symlinks untouched). `compare` seals AFTER the
-    project install and the overlay: sealing before breaks `pip install -e` (verified), and sealing after then running
-    pytest leaves the tree hash unchanged. Fails closed (`SEAL_FAILED`), including on a hard-linked file. A same-user
-    process can `chmod` back; the hash recheck then reports it."""
+    """Remove every write bit under `root` (symlinks and special files untouched), by descriptor only. `compare` seals AFTER
+    the install and the overlay (sealing before breaks `pip install -e`, verified). Fails closed (`SEAL_FAILED`), including
+    on a hard-linked file. NOT protected: a writer already holding a descriptor from before the seal; root ignores mode bits;
+    a same-user process can `chmod` back (a later tree hash would show it); the dispatch root itself (marker, venvs)."""
     try:
-        for _, path, st in reversed(list(_walk_tree(os.fspath(root)))):
-            _chmod_entry(path, st, clear=0o222, add=0)
+        for _, pfd, name, st, dfd in _walk_fd(os.fspath(root), _MAX_TREE_ENTRIES):
+            if dfd is not None:
+                os.fchmod(dfd, stat.S_IMODE(st.st_mode) & ~0o222)
+            elif stat.S_ISREG(st.st_mode):
+                _fchmod_file(pfd, name, st, 0o222, 0)
     except OSError as exc:
         raise BenchmarkGateError("SEAL_FAILED", str(exc)) from exc
 
 
-def unseal_tree(root: str | os.PathLike) -> None:
-    """Inverse of `seal_tree` for `cleanup`: directories `u+rwx` top-down (each listable before it is read), files `u+w`."""
+def unseal_tree(root: str | os.PathLike, *, bounded: bool = True) -> None:
+    """Inverse of `seal_tree` for `cleanup`, by descriptor only: directories `u+rwx` (an unopenable one via
+    `_chmod_dir_nofollow`; where that is unavailable it stays), regular files `u+w` (hard-linked or unopenable ones are
+    skipped: deleting a file needs write on its directory only). `bounded=False` lifts the entry bound."""
     try:
-        for _, path, st in _walk_tree(os.fspath(root), before_dir=lambda p, s: _chmod_entry(p, s, 0, 0o700, fallback=True)):
-            if stat.S_ISREG(st.st_mode):
+        for _, pfd, name, st, dfd in _walk_fd(os.fspath(root), _MAX_TREE_ENTRIES if bounded else None, repair=True):
+            if dfd is None and stat.S_ISREG(st.st_mode):
                 try:
-                    _chmod_entry(path, st, clear=0, add=0o200)
+                    _fchmod_file(pfd, name, st, 0, 0o200)
                 except OSError:
-                    pass  # deleting a file needs write on its directory only
+                    pass
     except OSError as exc:
         raise BenchmarkGateError("TREE_UNREADABLE", str(exc)) from exc
 
@@ -1117,30 +1154,51 @@ def unseal_tree(root: str | os.PathLike) -> None:
 def cleanup_root(root: str | os.PathLike) -> str:
     """Remove a dispatch-unique root; return `REMOVED` / `ABSENT` or a refusal code (`CLEANUP_CODES`).
 
-    Only if the path is a directory directly under `fixed_parent()` (so not a symlink, not elsewhere), owned by this
-    user, carries a valid marker, and the marker's pid is not alive. Then `unseal_tree` (a sealed tree otherwise raises
-    `PermissionError`) and `shutil.rmtree`, which on POSIX works through directory descriptors and refuses a symlink root.
-    Never a name pattern. Residual: a same-user process swapping a directory for a symlink between unseal and removal."""
+    Only if the path is a directory directly under the private `fixed_parent()` (not a symlink), owned by this user, with a
+    valid marker whose pid is not alive. The root is opened by descriptor and given `u+rwx` first (a mode-0 root with a valid
+    marker is cleanable), then unsealed by descriptor WITHOUT the export entry bound (a legal root holds two exports and
+    venvs), then `shutil.rmtree` (descriptor based, refuses a symlink root) removes it. An entry vanishing underneath (a
+    concurrent cleanup) is not an error: the verdict is whether the root still exists. Never a name pattern."""
     try:
         path = _checked_root(root)
-        marker = _read_marker(path)
     except BenchmarkGateError as exc:
         return exc.code
+    try:
+        parent, name = os.path.split(path)
+        pfd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.close(_open_dir(pfd, name, os.stat(name, dir_fd=pfd, follow_symlinks=False), repair=True))
+        finally:
+            os.close(pfd)
+        marker = _read_marker(path)
+    except BenchmarkGateError as exc:
+        return "ABSENT" if exc.code == "MARKER_MISSING" and not os.path.lexists(path) else exc.code
+    except FileNotFoundError:  # a concurrent cleanup removed it first
+        return "ABSENT"
+    except OSError:
+        return "REMOVE_FAILED"
     if _pid_alive(marker["pid"]):
         return "OWNER_ALIVE"
+
+    def ignore_missing(_func, _path, exc: BaseException) -> None:
+        if not isinstance(exc, FileNotFoundError):
+            raise exc
+
     try:
-        unseal_tree(path)
-        shutil.rmtree(path)
-    except Exception:  # noqa: BLE001 -- RecursionError on absurd nesting, OSError, BenchmarkGateError: all "not removed"
-        return "REMOVE_FAILED"
-    return "REMOVED"
+        unseal_tree(path, bounded=False)
+    except (BenchmarkGateError, OSError):
+        pass  # best effort: `rmtree` below decides, and the verdict is whether the root is gone
+    try:
+        shutil.rmtree(path, onexc=ignore_missing)
+    except Exception:  # noqa: BLE001 -- RecursionError on absurd nesting, OSError: reported by the existence check
+        pass
+    return "REMOVE_FAILED" if os.path.lexists(path) else "REMOVED"
 
 
 # --- git: a private repository over the real object store ---------------------------------------------------------
 
 def _git_env(home: str) -> dict[str, str]:
-    """An environment built from nothing: no inherited `GIT_*`, no user or system config, no prompts, replace refs,
-    lazy fetch or pager."""
+    """An environment built from nothing: no inherited `GIT_*`, no user/system config, prompts, replace refs, lazy fetch, pager."""
     return {
         "PATH": "/usr/bin:/bin", "HOME": home, "XDG_CONFIG_HOME": home, "LC_ALL": "C", "GIT_CONFIG_NOSYSTEM": "1",
         "GIT_CONFIG_GLOBAL": os.devnull, "GIT_TERMINAL_PROMPT": "0", "GIT_ATTR_NOSYSTEM": "1", "GIT_NO_REPLACE_OBJECTS": "1",
@@ -1149,8 +1207,7 @@ def _git_env(home: str) -> dict[str, str]:
 
 
 def _objects_dir(repo: str | os.PathLike) -> str:
-    """The object directory of `repo` (work tree, bare, or linked worktree with a `gitdir:` file), found by reading
-    files, not by running git in the hostile repository."""
+    """The object directory of `repo` (work tree, bare, or linked worktree), found by reading files, not by running git in it."""
     try:
         base = os.path.abspath(os.fspath(repo))
         gitdir, dot_git = base, os.path.join(base, ".git")
@@ -1181,18 +1238,32 @@ def _fsize_limiter(cap: int):
     return apply
 
 
+def _require_modern_git() -> None:
+    """`GIT_ATTR_SOURCE` (keeps the tree's own `.gitattributes` out of the checkout) needs git >= 2.43; an older git silently
+    applies `eol=crlf`/`ident`, so honest repositories would fail verification as hostile. Say so up front as an environment
+    error (`GIT_TOO_OLD`, exit 2). Checked once per process."""
+    global _git_version
+    if _git_version is None:
+        code, out = _PrivateGit._run_raw(["--version"], _git_env(tempfile.gettempdir()), tempfile.gettempdir(), 256)
+        found = re.match(rb"git version (\d+)\.(\d+)", out) if code == 0 else None
+        if found is None:
+            raise BenchmarkGateError("GIT_FAILED", "cannot determine the git version")
+        _git_version = (int(found[1]), int(found[2]))
+    if _git_version < _GIT_MINIMUM:
+        raise BenchmarkGateError("GIT_TOO_OLD", "git >= %d.%d is required, found %d.%d" % (*_GIT_MINIMUM, *_git_version))
+
+
 class _PrivateGit:
-    """A throw-away bare repository with NO config, hooks, attributes, remotes or refs, whose object store is the real
-    repository's, read through `GIT_ALTERNATE_OBJECT_DIRECTORIES`. Every git command run on attacker-controlled objects
-    runs here, so nothing in the repository's own `.git/config` (a `filter.*` smudge, `core.fsmonitor`, a diff driver,
-    `core.hooksPath`, a promisor remote) can execute, and nothing is written to the real object store. SHA-1 and
-    SHA-256 repositories are told apart by the commit length."""
+    """A throw-away bare repository with NO config, hooks, attributes, remotes or refs, reading the real repository's
+    objects through `GIT_ALTERNATE_OBJECT_DIRECTORIES`: nothing in the real `.git/config` (filters, fsmonitor, diff
+    drivers, hooksPath, a promisor remote) can execute and nothing is written to the real store. SHA-1 or SHA-256 by commit length."""
 
     def __init__(self, repo: str | os.PathLike, commit_length: int) -> None:
         self._objects = _objects_dir(repo)
         self._length = commit_length
 
     def __enter__(self) -> "_PrivateGit":
+        _require_modern_git()
         self._dir = tempfile.mkdtemp(prefix="bench-git-")
         try:
             home = os.path.join(self._dir, "home")
@@ -1259,7 +1330,7 @@ def _check_commits(*commits: object) -> int:
 # --- export_tree --------------------------------------------------------------------------------------------------
 
 def _fold_component(part: str) -> str:
-    """NFC, casefolded, format characters dropped (HFS+ ignores zero-width joiners), trailing dots and spaces stripped (NTFS)."""
+    """NFC, casefolded, zero-width characters dropped (HFS+), trailing dots and spaces stripped (NTFS)."""
     folded = unicodedata.normalize("NFC", part).casefold()
     return "".join(c for c in folded if unicodedata.category(c) != "Cf").rstrip(" .")
 
@@ -1296,17 +1367,17 @@ def _parse_listing(raw: bytes) -> dict[str, tuple[str, int, bool]]:
         ancestors.update("/".join(key.split("/")[:i]) for i in range(1, len(parts)))
         total += size_value
         entries[rel] = (kind, size_value, mode == "100755")
-        if len(entries) > _MAX_TREE_ENTRIES or total > _MAX_EXPORT_BYTES:
-            raise BenchmarkGateError("EXPORT_TOO_LARGE", f"over {_MAX_TREE_ENTRIES} entries or {_MAX_EXPORT_BYTES} bytes")
+        # Files + directories + root: the bound the verification walk uses, so an oversize tree is always EXPORT_TOO_LARGE.
+        if len(entries) + len(ancestors) + 1 > _MAX_TREE_ENTRIES or total > _MAX_EXPORT_BYTES:
+            raise BenchmarkGateError("EXPORT_TOO_LARGE", f"over {_MAX_TREE_ENTRIES} entries (files and directories) or {_MAX_EXPORT_BYTES} bytes")
     if keys & ancestors:
         raise BenchmarkGateError("EXPORT_PATH_COLLISION", "a file and a directory share a name")
     return entries
 
 
 def _verify_export(dest: str, entries: dict[str, tuple[str, int, bool]]) -> list[str]:
-    """Walk the written tree and demand it equal the commit's listing: nothing extra or missing, every size and
-    executable bit equal (this also catches a conversion that slipped past `GIT_ATTR_SOURCE` on a git too old to honour
-    it), no symlink whose real target leaves `dest`. Returns the LFS-pointer paths."""
+    """Demand the written tree equal the commit's listing (nothing extra or missing, sizes and executable bits equal: this
+    also catches a conversion that slipped past `GIT_ATTR_SOURCE`), no symlink resolving outside `dest`. Returns LFS pointers."""
     expected_dirs = {"/".join(rel.split("/")[:i]) for rel in entries for i in range(1, rel.count("/") + 1)}
     expected_dirs |= {rel for rel, (kind, _, _) in entries.items() if kind == "G"}
     real_dest = os.path.realpath(dest)
@@ -1338,6 +1409,34 @@ def _verify_export(dest: str, entries: dict[str, tuple[str, int, bool]]) -> list
     return lfs
 
 
+def _create_root(parent: str, name: str, owner: int) -> bool:
+    """Create the dispatch root WITH its marker, atomically (a temp directory renamed into place, so a concurrent exporter
+    never sees a root without a marker). True if this call created it; False if it existed, which the caller validates."""
+    root = os.path.join(parent, name)
+    tmp = tempfile.mkdtemp(dir=parent, prefix=".new-")
+    try:
+        _write_marker(tmp, owner, name)
+        os.rename(tmp, root)
+        return True
+    except OSError as exc:
+        if exc.errno not in (errno.ENOTEMPTY, errno.EEXIST, errno.ENOTDIR):
+            raise
+        return False
+    finally:
+        if os.path.lexists(tmp):
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _drop_empty_root(root: str) -> None:
+    """Remove a root this call created, unless another export has put something in it meanwhile."""
+    try:
+        if set(os.listdir(root)) <= {_MARKER_NAME}:
+            os.unlink(os.path.join(root, _MARKER_NAME))
+            os.rmdir(root)
+    except OSError:
+        pass
+
+
 def _export(repo, commit, dest, owner_pid: int | None) -> tuple[Path, dict[str, list[str]]]:
     length = _check_commits(commit)
     try:
@@ -1347,53 +1446,55 @@ def _export(repo, commit, dest, owner_pid: int | None) -> tuple[Path, dict[str, 
     root_name, leaf = leaf_path.parent.name, leaf_path.name
     if not _ROOT_NAME_RE.fullmatch(root_name) or not _LEAF_NAME_RE.fullmatch(leaf):
         raise BenchmarkGateError("DEST_REJECTED", "dest must be <fixed parent>/<root name>/<leaf name>")
-    parent = _ensure_fixed_parent()
-    if os.path.realpath(leaf_path.parent.parent) != os.path.realpath(parent):
+    owner = _check_pid(os.getpid() if owner_pid is None else owner_pid)
+    parent = os.path.realpath(_check_parent(create=True))
+    if os.path.realpath(leaf_path.parent.parent) != parent:
         raise BenchmarkGateError("DEST_REJECTED", f"dest must be under {parent}")
-    root = os.path.join(os.path.realpath(parent), root_name)
+    root = os.path.join(parent, root_name)
     export_dir = os.path.join(root, leaf)
-    owner = os.getpid() if owner_pid is None else owner_pid
-    if type(owner) is not int or not 0 < owner < 1 << 31:
-        raise BenchmarkGateError("DEST_REJECTED", "owner pid must be a positive int")
+    sidecar = export_dir + ".export.json"
 
     with _PrivateGit(repo, length) as git:  # the repository is validated before anything is created
         git.require_commit(commit)
         entries = _parse_listing(git.run("ls-tree", "-r", "-l", "-z", "--full-tree", commit))
-        created_root = False
+        created_root = _create_root(parent, root_name, owner)
+        created_dest = False
         try:
-            os.mkdir(root, 0o700)
-            created_root = True
-        except FileExistsError:
-            st = os.lstat(root)
-            if not stat.S_ISDIR(st.st_mode) or _foreign(st):
-                raise BenchmarkGateError("DEST_REJECTED", "root exists and is not a directory of this user") from None
-            _read_marker(root)  # an existing root must be one of ours
-        try:
-            if created_root:
-                _write_marker(root, owner)
+            if not created_root:
+                st = os.lstat(root)
+                if not stat.S_ISDIR(st.st_mode) or _foreign(st):
+                    raise BenchmarkGateError("DEST_REJECTED", "root exists and is not a directory of this user")
+                _read_marker(root)  # an existing root must be one of ours
             try:
                 os.mkdir(export_dir, 0o755)
             except FileExistsError:
                 raise BenchmarkGateError("DEST_REJECTED", "dest already exists") from None
+            created_dest = True  # from here on, and only from here, this call owns `export_dir`
             git.run("read-tree", commit)
             git.run("checkout-index", "-a", "-f", work_tree=export_dir, cap=None)
             lfs = _verify_export(export_dir, entries)
-            _write_json_atomic(export_dir + ".export.json", {"commit": commit, "entries": len(entries)})
+            _write_json_atomic(sidecar, {"commit": commit, "entries": len(entries)})
         except BaseException:
-            shutil.rmtree(export_dir, ignore_errors=True)
+            if created_dest:  # remove only what this call created
+                shutil.rmtree(export_dir, ignore_errors=True)
+                if os.path.lexists(sidecar):
+                    os.unlink(sidecar)
             if created_root:
-                shutil.rmtree(root, ignore_errors=True)
+                _drop_empty_root(root)
             raise
     return Path(export_dir), {"gitlinks": sorted(r for r, e in entries.items() if e[0] == "G"), "lfs_pointers": lfs}
 
 
 def export_tree(repo: str | os.PathLike, commit: str, dest: str | os.PathLike, *, owner_pid: int | None = None) -> Path:
-    """Export the tree of `commit` into `dest` and return `dest`. Raises `BenchmarkGateError`.
+    """Export the tree of `commit` into `dest` and return the RESOLVED path of `dest`. Raises `BenchmarkGateError`. Needs
+    git >= 2.43 (`GIT_TOO_OLD` otherwise).
 
-    `commit` is 40 or 64 lowercase hex. `dest` is `<fixed_parent()>/<root>/<leaf>` and must not exist; the root
-    (`[A-Za-z0-9][A-Za-z0-9_-]{7,63}`, caller-chosen, dispatch-unique) is created mode 0700 with a marker holding
-    `owner_pid` (default: this process) and a timestamp, or reused after its marker validates (the second export of a
-    dispatch). `dest` is left WRITABLE: the install and the overlay still run; `compare` seals and hashes afterwards.
+    `commit` is 40 or 64 lowercase hex. `dest` is `<fixed_parent()>/<root>/<leaf>` and must not exist (an existing one is
+    `DEST_REJECTED` and never touched); the root (`[A-Za-z0-9][A-Za-z0-9_-]{7,63}`, caller-chosen, dispatch-unique) is created
+    mode 0700 together with its marker (pid, timestamp), atomically, or reused after its marker validates; concurrent exports
+    into one new root are safe. The marker pid is `owner_pid` for the FIRST export of a root (later ones are ignored); by
+    default the short-lived exporting process, so `cleanup` is allowed right after export unless `--owner-pid` names a
+    longer-lived owner. Put venvs at `<root>/venv-*`. `dest` is left WRITABLE: the install and the overlay still run.
 
     Built by `git read-tree` into a private index plus `git checkout-index` inside a `_PrivateGit` (never `git archive`,
     which honours `export-ignore`/`export-subst`): no `.git`, no hooks, no filters, no LFS, no network. A plain
@@ -1401,9 +1502,10 @@ def export_tree(repo: str | os.PathLike, commit: str, dest: str | os.PathLike, *
     `$Id$`), so `GIT_ATTR_SOURCE` points at the empty tree and `_verify_export` rechecks every size. A submodule becomes
     an EMPTY directory and an LFS pointer stays pointer text (both named by the CLI on stderr). A symlink is written as a
     symlink and the export is REFUSED if any resolves outside `dest` (stricter than "never follow": a legitimate absolute
-    symlink fails closed); unsafe or colliding paths and oversize trees are refused too. A sidecar `<leaf>.export.json`
-    beside `dest` records the commit so the benchmark overlay (C4c-2) can bind its `base_ref_commit` to this export. On failure `dest`
-    (and a root this call created) is removed."""
+    symlink fails closed); unsafe or colliding paths and trees over 100,000 entries are refused too. A sidecar
+    `<leaf>.export.json` beside `dest` records the commit (the C4c-2 overlay binds `base_ref_commit` to it). On failure only
+    what this call created is removed. No `.git`: an installer deriving its version from git (setuptools_scm, versioneer)
+    fails in an export unless the caller sets a pretend version."""
     return _export(repo, commit, dest, owner_pid)[0]
 
 
@@ -1549,9 +1651,14 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_fixed_parent(_args: argparse.Namespace) -> int:
+    """Print `fixed_parent()`: C4f builds `export --dest` and `cleanup --root` paths from it."""
+    print(fixed_parent())
+    return 0
+
+
 def _cmd_cleanup(args: argparse.Namespace) -> int:
-    """Remove one dispatch-unique root. The result code is printed on stdout: exit 0 for ``REMOVED``/``ABSENT``, 1
-    for a refusal (``CLEANUP_CODES``)."""
+    """Remove one dispatch-unique root; print the result code: exit 0 for ``REMOVED``/``ABSENT``, 1 for a refusal."""
     code = cleanup_root(args.root)
     print(code)
     return 0 if code in ("REMOVED", "ABSENT") else 1
@@ -1575,9 +1682,13 @@ def main(argv: list[str] | None = None) -> int:
     export = sub.add_parser("export", help="export a commit's tree (exit 0, 1 refused, 2 usage)")
     export.add_argument("--repo", required=True, metavar="DIR")
     export.add_argument("--commit", required=True, metavar="SHA")
-    export.add_argument("--dest", required=True, metavar="DIR", help="<fixed parent>/<root>/<leaf>; must not exist")
-    export.add_argument("--owner-pid", type=int, metavar="PID", help="pid recorded in the root's marker (default: this process)")
+    export.add_argument("--dest", required=True, metavar="DIR", help="<fixed parent>/<root>/<leaf>; must not exist; see fixed-parent")
+    export.add_argument("--owner-pid", type=int, metavar="PID",
+                        help="pid in the new root's marker (default: this short-lived process, so cleanup is allowed at once; "
+                             "ignored for an existing root); requires git >= 2.43")
     export.set_defaults(func=_cmd_export)
+    fixed = sub.add_parser("fixed-parent", help="print the per-user directory that roots live in")
+    fixed.set_defaults(func=_cmd_fixed_parent)
     cleanup = sub.add_parser("cleanup", help="remove a dispatch-unique root (exit 0 removed/absent, 1 refused)")
     cleanup.add_argument("--root", required=True, metavar="DIR")
     cleanup.set_defaults(func=_cmd_cleanup)

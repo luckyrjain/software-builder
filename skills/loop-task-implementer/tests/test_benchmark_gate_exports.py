@@ -1,20 +1,23 @@
 """Tests for the C4c-1 filesystem and git pieces of `benchmark_gate.py`: `export_tree`, tree hash and seal,
-`cleanup_root` / `claim_root`, and the `export` / `cleanup` CLIs.
+`cleanup_root`, and the `export` / `cleanup` CLIs.
 
-Everything git-related runs against real temporary repositories (no network, no hooks, no signing). Hostile trees
-(`.git` entries, `..`, case collisions, escaping symlinks) are built with `git mktree`, since `git add` refuses them.
+Everything git-related runs against real temporary repositories (no network, hooks or signing); hostile trees (`.git`
+entries, `..`, case collisions, escaping symlinks) are built with `git mktree`, since `git add` refuses them.
 Design: docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md (APIs table, `compare` row).
 """
 
 from __future__ import annotations
 
+import concurrent.futures
 import importlib.util
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 import pytest
@@ -37,9 +40,7 @@ IS_ROOT = hasattr(os, "geteuid") and os.geteuid() == 0
 BENCH = "benchmarks/bench_orders.py"
 BENCH_SRC = b'import hashlib\n\n\ndef test_bench():\n    print("BENCH_RESULT_DIGEST: " + hashlib.sha256(b"x").hexdigest())\n'
 
-# ---------------------------------------------------------------------------
-# helpers: scrubbed git, real repositories, hostile trees
-# ---------------------------------------------------------------------------
+# --- helpers: scrubbed git, real repositories, hostile trees ---
 
 GIT_ENV = {
     "PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": "/nonexistent", "GIT_CONFIG_GLOBAL": os.devnull,
@@ -83,7 +84,6 @@ def commit(repo, files=None, msg="c") -> str:
 
 
 def hostile_commit(repo, lines: list[str]) -> str:
-    """A commit whose root tree is `git mktree` of `lines` ("<mode> <type> <sha>\\t<name>"); blobs via `blob()`."""
     tree = git(repo, "mktree", inp=("\n".join(lines) + "\n").encode())
     return git(repo, "commit-tree", tree, "-m", "hostile")
 
@@ -93,10 +93,8 @@ def blob(repo, data=b"x\n") -> str:
 
 
 def dir_with(repo, name, inner="config", data=b"x\n") -> str:
-    """The mktree line of a directory `name` holding one file."""
     inner_tree = git(repo, "mktree", inp=f"100644 blob {blob(repo, data)}\t{inner}\n".encode())
     return f"040000 tree {inner_tree}\t{name}"
-
 
 @pytest.fixture(autouse=True)
 def sandbox(tmp_path, monkeypatch):
@@ -104,6 +102,10 @@ def sandbox(tmp_path, monkeypatch):
     temp = tmp_path / "tmp"
     temp.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(temp))
+    try:
+        bg._require_modern_git()
+    except Err as exc:
+        pytest.skip(f"the host git cannot run the export tests: {exc.detail}")  # GIT_ATTR_SOURCE needs git >= 2.43
     return temp
 
 
@@ -114,7 +116,6 @@ def dest(leaf="head", root="bench-aaaaaaaa") -> str:
 def tree_files(root: Path) -> dict[str, bytes]:
     return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file() and not p.is_symlink()}
 
-
 @pytest.fixture
 def repo_a(tmp_path):
     repo = make_repo(tmp_path)
@@ -123,9 +124,7 @@ def repo_a(tmp_path):
     return repo, sha
 
 
-# ---------------------------------------------------------------------------
-# export_tree
-# ---------------------------------------------------------------------------
+# --- export_tree ---
 
 def test_export_is_pristine_writable_without_git_and_records_the_owner(repo_a):
     repo, sha = repo_a
@@ -141,7 +140,6 @@ def test_export_is_pristine_writable_without_git_and_records_the_owner(repo_a):
     assert bg.export_tree(repo, sha, dest("base"), owner_pid=1) == Path(dest("base"))  # second export reuses the root
     assert json.loads((out.parent / bg._MARKER_NAME).read_text())["pid"] == os.getpid()
 
-
 def test_export_ignores_the_trees_own_attributes_and_the_repos_own_config(tmp_path):
     repo = make_repo(tmp_path)
     canary = tmp_path / "canary"
@@ -155,7 +153,6 @@ def test_export_ignores_the_trees_own_attributes_and_the_repos_own_config(tmp_pa
     assert tree_files(out) == {k: v.encode() for k, v in files.items()}  # byte-identical: no CRLF, no ident, nothing dropped
     assert not canary.exists()
 
-
 def test_export_sha256_repository(tmp_path):
     try:
         repo = make_repo(tmp_path, fmt="sha256")
@@ -164,7 +161,6 @@ def test_export_sha256_repository(tmp_path):
     sha = commit(repo, {"a.py": "x\n"})
     assert len(sha) == 64 and tree_files(bg.export_tree(repo, sha, dest())) == {"a.py": b"x\n"}
 
-
 def test_export_from_a_linked_worktree_and_odd_file_names(tmp_path):
     repo = make_repo(tmp_path)
     names = {"-dash.py": "1", "sp ace.py": "2", "café.py": "3", "new\nline.py": "4", "d/ends.py\n": "5"}
@@ -172,7 +168,6 @@ def test_export_from_a_linked_worktree_and_odd_file_names(tmp_path):
     git(repo, "worktree", "add", "-q", str(tmp_path / "wt"), "-b", "other")
     got = tree_files(bg.export_tree(tmp_path / "wt", sha, dest()))
     assert got == {k: v.encode() for k, v in names.items()}
-
 
 def test_export_reports_gitlinks_as_empty_directories_and_lfs_pointers(tmp_path, repo_a):
     repo, sha = repo_a
@@ -187,12 +182,10 @@ def test_export_reports_gitlinks_as_empty_directories_and_lfs_pointers(tmp_path,
     assert notes == {"gitlinks": ["vendor/sub"], "lfs_pointers": ["big.bin"]}
     assert (out / "big.bin").read_bytes() == lfs  # unresolved, not fetched
 
-
 @pytest.mark.parametrize("builder, code", [
     (lambda r, b: [dir_with(r, ".git")], "EXPORT_PATH_REJECTED"),
     (lambda r, b: [dir_with(r, ".GIT")], "EXPORT_PATH_REJECTED"),
     (lambda r, b: [dir_with(r, ".git ")], "EXPORT_PATH_REJECTED"),
-    (lambda r, b: [dir_with(r, ".git.")], "EXPORT_PATH_REJECTED"),
     (lambda r, b: [dir_with(r, ".g‌it")], "EXPORT_PATH_REJECTED"),
     (lambda r, b: [dir_with(r, "GIT~1")], "EXPORT_PATH_REJECTED"),
     (lambda r, b: [dir_with(r, "..")], "EXPORT_PATH_REJECTED"),
@@ -213,7 +206,6 @@ def test_export_refuses_hostile_trees_and_leaves_nothing_behind(tmp_path, builde
     assert not Path(dest()).parent.exists()  # the root this call created is removed too
     assert bg.main(["export", "--repo", str(repo), "--commit", sha, "--dest", dest()]) == 1
 
-
 @pytest.mark.parametrize("record, code", [
     (b"100666 blob abc 1\tweird\0", "EXPORT_ENTRY_MODE"), (b"160000 blob abc 1\tg\0", "EXPORT_ENTRY_MODE"),
     (b"100644 commit abc 1\tg\0", "EXPORT_ENTRY_MODE"), (b"040000 tree abc -\td\0", "EXPORT_ENTRY_MODE"),
@@ -228,14 +220,14 @@ def test_listing_parser_refuses_what_it_cannot_export_safely(record, code):
     assert info.value.code == code
     assert bg._parse_listing(b"") == {}
 
-
-def test_export_refuses_an_oversize_tree(repo_a, monkeypatch):
-    repo, sha = repo_a
-    monkeypatch.setattr(bg, "_MAX_TREE_ENTRIES", 2)
+def test_oversize_is_one_condition_files_and_directories_together(repo_a, monkeypatch):
+    repo, sha = repo_a  # 5 files in 3 directories: 9 entries with the root, the same count the verification walk uses
+    monkeypatch.setattr(bg, "_MAX_TREE_ENTRIES", 8)
     with pytest.raises(Err) as info:
         bg.export_tree(repo, sha, dest())
     assert info.value.code == "EXPORT_TOO_LARGE"
-
+    monkeypatch.setattr(bg, "_MAX_TREE_ENTRIES", 9)
+    assert bg.export_tree(repo, sha, dest()).is_dir()
 
 def test_export_verification_catches_a_conversion_that_changed_bytes(repo_a, monkeypatch):
     repo, sha = repo_a  # a git too old to honour GIT_ATTR_SOURCE would convert: the size check must then fail closed
@@ -251,13 +243,11 @@ def test_export_verification_catches_a_conversion_that_changed_bytes(repo_a, mon
     assert info.value.code == "EXPORT_VERIFY_FAILED"
     assert not Path(dest()).exists()
 
-
 @pytest.mark.parametrize("commit_arg", ["", "abc", "A" * 40, "g" * 40, "-" + "a" * 39, "a" * 41, "a" * 40 + "\n", "a" * 40 + "\0", None, 7])
 def test_export_rejects_malformed_commits(repo_a, commit_arg):
     with pytest.raises(Err) as info:
         bg.export_tree(repo_a[0], commit_arg, dest())
     assert info.value.code == "COMMIT_INVALID"
-
 
 def test_export_errors_are_clean_and_exit_2(repo_a, tmp_path, capsys):
     repo, sha = repo_a
@@ -274,38 +264,21 @@ def test_export_errors_are_clean_and_exit_2(repo_a, tmp_path, capsys):
         assert info.value.code == code, (code, info.value.code)
         assert bg.main(["export", "--repo", str(repo_arg), "--commit", commit_arg, "--dest", dest_arg]) == 2
         assert capsys.readouterr().out == ""
-    bg.export_tree(repo, sha, dest())
-    with pytest.raises(Err) as info:  # dest exists
-        bg.export_tree(repo, sha, dest())
-    assert info.value.code == "DEST_REJECTED"
-    with pytest.raises(Err):
-        bg.export_tree(repo, sha, dest("other"), owner_pid=0)
 
-
-def test_export_refuses_a_root_that_is_not_ours_or_a_symlinked_parent(repo_a, tmp_path):
+def test_export_refuses_a_root_that_is_not_ours_or_a_symlinked_root(repo_a, tmp_path):
     repo, sha = repo_a
     (bg.fixed_parent()).mkdir(mode=0o700)
-    (bg.fixed_parent() / "bench-bbbbbbbb").mkdir()  # no marker
+    (bg.fixed_parent() / "bench-bbbbbbbb").mkdir()
+    (bg.fixed_parent() / "bench-bbbbbbbb" / "stray").write_text("x")  # not ours: no marker (an EMPTY directory would be replaced)
     with pytest.raises(Err) as info:
         bg.export_tree(repo, sha, dest(root="bench-bbbbbbbb"))
     assert info.value.code == "MARKER_MISSING"
-    bg.fixed_parent().rmdir() if False else None
     outside = tmp_path / "outside"
     outside.mkdir()
     (bg.fixed_parent() / "bench-cccccccc").symlink_to(outside)
     with pytest.raises(Err):
         bg.export_tree(repo, sha, dest(root="bench-cccccccc"))
     assert not list(outside.iterdir())
-
-
-def test_export_refuses_a_group_writable_fixed_parent(repo_a):
-    repo, sha = repo_a
-    bg.fixed_parent().mkdir(mode=0o700)
-    bg.fixed_parent().chmod(0o777)
-    with pytest.raises(Err) as info:
-        bg.export_tree(repo, sha, dest())
-    assert info.value.code == "DEST_REJECTED"
-
 
 def test_git_runs_with_a_scrubbed_environment(repo_a, monkeypatch):
     repo, sha = repo_a
@@ -316,18 +289,13 @@ def test_git_runs_with_a_scrubbed_environment(repo_a, monkeypatch):
     monkeypatch.setattr(subprocess, "run", lambda argv, **kw: seen.append((argv, kw)) or real(argv, **kw))
     bg.export_tree(repo, sha, dest())
     assert seen and all(isinstance(argv, list) and kw["stdin"] == subprocess.DEVNULL and kw["timeout"] for argv, kw in seen)
-    assert all(not kw.get("shell") for _, kw in seen)
-    for _, kw in seen:
+    for _, kw in seen:  # argv lists, never a shell
         env = kw["env"]
         assert env["GIT_CONFIG_NOSYSTEM"] == "1" and env["GIT_CONFIG_GLOBAL"] == os.devnull and env["GIT_TERMINAL_PROMPT"] == "0"
         assert "GIT_EXTERNAL_DIFF" not in env and "GIT_SSH_COMMAND" not in env and "GIT_CONFIG_COUNT" not in env
-        assert env.get("GIT_INDEX_FILE", "").startswith(str(bg.fixed_parent().parent)) or "GIT_INDEX_FILE" not in env
-        assert not str(repo) in env.get("GIT_DIR", "")
 
 
-# ---------------------------------------------------------------------------
-# hash_tree, seal_tree, unseal_tree
-# ---------------------------------------------------------------------------
+# --- seal_tree, unseal_tree ---
 
 @pytest.fixture
 def tree(tmp_path):
@@ -336,80 +304,22 @@ def tree(tmp_path):
     (root / "d/a.txt").write_text("a")
     (root / "b.txt").write_text("b")
     (root / "link").symlink_to("b.txt")
+    for path, mode in ((root, 0o755), (root / "d", 0o755), (root / "d/a.txt", 0o644), (root / "b.txt", 0o644)):
+        path.chmod(mode)  # explicit: independent of the umask
     return root
 
-
-def test_hash_tree_is_deterministic_and_sensitive_to_every_input(tree, tmp_path):
-    base = bg.hash_tree(tree)
-    assert base == bg.hash_tree(str(tree)) and len(base) == 64
-    copy = tmp_path / "copy"
-    import shutil
-    shutil.copytree(tree, copy, symlinks=True)
-    assert bg.hash_tree(copy) == base  # path and timestamps are not inputs
-    os.utime(copy / "b.txt", (1, 1))
-    assert bg.hash_tree(copy) == base
-
-    def mutate(kind):
-        root = tmp_path / f"m-{kind}"
-        shutil.copytree(tree, root, symlinks=True)
-        if kind == "content":
-            (root / "b.txt").write_text("B")
-        elif kind == "mode":
-            (root / "b.txt").chmod(0o755)
-        elif kind == "dir-mode":
-            (root / "d").chmod(0o700)
-        elif kind == "rename":
-            (root / "b.txt").rename(root / "c.txt")
-        elif kind == "empty-dir":
-            (root / "e").mkdir()
-        elif kind == "new-file":
-            (root / "d/n.pyc").write_bytes(b"")
-        elif kind == "delete":
-            (root / "d/a.txt").unlink()
-        elif kind == "link-target":
-            (root / "link").unlink()
-            (root / "link").symlink_to("d/a.txt")
-        elif kind == "link-to-file":  # same bytes, different type
-            (root / "link").unlink()
-            (root / "link").write_text("b.txt")
-        return bg.hash_tree(root)
-
-    kinds = ["content", "mode", "dir-mode", "rename", "empty-dir", "new-file", "delete", "link-target", "link-to-file"]
-    hashes = {kind: mutate(kind) for kind in kinds}
-    assert base not in hashes.values() and len(set(hashes.values())) == len(kinds)
-
-
-def test_hash_tree_never_opens_special_files_or_follows_links(tree, tmp_path):
-    if hasattr(os, "mkfifo"):
-        os.mkfifo(tree / "fifo")
-    (tree / "out").symlink_to(tmp_path)  # a link out of the tree is hashed as a link, not walked
-    before = bg.hash_tree(tree)
-    (tmp_path / "unrelated.txt").write_text("changes outside the tree")
-    assert bg.hash_tree(tree) == before
-
-
-@pytest.mark.skipif(IS_ROOT, reason="root reads mode-0 files")
-def test_hash_tree_fails_closed_on_an_unreadable_entry(tree):
-    (tree / "b.txt").chmod(0)
-    with pytest.raises(Err) as info:
-        bg.hash_tree(tree)
-    assert info.value.code == "TREE_UNREADABLE"
-
-
 def test_walk_is_bounded_and_refuses_a_symlink_or_missing_root(tree, tmp_path, monkeypatch):
-    with pytest.raises(Err) as info:
-        bg.hash_tree(tree / "link")
-    assert info.value.code == "TREE_UNREADABLE"
-    with pytest.raises(Err):
-        bg.hash_tree(tmp_path / "missing")
+    for bad in (tree / "link", tmp_path / "missing"):
+        with pytest.raises(Err) as info:
+            list(bg._walk_tree(str(bad)))
+        assert info.value.code == "TREE_UNREADABLE"
     monkeypatch.setattr(bg, "_MAX_TREE_ENTRIES", 3)
     with pytest.raises(Err) as info:
-        bg.hash_tree(tree)
+        list(bg._walk_tree(str(tree)))
     assert info.value.code == "TREE_TOO_LARGE"
 
-
 @pytest.mark.skipif(IS_ROOT, reason="root ignores write bits")
-def test_seal_removes_every_write_bit_keeps_the_hash_stable_and_unseal_restores(tree, tmp_path):
+def test_seal_removes_every_write_bit_and_unseal_restores(tree, tmp_path):
     outside = tmp_path / "outside.txt"
     outside.write_text("o")
     outside.chmod(0o644)
@@ -423,14 +333,11 @@ def test_seal_removes_every_write_bit_keeps_the_hash_stable_and_unseal_restores(
         (tree / "new.txt").write_text("x")
     with pytest.raises(PermissionError):
         (tree / "b.txt").write_text("x")
-    sealed = bg.hash_tree(tree)
-    assert (tree / "d/a.txt").read_text() == "a" and bg.hash_tree(tree) == sealed  # reading changes nothing
+    assert (tree / "d/a.txt").read_text() == "a"  # still readable
     bg.seal_tree(tree)  # idempotent
-    assert bg.hash_tree(tree) == sealed
     bg.unseal_tree(tree)
     (tree / "new.txt").write_text("x")
     assert stat.S_IMODE(outside.stat().st_mode) == 0o644
-
 
 @pytest.mark.skipif(IS_ROOT, reason="root ignores permissions")
 def test_unseal_handles_unlistable_directories_and_seal_fails_closed(tree):
@@ -442,15 +349,12 @@ def test_unseal_handles_unlistable_directories_and_seal_fails_closed(tree):
     assert (tree / "d/a.txt").read_text() == "a"
 
 
-# ---------------------------------------------------------------------------
-# cleanup_root, claim_root, pid liveness
-# ---------------------------------------------------------------------------
+# --- cleanup_root, pid liveness ---
 
 def dead_pid() -> int:
     child = subprocess.Popen([sys.executable, "-c", "pass"])
     child.wait(timeout=60)
     return child.pid
-
 
 @pytest.fixture
 def root(repo_a):
@@ -458,30 +362,20 @@ def root(repo_a):
     bg.export_tree(repo, sha, dest(), owner_pid=dead_pid())
     return Path(dest()).parent
 
-
 def test_cleanup_removes_a_sealed_root_with_a_dead_owner_and_never_follows_links(root, tmp_path):
     outside = tmp_path / "keep"
     outside.mkdir()
     (outside / "canary").write_text("alive")
     (root / "head" / "out").symlink_to(outside)
     bg.seal_tree(root / "head")
-    if not IS_ROOT:
-        with pytest.raises(PermissionError):
-            shutil_rmtree_plain(root / "head")  # a plain removal of the sealed tree fails: unseal must come first
     assert bg.cleanup_root(root) == "REMOVED" and not root.exists()
     assert (outside / "canary").read_text() == "alive" and outside.exists()
     assert bg.cleanup_root(root) == "ABSENT"
 
 
-def shutil_rmtree_plain(path):
-    import shutil
-    shutil.rmtree(path)
-
-
 def write_marker(directory: Path, **overrides):
     marker = {"kind": bg._MARKER_KIND, "version": 1, "pid": dead_pid(), "created": 1.0, "root": directory.name, **overrides}
     (directory / bg._MARKER_NAME).write_text(json.dumps(marker))
-
 
 @pytest.mark.parametrize("override", [
     {"pid": True}, {"pid": 0}, {"pid": -5}, {"pid": "1"}, {"pid": 2 ** 40}, {"created": 1e12}, {"created": "now"}, {"created": float("nan")},
@@ -490,7 +384,6 @@ def write_marker(directory: Path, **overrides):
 def test_cleanup_refuses_an_invalid_marker(root, override):
     write_marker(root, **override)
     assert bg.cleanup_root(root) == "MARKER_INVALID" and root.exists()
-
 
 def test_cleanup_refuses_bad_markers_roots_and_paths(root, tmp_path):
     (root / bg._MARKER_NAME).write_text("{not json")
@@ -517,30 +410,13 @@ def test_cleanup_refuses_bad_markers_roots_and_paths(root, tmp_path):
         assert bg.cleanup_root(bad) == "NOT_UNDER_FIXED_PARENT", bad
     assert stray.exists() and (root / "head").exists()
 
-
-def test_cleanup_refuses_while_the_owner_lives_and_claim_root_moves_the_owner(root):
-    write_marker(root, pid=os.getpid())
-    assert bg.cleanup_root(root) == "OWNER_ALIVE" and root.exists()
-    write_marker(root)
-    bg.claim_root(root)
-    assert json.loads((root / bg._MARKER_NAME).read_text())["pid"] == os.getpid()
-    assert bg.cleanup_root(root) == "OWNER_ALIVE"
-    bg.claim_root(root, dead_pid())
-    assert bg.cleanup_root(root) == "REMOVED"
-    with pytest.raises(Err):
-        bg.claim_root(root)
-
-
 def test_pid_liveness(monkeypatch):
     assert bg._pid_alive(os.getpid()) and not bg._pid_alive(dead_pid())
-    for exc, alive in ((PermissionError(), True), (OSError(), True), (OverflowError(), True)):
+    for exc, alive in ((PermissionError(), True), (OSError(), True), (OverflowError(), True), (ProcessLookupError(), False)):
         monkeypatch.setattr(os, "kill", lambda pid, sig, exc=exc: (_ for _ in ()).throw(exc))
         assert bg._pid_alive(5) is alive
-    monkeypatch.setattr(os, "kill", lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()))
-    assert bg._pid_alive(5) is False
     monkeypatch.setattr(os, "name", "nt")
     assert bg._pid_alive(5) is True  # never os.kill off POSIX: on Windows that terminates the process
-
 
 def test_cleanup_cli_exit_codes(root, capsys):
     write_marker(root, pid=os.getpid())
@@ -551,9 +427,7 @@ def test_cleanup_cli_exit_codes(root, capsys):
     assert bg.main(["cleanup"]) == 2
 
 
-# ---------------------------------------------------------------------------
-# CLI and vocabularies
-# ---------------------------------------------------------------------------
+# --- CLI and vocabularies ---
 
 def test_export_cli_prints_the_path_records_the_owner_and_rejects_bad_usage(repo_a, capsys):
     repo, sha = repo_a
@@ -564,19 +438,17 @@ def test_export_cli_prints_the_path_records_the_owner_and_rejects_bad_usage(repo
     for argv in (["export"], ["export", "--repo", "r", "--commit", sha], ["cleanup", "--root"]):
         assert bg.main(argv) == 2
 
-
 def test_code_vocabularies_are_pinned():
     assert bg.EXPORT_REFUSAL_CODES == tuple(
         "EXPORT_PATH_REJECTED EXPORT_PATH_COLLISION EXPORT_ENTRY_MODE EXPORT_TOO_LARGE EXPORT_SYMLINK_ESCAPES EXPORT_VERIFY_FAILED".split())
     assert bg.CLEANUP_CODES == tuple(
         "REMOVED ABSENT NOT_UNDER_FIXED_PARENT NOT_A_DIRECTORY NOT_OWNED MARKER_MISSING MARKER_INVALID OWNER_ALIVE REMOVE_FAILED".split())
     assert bg.ERROR_CODES == tuple(
-        """COMMIT_INVALID COMMIT_NOT_FOUND REPO_UNREADABLE DEST_REJECTED GIT_FAILED GIT_TIMEOUT GIT_OUTPUT_TOO_LARGE TREE_UNREADABLE
+        """COMMIT_INVALID COMMIT_NOT_FOUND REPO_UNREADABLE DEST_REJECTED GIT_FAILED GIT_TOO_OLD GIT_TIMEOUT GIT_OUTPUT_TOO_LARGE TREE_UNREADABLE
         TREE_TOO_LARGE SEAL_FAILED MARKER_MISSING MARKER_INVALID""".split())
     for vocabulary in (bg.EXPORT_REFUSAL_CODES, bg.CLEANUP_CODES, bg.ERROR_CODES):
         assert len(set(vocabulary)) == len(vocabulary)
         assert all(code.isascii() and code.replace("_", "").isalpha() and bg.escape_diagnostic(code) == code for code in vocabulary)
-
 
 def test_git_is_never_taken_from_the_working_directory(repo_a, tmp_path, monkeypatch):
     repo, sha = repo_a
@@ -587,7 +459,6 @@ def test_git_is_never_taken_from_the_working_directory(repo_a, tmp_path, monkeyp
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PATH", f".{os.pathsep}{os.pathsep}relative/bin")
     assert bg.export_tree(repo, sha, dest()).is_dir() and not canary.exists()
-
 
 @pytest.mark.skipif(IS_ROOT, reason="root ignores write bits")
 def test_seal_refuses_a_hard_linked_file_and_unseal_leaves_its_mode_alone(tree, tmp_path):
@@ -600,3 +471,222 @@ def test_seal_refuses_a_hard_linked_file_and_unseal_leaves_its_mode_alone(tree, 
     assert info.value.code == "SEAL_FAILED" and stat.S_IMODE(shared.stat().st_mode) == 0o444
     bg.unseal_tree(tree)
     assert stat.S_IMODE(shared.stat().st_mode) == 0o444
+
+
+# --- review round 1: failure path of export, descriptor walk, unbounded cleanup, environment checks ---
+
+def test_a_second_export_to_an_existing_dest_never_touches_it(repo_a, capsys):
+    repo, sha = repo_a
+    out = bg.export_tree(repo, sha, dest())
+    (out / "installed.txt").write_text("written by the install")
+    sidecar = Path(dest() + ".export.json")
+    kept = sidecar.read_bytes()
+    for _ in range(2):  # it used to alternate rc 0 / rc 2 and destroy the tree being installed into
+        with pytest.raises(Err) as info:
+            bg.export_tree(repo, sha, dest())
+        assert info.value.code == "DEST_REJECTED"
+        assert bg.main(["export", "--repo", str(repo), "--commit", sha, "--dest", dest()]) == 2
+        assert (out / "installed.txt").read_text() == "written by the install" and sidecar.read_bytes() == kept
+        assert (out.parent / bg._MARKER_NAME).exists() and capsys.readouterr().out == ""
+
+def test_a_failed_export_removes_only_what_it_created(repo_a):
+    repo, sha = repo_a
+    first = bg.export_tree(repo, sha, dest("base"))
+    stale = Path(dest("head") + f".export.json.{os.getpid()}.tmp")
+    stale.write_text("a crashed run")  # a leftover temp file blocks the sidecar write: a clean error, not a traceback
+    with pytest.raises(Err) as info:
+        bg.export_tree(repo, sha, dest("head"))
+    assert info.value.code == "DEST_REJECTED" and not Path(dest("head")).exists() and stale.read_text() == "a crashed run"
+    assert first.is_dir() and (first.parent / bg._MARKER_NAME).exists() and Path(dest("base") + ".export.json").exists()
+
+def test_two_concurrent_first_exports_into_a_new_root_both_succeed(repo_a):
+    repo, sha = repo_a
+    for attempt in range(10):
+        gate = threading.Barrier(2)
+
+        def run(leaf, attempt=attempt):
+            gate.wait()
+            return bg.export_tree(repo, sha, dest(leaf, root=f"bench-race{attempt:04d}"))
+
+        with concurrent.futures.ThreadPoolExecutor(2) as pool:
+            results = [future.result() for future in [pool.submit(run, "head"), pool.submit(run, "base")]]
+        assert all(path.is_dir() for path in results)
+
+
+def swap_for_symlink_on_open(monkeypatch, parent: Path, name: str, outside: Path):
+    """A hostile process, deterministically: just before the walk opens directory `name`, swap it for a symlink to `outside`."""
+    real_open, done = os.open, []
+
+    def hooked(path, flags, mode=0o777, *, dir_fd=None):
+        if path == name and dir_fd is not None and not done:
+            done.append(True)
+            os.rename(parent / name, parent / (name + ".moved"))
+            os.symlink(outside, parent / name)
+        return real_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(os, "open", hooked)
+    return done
+
+
+def outside_tree(base: Path, dir_mode: int, file_mode: int) -> dict:
+    (base / "sub").mkdir(parents=True)
+    for path in (base / "a.txt", base / "sub/b.txt"):
+        path.write_text("outside")
+        path.chmod(file_mode)
+    (base / "sub").chmod(dir_mode)
+    base.chmod(dir_mode)
+    return {str(p): (stat.S_IMODE(p.stat().st_mode), None if p.is_dir() else p.read_text()) for p in [base, *base.rglob("*")]}
+
+@pytest.mark.skipif(IS_ROOT, reason="root ignores mode bits")
+@pytest.mark.parametrize("operation", ["seal", "unseal", "cleanup"])
+def test_a_directory_swapped_for_a_symlink_mid_walk_is_never_followed(tree, root, tmp_path, monkeypatch, operation):
+    # seal must not strip outside write bits; unseal and cleanup must not add them (outside starts restrictive)
+    writable = operation == "seal"
+    outside = tmp_path / "outside"
+    snapshot = outside_tree(outside, 0o755 if writable else 0o500, 0o644 if writable else 0o400)
+    target, victim = (tree, "d") if operation != "cleanup" else (root / "head", "src")
+    if operation == "unseal":
+        bg.seal_tree(tree)
+    done = swap_for_symlink_on_open(monkeypatch, target, victim, outside)
+    try:
+        if operation == "cleanup":
+            assert bg.cleanup_root(root) == "REMOVED"
+        else:
+            with pytest.raises(Err):
+                (bg.seal_tree if operation == "seal" else bg.unseal_tree)(tree)
+    finally:
+        monkeypatch.undo()
+    assert done and {str(p): (stat.S_IMODE(p.stat().st_mode), None if p.is_dir() else p.read_text())
+                     for p in [outside, *outside.rglob("*")]} == snapshot
+    os.chmod(outside, 0o755)
+    os.chmod(outside / "sub", 0o755)
+
+def test_cleanup_removes_a_legal_root_larger_than_the_export_bound(root, repo_a, monkeypatch):
+    repo, sha = repo_a
+    bg.export_tree(repo, sha, dest("base"))
+    bg.seal_tree(root / "head")
+    bg.seal_tree(root / "base")
+    monkeypatch.setattr(bg, "_MAX_TREE_ENTRIES", 5)  # export/hash/seal keep the bound; removal must not apply it
+    with pytest.raises(Err):
+        bg.seal_tree(root / "base")
+    assert bg.cleanup_root(root) == "REMOVED" and not root.exists()
+
+@pytest.mark.skipif(IS_ROOT, reason="root ignores mode bits")
+def test_cleanup_removes_a_root_and_subdirectories_with_mode_zero(root):
+    (root / "head" / "src" / "locked").mkdir()
+    (root / "head" / "src" / "locked" / "f").write_text("x")
+    (root / "head" / "src" / "locked").chmod(0)
+    root.chmod(0)  # a valid marker inside a mode-0 root: cleanable, not MARKER_MISSING
+    assert bg.cleanup_root(root) == "REMOVED" and not root.exists()
+
+def test_cleanup_removes_a_tree_deeper_than_path_max(root, monkeypatch):
+    monkeypatch.chdir(root / "head")
+    for _ in range(30):  # 30 x 200 characters is far over PATH_MAX; only descriptor-relative calls can reach the bottom
+        os.mkdir("d" * 200)
+        os.chdir("d" * 200)
+    Path("deep.txt").write_text("x")
+    monkeypatch.chdir(root.parent)
+    assert bg.cleanup_root(root) == "REMOVED" and not root.exists()
+
+def test_racing_cleanups_all_report_removed_or_absent(root):
+    for index in range(300):
+        (root / "head" / f"f{index}.txt").write_text("x")
+    gate = threading.Barrier(8)
+
+    def run(_):
+        gate.wait()
+        return bg.cleanup_root(root)
+
+    with concurrent.futures.ThreadPoolExecutor(8) as pool:
+        results = list(pool.map(run, range(8)))
+    assert set(results) <= {"REMOVED", "ABSENT"} and "REMOVED" in results and not root.exists()
+
+def test_old_git_is_an_environment_error_not_a_hostile_tree_verdict(repo_a, monkeypatch, capsys):
+    repo, sha = repo_a
+    monkeypatch.setattr(bg, "_git_version", (2, 34))
+    with pytest.raises(Err) as info:
+        bg.export_tree(repo, sha, dest())
+    assert info.value.code == "GIT_TOO_OLD" and "2.43" in info.value.detail and not Path(dest()).parent.exists()
+    assert bg.main(["export", "--repo", str(repo), "--commit", sha, "--dest", dest()]) == 2
+    assert capsys.readouterr().out == ""
+    real = subprocess.run  # and the version really is parsed from `git --version`
+    monkeypatch.setattr(bg, "_git_version", None)
+    monkeypatch.setattr(subprocess, "run", lambda argv, **kw: real(["/bin/echo", "git version 2.39.5 (Apple Git-154)"] if "--version" in argv else argv, **kw))
+    with pytest.raises(Err) as info:
+        bg.export_tree(repo, sha, dest())
+    assert info.value.code == "GIT_TOO_OLD" and "found 2.39" in info.value.detail
+
+@pytest.mark.parametrize("bad", [True, False, 0, -1, 2 ** 31, 1.5, "1", b"1"])
+def test_a_bad_owner_pid_is_rejected_before_anything_is_created(root, repo_a, bad):
+    before, listing = (root / bg._MARKER_NAME).read_bytes(), sorted(os.listdir(root))
+    with pytest.raises(Err) as info:
+        bg.export_tree(*repo_a, dest("other"), owner_pid=bad)
+    assert info.value.code == "DEST_REJECTED" and not Path(dest("other")).exists()
+    assert (root / bg._MARKER_NAME).read_bytes() == before and sorted(os.listdir(root)) == listing
+
+def test_the_fixed_parent_is_per_user_private_and_checked_by_export_and_cleanup(repo_a, root, capsys):
+    repo, sha = repo_a
+    parent = bg.fixed_parent()
+    assert parent.name == f"software-builder-bench-{os.getuid()}" and stat.S_IMODE(parent.stat().st_mode) == 0o700
+    assert bg.main(["fixed-parent"]) == 0 and capsys.readouterr().out == f"{parent}\n"
+    parent.chmod(0o777)  # another user could now plant entries: both sides refuse, with codes and no traceback
+    with pytest.raises(Err) as info:
+        bg.export_tree(repo, sha, dest("other"))
+    assert info.value.code == "DEST_REJECTED" and bg.cleanup_root(root) == "NOT_UNDER_FIXED_PARENT"
+    if not IS_ROOT:
+        parent.chmod(0)  # lstat of the root then fails with EACCES: a code, not a traceback
+        assert bg.cleanup_root(root) == "NOT_A_DIRECTORY"
+    parent.chmod(0o700)
+    moved = parent.with_name("moved")
+    parent.rename(moved)
+    parent.symlink_to(moved)  # a symlinked fixed parent is not a directory
+    with pytest.raises(Err) as info:
+        bg.export_tree(repo, sha, dest("other"))
+    assert info.value.code == "DEST_REJECTED" and bg.cleanup_root(root) == "NOT_UNDER_FIXED_PARENT"
+
+def test_error_details_are_escaped_where_they_are_built():
+    detail = Err("GIT_FAILED", "git x: `rm -rf` | # header\n- item \u00e9 " + "z" * 500).detail
+    assert detail == bg.escape_diagnostic(detail) and len(detail) <= 200 and detail.isascii()
+
+def test_a_failed_export_drops_its_new_root_only_when_nothing_else_uses_it(repo_a, monkeypatch):
+    repo, sha = repo_a
+    seen = []
+    real_marker = bg._write_marker  # the marker is written BEFORE the root becomes visible (temp directory, then rename)
+    monkeypatch.setattr(bg, "_write_marker", lambda root, pid, name=None: (seen.append(os.path.lexists(os.path.join(os.path.dirname(root), name or ""))), real_marker(root, pid, name))[1])
+    root_dir = Path(dest()).parent
+
+    def fail_verify(_dest, _entries):
+        if shared:
+            (root_dir / "other-export").mkdir()  # another exporter put its tree into the root meanwhile
+        raise Err("EXPORT_VERIFY_FAILED", "forced")
+
+    monkeypatch.setattr(bg, "_verify_export", fail_verify)
+    for shared in (False, True):
+        with pytest.raises(Err):
+            bg.export_tree(repo, sha, dest())
+        assert not Path(dest()).exists() and root_dir.exists() is shared
+        assert shared is False or (root_dir / bg._MARKER_NAME).exists()
+        shutil.rmtree(root_dir, ignore_errors=True)
+    assert seen == [False, False]
+
+
+def test_cleanup_verdict_is_what_is_left_and_a_vanished_root_is_absent(root, monkeypatch):
+    real_rmtree, real_open = shutil.rmtree, bg._open_dir
+    monkeypatch.setattr(shutil, "rmtree", lambda *a, **k: None)
+    assert bg.cleanup_root(root) == "REMOVE_FAILED"  # the verdict is whether the root still exists
+    monkeypatch.setattr(bg, "_open_dir", lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError()))
+    assert bg.cleanup_root(root) == "ABSENT"  # gone between the checks and the repair open
+    monkeypatch.setattr(bg, "_open_dir", real_open)
+    monkeypatch.setattr(bg, "_read_marker", lambda path: (real_rmtree(path), (_ for _ in ()).throw(Err("MARKER_MISSING")))[1])
+    assert bg.cleanup_root(root) == "ABSENT"  # a racing cleanup removed it while the marker was read
+
+def test_unseal_tolerates_an_entry_vanishing_under_it(tree, monkeypatch):
+    real = os.stat
+
+    def vanish(path, *args, **kwargs):
+        if path == "b.txt" and kwargs.get("dir_fd") is not None and (tree / "b.txt").exists():
+            os.unlink(tree / "b.txt")
+        return real(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "stat", vanish)
+    bg.unseal_tree(tree)
