@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import collections
 import concurrent.futures
+import errno
 import importlib.util
 import json
 import multiprocessing
@@ -940,7 +941,8 @@ def test_a_cleanup_that_loses_to_another_one_at_any_point_reports_absent_or_remo
         return real(*args, **kwargs)
 
     monkeypatch.setattr(bg, hook, another_cleanup_completes_here)
-    assert bg.cleanup_root(root) in ("ABSENT", "REMOVED") and state["nested"] in ("ABSENT", "REMOVED") and not root.exists()
+    monkeypatch.setattr(bg, "_LOCK_WAIT_SECONDS", 0.1)  # the nested one meets the outer one's lock and cannot wait it out: a refusal, not "gone"
+    assert bg.cleanup_root(root) in ("ABSENT", "REMOVED") and state["nested"] in ("ABSENT", "REMOVED", "REMOVE_FAILED") and not root.exists()
 
 
 @pytest.mark.filterwarnings("ignore:.*fork.*:DeprecationWarning")
@@ -1323,8 +1325,8 @@ def test_a_real_attacker_polling_for_the_claimed_directory_cannot_steer_cleanup(
             attacker.kill()
         assert attacker.exitcode == 0 and look(outside) == before
 
-@pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM])
-def test_a_cleanup_interrupted_after_the_claim_puts_the_tree_back_and_the_next_one_finishes(root, sig):
+@pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM, signal.SIGKILL])
+def test_a_cleanup_interrupted_after_the_claim_is_put_back_or_finished_by_the_next_one(root, sig):
     child = (
         "import importlib.util, sys, time, tempfile\n"
         "spec = importlib.util.spec_from_file_location('bg', sys.argv[1]); bg = importlib.util.module_from_spec(spec); spec.loader.exec_module(bg)\n"
@@ -1340,8 +1342,62 @@ def test_a_cleanup_interrupted_after_the_claim_puts_the_tree_back_and_the_next_o
         _, err = proc.communicate(timeout=60)
     finally:
         proc.kill()
-    assert proc.returncode == 1 and "interrupted" in err and root.exists() and not claimed(root.parent)  # exit 1, nothing on stdout, tree back
+    if sig == signal.SIGKILL:
+        assert proc.returncode == -signal.SIGKILL and len(claimed(root.parent)) == 1 and not root.exists()  # cannot put itself back
+    else:
+        assert proc.returncode == 1 and "interrupted" in err and root.exists() and not claimed(root.parent)  # exit 1, nothing on stdout, tree back
     assert bg.cleanup_root(root) == "REMOVED" and not root.exists() and not claimed(root.parent) and bg.cleanup_root(root) == "ABSENT"
+
+def test_abandoned_claims_are_finished_and_selected_by_a_valid_marker_naming_the_root_not_by_their_name(root):
+    base = f".gone-{root.name}-"
+    sibling = root.parent / f"{base}extra-{'e' * 16}"  # another root's leftover, whose name merely extends this one
+    sibling.mkdir()
+    write_marker(sibling, root=root.name + "-extra")
+    held = root.parent / (base + "0" * 16)
+    bg.seal_tree(root / "head")
+    root.rename(held)
+    held.chmod(0)  # unopenable, as an interrupted unseal can leave it
+    assert bg.cleanup_root(root) == "REMOVED" and not held.exists() and bg.cleanup_root(root) == "ABSENT" and sibling.exists()
+    empty, held = root.parent / (base + "a" * 16), root.parent / (base + "b" * 16)
+    empty.mkdir()  # a run that died after deleting its marker: empty and marker-less
+    held.mkdir()
+    (held / "x").write_text("x")
+    assert bg.cleanup_root(root) == "MARKER_MISSING" and not empty.exists() and (held / "x").exists()  # one finished, one not provably ours
+    write_marker(held, root="bench-other")
+    assert bg.cleanup_root(root) == "MARKER_INVALID" and (held / "x").exists()
+    write_marker(held, root=root.name, pid=os.getpid())
+    assert bg.cleanup_root(root) == "OWNER_ALIVE" and (root / "x").exists() and not held.exists()  # re-pointed: put back
+
+def test_a_lock_held_by_another_process_is_never_taken_for_a_finished_root(root, tmp_path, monkeypatch):
+    fcntl, base = pytest.importorskip("fcntl"), f".gone-{root.name}-"
+    monkeypatch.setattr(bg, "_LOCK_WAIT_SECONDS", 0.2)
+    fd = os.open(root, os.O_RDONLY)
+    fcntl.flock(fd, fcntl.LOCK_SH)  # a stray holds the root itself: our exclusive lock must fail
+    assert bg.cleanup_root(root) == "REMOVE_FAILED" and (root / bg._MARKER_NAME).exists() and not claimed(root.parent)  # put back, not "gone"
+    os.close(fd)
+    live, link = root.parent / (base + "c" * 16), root.parent / (base + "d" * 16)
+    root.rename(live)
+    link.symlink_to(tmp_path)  # a link named like a claim is not one
+    fd = os.open(live, os.O_RDONLY)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    assert bg.cleanup_root(root) == "REMOVE_FAILED" and live.exists() and tmp_path.is_dir()  # a locked leftover is a refusal, never ABSENT
+    monkeypatch.setattr(bg, "_LOCK_WAIT_SECONDS", 30)
+    threading.Timer(0.1, lambda: (shutil.rmtree(live), os.close(fd))).start()  # the holder, a live cleanup, finishes it
+    assert bg.cleanup_root(root) == "ABSENT" and link.is_symlink() and tmp_path.is_dir()
+
+@pytest.mark.parametrize("failing, number", [("open", errno.EMFILE), ("listdir", errno.EIO), ("stat", errno.EACCES)])
+def test_a_scan_for_abandoned_claims_that_fails_is_a_refusal_not_absent(root, monkeypatch, failing, number):
+    shutil.rmtree(root)  # no root: only the scan can say what is left
+    real = {"open": os.open, "listdir": os.listdir, "stat": os.stat}[failing]
+    (root.parent / f".gone-{root.name}-{'a' * 16}").mkdir()
+
+    def broken(path, *rest, **kw):
+        if isinstance(path, int) or str(path).startswith(".gone-") or failing == "open":
+            raise OSError(number, "injected")
+        return real(path, *rest, **kw)
+
+    monkeypatch.setattr(os, failing, broken)
+    assert bg.cleanup_root(root) == "REMOVE_FAILED"
 
 @pytest.mark.parametrize("case", ["after the marker is deleted", "after every pass", "after the first pass", "ENOENT on a listed entry"])
 def test_a_late_entry_never_leaves_a_root_without_its_marker(root, monkeypatch, case):
@@ -1429,6 +1485,20 @@ def test_a_marker_rewritten_between_the_pid_check_and_the_claim_is_honoured_and_
     monkeypatch.setattr(bg, "_pid_alive", rewritten_after_the_check)
     assert bg.cleanup_root(root) == code and done and (root / "head").is_dir() and (root / bg._MARKER_NAME).exists() and not claimed(root.parent)
 
+def test_a_rename_back_that_finds_its_name_taken_leaves_a_claim_the_next_cleanup_finishes(root, monkeypatch):
+    def stubborn(path, onexc, **kw):
+        if not root.exists():
+            root.mkdir()
+            (root / "squatter").write_text("x")  # not empty, so the rename back cannot replace it
+        onexc(os.unlink, path, PermissionError(1, "immutable"))
+
+    real = shutil.rmtree
+    monkeypatch.setattr(shutil, "rmtree", stubborn)
+    assert bg.cleanup_root(root) == "REMOVE_FAILED" and len(claimed(root.parent)) == 1
+    monkeypatch.setattr(shutil, "rmtree", real)
+    shutil.rmtree(root)
+    assert bg.cleanup_root(root) == "REMOVED" and not claimed(root.parent)
+
 def test_a_restricted_chain_deeper_than_the_default_descriptor_limit_is_removed_in_one_call(root):
     resource = pytest.importorskip("resource")
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -1499,3 +1569,12 @@ def test_git_children_run_under_umask_022_with_the_file_size_cap_and_a_foreign_p
     assert done.stdout.strip() == "1001"  # the cap is `cap + 1` bytes
     monkeypatch.setattr(bg, "_foreign", lambda st: True)
     assert bg.cleanup_root(root) == "NOT_UNDER_FIXED_PARENT" and root.exists()  # somebody else's fixed parent
+
+def test_without_flock_the_rename_claim_alone_applies_and_a_leftover_is_still_finished(root, monkeypatch):
+    monkeypatch.setitem(sys.modules, "fcntl", None)  # `import fcntl` now raises ImportError
+    held = root.parent / f".gone-{root.name}-{'f' * 16}"
+    root.rename(held)
+    fd = os.open(held, os.O_RDONLY)
+    assert bg._lock(fd) is True  # nothing to lock with: proceed
+    os.close(fd)
+    assert bg.cleanup_root(root) == "REMOVED" and not held.exists()
