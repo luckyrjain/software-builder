@@ -15,12 +15,15 @@ import json
 import multiprocessing
 import os
 import re
+import select
 import shutil
+import signal
 import stat
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -377,6 +380,7 @@ def test_cleanup_removes_a_sealed_root_with_a_dead_owner_and_never_follows_links
     outside.mkdir()
     (outside / "canary").write_text("alive")
     (root / "head" / "out").symlink_to(outside)
+    (root / "toplink").symlink_to(outside)  # a top-level link is unlinked, never followed
     bg.seal_tree(root / "head")
     assert bg.cleanup_root(root) == "REMOVED" and not root.exists()
     assert (outside / "canary").read_text() == "alive" and outside.exists()
@@ -428,12 +432,14 @@ def test_pid_liveness(monkeypatch):
     assert bg._pid_alive(5) is True  # never os.kill off POSIX: on Windows that terminates the process
 
 def test_cleanup_cli_exit_codes(root, capsys):
+    handlers = signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)
     write_marker(root, pid=os.getpid())
     assert bg.main(["cleanup", "--root", str(root)]) == 1 and capsys.readouterr().out == "OWNER_ALIVE\n"
     write_marker(root)
     assert bg.main(["cleanup", "--root", str(root)]) == 0 and capsys.readouterr().out == "REMOVED\n"
     assert bg.main(["cleanup", "--root", str(root)]) == 0 and capsys.readouterr().out == "ABSENT\n"
     assert bg.main(["cleanup"]) == 2
+    assert (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)) == handlers  # the CLI gives the handlers back
 
 
 # --- CLI and vocabularies ---
@@ -547,28 +553,23 @@ def outside_tree(base: Path, dir_mode: int, file_mode: int) -> dict:
         path.chmod(file_mode)
     (base / "sub").chmod(dir_mode)
     base.chmod(dir_mode)
-    return {str(p): (stat.S_IMODE(p.stat().st_mode), None if p.is_dir() else p.read_text()) for p in [base, *base.rglob("*")]}
+    return look(base)
 
-@pytest.mark.parametrize("operation", ["seal", "unseal", "cleanup"])
-def test_a_directory_swapped_for_a_symlink_mid_walk_is_never_followed(tree, root, tmp_path, monkeypatch, operation):
-    # seal must not strip outside write bits; unseal and cleanup must not add them (outside starts restrictive)
+@pytest.mark.parametrize("operation", ["seal", "unseal"])
+def test_a_directory_swapped_for_a_symlink_mid_walk_is_never_followed(tree, tmp_path, monkeypatch, operation):
+    # seal must not strip outside write bits; unseal must not add them (outside starts restrictive)
     writable = operation == "seal"
     outside = tmp_path / "outside"
     snapshot = outside_tree(outside, 0o755 if writable else 0o500, 0o644 if writable else 0o400)
-    locate, victim = (lambda: tree, "d") if operation != "cleanup" else (lambda: next(root.parent.glob(".gone-*")) / "head", "src")
     if operation == "unseal":
         bg.seal_tree(tree)
-    done = swap_for_symlink_on_open(monkeypatch, locate, victim, outside)
+    done = swap_for_symlink_on_open(monkeypatch, lambda: tree, "d", outside)
     try:
-        if operation == "cleanup":
-            assert bg.cleanup_root(root) == "REMOVED"
-        else:
-            with pytest.raises(Err):
-                (bg.seal_tree if operation == "seal" else bg.unseal_tree)(tree)
+        with pytest.raises(Err):
+            (bg.seal_tree if operation == "seal" else bg.unseal_tree)(tree)
     finally:
         monkeypatch.undo()
-    assert done == [True] and {str(p): (stat.S_IMODE(p.stat().st_mode), None if p.is_dir() else p.read_text())
-                               for p in [outside, *outside.rglob("*")]} == snapshot
+    assert done == [True] and look(outside) == snapshot
     os.chmod(outside, 0o755)
     os.chmod(outside / "sub", 0o755)
 
@@ -598,19 +599,6 @@ def test_cleanup_removes_a_tree_deeper_than_path_max(root, monkeypatch):
     Path("deep.txt").write_text("x")
     monkeypatch.chdir(root.parent)
     assert bg.cleanup_root(root) == "REMOVED" and not root.exists()
-
-def test_racing_cleanups_all_report_removed_or_absent(root):
-    for index in range(300):
-        (root / "head" / f"f{index}.txt").write_text("x")
-    gate = threading.Barrier(8)
-
-    def run(_):
-        gate.wait()
-        return bg.cleanup_root(root)
-
-    with concurrent.futures.ThreadPoolExecutor(8) as pool:
-        results = list(pool.map(run, range(8)))
-    assert set(results) <= {"REMOVED", "ABSENT"} and "REMOVED" in results and not root.exists()
 
 def test_old_git_is_an_environment_error_not_a_hostile_tree_verdict(repo_a, monkeypatch, capsys):
     repo, sha = repo_a
@@ -767,13 +755,13 @@ def test_a_failed_export_never_removes_a_sidecar_it_did_not_write(repo_a, monkey
     assert info.value.code == "EXPORT_VERIFY_FAILED" and not Path(dest()).exists()  # the original error, not an OSError
     assert sidecar.is_dir() if planted == "directory" else sidecar.read_text() == "planted"
 
-@pytest.mark.parametrize("kind", ["file", "directory", "symlink", "fifo", "tmp file"])
+@pytest.mark.parametrize("kind", ["file", "directory", "symlink", "dangling", "fifo", "tmp file"])
 def test_a_taken_sidecar_path_is_refused_before_any_git_work(repo_a, monkeypatch, tmp_path, kind):
     repo, sha = repo_a
     bg.export_tree(repo, sha, dest("base"))
     planted = Path(dest("head") + (f".export.json.{os.getpid()}.tmp" if kind == "tmp file" else ".export.json"))
     {"file": lambda: planted.write_text("planted"), "tmp file": lambda: planted.write_text("planted"), "directory": planted.mkdir,
-     "symlink": lambda: planted.symlink_to(tmp_path), "fifo": lambda: os.mkfifo(planted)}[kind]()
+     "symlink": lambda: planted.symlink_to(tmp_path), "dangling": lambda: planted.symlink_to(tmp_path / "missing"), "fifo": lambda: os.mkfifo(planted)}[kind]()
     before, calls, real = os.lstat(planted), [], subprocess.run
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: calls.append(a) or real(*a, **k))
     with pytest.raises(Err) as info:
@@ -850,7 +838,7 @@ def test_verification_demands_the_written_tree_equal_the_listing(tmp_path, chang
 
 def test_a_file_vanishing_during_removal_is_not_an_error(root, monkeypatch):
     real = shutil.rmtree
-    monkeypatch.setattr(shutil, "rmtree", lambda path, onexc: (onexc(os.unlink, path, FileNotFoundError()), real(path, onexc=onexc))[1])
+    monkeypatch.setattr(shutil, "rmtree", lambda path, onexc, **kw: (onexc(os.unlink, path, FileNotFoundError()), real(path, onexc=onexc, **kw))[1])
     assert bg.cleanup_root(root) == "REMOVED"
 
 @pytest.mark.skipif(IS_ROOT, reason="root can open a mode-0 directory, so there is nothing to repair")
@@ -955,6 +943,7 @@ def test_a_cleanup_that_loses_to_another_one_at_any_point_reports_absent_or_remo
     assert bg.cleanup_root(root) in ("ABSENT", "REMOVED") and state["nested"] in ("ABSENT", "REMOVED") and not root.exists()
 
 
+@pytest.mark.filterwarnings("ignore:.*fork.*:DeprecationWarning")
 def test_racing_cleanups_in_processes_report_exactly_one_removed_and_the_rest_absent():
     ctx, parent, owner = multiprocessing.get_context("fork"), bg._check_parent(create=True), dead_pid()
     seen = collections.Counter()
@@ -967,27 +956,21 @@ def test_racing_cleanups_in_processes_report_exactly_one_removed_and_the_rest_ab
         gate, queue = ctx.Barrier(8), ctx.Queue()
 
         def run(small=small, gate=gate, queue=queue):
-            gate.wait()
+            gate.wait(60)
             queue.put(bg.cleanup_root(small))
 
         procs = [ctx.Process(target=run) for _ in range(8)]
         for proc in procs:
             proc.start()
-        results = [queue.get(timeout=120) for _ in procs]
-        for proc in procs:
-            proc.join(timeout=60)
+        try:
+            results = [queue.get(timeout=120) for _ in procs]
+        finally:  # a child that never started must fail the test, not hang it
+            for proc in procs:
+                proc.join(timeout=60)
+                proc.kill()
         seen.update(results)
         assert set(results) <= {"REMOVED", "ABSENT"} and results.count("REMOVED") == 1 and not small.exists(), results
     assert seen["REMOVED"] == 100
-
-
-def test_a_stubborn_entry_leaves_a_retryable_root_with_its_marker(root, monkeypatch):
-    real = shutil.rmtree
-    monkeypatch.setattr(shutil, "rmtree", lambda path, onexc: onexc(os.unlink, path, PermissionError(1, "immutable")))  # nothing goes
-    assert bg.cleanup_root(root) == "REMOVE_FAILED"  # the verdict is whether the root still exists
-    assert (root / bg._MARKER_NAME).exists() and (root / "head").exists() and not list(root.parent.glob(".gone-*"))
-    monkeypatch.setattr(shutil, "rmtree", real)  # the cause is gone: the retry finds the marker and finishes
-    assert bg.cleanup_root(root) == "REMOVED" and not root.exists()
 
 
 @pytest.mark.skipif(IS_ROOT, reason="root deletes a sealed tree without unsealing it")
@@ -1022,11 +1005,11 @@ def test_a_root_swapped_for_another_real_directory_is_refused_before_anything_is
 
 @pytest.mark.parametrize("kind", ["directory", "file"])
 @pytest.mark.parametrize("operation", ["seal", "unseal"])
-def test_a_fifo_swapped_in_is_neither_waited_for_nor_chmodded(kind, operation):
+def test_a_fifo_swapped_in_is_neither_waited_for_nor_chmodded(kind, operation, tmp_path):
     child = (
         "import importlib.util, os, stat, sys, tempfile\n"
         "spec = importlib.util.spec_from_file_location('bg', sys.argv[1]); bg = importlib.util.module_from_spec(spec); spec.loader.exec_module(bg)\n"
-        "tree = os.path.join(tempfile.mkdtemp(), 't'); os.makedirs(os.path.join(tree, 'd')); open(os.path.join(tree, 'f'), 'w').close()\n"
+        "tree = os.path.join(tempfile.mkdtemp(dir=sys.argv[4]), 't'); os.makedirs(os.path.join(tree, 'd')); open(os.path.join(tree, 'f'), 'w').close()\n"
         "victim = 'd' if sys.argv[2] == 'directory' else 'f'\n"
         "real_open, done = os.open, []\n"
         "def hooked(path, flags, mode=0o777, *, dir_fd=None):\n"
@@ -1040,7 +1023,7 @@ def test_a_fifo_swapped_in_is_neither_waited_for_nor_chmodded(kind, operation):
         "    pass\n"
         "print(done, oct(stat.S_IMODE(os.lstat(os.path.join(tree, victim)).st_mode)))\n")
     # a hard timeout: if O_NONBLOCK / O_DIRECTORY were dropped the open would block on the FIFO and the test FAILS instead of hanging
-    done = subprocess.run([sys.executable, "-c", child, str(_SCRIPTS / "benchmark_gate.py"), kind, operation], capture_output=True, text=True, timeout=60)
+    done = subprocess.run([sys.executable, "-c", child, str(_SCRIPTS / "benchmark_gate.py"), kind, operation, str(tmp_path)], capture_output=True, text=True, timeout=60)
     assert (done.returncode, done.stdout.strip()) == (0, "[1] 0o600"), done.stderr
 
 
@@ -1173,12 +1156,12 @@ def test_an_empty_markerless_directory_is_never_replaced_by_a_root(repo_a):
 
 
 def test_a_restrictive_umask_does_not_poison_the_fixed_parent(repo_a):
-    old = os.umask(0o277)
+    old = os.umask(0o577)  # hides every bit from the owner: nothing may depend on the caller's umask
     try:
-        assert bg.export_tree(*repo_a, dest("first")).is_dir()  # modes do not depend on the caller's umask
+        assert bg.export_tree(*repo_a, dest("first")).is_dir()
     finally:
         os.umask(old)
-    assert stat.S_IMODE(bg.fixed_parent().stat().st_mode) == 0o700
+    assert stat.S_IMODE(bg.fixed_parent().stat().st_mode) == 0o700 and stat.S_IMODE((Path(dest()).parent / bg._MARKER_NAME).stat().st_mode) == 0o600
     assert bg.export_tree(*repo_a, dest("second")).is_dir()
 
 
@@ -1230,11 +1213,11 @@ def test_what_the_claiming_rename_moved_must_be_what_was_validated(root, monkeyp
     (other / "secret.txt").write_text("s")
     real = os.rename
 
-    def swapped_then_renamed(src, dst):
-        if str(src) == str(root) and ".gone-" in str(dst):  # the swap lands exactly between the identity check and the rename
+    def swapped_then_renamed(src, dst, **kw):
+        if src == root.name and ".gone-" in str(dst):  # the swap lands exactly between the identity check and the rename
             real(root, root.with_name("moved-root"))
             real(other, root)
-        return real(src, dst)
+        return real(src, dst, **kw)
 
     monkeypatch.setattr(os, "rename", swapped_then_renamed)
     assert bg.cleanup_root(root) == "ROOT_CHANGED"
@@ -1243,13 +1226,6 @@ def test_what_the_claiming_rename_moved_must_be_what_was_validated(root, monkeyp
 
 
 def test_the_removal_helper_and_the_root_creation_helper_report_their_failures_as_codes(tmp_path, monkeypatch):
-    assert bg._remove_contents(str(tmp_path / "missing")) is True  # already gone
-    (tmp_path / "file").write_text("x")
-    assert bg._remove_contents(str(tmp_path / "file")) is False  # cannot even be listed
-    (tmp_path / "empty").mkdir()
-    monkeypatch.setattr(os, "rmdir", lambda path: (_ for _ in ()).throw(FileNotFoundError()))
-    assert bg._remove_contents(str(tmp_path / "empty")) is True  # a concurrent cleanup removed the directory first
-    monkeypatch.undo()
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     parent = bg._check_parent(create=True)
     real_lstat = os.lstat
@@ -1282,3 +1258,209 @@ def test_an_export_under_a_symlinked_tmpdir_and_a_foreign_root_are_handled(repo_
     with pytest.raises(Err) as info:
         bg.export_tree(*repo_a, dest("three"))
     assert info.value.code == "DEST_REJECTED"  # an existing root that someone else owns
+
+
+# --- review round 2 on #340 (gen 2): the claimed directory is handled by descriptor; an interrupted cleanup is recoverable ---
+
+def claimed(parent: Path) -> list[Path]:
+    return [p for p in parent.iterdir() if p.name.startswith(".gone-") and not p.name.endswith(".aside")]
+
+def look(base: Path) -> dict:
+    return {str(p): (stat.S_IMODE(p.stat().st_mode), None if p.is_dir() else p.read_text()) for p in [base, *base.rglob("*")]}
+
+@pytest.mark.parametrize("kind", ["symlink", "directory"])
+@pytest.mark.parametrize("point", ["before the unseal", "between the unseal and the removal", "during the removal"])
+def test_a_claimed_directory_renamed_aside_and_replaced_never_steers_a_delete_or_a_chmod(root, tmp_path, monkeypatch, point, kind):
+    outside, done = tmp_path / "outside", []
+    before = outside_tree(outside, 0o755, 0o444)  # WRITABLE directories: a delete that followed the link succeeds; read-only files: an unseal would chmod them
+
+    def attack():
+        held = claimed(root.parent)[0]
+        held.rename(held.with_name(held.name + ".aside"))
+        held.symlink_to(outside) if kind == "symlink" else outside.rename(held)
+        done.append(held.is_symlink() == (kind == "symlink"))
+
+    owner, attr = {"before the unseal": (bg, "unseal_tree"), "between the unseal and the removal": (bg, "_remove_contents"), "during the removal": (shutil, "rmtree")}[point]
+    real = getattr(owner, attr)
+    monkeypatch.setattr(owner, attr, lambda *a, **k: (None if done else attack(), real(*a, **k))[1])
+    assert bg.cleanup_root(root) == "ROOT_CHANGED" and done == [True]
+    assert sorted(map(repr, look(claimed(root.parent)[0]).values())) == sorted(map(repr, before.values()))  # whatever sits at the claimed name is untouched
+
+@pytest.mark.filterwarnings("ignore:.*fork.*:DeprecationWarning")
+def test_a_real_attacker_polling_for_the_claimed_directory_cannot_steer_cleanup(repo_a, tmp_path, monkeypatch):
+    ctx, parent, real = multiprocessing.get_context("fork"), bg._check_parent(create=True), bg._remove_contents
+    for trial in range(5):
+        small = Path(dest(root=f"bench-poll{trial:04d}")).parent
+        bg.export_tree(*repo_a, dest(root=small.name), owner_pid=dead_pid())
+        outside, prefix = tmp_path / f"outside{trial}", f".gone-{small.name}-"
+        before = outside_tree(outside, 0o755, 0o644)
+
+        def attack():
+            while True:  # killed below if it never sees the claim
+                for entry in os.listdir(parent):
+                    if entry.startswith(prefix) and not entry.endswith(".aside"):
+                        try:
+                            os.rename(parent / entry, parent / (entry + ".aside"))
+                            os.symlink(outside, parent / entry)
+                        except OSError:
+                            continue
+                        os._exit(0)
+
+        def hold_until_swapped(cfd):  # deterministic: the cleanup waits for the real attacker, so every trial is an attack
+            deadline = time.time() + 30
+            while time.time() < deadline and not any(e.startswith(prefix) and e.endswith(".aside") for e in os.listdir(parent)):
+                time.sleep(0.001)
+            return real(cfd)
+
+        attacker = ctx.Process(target=attack)
+        attacker.start()
+        monkeypatch.setattr(bg, "_remove_contents", hold_until_swapped)
+        try:
+            assert bg.cleanup_root(small) in ("ROOT_CHANGED", "ABSENT")  # ABSENT: the claim was already between its two names
+        finally:
+            attacker.join(timeout=60)
+            attacker.kill()
+        assert attacker.exitcode == 0 and look(outside) == before
+
+@pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM, signal.SIGKILL])
+def test_a_cleanup_interrupted_after_the_claim_is_put_back_or_finished_by_the_next_one(root, sig):
+    child = (
+        "import importlib.util, sys, time, tempfile\n"
+        "spec = importlib.util.spec_from_file_location('bg', sys.argv[1]); bg = importlib.util.module_from_spec(spec); spec.loader.exec_module(bg)\n"
+        "tempfile.tempdir = sys.argv[3]\n"
+        "bg._remove_contents = lambda cfd: (print('claimed', flush=True), time.sleep(120))\n"
+        "sys.exit(bg.main(['cleanup', '--root', sys.argv[2]]))\n")
+    proc = subprocess.Popen([sys.executable, "-c", child, str(_SCRIPTS / "benchmark_gate.py"), str(root), tempfile.tempdir], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                            preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_IGN))  # as in a background job: only our handler can stop it
+    try:
+        assert select.select([proc.stdout], [], [], 60)[0] and proc.stdout.readline() == "claimed\n"  # the child is past the claim
+        assert not root.exists() and len(claimed(root.parent)) == 1
+        proc.send_signal(sig)
+        _, err = proc.communicate(timeout=60)
+    finally:
+        proc.kill()
+    if sig == signal.SIGKILL:
+        assert proc.returncode == -signal.SIGKILL and len(claimed(root.parent)) == 1 and not root.exists()  # cannot put itself back
+    else:
+        assert proc.returncode == 1 and "interrupted" in err and root.exists() and not claimed(root.parent)
+    assert bg.cleanup_root(root) == "REMOVED" and not root.exists() and not claimed(root.parent) and bg.cleanup_root(root) == "ABSENT"
+
+def test_abandoned_claims_are_finished_and_selected_by_a_valid_marker_naming_the_root_not_by_their_name(root):
+    base = f".gone-{root.name}-"
+    sibling = root.parent / f"{base}extra-{'e' * 16}"  # another root's leftover, whose name merely extends this one
+    sibling.mkdir()
+    write_marker(sibling, root=root.name + "-extra")
+    held = root.parent / (base + "0" * 16)
+    bg.seal_tree(root / "head")
+    root.rename(held)
+    held.chmod(0)  # unopenable, as an interrupted unseal can leave it
+    assert bg.cleanup_root(root) == "REMOVED" and not held.exists() and bg.cleanup_root(root) == "ABSENT" and sibling.exists()
+    empty, held = root.parent / (base + "a" * 16), root.parent / (base + "b" * 16)
+    empty.mkdir()  # a run that died after deleting its marker: empty and marker-less
+    held.mkdir()
+    (held / "x").write_text("x")
+    assert bg.cleanup_root(root) == "MARKER_MISSING" and not empty.exists() and (held / "x").exists()  # one finished, one not provably ours
+    write_marker(held, root="bench-other")
+    assert bg.cleanup_root(root) == "MARKER_INVALID" and (held / "x").exists()
+    write_marker(held, root=root.name, pid=os.getpid())
+    assert bg.cleanup_root(root) == "OWNER_ALIVE" and (root / "x").exists() and not held.exists()  # re-pointed: put back
+
+def test_a_claim_another_cleanup_holds_and_a_link_named_like_a_claim_are_left_alone(root, tmp_path):
+    fcntl, base = pytest.importorskip("fcntl"), f".gone-{root.name}-"
+    live, link = root.parent / (base + "c" * 16), root.parent / (base + "d" * 16)
+    root.rename(live)
+    link.symlink_to(tmp_path)
+    fd = os.open(live, os.O_RDONLY)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)  # another cleanup is on it right now
+        assert bg.cleanup_root(root) == "ABSENT" and live.exists() and tmp_path.is_dir()
+    finally:
+        os.close(fd)
+    assert bg.cleanup_root(root) == "REMOVED" and not live.exists() and link.is_symlink() and tmp_path.is_dir()
+
+@pytest.mark.parametrize("rewrite, code", [(lambda r: write_marker(r, pid=os.getpid()), "OWNER_ALIVE"), (lambda r: (r / bg._MARKER_NAME).write_text("{"), "MARKER_INVALID")])
+def test_a_marker_rewritten_between_the_pid_check_and_the_claim_is_honoured_and_the_root_put_back(root, monkeypatch, rewrite, code):
+    real, done = bg._pid_alive, []
+
+    def rewritten_after_the_check(pid):  # `claim_root` re-points the marker right here
+        alive = real(pid)
+        if not done:
+            done.append(1)
+            rewrite(root)
+        return alive
+
+    monkeypatch.setattr(bg, "_pid_alive", rewritten_after_the_check)
+    assert bg.cleanup_root(root) == code and done and (root / "head").is_dir() and (root / bg._MARKER_NAME).exists() and not claimed(root.parent)
+
+def test_a_rename_back_that_finds_its_name_taken_leaves_a_claim_the_next_cleanup_finishes(root, monkeypatch):
+    def stubborn(path, onexc, **kw):
+        if not root.exists():
+            root.mkdir()
+            (root / "squatter").write_text("x")  # not empty, so the rename back cannot replace it
+        onexc(os.unlink, path, PermissionError(1, "immutable"))
+
+    real = shutil.rmtree
+    monkeypatch.setattr(shutil, "rmtree", stubborn)
+    assert bg.cleanup_root(root) == "REMOVE_FAILED" and len(claimed(root.parent)) == 1
+    monkeypatch.setattr(shutil, "rmtree", real)
+    shutil.rmtree(root)
+    assert bg.cleanup_root(root) == "REMOVED" and not claimed(root.parent)
+
+def test_a_restricted_chain_deeper_than_the_default_descriptor_limit_is_removed_in_one_call(root):
+    resource = pytest.importorskip("resource")
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    fd = os.open(root / "head", os.O_RDONLY)
+    for level in range(600):  # 600 levels, each unlistable or read-only, far below PATH_MAX: descriptors only
+        os.mkdir("d", dir_fd=fd)
+        child = os.open("d", os.O_RDONLY, dir_fd=fd)
+        os.fchmod(fd, 0o500 if level % 2 else 0)
+        os.close(fd)
+        fd = child
+    os.close(fd)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (256, hard))
+    try:
+        assert bg.cleanup_root(root) == "REMOVED" and not root.exists()
+        assert resource.getrlimit(resource.RLIMIT_NOFILE) == (256, hard)  # given back
+    finally:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
+
+@pytest.mark.parametrize("case", ["claiming rename", "top-level entry", "marker unlink", "final rmdir"])
+def test_every_failure_of_a_claimed_removal_is_a_coded_failure_with_the_root_retryable(root, monkeypatch, capsys, case):
+    (root / "stubborn.txt").write_text("x")
+    attr, hit, number = {
+        "claiming rename": ("rename", lambda a, b: ".gone-" in b, 18), "top-level entry": ("unlink", lambda a, b: a == "stubborn.txt", 1),
+        "marker unlink": ("unlink", lambda a, b: a == bg._MARKER_NAME, 5), "final rmdir": ("rmdir", lambda a, b: ".gone-" in a, 16)}[case]
+    original = getattr(os, attr)
+
+    def broken(path, *rest, **kw):
+        if hit(path, rest[0] if rest else ""):
+            raise OSError(number, "injected")
+        return original(path, *rest, **kw)
+
+    monkeypatch.setattr(os, attr, broken)
+    assert bg.main(["cleanup", "--root", str(root)]) == 1
+    out, err = capsys.readouterr()
+    assert out == "REMOVE_FAILED\n" and err.startswith("REMOVE_FAILED: ") and "no detail" not in err  # the code on stdout, the reason on stderr
+    monkeypatch.setattr(os, attr, original)
+    assert root.exists() == (case != "final rmdir")  # that one leaves an empty claim, which the retry finishes
+    assert bg.cleanup_root(root) == "REMOVED" and not root.exists() and not claimed(root.parent)
+
+def test_a_root_swapped_for_a_regular_file_is_refused(root, monkeypatch):
+    real = bg._checked_root
+
+    def swapped(arg):
+        result = real(arg)
+        root.rename(root.with_name("moved-root"))
+        root.write_text("file")
+        return result
+
+    monkeypatch.setattr(bg, "_checked_root", swapped)
+    assert bg.cleanup_root(root) == "ROOT_CHANGED" and root.read_text() == "file"
+
+def test_the_claim_name_carries_64_random_bits(root, monkeypatch):
+    names, real, other = [], os.rename, root.with_name("bench-second01")
+    other.mkdir()
+    write_marker(other)
+    monkeypatch.setattr(os, "rename", lambda src, dst, **kw: (names.append(dst), real(src, dst, **kw))[1])
+    assert bg.cleanup_root(root) == bg.cleanup_root(other) == "REMOVED"
+    assert len(names) == 2 and all(re.fullmatch(r"\.gone-bench-[a-z0-9]+-[0-9a-f]{16}", name) for name in names) and names[0][-16:] != names[1][-16:]
