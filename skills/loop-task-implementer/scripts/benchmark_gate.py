@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Validation, lint and statistics core of the performance-review -> loop-task-implementer benchmark gate (Epic C).
 
-**This module is not wired into anything yet.** It is delivered by a series of six PRs for gap-backlog ticket
-C4 (C4a core, C4b lint, C4c exports, C4d harness, C4e classifier/docs, C4f wiring); no workflow file,
-lifecycle validator or other script calls it until C4f, and the ``lint`` subcommand added by C4b is called by
-nothing until C4d/C4e/C4f. So far it holds only the pure, string-level and arithmetic pieces plus the
-``validate`` and ``lint`` CLIs. Specification (revision 5, the converged result of four review
+**This module is not wired into anything yet.** It is delivered by a series of eight PRs for gap-backlog ticket
+C4 (C4a core, C4b lint, C4c-1a export, C4c-1b seal/cleanup, C4c-2 overlay/diff/venv check, C4d harness, C4e classifier/docs, C4f wiring); no workflow file,
+lifecycle validator or other script calls it until C4f. So far it holds the pure, string-level and arithmetic
+pieces (``validate``, ``lint``) and the first part of C4c (C4c-1a): ``export``, ``fixed-parent`` and the library
+function ``export_tree``. C4c-1b adds ``seal_tree``, ``unseal_tree`` and ``cleanup``; C4c-2 adds the tree hash, the
+benchmark overlay, the protected-path diff, the token tripwire and the venv ``.pth`` check with ``snapshot-venv``; C4d adds measurement, the trace, ``compare`` and ``run-once``, C4e
+the classifier and docs, C4f the workflow wiring. Specification (revision 5, the converged result of four review
 rounds): ``docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md`` (APIs table,
 Data model, Capacity, Threat model). This docstring states each function's own contract and the reason each
 rule exists; it does not re-derive the design.
@@ -16,7 +18,9 @@ under the harness; for that class the control is a human reading the fix and the
 fails closed: any malformed input yields a rejection code or ``INCONCLUSIVE``, never a pass.
 
 Standard library only. The skill is packaged with ``scripts/`` shipped wholesale and cannot import
-repo-root packages, and nothing platform-specific happens at import time (Windows-safe).
+repo-root packages, and nothing platform-specific happens at import time (Windows-safe). The C4c filesystem
+helpers need POSIX (``fchmod``, ``O_NOFOLLOW``, ``os.kill``): the harness is POSIX-only (Windows is out of
+scope, ``compare`` reports ``UNSUPPORTED_PLATFORM``), but importing the module works everywhere.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ import argparse
 import ast
 import codecs
 import dis
+import errno
 import hashlib
 import io
 import json
@@ -32,10 +37,15 @@ import math
 import os
 import posixpath
 import re
+import shutil
 import stat
+import subprocess
 import sys
+import tempfile
+import time
 import tokenize
 import types
+import unicodedata
 import warnings
 from fractions import Fraction
 from pathlib import Path
@@ -808,6 +818,496 @@ def validate_benchmark_content(source: bytes, symbol: str, repo_top_levels: froz
 
 
 # ---------------------------------------------------------------------------
+# C4c-1a: export
+#
+# Runs on attacker-influenced input (a Builder's commit, a tree the code under test wrote into): argv lists only, a
+# scrubbed environment, bounded subprocesses, validated paths, no symlink followed out of a root. POSIX only.
+# ---------------------------------------------------------------------------
+
+# Stable ASCII codes. A refusal of hostile tree content is a verdict (CLI: stdout, exit 1); the rest are failures (exit 2).
+EXPORT_REFUSAL_CODES = (
+    "EXPORT_PATH_REJECTED",     # a `.`/`..`/empty component or a `.git` lookalike
+    "EXPORT_PATH_COLLISION",    # two paths equal after NFC + casefold, or a file/directory clash that way
+    "EXPORT_ENTRY_MODE",        # not a regular file, symlink or gitlink
+    "EXPORT_TOO_LARGE",         # over 100,000 entries (files and directories) or 1 GiB of blobs
+    "EXPORT_SYMLINK_ESCAPES",   # a symlink whose real target is outside the export
+    "EXPORT_VERIFY_FAILED",     # the written tree differs from the commit's listing
+)
+ERROR_CODES = (  # MARKER_MISSING / MARKER_INVALID are also `cleanup` codes (C4c-1b): the same condition seen by `cleanup`
+    "COMMIT_INVALID", "COMMIT_NOT_FOUND", "REPO_UNREADABLE", "DEST_REJECTED", "GIT_FAILED", "GIT_TOO_OLD", "GIT_TIMEOUT",
+    "GIT_OUTPUT_TOO_LARGE", "TREE_UNREADABLE", "TREE_TOO_LARGE", "MARKER_MISSING", "MARKER_INVALID",
+)
+
+_COMMIT_RE = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}", re.ASCII)
+_EMPTY_TREE = {  # git knows the empty tree without it being in the object store
+    40: "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+    64: "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321",
+}
+_ROOT_PARENT_NAME = "software-builder-bench"
+_MARKER_NAME = ".bench-root.json"
+_MARKER_KIND = "software-builder-bench-root"
+_ROOT_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{7,63}")
+_LEAF_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
+_MAX_TREE_ENTRIES = 100_000
+_MAX_EXPORT_BYTES = 1 << 30
+_GIT_TIMEOUT_SECONDS = 300
+_GIT_OUTPUT_CAP = 64 << 20
+_GIT_MINIMUM = (2, 43)  # GIT_ATTR_SOURCE; older git silently applies the tree's own .gitattributes
+_git_version: tuple[int, int] | None = None
+_LFS_POINTER_PREFIX = b"version https://git-lfs.github.com/spec/v1\n"
+
+
+class BenchmarkGateError(Exception):
+    """A refusal or failure of a C4c helper: `code` is one of the stable codes above. `detail` may carry attacker-influenced
+    text (git stderr, an OSError message, a file name), so it is escaped HERE, once: printable ASCII, no backticks or newlines."""
+
+    def __init__(self, code: str, detail: str = "") -> None:
+        super().__init__(code)
+        self.code = code
+        self.detail = escape_diagnostic(detail, 200)
+
+
+# --- the fixed parent, the dispatch-unique root and its marker ----------------------------------------------------
+
+def fixed_parent() -> Path:
+    """The only directory `export` creates roots in and `cleanup` (C4c-1b) removes them from:
+    `<tempfile.gettempdir()>/software-builder-bench-<uid>` (plain name without a uid), fixed so containment is a `realpath`
+    comparison, never a name pattern (a pattern delete could hit another live task's root; `task_lease` allows concurrent
+    Orchestrators on one host). The per-user name does NOT stop another user who already owns that name from making `export`
+    and `cleanup` refuse (`DEST_REJECTED` / `NOT_UNDER_FIXED_PARENT`): a safe refusal, not a takeover. Derived from `TMPDIR` at
+    call time: the cleaning process must use the exporter's `TMPDIR`. CLI: `fixed-parent`. Residual: the parent is validated
+    BY PATH above the dispatch root; a same-uid process can redirect it between check and use, gaining no capability (it can
+    already write, chmod and delete those directories). Everything below a root is handled by descriptor."""
+    suffix = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
+    return Path(tempfile.gettempdir()) / (_ROOT_PARENT_NAME + suffix)
+
+
+def _foreign(st: os.stat_result) -> bool:
+    return hasattr(os, "getuid") and st.st_uid != os.getuid()
+
+
+def _check_parent(create: bool) -> Path:
+    """The fixed parent, which must be a real directory of ours that others cannot write (created 0700 if `create`).
+    `ABSENT` when it does not exist and `create` is false; `DEST_REJECTED` for anything else wrong with it."""
+    parent = fixed_parent()
+    if create:
+        try:
+            os.mkdir(parent, 0o700)
+        except FileExistsError:
+            pass
+        except OSError as exc:
+            raise BenchmarkGateError("DEST_REJECTED", f"cannot create the fixed parent: {exc}") from exc
+    try:
+        st = os.lstat(parent)  # lstat: a symlink planted at the fixed parent is not a directory
+    except OSError as exc:
+        raise BenchmarkGateError("ABSENT" if isinstance(exc, FileNotFoundError) else "DEST_REJECTED", f"fixed parent: {exc}") from exc
+    if not stat.S_ISDIR(st.st_mode) or st.st_mode & 0o022 or _foreign(st):
+        raise BenchmarkGateError("DEST_REJECTED", "fixed parent is not a private directory owned by this user")
+    return parent
+
+
+def _check_pid(pid: object) -> int:
+    if type(pid) is not int or not 0 < pid < 1 << 31:
+        raise BenchmarkGateError("DEST_REJECTED", "owner pid must be a positive int below 2**31")
+    return pid
+
+
+def _write_json_atomic(path: str, payload: dict) -> None:
+    tmp = f"{path}.{os.getpid()}.tmp"  # O_EXCL + O_NOFOLLOW, then rename: a reader sees all of it or none
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    except FileExistsError as exc:  # a stale file of ours from a crashed run: never overwritten, never removed here
+        raise BenchmarkGateError("DEST_REJECTED", "a stale temp file blocks the write; remove it") from exc
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(json.dumps(payload, sort_keys=True).encode("ascii"))
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.lexists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+def _write_marker(root: str, owner_pid: int, name: str | None = None) -> None:
+    """Write the marker (validating the pid first, so a bad pid leaves any existing marker untouched)."""
+    _write_json_atomic(os.path.join(root, _MARKER_NAME), {
+        "kind": _MARKER_KIND, "version": 1, "pid": _check_pid(owner_pid), "created": time.time(),
+        "root": name or os.path.basename(root),
+    })
+
+
+def _read_marker(root: str) -> dict:
+    """The validated marker (kind, version, positive `int` pid, finite non-future `created`, `root` equal to the directory's own
+    name: a copied marker proves nothing), else `MARKER_MISSING` / `MARKER_INVALID`."""
+    try:
+        raw = _read_bounded(os.path.join(root, _MARKER_NAME), 4096, nofollow=True)
+    except OSError as exc:
+        raise BenchmarkGateError("MARKER_MISSING", str(exc)) from exc
+    except ValueError as exc:
+        raise BenchmarkGateError("MARKER_INVALID", "not a regular file") from exc
+    try:
+        marker = json.loads(raw.decode("ascii")) if len(raw) <= 4096 else None
+    except (ValueError, RecursionError):
+        marker = None
+    pid, created = (marker.get("pid"), marker.get("created")) if isinstance(marker, dict) else (None, None)
+    if not (
+        isinstance(marker, dict) and marker.get("kind") == _MARKER_KIND and marker.get("version") == 1
+        and marker.get("root") == os.path.basename(root) and type(pid) is int and 0 < pid < 1 << 31
+        and type(created) in (int, float) and math.isfinite(created) and 0 < created <= time.time() + 300
+    ):
+        raise BenchmarkGateError("MARKER_INVALID", "marker fields are wrong")
+    return marker
+
+
+def _identity(path: str) -> tuple[int, int]:
+    st = os.lstat(path)
+    return st.st_dev, st.st_ino
+
+
+# --- tree walk (read-only: verifies a fresh export) ------------------------------------------------------------------------------
+
+def _walk_tree(root: str):
+    """Yield `(relpath, abspath, lstat)` for `root` ("" first) and everything below: depth first, names sorted, symlinks
+    reported and never followed, at most `_MAX_TREE_ENTRIES`. By PATH: used by `_verify_export`, which only reads, on
+    a tree this process has just written. Any `OSError` is `TREE_UNREADABLE`."""
+    try:
+        stack = [("", root, os.lstat(root))]
+        count = 0
+        while stack:
+            rel, path, st = stack.pop()
+            count += 1
+            if count > _MAX_TREE_ENTRIES:
+                raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_TREE_ENTRIES} entries")
+            if rel == "" and not stat.S_ISDIR(st.st_mode):
+                raise BenchmarkGateError("TREE_UNREADABLE", "root is not a real directory")
+            yield rel, path, st
+            if stat.S_ISDIR(st.st_mode):
+                with os.scandir(path) as listing:
+                    names = sorted(entry.name for entry in listing)
+                for name in reversed(names):
+                    child = os.path.join(path, name)
+                    stack.append((f"{rel}/{name}" if rel else name, child, os.lstat(child)))
+    except OSError as exc:
+        raise BenchmarkGateError("TREE_UNREADABLE", str(exc)) from exc
+
+
+# --- git: a private repository over the real object store ---------------------------------------------------------
+
+def _git_env(home: str) -> dict[str, str]:
+    """An environment built from nothing: no inherited `GIT_*`, no user/system config, prompts, replace refs, lazy fetch, pager."""
+    return {
+        "PATH": "/usr/bin:/bin", "HOME": home, "XDG_CONFIG_HOME": home, "LC_ALL": "C", "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull, "GIT_TERMINAL_PROMPT": "0", "GIT_ATTR_NOSYSTEM": "1", "GIT_NO_REPLACE_OBJECTS": "1",
+        "GIT_NO_LAZY_FETCH": "1", "GIT_OPTIONAL_LOCKS": "0", "GIT_LITERAL_PATHSPECS": "1", "GIT_PAGER": "cat",
+    }
+
+
+def _objects_dir(repo: str | os.PathLike) -> str:
+    """The object directory of `repo` (work tree, bare, or linked worktree), found by reading files, not by running git in it."""
+    try:
+        base = os.path.abspath(os.fspath(repo))
+        gitdir, dot_git = base, os.path.join(base, ".git")
+        if os.path.isdir(dot_git):
+            gitdir = dot_git
+        elif os.path.isfile(dot_git):
+            line = _read_bounded(dot_git, 4096, nofollow=True).decode("utf-8", "surrogateescape").strip()
+            if not line.startswith("gitdir:"):
+                raise ValueError("unrecognised .git file")
+            gitdir = os.path.normpath(os.path.join(base, line[len("gitdir:"):].strip()))
+            common = os.path.join(gitdir, "commondir")
+            if os.path.isfile(common):
+                gitdir = os.path.normpath(os.path.join(gitdir, _read_bounded(common, 4096).decode("utf-8", "surrogateescape").strip()))
+        objects = os.path.join(gitdir, "objects")
+        if ":" in objects or "\n" in objects or not os.path.isdir(objects):  # the alternates variable is colon-separated
+            raise ValueError("no usable git object directory")
+        return objects
+    except (OSError, ValueError, TypeError) as exc:
+        raise BenchmarkGateError("REPO_UNREADABLE", escape_diagnostic(str(exc), 120)) from exc
+
+
+def _fsize_limiter(cap: int):
+    """A `preexec_fn` capping every file the child writes at `cap + 1` bytes, clamped to the hard limit it inherited (a lower
+    hard limit would make `setrlimit` raise). `resource` is POSIX-only: lazy import."""
+    def apply() -> None:
+        import resource
+
+        hard = resource.getrlimit(resource.RLIMIT_FSIZE)[1]
+        resource.setrlimit(resource.RLIMIT_FSIZE, (cap + 1 if hard == resource.RLIM_INFINITY else min(cap + 1, hard), hard))
+    return apply
+
+
+def _require_modern_git() -> None:
+    """`GIT_ATTR_SOURCE` (keeps the tree's own `.gitattributes` out of the checkout) needs git >= 2.43; an older git silently
+    applies `eol=crlf`/`ident`, so honest repositories would fail verification as hostile. Say so up front as an environment
+    error (`GIT_TOO_OLD`, exit 2). Checked once per process."""
+    global _git_version
+    if _git_version is None:
+        code, out = _PrivateGit._run_raw(["--version"], _git_env(tempfile.gettempdir()), tempfile.gettempdir(), 256)
+        found = re.match(rb"git version (\d+)\.(\d+)", out) if code == 0 else None
+        if found is None:
+            raise BenchmarkGateError("GIT_FAILED", "cannot determine the git version")
+        _git_version = (int(found[1]), int(found[2]))
+    if _git_version < _GIT_MINIMUM:
+        raise BenchmarkGateError("GIT_TOO_OLD", "git >= %d.%d is required, found %d.%d" % (*_GIT_MINIMUM, *_git_version))
+
+
+class _PrivateGit:
+    """A throw-away bare repository with NO config, hooks, attributes, remotes or refs, reading the real repository's
+    objects through `GIT_ALTERNATE_OBJECT_DIRECTORIES`: nothing in the real `.git/config` (filters, fsmonitor, diff
+    drivers, hooksPath, a promisor remote) can execute and nothing is written to the real store. SHA-1 or SHA-256 by commit length."""
+
+    def __init__(self, repo: str | os.PathLike, commit_length: int) -> None:
+        self._objects = _objects_dir(repo)
+        self._length = commit_length
+
+    def __enter__(self) -> "_PrivateGit":
+        _require_modern_git()
+        self._dir = tempfile.mkdtemp(prefix="bench-git-")
+        try:
+            home = os.path.join(self._dir, "home")
+            os.mkdir(home)
+            self.gitdir = os.path.join(self._dir, "git")
+            fmt = "sha1" if self._length == 40 else "sha256"
+            self._run_raw(["init", "-q", "--bare", "--template=", f"--object-format={fmt}", self.gitdir], _git_env(home), self._dir)
+            self.env = dict(
+                _git_env(home), GIT_DIR=self.gitdir, GIT_OBJECT_DIRECTORY=os.path.join(self.gitdir, "objects"),
+                GIT_ALTERNATE_OBJECT_DIRECTORIES=self._objects, GIT_INDEX_FILE=os.path.join(self._dir, "index"),
+                GIT_ATTR_SOURCE=_EMPTY_TREE[self._length],  # ignore the tree's own .gitattributes (eol, ident, encodings)
+            )
+        except BaseException:
+            shutil.rmtree(self._dir, ignore_errors=True)
+            raise
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        shutil.rmtree(self._dir, ignore_errors=True)
+
+    @staticmethod
+    def _run_raw(args: list, env: dict, cwd: str, cap: int | None = None) -> tuple[int, bytes]:
+        # Fixed system directories, never the inherited PATH (it may hold "." or a hostile checkout).
+        git = shutil.which("git", path="/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin")
+        if git is None:
+            raise BenchmarkGateError("GIT_FAILED", "git is not installed")
+        argv = [git, "-c", "core.protectNTFS=true", "-c", "core.protectHFS=true", "-c", "core.fsmonitor=false", *args]
+        kwargs = {"preexec_fn": _fsize_limiter(cap)} if cap is not None and os.name == "posix" else {}
+        with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+            try:
+                proc = subprocess.run(argv, env=env, cwd=cwd, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
+                                      timeout=_GIT_TIMEOUT_SECONDS, check=False, close_fds=True, **kwargs)
+            except subprocess.TimeoutExpired as exc:
+                raise BenchmarkGateError("GIT_TIMEOUT", f"git {args[0]} exceeded {_GIT_TIMEOUT_SECONDS} s") from exc
+            except (OSError, subprocess.SubprocessError) as exc:  # SubprocessError: a failing preexec_fn
+                raise BenchmarkGateError("GIT_FAILED", str(exc)) from exc
+            out.seek(0)
+            data = out.read((cap if cap is not None else _GIT_OUTPUT_CAP) + 1)
+            if cap is not None and len(data) > cap:
+                raise BenchmarkGateError("GIT_OUTPUT_TOO_LARGE", f"git {args[0]} wrote more than {cap} bytes")
+            err.seek(0)
+            return (0, data) if proc.returncode == 0 else (proc.returncode, err.read(2048))
+
+    def run(self, *args: str | bytes, work_tree: str | None = None, cap: int | None = _GIT_OUTPUT_CAP) -> bytes:
+        env = dict(self.env, GIT_WORK_TREE=work_tree) if work_tree is not None else self.env
+        code, data = self._run_raw(list(args), env, self._dir, cap)
+        if code != 0:
+            raise BenchmarkGateError("GIT_FAILED", f"git {os.fsdecode(args[0])} exit {code}: {data.decode('utf-8', 'replace')}")
+        return data
+
+    def require_commit(self, commit: str) -> None:
+        code, data = self._run_raw(["cat-file", "-t", commit], self.env, self._dir, 64)
+        if code != 0 or data.strip() != b"commit":
+            raise BenchmarkGateError("COMMIT_NOT_FOUND", "no such commit in the repository")
+
+
+def _check_commits(*commits: object) -> int:
+    """All arguments lowercase hex of ONE length (40 or 64); returns it."""
+    if any(type(c) is not str or _COMMIT_RE.fullmatch(c) is None for c in commits) or len({len(c) for c in commits}) != 1:
+        raise BenchmarkGateError("COMMIT_INVALID", "a commit must be 40 or 64 lowercase hex characters")
+    return len(commits[0])
+
+
+# --- export_tree --------------------------------------------------------------------------------------------------
+
+def _fold_component(part: str) -> str:
+    """NFC, casefolded, zero-width characters dropped (HFS+), trailing dots and spaces stripped (NTFS)."""
+    folded = unicodedata.normalize("NFC", part).casefold()
+    return "".join(c for c in folded if unicodedata.category(c) != "Cf").rstrip(" .")
+
+
+def _parse_listing(raw: bytes) -> dict[str, tuple[str, int, bool]]:
+    """`git ls-tree -r -l -z` -> `{relpath: (kind, size, executable)}`, kind `F` file / `L` symlink / `G` gitlink.
+    Refuses (`EXPORT_*`) a bad path, a case or normalization collision, an unknown mode, or an oversize tree."""
+    entries: dict[str, tuple[str, int, bool]] = {}
+    keys: set[str] = set()
+    ancestors: set[str] = set()
+    total = 0
+    records = raw.split(b"\0")
+    if records.pop() != b"":
+        raise BenchmarkGateError("GIT_FAILED", "unterminated ls-tree output")
+    for record in records:
+        meta, tab, raw_path = record.partition(b"\t")
+        try:
+            mode, otype, _object, size = meta.decode("ascii").split()
+            size_value = 0 if size == "-" else int(size)
+        except ValueError as exc:
+            raise BenchmarkGateError("GIT_FAILED", "unparseable ls-tree record") from exc
+        rel = os.fsdecode(raw_path)
+        parts = rel.split("/")
+        if not tab or any(p in ("", ".", "..") or _fold_component(p) in (".git", "git~1") for p in parts):
+            raise BenchmarkGateError("EXPORT_PATH_REJECTED", escape_diagnostic(rel, 120))
+        kind = {("100644", "blob"): "F", ("100664", "blob"): "F", ("100755", "blob"): "F", ("120000", "blob"): "L",
+                ("160000", "commit"): "G"}.get((mode, otype))
+        if kind is None:
+            raise BenchmarkGateError("EXPORT_ENTRY_MODE", f"mode {escape_diagnostic(mode, 8)}: {escape_diagnostic(rel, 120)}")
+        key = "/".join(_fold_component(p) for p in parts)
+        if key in keys:
+            raise BenchmarkGateError("EXPORT_PATH_COLLISION", escape_diagnostic(rel, 120))
+        keys.add(key)
+        ancestors.update("/".join(key.split("/")[:i]) for i in range(1, len(parts)))
+        total += size_value
+        entries[rel] = (kind, size_value, mode == "100755")
+        # Files + directories + root: the bound the verification walk uses, so an oversize tree is always EXPORT_TOO_LARGE.
+        if len(entries) + len(ancestors) + 1 > _MAX_TREE_ENTRIES or total > _MAX_EXPORT_BYTES:
+            raise BenchmarkGateError("EXPORT_TOO_LARGE", f"over {_MAX_TREE_ENTRIES} entries (files and directories) or {_MAX_EXPORT_BYTES} bytes")
+    if keys & ancestors:
+        raise BenchmarkGateError("EXPORT_PATH_COLLISION", "a file and a directory share a name")
+    return entries
+
+
+def _verify_export(dest: str, entries: dict[str, tuple[str, int, bool]]) -> list[str]:
+    """Demand the written tree equal the commit's listing (nothing extra or missing, sizes and executable bits equal: this
+    also catches a conversion that slipped past `GIT_ATTR_SOURCE`), no symlink resolving outside `dest`. Returns LFS pointers."""
+    expected_dirs = {"/".join(rel.split("/")[:i]) for rel in entries for i in range(1, rel.count("/") + 1)}
+    expected_dirs |= {rel for rel, (kind, _, _) in entries.items() if kind == "G"}
+    real_dest = os.path.realpath(dest)
+    seen: set[str] = set()
+    lfs: list[str] = []
+    for rel, path, st in _walk_tree(dest):
+        if rel == "":
+            continue
+        want = entries.get(rel)
+        if stat.S_ISDIR(st.st_mode):
+            if rel not in expected_dirs:
+                raise BenchmarkGateError("EXPORT_VERIFY_FAILED", f"unexpected directory {escape_diagnostic(rel, 120)}")
+            continue
+        seen.add(rel)
+        is_link = stat.S_ISLNK(st.st_mode)
+        if (
+            want is None or want[0] == "G" or not (is_link or stat.S_ISREG(st.st_mode)) or is_link != (want[0] == "L")
+            or st.st_size != want[1] or (not is_link and bool(st.st_mode & 0o100) != want[2])
+        ):
+            raise BenchmarkGateError("EXPORT_VERIFY_FAILED", escape_diagnostic(rel, 120))
+        if is_link:
+            real = os.path.realpath(path)
+            if real != real_dest and not real.startswith(real_dest + os.sep):
+                raise BenchmarkGateError("EXPORT_SYMLINK_ESCAPES", escape_diagnostic(rel, 120))
+        elif want[1] <= 200 and _read_bounded(path, 64, nofollow=True).startswith(_LFS_POINTER_PREFIX):
+            lfs.append(rel)
+    if seen != {rel for rel, (kind, _, _) in entries.items() if kind != "G"}:
+        raise BenchmarkGateError("EXPORT_VERIFY_FAILED", "an entry of the commit is missing from the export")
+    return lfs
+
+
+def _create_root(parent: str, name: str, owner: int) -> bool:
+    """Create the dispatch root WITH its marker, atomically (a temp directory renamed into place, so a concurrent exporter
+    never sees a root without a marker). True if this call created it; False if it existed, which the caller validates."""
+    root = os.path.join(parent, name)
+    tmp = tempfile.mkdtemp(dir=parent, prefix=".new-")
+    try:
+        _write_marker(tmp, owner, name)
+        os.rename(tmp, root)
+        return True
+    except OSError as exc:
+        if exc.errno not in (errno.ENOTEMPTY, errno.EEXIST, errno.ENOTDIR):
+            raise
+        return False
+    finally:
+        if os.path.lexists(tmp):
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _export(repo, commit, dest, owner_pid: int | None) -> tuple[Path, dict[str, list[str]]]:
+    length = _check_commits(commit)
+    try:
+        leaf_path = Path(os.path.abspath(os.fspath(dest)))
+    except (TypeError, ValueError) as exc:
+        raise BenchmarkGateError("DEST_REJECTED", "dest is not a path") from exc
+    root_name, leaf = leaf_path.parent.name, leaf_path.name
+    if not _ROOT_NAME_RE.fullmatch(root_name) or not _LEAF_NAME_RE.fullmatch(leaf):
+        raise BenchmarkGateError("DEST_REJECTED", "dest must be <fixed parent>/<root name>/<leaf name>")
+    owner = _check_pid(os.getpid() if owner_pid is None else owner_pid)
+    if os.path.realpath(leaf_path.parent.parent) != os.path.realpath(fixed_parent()):  # before anything is created
+        raise BenchmarkGateError("DEST_REJECTED", f"dest must be under {fixed_parent()}")
+    parent = os.path.realpath(_check_parent(create=True))
+    root = os.path.join(parent, root_name)
+    export_dir = os.path.join(root, leaf)
+    sidecar = export_dir + ".export.json"
+
+    with _PrivateGit(repo, length) as git:  # the repository is validated before anything is created
+        git.require_commit(commit)
+        entries = _parse_listing(git.run("ls-tree", "-r", "-l", "-z", "--full-tree", commit))
+        created_root = _create_root(parent, root_name, owner)
+        st = os.lstat(root)
+        if not stat.S_ISDIR(st.st_mode) or _foreign(st):
+            raise BenchmarkGateError("DEST_REJECTED", "root exists and is not a directory of this user")
+        if not created_root:
+            _read_marker(root)  # an existing root must be one of ours
+        root_id, created_dest, sidecar_written = (st.st_dev, st.st_ino), False, False
+        try:
+            try:
+                os.mkdir(export_dir, 0o755)
+            except FileExistsError:
+                raise BenchmarkGateError("DEST_REJECTED", "dest already exists") from None
+            created_dest = True  # from here on, and only from here, this call owns `export_dir`
+            git.run("read-tree", commit)
+            git.run("checkout-index", "-a", "-f", work_tree=export_dir, cap=None)
+            lfs = _verify_export(export_dir, entries)
+            if _identity(root) != root_id or os.path.realpath(export_dir) != export_dir:  # narrows a same-uid redirect
+                raise BenchmarkGateError("DEST_REJECTED", "the dispatch root changed while exporting")
+            _write_json_atomic(sidecar, {"commit": commit, "entries": len(entries)})
+            sidecar_written = True
+        except BaseException:
+            # Remove only what this call created INSIDE the root. A new root keeps its marker even when empty (an empty
+            # root with a marker is cleanable by `cleanup`, and a later export may reuse it); unlinking the marker in place
+            # would race a concurrent exporter that already validated it.
+            if created_dest:
+                shutil.rmtree(export_dir, ignore_errors=True)
+            if sidecar_written:
+                try:
+                    os.unlink(sidecar)
+                except OSError:
+                    pass
+            raise
+    return Path(export_dir), {"gitlinks": sorted(r for r, e in entries.items() if e[0] == "G"), "lfs_pointers": lfs}
+
+
+def export_tree(repo: str | os.PathLike, commit: str, dest: str | os.PathLike, *, owner_pid: int | None = None) -> Path:
+    """Export the tree of `commit` into `dest` and return the RESOLVED path of `dest`. Raises `BenchmarkGateError`. Needs
+    git >= 2.43 (`GIT_TOO_OLD` otherwise).
+
+    `commit` is 40 or 64 lowercase hex. `dest` is `<fixed_parent()>/<root>/<leaf>` and must not exist (an existing one is
+    `DEST_REJECTED` and never touched); the root (`[A-Za-z0-9][A-Za-z0-9_-]{7,63}`, caller-chosen, dispatch-unique) is created
+    mode 0700 together with its marker (pid, timestamp), atomically, or reused after its marker validates; concurrent exports
+    into one new root are safe. The marker pid is `owner_pid` for the FIRST export of a root (later ones are ignored); by
+    default the short-lived exporting process, so `cleanup` (C4c-1b) is allowed right after export unless `--owner-pid` names a
+    longer-lived owner. Put venvs at `<root>/venv-*`. `dest` is left WRITABLE: the install and the overlay still run.
+
+    Built by `git read-tree` into a private index plus `git checkout-index` inside a `_PrivateGit` (never `git archive`,
+    which honours `export-ignore`/`export-subst`): no `.git`, no hooks, no filters, no LFS, no network. A plain
+    checkout-index applied the tree's own `.gitattributes` (`eol=crlf` rewrote every line ending, `ident` rewrote
+    `$Id$`), so `GIT_ATTR_SOURCE` points at the empty tree and `_verify_export` rechecks every size. A submodule becomes
+    an EMPTY directory and an LFS pointer stays pointer text (both named by the CLI on stderr). A symlink is written as a
+    symlink and the export is REFUSED if any resolves outside `dest` (stricter than "never follow": a legitimate absolute
+    symlink fails closed); unsafe or colliding paths and trees over 100,000 entries are refused too. A sidecar
+    `<leaf>.export.json` beside `dest` records the commit (the C4c-2 overlay binds `base_ref_commit` to it). On failure only
+    what this call created inside the root is removed (a new root keeps its marker). No `.git`: an installer deriving its
+    version from git (setuptools_scm, versioneer) fails in an export unless the caller sets a pretend version. Residual:
+    the fixed parent and the root are validated BY PATH (git itself works by path), then the root's identity is re-checked
+    before the sidecar is written; a same-uid process can still redirect the write, gaining no capability (it can already
+    write, chmod and delete those directories)."""
+    return _export(repo, commit, dest, owner_pid)[0]
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -820,15 +1320,16 @@ def gate_sha256(normalized_gate: dict) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def _read_bounded(path: str, limit: int) -> bytes:
+def _read_bounded(path: str, limit: int, nofollow: bool = False) -> bytes:
     """Read at most ``limit + 1`` bytes of a REGULAR file; the caller treats ``len > limit`` as too large.
 
     A bounded read rather than ``stat().st_size``: a size taken before the read is not a cap, and a FIFO or a
     device (``/dev/zero``) reports no useful size. The file is opened ``O_NONBLOCK`` (where the platform has it)
     so opening a FIFO with no writer cannot hang, then ``fstat`` on the opened descriptor must say regular file.
+    ``nofollow`` refuses a symlink as the final component (``O_NOFOLLOW``), for files inside a tree under test.
     Raises ``OSError`` or ``ValueError``; both are usage errors to the CLI.
     """
-    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | (getattr(os, "O_NOFOLLOW", 0) if nofollow else 0))
     try:
         if not stat.S_ISREG(os.fstat(fd).st_mode):
             raise ValueError("not a regular file")
@@ -920,10 +1421,45 @@ def _cmd_lint(args: argparse.Namespace) -> int:
     return 1 if violations else 0
 
 
+def _fail(exc: BenchmarkGateError) -> int:
+    """A refusal of hostile tree content is a verdict (code on stdout, exit 1); every other failure is exit 2."""
+    if exc.code in EXPORT_REFUSAL_CODES:
+        print(exc.code)
+        print(f"detail: {escape_diagnostic(exc.detail, 200)}", file=sys.stderr)
+        return 1
+    print(f"usage error: {exc.code}: {escape_diagnostic(exc.detail, 200)}", file=sys.stderr)
+    return 2
+
+
+def _cmd_export(args: argparse.Namespace) -> int:
+    """Export one commit. Exit 0 and the path on stdout; 1 and a code on stdout when the tree is refused
+    (``EXPORT_REFUSAL_CODES``); 2 for a bad commit or destination, a missing commit, an unreadable repository or a
+    git failure. Gitlinks (left as EMPTY directories) and LFS pointers (left unresolved) are named on stderr."""
+    try:
+        dest, notes = _export(args.repo, args.commit, args.dest, args.owner_pid)
+    except BenchmarkGateError as exc:
+        return _fail(exc)
+    except (OSError, ValueError) as exc:
+        print(f"usage error: cannot export: {escape_diagnostic(str(exc), 200)}", file=sys.stderr)
+        return 2
+    print(dest)
+    for key, label in (("gitlinks", "submodule left as an empty directory"), ("lfs_pointers", "LFS pointer left unresolved")):
+        if notes[key]:
+            print(f"note: {label}: {escape_diagnostic(', '.join(notes[key][:5]), 200)} ({len(notes[key])} total)", file=sys.stderr)
+    return 0
+
+
+def _cmd_fixed_parent(_args: argparse.Namespace) -> int:
+    """Print `fixed_parent()`: C4f builds `export --dest` and `cleanup --root` paths from it."""
+    print(fixed_parent())
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point: ``validate`` (C4a) and ``lint`` (C4b). Later PRs add ``export``, ``compare`` and others
-    by adding a subparser with ``set_defaults(func=...)``; nothing else here changes."""
-    parser = argparse.ArgumentParser(prog="benchmark_gate.py", description="Benchmark gate validation core (C4a/C4b).")
+    """CLI entry point: ``validate`` (C4a), ``lint`` (C4b), ``export`` and ``fixed-parent`` (C4c-1a). Later
+    PRs add ``cleanup`` (C4c-1b), ``snapshot-venv`` (C4c-2), ``compare`` and ``run-once`` (C4d) by adding a subparser with ``set_defaults(func=...)``. There is no catch-all
+    here on purpose: C4d owns the exit-code contract for a crash."""
+    parser = argparse.ArgumentParser(prog="benchmark_gate.py", description="Benchmark gate: validate, lint, export, fixed-parent.")
     sub = parser.add_subparsers(dest="command", required=True)
     validate = sub.add_parser("validate", help="validate specialist_inputs.benchmark_gate")
     validate.add_argument("--specialist-inputs", required=True, metavar="FILE")
@@ -934,6 +1470,16 @@ def main(argv: list[str] | None = None) -> int:
     lint.add_argument("--repo-root", metavar="DIR", help="derive the repo's top-level names from DIR and DIR/src")
     lint.add_argument("--top-level", action="append", default=[], metavar="NAME", help="add one top-level name")
     lint.set_defaults(func=_cmd_lint)
+    export = sub.add_parser("export", help="export a commit's tree (exit 0, 1 refused, 2 usage)")
+    export.add_argument("--repo", required=True, metavar="DIR")
+    export.add_argument("--commit", required=True, metavar="SHA")
+    export.add_argument("--dest", required=True, metavar="DIR", help="<fixed parent>/<root>/<leaf>; must not exist; see fixed-parent")
+    export.add_argument("--owner-pid", type=int, metavar="PID",
+                        help="pid in a NEW root's marker, a positive int below 2**31 (default: this short-lived process, so cleanup is "
+                             "allowed at once; ignored for an existing root); requires git >= 2.43")
+    export.set_defaults(func=_cmd_export)
+    fixed = sub.add_parser("fixed-parent", help="print the per-user directory that roots live in")
+    fixed.set_defaults(func=_cmd_fixed_parent)
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:  # argparse exits 2 on usage errors (and 0 on --help)
