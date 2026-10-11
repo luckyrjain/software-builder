@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Validation, lint and statistics core of the performance-review -> loop-task-implementer benchmark gate (Epic C).
 
-**This module is not wired into anything yet.** It is delivered by a series of eight PRs for gap-backlog ticket
-C4 (C4a core, C4b lint, C4c-1a export, C4c-1b seal/cleanup, C4c-2 overlay/diff/venv check, C4d harness, C4e classifier/docs, C4f wiring); no workflow file,
+**This module is not wired into anything yet.** It is delivered by a series of nine PRs for gap-backlog ticket
+C4 (C4a core, C4b lint, C4c-1a export, C4c-1b seal/cleanup, C4c-1c claim recovery, C4c-2 overlay/diff/venv check, C4d harness, C4e classifier/docs, C4f wiring); no workflow file,
 lifecycle validator or other script calls it until C4f. So far it holds the pure, string-level and arithmetic
 pieces (``validate``, ``lint``) and C4c-1 (a: export, b: seal and cleanup): ``export``, ``fixed-parent``, ``cleanup`` and the library
 functions ``compare`` will call (``export_tree``, ``seal_tree``, ``unseal_tree``, ``cleanup_root``). C4c-2
@@ -1252,8 +1252,8 @@ def _remove_contents(cfd: int) -> str:
 
 
 def _put_back(pfd: int, held: str, root: str, want: tuple[int, int], cfd: int, code: str | None, marker: dict | None = None) -> str | None:
-    """Best effort: rename the claimed `held` back to `root` if something is left in it (an empty one stays: nothing to retry) and
-    `held` still names the claimed directory; a `marker` already deleted is written back first, so the retry finds it
+    """Best effort: rename the claimed `held` back to `root` if something is left in it (an empty one stays: nothing to retry),
+    `held` still names the claimed directory and `root` is free; a `marker` already deleted is written back first, so the retry finds it
     (and an interrupt or a failing `rmdir` after that deletion loses nothing). Returns `code`."""
     try:
         if marker is not None or os.listdir(cfd):
@@ -1263,7 +1263,10 @@ def _put_back(pfd: int, held: str, root: str, want: tuple[int, int], cfd: int, c
                     os.fchmod(fd, 0o600)
                     handle.write(json.dumps(marker, sort_keys=True).encode("ascii"))
             if _id_at(pfd, held) == want:
-                os.rename(held, root, src_dir_fd=pfd, dst_dir_fd=pfd)
+                try:
+                    os.stat(root, dir_fd=pfd, follow_symlinks=False)  # `root` taken: a rename would replace an empty directory
+                except FileNotFoundError:
+                    os.rename(held, root, src_dir_fd=pfd, dst_dir_fd=pfd)
     except OSError:
         pass
     return code
@@ -1278,13 +1281,11 @@ def _finish(pfd: int, held: str, want: tuple[int, int], root: str) -> str:
     except FileNotFoundError:
         return "ABSENT"
     except OSError as exc:
-        if not (isinstance(exc, _EntryChanged) or exc.errno in (errno.ELOOP, errno.ENOTDIR)):
-            return _failed(f"cannot open the claimed root: {exc}")
-        try:  # raced the claiming rename: what was moved is not what was validated
+        try:  # raced the claiming rename (what was moved is not what was validated) or cannot be opened: back it goes
             os.rename(held, root, src_dir_fd=pfd, dst_dir_fd=pfd)
         except OSError:
             pass
-        return "ROOT_CHANGED"
+        return "ROOT_CHANGED" if isinstance(exc, _EntryChanged) or exc.errno in (errno.ELOOP, errno.ENOTDIR) else _failed(f"cannot open the claimed root: {exc}")
     gone = None  # the marker, once it has been deleted
     try:
         try:
@@ -1307,11 +1308,11 @@ def _finish(pfd: int, held: str, want: tuple[int, int], root: str) -> str:
                 why = "entries keep appearing in the claimed root"
             if why:
                 return _put_back(pfd, held, root, want, cfd, _failed(why))
+            gone = marker  # before the unlink: an interrupt right after it must still find the marker to restore
             try:
                 os.unlink(_MARKER_NAME, dir_fd=cfd)
-                gone = marker
             except FileNotFoundError:
-                pass
+                gone = None
         if _id_at(pfd, held) != want:  # swapped aside meanwhile: its contents are gone, but that name is not ours to remove
             return "ROOT_CHANGED"
         os.rmdir(held, dir_fd=pfd)
@@ -1355,14 +1356,15 @@ def cleanup_root(root: str | os.PathLike) -> str:
     a symlink cannot steer a delete (the contents still go, the verdict is `ROOT_CHANGED`). Anything left: renamed back,
     `REMOVE_FAILED`, and a retry finds the marker. `ROOT_CHANGED` only for a root that EXISTS with another identity. Never a name pattern.
 
-    SIGINT and SIGTERM (the CLI makes both `KeyboardInterrupt`, SIGINT even when it was inherited as ignored: on purpose) put the
+    SIGINT, SIGTERM and SIGHUP (the CLI makes them `KeyboardInterrupt`, SIGINT even when it was inherited as ignored: on purpose) put the
     tree back, marker included even when the interrupt lands after the marker was deleted: the next call is `REMOVED`. The
     interrupted CLI exits 1 with EMPTY stdout ("exit 1 and no code" means retry). A cleanup killed by SIGKILL or power loss
     after the claim leaves `.gone-<root>-<hex>` (maybe half removed or sealed); recovery of such leftovers lands in C4c-1c, and
     until then a retry answers `ABSENT` for that root. Nothing is wired to this code before C4f; both PRs must merge before C4d.
     `ABSENT` means only that the path is gone: a cleanup that lost the claim to another one says it while the winner is still
     removing. Killed before the claim, nothing changed but modes. The soft `RLIMIT_NOFILE` is raised to `min(hard, 4096)` for the
-    call: process-wide, so other threads see it (the CLI is unaffected). POSIX only (`O_DIRECTORY`, descriptor-relative calls).
+    call: process-wide, so other threads see it (the CLI is unaffected). POSIX only. Depth bound: one descriptor per level, so a chain deeper than ~4,090 levels is not
+    removable under a soft `RLIMIT_NOFILE` of 256 (macOS; Linux's usual 1M is not reached): hostile-only, no safety impact.
 
     The root's mode is repaired BEFORE the marker is read (a mode-0 root hides its marker), so a refused cleanup (bad marker,
     live owner) can leave a 0500 root at 0700. Residual: the fixed parent and the root are validated BY PATH and re-checked
@@ -1378,6 +1380,18 @@ def cleanup_root(root: str | os.PathLike) -> str:
                 resource.setrlimit(resource.RLIMIT_NOFILE, old)
             except (ValueError, OSError):
                 pass
+
+
+def _return_claim(pfd: int, held: str, root: str, want: tuple[int, int]) -> None:
+    """Best effort after an exception: `_put_back` for a claim whose directory this call has not opened yet (or no longer holds)."""
+    try:
+        fd = os.open(held, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=pfd)
+    except OSError:
+        return
+    try:
+        _put_back(pfd, held, root, want, fd, None)
+    finally:
+        os.close(fd)
 
 
 def _cleanup(root: str | os.PathLike) -> str:
@@ -1398,8 +1412,12 @@ def _cleanup(root: str | os.PathLike) -> str:
         claimed = f".gone-{name}-{os.urandom(8).hex()}"
         if (_identity(parent), _identity(path)) != identities:
             return "ROOT_CHANGED"
-        os.rename(name, claimed, src_dir_fd=pfd, dst_dir_fd=pfd)
-        return _finish(pfd, claimed, identities[1], name)
+        try:
+            os.rename(name, claimed, src_dir_fd=pfd, dst_dir_fd=pfd)
+            return _finish(pfd, claimed, identities[1], name)
+        except BaseException:  # an interrupt between the rename and `_finish`'s own handler would strand the claim
+            _return_claim(pfd, claimed, name, identities[1])
+            raise
     except _EntryChanged:
         return "ROOT_CHANGED"
     except BenchmarkGateError as exc:
@@ -1897,13 +1915,19 @@ def _cmd_fixed_parent(_args: argparse.Namespace) -> int:
 
 def _cmd_cleanup(args: argparse.Namespace) -> int:
     """Remove one dispatch-unique root; print the result code: exit 0 for ``REMOVED``/``ABSENT``, 1 for a refusal (``REMOVE_FAILED``
-    adds the escaped reason on stderr). SIGINT and SIGTERM become ``KeyboardInterrupt``: the claimed tree is put back, exit 1."""
+    adds the escaped reason on stderr; its ``first: <name>`` is the first TOP-LEVEL entry). SIGINT, SIGTERM and SIGHUP become
+    ``KeyboardInterrupt`` (the first also ignores the others, so a second Ctrl-C cannot interrupt the put-back): the claimed tree is
+    put back, exit 1; other fatal signals leave ``.gone-<root>-<hex>`` (see ``cleanup_root``)."""
     import signal
 
+    numbers = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+
     def interrupt(_signum, _frame):
+        for number in numbers:
+            signal.signal(number, signal.SIG_IGN)
         raise KeyboardInterrupt
 
-    old = [(number, signal.signal(number, interrupt)) for number in (signal.SIGINT, signal.SIGTERM)]
+    old = [(number, signal.signal(number, interrupt)) for number in numbers]
     try:
         code = cleanup_root(args.root)
     except KeyboardInterrupt:
@@ -1943,7 +1967,8 @@ def main(argv: list[str] | None = None) -> int:
     export.set_defaults(func=_cmd_export)
     fixed = sub.add_parser("fixed-parent", help="print the per-user directory that roots live in")
     fixed.set_defaults(func=_cmd_fixed_parent)
-    cleanup = sub.add_parser("cleanup", help="remove a dispatch-unique root (exit 0 removed/absent, 1 refused or interrupted: with no code on stdout, retry)")
+    cleanup = sub.add_parser("cleanup", help="remove a dispatch-unique root (exit 0 removed/absent, 1 refused or interrupted, no code on stdout = retry; "
+                             "SIGKILL/power loss leaves .gone-<root>-<hex>, retry says ABSENT until C4c-1c)")
     cleanup.add_argument("--root", required=True, metavar="DIR")
     cleanup.set_defaults(func=_cmd_cleanup)
     try:

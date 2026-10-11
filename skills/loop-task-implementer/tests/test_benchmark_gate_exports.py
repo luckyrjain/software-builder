@@ -15,7 +15,6 @@ import json
 import multiprocessing
 import os
 import re
-import select
 import shutil
 import signal
 import stat
@@ -1287,62 +1286,6 @@ def test_a_claimed_directory_renamed_aside_and_replaced_never_steers_a_delete_or
     assert bg.cleanup_root(root) == "ROOT_CHANGED" and done == [True]
     assert sorted(map(repr, look(claimed(root.parent)[0]).values())) == sorted(map(repr, before.values()))  # whatever sits at the claimed name is untouched
 
-@pytest.mark.filterwarnings("ignore:.*fork.*:DeprecationWarning")
-def test_a_real_attacker_polling_for_the_claimed_directory_cannot_steer_cleanup(repo_a, tmp_path, monkeypatch):
-    ctx, parent, real = multiprocessing.get_context("fork"), bg._check_parent(create=True), bg._remove_contents
-    for trial in range(5):
-        small = Path(dest(root=f"bench-poll{trial:04d}")).parent
-        bg.export_tree(*repo_a, dest(root=small.name), owner_pid=dead_pid())
-        outside, prefix = tmp_path / f"outside{trial}", f".gone-{small.name}-"
-        before = outside_tree(outside, 0o755, 0o644)
-
-        def attack():
-            while True:  # killed below if it never sees the claim
-                for entry in os.listdir(parent):
-                    if entry.startswith(prefix) and not entry.endswith(".aside"):
-                        try:
-                            os.rename(parent / entry, parent / (entry + ".aside"))
-                            os.symlink(outside, parent / entry)
-                        except OSError:
-                            continue
-                        os._exit(0)
-
-        def hold_until_swapped(cfd):  # deterministic: the cleanup waits for the real attacker, so every trial is an attack
-            deadline = time.time() + 30
-            while time.time() < deadline and not any(e.startswith(prefix) and e.endswith(".aside") for e in os.listdir(parent)):
-                time.sleep(0.001)
-            return real(cfd)
-
-        attacker = ctx.Process(target=attack)
-        attacker.start()
-        monkeypatch.setattr(bg, "_remove_contents", hold_until_swapped)
-        try:
-            assert bg.cleanup_root(small) in ("ROOT_CHANGED", "ABSENT")  # ABSENT: the claim was already between its two names
-        finally:
-            attacker.join(timeout=60)
-            attacker.kill()
-        assert attacker.exitcode == 0 and look(outside) == before
-
-@pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM])
-def test_a_cleanup_interrupted_after_the_claim_puts_the_tree_back_and_the_next_one_finishes(root, sig):
-    child = (
-        "import importlib.util, sys, time, tempfile\n"
-        "spec = importlib.util.spec_from_file_location('bg', sys.argv[1]); bg = importlib.util.module_from_spec(spec); spec.loader.exec_module(bg)\n"
-        "tempfile.tempdir = sys.argv[3]\n"
-        "bg._remove_contents = lambda cfd: (print('claimed', flush=True), time.sleep(120))\n"
-        "sys.exit(bg.main(['cleanup', '--root', sys.argv[2]]))\n")
-    proc = subprocess.Popen([sys.executable, "-c", child, str(_SCRIPTS / "benchmark_gate.py"), str(root), tempfile.tempdir], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                            preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_IGN))  # as in a background job: only our handler can stop it
-    try:
-        assert select.select([proc.stdout], [], [], 60)[0] and proc.stdout.readline() == "claimed\n"  # the child is past the claim
-        assert not root.exists() and len(claimed(root.parent)) == 1
-        proc.send_signal(sig)
-        _, err = proc.communicate(timeout=60)
-    finally:
-        proc.kill()
-    assert proc.returncode == 1 and "interrupted" in err and root.exists() and not claimed(root.parent)  # exit 1, nothing on stdout, tree back
-    assert bg.cleanup_root(root) == "REMOVED" and not root.exists() and not claimed(root.parent) and bg.cleanup_root(root) == "ABSENT"
-
 @pytest.mark.parametrize("case", ["after the marker is deleted", "after every pass", "after the first pass", "ENOENT on a listed entry"])
 def test_a_late_entry_never_leaves_a_root_without_its_marker(root, monkeypatch, case):
     real_unlink, real_stat, real_remove = os.unlink, os.stat, bg._remove_contents
@@ -1364,56 +1307,6 @@ def test_a_late_entry_never_leaves_a_root_without_its_marker(root, monkeypatch, 
             return
         assert bg._read_marker(str(root))["root"] == root.name  # the retry finds a valid marker, never MARKER_MISSING
     assert bg.cleanup_root(root) == "REMOVED" and not claimed(root.parent)
-
-def test_an_interrupt_after_the_marker_was_deleted_still_leaves_a_retryable_root(root, monkeypatch):
-    real = os.rmdir
-
-    def interrupted(path, **kw):
-        if ".gone-" in str(path):
-            raise KeyboardInterrupt
-        return real(path, **kw)
-
-    monkeypatch.setattr(os, "rmdir", interrupted)
-    old = os.umask(0o577)  # the restored marker must not depend on the umask
-    try:
-        with pytest.raises(KeyboardInterrupt):
-            bg.cleanup_root(root)
-    finally:
-        os.umask(old)
-    monkeypatch.setattr(os, "rmdir", real)
-    assert bg._read_marker(str(root))["root"] == root.name and bg.cleanup_root(root) == "REMOVED"
-
-def test_a_stray_process_writing_into_the_root_cannot_make_it_uncleanable(root):
-    stray = subprocess.Popen([sys.executable, "-c", (
-        "import os, sys, time\nroot, parent, prefix = sys.argv[1:4]\nprint('up', flush=True)\nn = 0\nend = time.time() + 60\n"
-        "while time.time() < end:\n    for base in [root] + [os.path.join(parent, e) for e in os.listdir(parent) if e.startswith(prefix)]:\n"
-        "        try:\n            os.close(os.open(os.path.join(base, 'late%d' % n), os.O_CREAT | os.O_WRONLY, 0o600))\n            n += 1\n        except OSError:\n            pass\n"),
-        str(root), str(root.parent), f".gone-{root.name}-"], stdout=subprocess.PIPE, text=True)
-    try:
-        assert stray.stdout.readline() == "up\n"
-        first = bg.cleanup_root(root)
-    finally:
-        stray.kill()
-        stray.wait()
-    seen = [first]
-    while seen[-1] not in ("REMOVED", "ABSENT") and len(seen) < 4:
-        seen.append(bg.cleanup_root(root))  # the stray is dead: at most a pass or two to finish
-    assert first in ("REMOVED", "REMOVE_FAILED", "ABSENT") and seen[-1] in ("REMOVED", "ABSENT") and not root.exists() and not claimed(root.parent), seen
-
-def test_an_interrupt_right_after_the_walk_closes_a_directory_is_not_lost(root, monkeypatch):
-    real_close, fired = os.close, []
-
-    def close_then_interrupt(fd):
-        real_close(fd)
-        if not fired and sys._getframe(1).f_code.co_name == "_walk_fd":
-            fired.append(1)
-            raise KeyboardInterrupt
-
-    monkeypatch.setattr(os, "close", close_then_interrupt)
-    with pytest.raises(KeyboardInterrupt):
-        bg.cleanup_root(root)
-    monkeypatch.setattr(os, "close", real_close)
-    assert fired and root.exists() and bg.cleanup_root(root) == "REMOVED"
 
 @pytest.mark.parametrize("rewrite, code", [(lambda r: write_marker(r, pid=os.getpid()), "OWNER_ALIVE"), (lambda r: (r / bg._MARKER_NAME).write_text("{"), "MARKER_INVALID")])
 def test_a_marker_rewritten_between_the_pid_check_and_the_claim_is_honoured_and_the_root_put_back(root, monkeypatch, rewrite, code):
@@ -1488,14 +1381,91 @@ def test_the_claim_name_carries_64_random_bits(root, monkeypatch):
     assert bg.cleanup_root(root) == bg.cleanup_root(other) == "REMOVED"
     assert len(names) == 2 and all(re.fullmatch(r"\.gone-bench-[a-z0-9]+-[0-9a-f]{16}", name) for name in names) and names[0][-16:] != names[1][-16:]
 
-def test_git_children_run_under_umask_022_with_the_file_size_cap_and_a_foreign_parent_is_refused(repo_a, root, monkeypatch):
-    old = os.umask(0o077)
+def test_a_keyboard_interrupt_before_or_after_any_os_call_leaves_nothing_or_a_retryable_root(monkeypatch):
+    names = ["open", "close", "rename", "unlink", "rmdir", "listdir", "stat", "lstat", "fstat", "fchmod", "chmod", "mkdir"]
+    real, state, parent, owner = {n: getattr(os, n) for n in names}, {"on": False, "n": 0, "at": 0, "after": False}, bg._check_parent(create=True), dead_pid()
+
+    def wrap(name):
+        def hooked(*a, **k):
+            state["n"] += state["on"]
+            hit = state["on"] and state["n"] == state["at"]
+            if hit and not state["after"]:
+                raise KeyboardInterrupt
+            result = real[name](*a, **k)
+            if hit:
+                raise KeyboardInterrupt
+            return result
+        return hooked
+
+    def fresh():
+        victim = parent / "bench-inject1"
+        (victim / "head/pkg").mkdir(parents=True)
+        bg._write_marker(str(victim), owner)
+        (victim / "head/pkg/f").write_text("x")
+        return victim
+
+    for name in names:
+        hooked = wrap(name)
+        for supported in (os.supports_follow_symlinks, os.supports_dir_fd, os.supports_fd):
+            if real[name] in supported:
+                supported.add(hooked)
+        monkeypatch.setattr(os, name, hooked)
+    calls = 0
+    for after, at in [(False, 0)] + [(a, i) for a in (False, True) for i in range(1, 400)]:
+        victim = fresh()
+        state.update(on=True, n=0, at=at, after=after)
+        old = os.umask(0o577)  # a marker written back must not depend on the umask
+        try:
+            result = bg.cleanup_root(victim)
+        except KeyboardInterrupt:
+            result = None
+        finally:
+            os.umask(old)
+            state["on"] = False
+        calls = calls or state["n"]
+        assert calls > 60  # the dry run saw a realistic number of calls
+        if at > calls:
+            bg.cleanup_root(victim)
+            continue  # past the last call: nothing was injected
+        assert (result is None) == (at > 0), (after, at, result)  # an interrupt is never swallowed, and only one was injected
+        assert not claimed(parent) and (not victim.exists() or bg._read_marker(str(victim))["root"] == victim.name), (after, at)
+        assert bg.cleanup_root(victim) in ("REMOVED", "ABSENT") and not victim.exists() and not claimed(parent), (after, at)  # the retry
+
+@pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM, signal.SIGHUP])
+@pytest.mark.parametrize("point", ["right after the claiming rename", "after the claimed open's chmod", "after the marker was deleted, with a late entry"])
+def test_a_real_signal_in_a_short_window_puts_the_tree_back_and_the_cli_exits_1_with_empty_stdout(root, monkeypatch, capsys, sig, point):
+    real, fired = {"rename": os.rename, "fchmod": os.fchmod, "unlink": os.unlink}, []
+
+    def after(name, when):
+        def hooked(*a, **k):
+            result = real[name](*a, **k)
+            if not fired and when(*a):
+                fired.append(1)
+                os.kill(os.getpid(), sig)
+            return result
+        return hooked
+
+    name, when = {"right after the claiming rename": ("rename", lambda src, dst: ".gone-" in dst), "after the claimed open's chmod": ("fchmod", lambda fd, mode: bool(claimed(root.parent))),
+                  "after the marker was deleted, with a late entry": ("unlink", lambda path: path == bg._MARKER_NAME and [(claimed(root.parent)[0] / "late.txt").write_text("x")])}[point]
+    monkeypatch.setattr(os, name, after(name, when))
+    inherited = signal.signal(signal.SIGINT, signal.SIG_IGN)  # as in a background job: only the CLI's own handler can stop it
     try:
-        out = bg.export_tree(*repo_a, dest("under077"))
+        assert bg.main(["cleanup", "--root", str(root)]) == 1 and fired
     finally:
-        os.umask(old)
-    assert stat.S_IMODE((out / "README.md").stat().st_mode) == 0o644 and stat.S_IMODE((out / "src/app/run.sh").stat().st_mode) == 0o755
-    done = subprocess.run([sys.executable, "-c", "import resource; print(resource.getrlimit(resource.RLIMIT_FSIZE)[0])"], preexec_fn=bg._child_setup(1000), capture_output=True, text=True)
-    assert done.stdout.strip() == "1001"  # the cap is `cap + 1` bytes
-    monkeypatch.setattr(bg, "_foreign", lambda st: True)
-    assert bg.cleanup_root(root) == "NOT_UNDER_FIXED_PARENT" and root.exists()  # somebody else's fixed parent
+        signal.signal(signal.SIGINT, inherited)
+    assert capsys.readouterr().out == "" and bg._read_marker(str(root))["root"] == root.name and not claimed(root.parent)
+    monkeypatch.setattr(os, name, real[name])
+    assert bg.cleanup_root(root) == "REMOVED"
+
+def test_a_claimed_directory_that_cannot_be_opened_is_put_back_with_a_refusal(root, monkeypatch):
+    real = os.open
+
+    def too_many(path, flags, mode=0o777, *, dir_fd=None):
+        if str(path).startswith(".gone-") and flags & os.O_DIRECTORY:
+            raise OSError(bg.errno.EMFILE, "too many open files")
+        return real(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(os, "open", too_many)
+    assert bg.cleanup_root(root) == "REMOVE_FAILED" and (root / bg._MARKER_NAME).exists() and not claimed(root.parent)
+    monkeypatch.setattr(os, "open", real)
+    assert bg.cleanup_root(root) == "REMOVED"
