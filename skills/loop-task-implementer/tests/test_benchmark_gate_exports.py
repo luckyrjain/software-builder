@@ -1162,6 +1162,7 @@ def test_a_restrictive_umask_does_not_poison_the_fixed_parent(repo_a):
     finally:
         os.umask(old)
     assert stat.S_IMODE(bg.fixed_parent().stat().st_mode) == 0o700 and stat.S_IMODE((Path(dest()).parent / bg._MARKER_NAME).stat().st_mode) == 0o600
+    assert not list(Path(tempfile.tempdir).glob("bench-git-*"))  # the private git directory was removable too
     assert bg.export_tree(*repo_a, dest("second")).is_dir()
 
 
@@ -1322,8 +1323,8 @@ def test_a_real_attacker_polling_for_the_claimed_directory_cannot_steer_cleanup(
             attacker.kill()
         assert attacker.exitcode == 0 and look(outside) == before
 
-@pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM, signal.SIGKILL])
-def test_a_cleanup_interrupted_after_the_claim_is_put_back_or_finished_by_the_next_one(root, sig):
+@pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM])
+def test_a_cleanup_interrupted_after_the_claim_puts_the_tree_back_and_the_next_one_finishes(root, sig):
     child = (
         "import importlib.util, sys, time, tempfile\n"
         "spec = importlib.util.spec_from_file_location('bg', sys.argv[1]); bg = importlib.util.module_from_spec(spec); spec.loader.exec_module(bg)\n"
@@ -1339,44 +1340,80 @@ def test_a_cleanup_interrupted_after_the_claim_is_put_back_or_finished_by_the_ne
         _, err = proc.communicate(timeout=60)
     finally:
         proc.kill()
-    if sig == signal.SIGKILL:
-        assert proc.returncode == -signal.SIGKILL and len(claimed(root.parent)) == 1 and not root.exists()  # cannot put itself back
-    else:
-        assert proc.returncode == 1 and "interrupted" in err and root.exists() and not claimed(root.parent)
+    assert proc.returncode == 1 and "interrupted" in err and root.exists() and not claimed(root.parent)  # exit 1, nothing on stdout, tree back
     assert bg.cleanup_root(root) == "REMOVED" and not root.exists() and not claimed(root.parent) and bg.cleanup_root(root) == "ABSENT"
 
-def test_abandoned_claims_are_finished_and_selected_by_a_valid_marker_naming_the_root_not_by_their_name(root):
-    base = f".gone-{root.name}-"
-    sibling = root.parent / f"{base}extra-{'e' * 16}"  # another root's leftover, whose name merely extends this one
-    sibling.mkdir()
-    write_marker(sibling, root=root.name + "-extra")
-    held = root.parent / (base + "0" * 16)
-    bg.seal_tree(root / "head")
-    root.rename(held)
-    held.chmod(0)  # unopenable, as an interrupted unseal can leave it
-    assert bg.cleanup_root(root) == "REMOVED" and not held.exists() and bg.cleanup_root(root) == "ABSENT" and sibling.exists()
-    empty, held = root.parent / (base + "a" * 16), root.parent / (base + "b" * 16)
-    empty.mkdir()  # a run that died after deleting its marker: empty and marker-less
-    held.mkdir()
-    (held / "x").write_text("x")
-    assert bg.cleanup_root(root) == "MARKER_MISSING" and not empty.exists() and (held / "x").exists()  # one finished, one not provably ours
-    write_marker(held, root="bench-other")
-    assert bg.cleanup_root(root) == "MARKER_INVALID" and (held / "x").exists()
-    write_marker(held, root=root.name, pid=os.getpid())
-    assert bg.cleanup_root(root) == "OWNER_ALIVE" and (root / "x").exists() and not held.exists()  # re-pointed: put back
+@pytest.mark.parametrize("case", ["after the marker is deleted", "after every pass", "after the first pass", "ENOENT on a listed entry"])
+def test_a_late_entry_never_leaves_a_root_without_its_marker(root, monkeypatch, case):
+    real_unlink, real_stat, real_remove = os.unlink, os.stat, bg._remove_contents
 
-def test_a_claim_another_cleanup_holds_and_a_link_named_like_a_claim_are_left_alone(root, tmp_path):
-    fcntl, base = pytest.importorskip("fcntl"), f".gone-{root.name}-"
-    live, link = root.parent / (base + "c" * 16), root.parent / (base + "d" * 16)
-    root.rename(live)
-    link.symlink_to(tmp_path)
-    fd = os.open(live, os.O_RDONLY)
+    def late():
+        (claimed(root.parent)[0] / f"late{time.monotonic_ns()}").write_text("x")
+
+    with monkeypatch.context() as hook:
+        if case == "after the marker is deleted":
+            hook.setattr(os, "unlink", lambda path, **kw: (real_unlink(path, **kw), late() if path == bg._MARKER_NAME else None)[0])
+        elif case in ("after every pass", "after the first pass"):
+            passes = []
+            hook.setattr(bg, "_remove_contents", lambda cfd: (real_remove(cfd), late() if case == "after every pass" or not passes else None, passes.append(1))[0])
+        else:
+            hook.setattr(os, "stat", lambda path, **kw: (_ for _ in ()).throw(FileNotFoundError()) if path == "head" and "dir_fd" in kw else real_stat(path, **kw))
+        expected = "REMOVED" if case == "after the first pass" else "REMOVE_FAILED"  # a transient late writer is removed by the next pass
+        assert bg.cleanup_root(root) == expected
+        if expected == "REMOVED":
+            return
+        assert bg._read_marker(str(root))["root"] == root.name  # the retry finds a valid marker, never MARKER_MISSING
+    assert bg.cleanup_root(root) == "REMOVED" and not claimed(root.parent)
+
+def test_an_interrupt_after_the_marker_was_deleted_still_leaves_a_retryable_root(root, monkeypatch):
+    real = os.rmdir
+
+    def interrupted(path, **kw):
+        if ".gone-" in str(path):
+            raise KeyboardInterrupt
+        return real(path, **kw)
+
+    monkeypatch.setattr(os, "rmdir", interrupted)
+    old = os.umask(0o577)  # the restored marker must not depend on the umask
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)  # another cleanup is on it right now
-        assert bg.cleanup_root(root) == "ABSENT" and live.exists() and tmp_path.is_dir()
+        with pytest.raises(KeyboardInterrupt):
+            bg.cleanup_root(root)
     finally:
-        os.close(fd)
-    assert bg.cleanup_root(root) == "REMOVED" and not live.exists() and link.is_symlink() and tmp_path.is_dir()
+        os.umask(old)
+    monkeypatch.setattr(os, "rmdir", real)
+    assert bg._read_marker(str(root))["root"] == root.name and bg.cleanup_root(root) == "REMOVED"
+
+def test_a_stray_process_writing_into_the_root_cannot_make_it_uncleanable(root):
+    stray = subprocess.Popen([sys.executable, "-c", (
+        "import os, sys, time\nroot, parent, prefix = sys.argv[1:4]\nprint('up', flush=True)\nn = 0\nend = time.time() + 60\n"
+        "while time.time() < end:\n    for base in [root] + [os.path.join(parent, e) for e in os.listdir(parent) if e.startswith(prefix)]:\n"
+        "        try:\n            os.close(os.open(os.path.join(base, 'late%d' % n), os.O_CREAT | os.O_WRONLY, 0o600))\n            n += 1\n        except OSError:\n            pass\n"),
+        str(root), str(root.parent), f".gone-{root.name}-"], stdout=subprocess.PIPE, text=True)
+    try:
+        assert stray.stdout.readline() == "up\n"
+        first = bg.cleanup_root(root)
+    finally:
+        stray.kill()
+        stray.wait()
+    seen = [first]
+    while seen[-1] not in ("REMOVED", "ABSENT") and len(seen) < 4:
+        seen.append(bg.cleanup_root(root))  # the stray is dead: at most a pass or two to finish
+    assert first in ("REMOVED", "REMOVE_FAILED", "ABSENT") and seen[-1] in ("REMOVED", "ABSENT") and not root.exists() and not claimed(root.parent), seen
+
+def test_an_interrupt_right_after_the_walk_closes_a_directory_is_not_lost(root, monkeypatch):
+    real_close, fired = os.close, []
+
+    def close_then_interrupt(fd):
+        real_close(fd)
+        if not fired and sys._getframe(1).f_code.co_name == "_walk_fd":
+            fired.append(1)
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(os, "close", close_then_interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        bg.cleanup_root(root)
+    monkeypatch.setattr(os, "close", real_close)
+    assert fired and root.exists() and bg.cleanup_root(root) == "REMOVED"
 
 @pytest.mark.parametrize("rewrite, code", [(lambda r: write_marker(r, pid=os.getpid()), "OWNER_ALIVE"), (lambda r: (r / bg._MARKER_NAME).write_text("{"), "MARKER_INVALID")])
 def test_a_marker_rewritten_between_the_pid_check_and_the_claim_is_honoured_and_the_root_put_back(root, monkeypatch, rewrite, code):
@@ -1391,20 +1428,6 @@ def test_a_marker_rewritten_between_the_pid_check_and_the_claim_is_honoured_and_
 
     monkeypatch.setattr(bg, "_pid_alive", rewritten_after_the_check)
     assert bg.cleanup_root(root) == code and done and (root / "head").is_dir() and (root / bg._MARKER_NAME).exists() and not claimed(root.parent)
-
-def test_a_rename_back_that_finds_its_name_taken_leaves_a_claim_the_next_cleanup_finishes(root, monkeypatch):
-    def stubborn(path, onexc, **kw):
-        if not root.exists():
-            root.mkdir()
-            (root / "squatter").write_text("x")  # not empty, so the rename back cannot replace it
-        onexc(os.unlink, path, PermissionError(1, "immutable"))
-
-    real = shutil.rmtree
-    monkeypatch.setattr(shutil, "rmtree", stubborn)
-    assert bg.cleanup_root(root) == "REMOVE_FAILED" and len(claimed(root.parent)) == 1
-    monkeypatch.setattr(shutil, "rmtree", real)
-    shutil.rmtree(root)
-    assert bg.cleanup_root(root) == "REMOVED" and not claimed(root.parent)
 
 def test_a_restricted_chain_deeper_than_the_default_descriptor_limit_is_removed_in_one_call(root):
     resource = pytest.importorskip("resource")
@@ -1440,9 +1463,9 @@ def test_every_failure_of_a_claimed_removal_is_a_coded_failure_with_the_root_ret
     monkeypatch.setattr(os, attr, broken)
     assert bg.main(["cleanup", "--root", str(root)]) == 1
     out, err = capsys.readouterr()
-    assert out == "REMOVE_FAILED\n" and err.startswith("REMOVE_FAILED: ") and "no detail" not in err  # the code on stdout, the reason on stderr
+    assert out == "REMOVE_FAILED\n" and err.startswith("REMOVE_FAILED: ") and "no detail" not in err and (case != "top-level entry" or "stubborn.txt" in err)  # the code on stdout, the reason (and the first name) on stderr
     monkeypatch.setattr(os, attr, original)
-    assert root.exists() == (case != "final rmdir")  # that one leaves an empty claim, which the retry finishes
+    assert root.exists() and (root / bg._MARKER_NAME).exists()  # marker and all: a failing final step loses nothing
     assert bg.cleanup_root(root) == "REMOVED" and not root.exists() and not claimed(root.parent)
 
 def test_a_root_swapped_for_a_regular_file_is_refused(root, monkeypatch):
@@ -1464,3 +1487,15 @@ def test_the_claim_name_carries_64_random_bits(root, monkeypatch):
     monkeypatch.setattr(os, "rename", lambda src, dst, **kw: (names.append(dst), real(src, dst, **kw))[1])
     assert bg.cleanup_root(root) == bg.cleanup_root(other) == "REMOVED"
     assert len(names) == 2 and all(re.fullmatch(r"\.gone-bench-[a-z0-9]+-[0-9a-f]{16}", name) for name in names) and names[0][-16:] != names[1][-16:]
+
+def test_git_children_run_under_umask_022_with_the_file_size_cap_and_a_foreign_parent_is_refused(repo_a, root, monkeypatch):
+    old = os.umask(0o077)
+    try:
+        out = bg.export_tree(*repo_a, dest("under077"))
+    finally:
+        os.umask(old)
+    assert stat.S_IMODE((out / "README.md").stat().st_mode) == 0o644 and stat.S_IMODE((out / "src/app/run.sh").stat().st_mode) == 0o755
+    done = subprocess.run([sys.executable, "-c", "import resource; print(resource.getrlimit(resource.RLIMIT_FSIZE)[0])"], preexec_fn=bg._child_setup(1000), capture_output=True, text=True)
+    assert done.stdout.strip() == "1001"  # the cap is `cap + 1` bytes
+    monkeypatch.setattr(bg, "_foreign", lambda st: True)
+    assert bg.cleanup_root(root) == "NOT_UNDER_FIXED_PARENT" and root.exists()  # somebody else's fixed parent

@@ -1134,8 +1134,8 @@ def _walk_fd(root: str, limit: int | None, repair: bool = False, at: tuple[int, 
         while frames:
             rel, dfd, names = frames[-1]
             if not names:
-                os.close(dfd)
                 frames.pop()
+                os.close(dfd)
                 continue
             child = names.pop()
             try:
@@ -1208,26 +1208,13 @@ def unseal_tree(root: str | os.PathLike, *, bounded: bool = True, _at: tuple[int
 
 
 _failure = ""  # why the last `cleanup_root` said REMOVE_FAILED, for the CLI (one call at a time per process)
-_CLAIM_TAIL = re.compile(r"[0-9a-f]{16}")
+_REMOVE_PASSES = 3  # a late writer may add entries; the marker goes only when a pass leaves nothing else
 
 
 def _failed(reason: str) -> str:
     global _failure
     _failure = escape_diagnostic(reason, 200)
     return "REMOVE_FAILED"
-
-
-def _lock(fd: int) -> bool:
-    """Exclusive `flock` on a claimed directory: False when another cleanup (process or thread) holds it. The kernel drops it when
-    its holder dies, even by SIGKILL: that tells a live cleanup from an abandoned claim. True where there is no `flock`."""
-    try:
-        import fcntl
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        return False
-    except (ImportError, OSError):
-        pass
-    return True
 
 
 def _id_at(dir_fd: int, name: str) -> tuple[int, int]:
@@ -1239,7 +1226,7 @@ def _remove_contents(cfd: int) -> str:
     """Delete everything in the directory open as `cfd` EXCEPT its marker, relative to that descriptor only (never a path),
     recording failures and carrying on. Returns "" or why something is left; the caller deletes the marker LAST, so a stubborn
     entry leaves a directory that still carries its marker (a retry finds it)."""
-    failures = 0
+    failures, first = 0, ""
 
     def record(_func, _path, exc: BaseException) -> None:
         nonlocal failures
@@ -1250,6 +1237,7 @@ def _remove_contents(cfd: int) -> str:
     except OSError as exc:
         return f"cannot list the claimed root: {exc}"
     for name in names:
+        before = failures
         try:
             if stat.S_ISDIR(os.stat(name, dir_fd=cfd, follow_symlinks=False).st_mode):
                 shutil.rmtree(name, dir_fd=cfd, onexc=record)
@@ -1259,24 +1247,32 @@ def _remove_contents(cfd: int) -> str:
             pass
         except Exception:  # noqa: BLE001 -- OSError, RecursionError on absurd nesting: counted, never fatal
             failures += 1
-    return f"{failures} entries could not be removed" if failures else ""
+        first = first or (name if failures > before else "")
+    return f"{failures} entries could not be removed (first: {first})" if failures else ""
 
 
-def _put_back(pfd: int, held: str, root: str, want: tuple[int, int], cfd: int, code: str | None) -> str | None:
-    """Best effort: rename the claimed `held` back to `root` if something is left in it (an empty one is finished by the next
-    cleanup) and `held` still names the claimed directory. Returns `code`."""
+def _put_back(pfd: int, held: str, root: str, want: tuple[int, int], cfd: int, code: str | None, marker: dict | None = None) -> str | None:
+    """Best effort: rename the claimed `held` back to `root` if something is left in it (an empty one stays: nothing to retry) and
+    `held` still names the claimed directory; a `marker` already deleted is written back first, so the retry finds it
+    (and an interrupt or a failing `rmdir` after that deletion loses nothing). Returns `code`."""
     try:
-        if os.listdir(cfd) and _id_at(pfd, held) == want:
-            os.rename(held, root, src_dir_fd=pfd, dst_dir_fd=pfd)
+        if marker is not None or os.listdir(cfd):
+            if marker is not None and _MARKER_NAME not in os.listdir(cfd):
+                fd = os.open(_MARKER_NAME, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=cfd)
+                with os.fdopen(fd, "wb") as handle:
+                    os.fchmod(fd, 0o600)
+                    handle.write(json.dumps(marker, sort_keys=True).encode("ascii"))
+            if _id_at(pfd, held) == want:
+                os.rename(held, root, src_dir_fd=pfd, dst_dir_fd=pfd)
     except OSError:
         pass
     return code
 
 
-def _finish(pfd: int, held: str, want: tuple[int, int], root: str, claimed_now: bool) -> str:
-    """Remove the directory `held` of `pfd` (identity `want`, marker naming `root`): the root this call just claimed, or an
-    abandoned claim. Opened ONCE (`O_NOFOLLOW`, checked against `want`); everything after goes through that descriptor or `pfd`.
-    Any `BaseException` puts the tree back, then re-raises; nothing is reported failed without a put-back attempt."""
+def _finish(pfd: int, held: str, want: tuple[int, int], root: str) -> str:
+    """Remove the directory `held` of `pfd` (identity `want`, marker naming `root`): the root this call just claimed. Opened ONCE
+    (`O_NOFOLLOW`, checked against `want`); everything after goes through that descriptor or `pfd`. Any `BaseException` puts the
+    tree back, then re-raises; nothing is reported failed without a put-back attempt."""
     try:
         cfd = _open_dir(pfd, held, types.SimpleNamespace(st_dev=want[0], st_ino=want[1]), repair=True)
     except FileNotFoundError:
@@ -1284,20 +1280,18 @@ def _finish(pfd: int, held: str, want: tuple[int, int], root: str, claimed_now: 
     except OSError as exc:
         if not (isinstance(exc, _EntryChanged) or exc.errno in (errno.ELOOP, errno.ENOTDIR)):
             return _failed(f"cannot open the claimed root: {exc}")
-        if claimed_now:  # raced the claiming rename: what was moved is not what was validated
-            try:
-                os.rename(held, root, src_dir_fd=pfd, dst_dir_fd=pfd)
-            except OSError:
-                pass
+        try:  # raced the claiming rename: what was moved is not what was validated
+            os.rename(held, root, src_dir_fd=pfd, dst_dir_fd=pfd)
+        except OSError:
+            pass
         return "ROOT_CHANGED"
+    gone = None  # the marker, once it has been deleted
     try:
-        if not _lock(cfd):  # another cleanup is finishing this very directory
-            return "ABSENT"
         try:
             marker = _read_marker("", dir_fd=cfd, expect=root)
-        except BenchmarkGateError as exc:  # a marker-less EMPTY directory is a run that died after its last unlink
-            if exc.code != "MARKER_MISSING" or os.listdir(cfd):  # an unproven leftover stays where it is; a claimed root goes back
-                return _put_back(pfd, held, root, want, cfd, exc.code) if claimed_now else exc.code
+        except BenchmarkGateError as exc:  # an EMPTY directory without its marker has nothing left to protect
+            if exc.code != "MARKER_MISSING" or os.listdir(cfd):
+                return _put_back(pfd, held, root, want, cfd, exc.code)
         else:
             if _pid_alive(marker["pid"]):  # re-pointed (`claim_root`) after the pre-claim check
                 return _put_back(pfd, held, root, want, cfd, "OWNER_ALIVE")
@@ -1305,11 +1299,17 @@ def _finish(pfd: int, held: str, want: tuple[int, int], root: str, claimed_now: 
                 unseal_tree("", bounded=False, _at=(pfd, held, want))
             except BenchmarkGateError:
                 pass  # best effort; the removal below decides
-            why = _remove_contents(cfd)
+            for _ in range(_REMOVE_PASSES):
+                why = _remove_contents(cfd)
+                if why or not set(os.listdir(cfd)) - {_MARKER_NAME}:
+                    break
+            else:
+                why = "entries keep appearing in the claimed root"
             if why:
                 return _put_back(pfd, held, root, want, cfd, _failed(why))
             try:
                 os.unlink(_MARKER_NAME, dir_fd=cfd)
+                gone = marker
             except FileNotFoundError:
                 pass
         if _id_at(pfd, held) != want:  # swapped aside meanwhile: its contents are gone, but that name is not ours to remove
@@ -1319,44 +1319,12 @@ def _finish(pfd: int, held: str, want: tuple[int, int], root: str, claimed_now: 
     except FileNotFoundError:
         return "ABSENT"
     except OSError as exc:
-        return _put_back(pfd, held, root, want, cfd, _failed(str(exc)))
+        return _put_back(pfd, held, root, want, cfd, _failed(str(exc)), gone)
     except BaseException:
-        _put_back(pfd, held, root, want, cfd, None)
+        _put_back(pfd, held, root, want, cfd, None, gone)
         raise
     finally:
         os.close(cfd)
-
-
-def _recover(root: str | os.PathLike) -> str:
-    """Finish the claims `.gone-<root>-<random>` of earlier cleanups of this root that died before they were done, so `ABSENT`
-    means nothing is left that no live cleanup is working on. Selected by a VALIDATED MARKER (naming `root`, owner dead, a
-    directory of ours, not a link; the name only narrows the search), and only if its `flock` is free (`_finish`). A marker-less
-    empty one is just removed. Returns `REMOVED` / `ABSENT` / the refusal of any that was left."""
-    path = os.path.abspath(os.fspath(root))
-    name = os.path.basename(path)
-    try:
-        pfd = os.open(os.path.realpath(os.path.dirname(path)), os.O_RDONLY | os.O_DIRECTORY)
-    except OSError:
-        return "ABSENT"
-    result = "ABSENT"
-    try:
-        prefix = f".gone-{name}-"
-        for entry in sorted(os.listdir(pfd)):
-            if not (entry.startswith(prefix) and _CLAIM_TAIL.fullmatch(entry[len(prefix):])):
-                continue
-            try:
-                st = os.stat(entry, dir_fd=pfd, follow_symlinks=False)
-            except OSError:
-                continue
-            if stat.S_ISDIR(st.st_mode) and not _foreign(st):
-                code = _finish(pfd, entry, (st.st_dev, st.st_ino), name, False)
-                if code != "ABSENT" and result in ("ABSENT", "REMOVED"):
-                    result = code
-    except OSError:
-        pass
-    finally:
-        os.close(pfd)
-    return result
 
 
 def _more_descriptors():
@@ -1387,11 +1355,14 @@ def cleanup_root(root: str | os.PathLike) -> str:
     a symlink cannot steer a delete (the contents still go, the verdict is `ROOT_CHANGED`). Anything left: renamed back,
     `REMOVE_FAILED`, and a retry finds the marker. `ROOT_CHANGED` only for a root that EXISTS with another identity. Never a name pattern.
 
-    SIGINT and SIGTERM (the CLI makes both `KeyboardInterrupt`) put the tree back: the next call is `REMOVED`, the CLI exits 1.
-    SIGKILL or a crash leaves `.gone-<root>-<hex>`, maybe half removed or sealed; so does a rename-back that found its name
-    taken. The next `cleanup_root(<root>)` finishes each leftover whose VALIDATED MARKER names the root and whose `flock` is free
-    (`_recover`: REMOVED, or the refusal for one it could not); `ABSENT` only when none is left that no live cleanup is on.
-    Killed before the claim, nothing changed but modes. The soft `RLIMIT_NOFILE` is raised to `min(hard, 4096)` meanwhile.
+    SIGINT and SIGTERM (the CLI makes both `KeyboardInterrupt`, SIGINT even when it was inherited as ignored: on purpose) put the
+    tree back, marker included even when the interrupt lands after the marker was deleted: the next call is `REMOVED`. The
+    interrupted CLI exits 1 with EMPTY stdout ("exit 1 and no code" means retry). A cleanup killed by SIGKILL or power loss
+    after the claim leaves `.gone-<root>-<hex>` (maybe half removed or sealed); recovery of such leftovers lands in C4c-1c, and
+    until then a retry answers `ABSENT` for that root. Nothing is wired to this code before C4f; both PRs must merge before C4d.
+    `ABSENT` means only that the path is gone: a cleanup that lost the claim to another one says it while the winner is still
+    removing. Killed before the claim, nothing changed but modes. The soft `RLIMIT_NOFILE` is raised to `min(hard, 4096)` for the
+    call: process-wide, so other threads see it (the CLI is unaffected). POSIX only (`O_DIRECTORY`, descriptor-relative calls).
 
     The root's mode is repaired BEFORE the marker is read (a mode-0 root hides its marker), so a refused cleanup (bad marker,
     live owner) can leave a 0500 root at 0700. Residual: the fixed parent and the root are validated BY PATH and re-checked
@@ -1399,8 +1370,7 @@ def cleanup_root(root: str | os.PathLike) -> str:
     capability (it can already write, chmod and delete those directories)."""
     old = _more_descriptors()
     try:
-        code = _cleanup(root)
-        return _recover(root) if code == "ABSENT" else code
+        return _cleanup(root)
     finally:
         if old is not None:
             import resource
@@ -1429,7 +1399,7 @@ def _cleanup(root: str | os.PathLike) -> str:
         if (_identity(parent), _identity(path)) != identities:
             return "ROOT_CHANGED"
         os.rename(name, claimed, src_dir_fd=pfd, dst_dir_fd=pfd)
-        return _finish(pfd, claimed, identities[1], name, True)
+        return _finish(pfd, claimed, identities[1], name)
     except _EntryChanged:
         return "ROOT_CHANGED"
     except BenchmarkGateError as exc:
@@ -1973,7 +1943,7 @@ def main(argv: list[str] | None = None) -> int:
     export.set_defaults(func=_cmd_export)
     fixed = sub.add_parser("fixed-parent", help="print the per-user directory that roots live in")
     fixed.set_defaults(func=_cmd_fixed_parent)
-    cleanup = sub.add_parser("cleanup", help="remove a dispatch-unique root (exit 0 removed/absent, 1 refused)")
+    cleanup = sub.add_parser("cleanup", help="remove a dispatch-unique root (exit 0 removed/absent, 1 refused or interrupted: with no code on stdout, retry)")
     cleanup.add_argument("--root", required=True, metavar="DIR")
     cleanup.set_defaults(func=_cmd_cleanup)
     try:
