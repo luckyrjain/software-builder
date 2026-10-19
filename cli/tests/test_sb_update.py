@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import urllib.error
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -264,8 +265,43 @@ def test_real_github_api_plumbing_only() -> None:
     except UpdateError as exc:
         # A 404 (no release exists yet) is an expected, valid outcome given this repo's
         # current state -- not a plumbing failure. Any other UpdateError is a real failure.
-        assert "404" in str(exc), f"unexpected fetch failure: {exc}"
+        message = str(exc)
+        # Shared CI runners share an unauthenticated GitHub IP quota, so a rate-limit
+        # response (403 "rate limit exceeded", or 429) says nothing about the plumbing.
+        if "429" in message or ("403" in message and "rate limit" in message.lower()):
+            pytest.skip(f"GitHub API rate limited, plumbing not exercised: {exc}")
+        assert "404" in message, f"unexpected fetch failure: {exc}"
         return
     assert isinstance(release, dict)
     assert "tag_name" in release
     assert "assets" in release
+
+
+def _raise_http_error(code: int, reason: str):
+    def fake_urlopen(*a, **k):
+        raise urllib.error.HTTPError("https://api.github.invalid", code, reason, {}, None)  # type: ignore[arg-type]
+
+    return fake_urlopen
+
+
+@pytest.mark.parametrize(
+    ("code", "reason"), [(403, "rate limit exceeded"), (429, "Too Many Requests")]
+)
+def test_plumbing_check_skips_on_rate_limit(monkeypatch, code: int, reason: str) -> None:
+    monkeypatch.setattr("sb._update.urllib.request.urlopen", _raise_http_error(code, reason))
+    with pytest.raises(pytest.skip.Exception):
+        test_real_github_api_plumbing_only()
+
+
+def test_plumbing_check_still_accepts_404(monkeypatch) -> None:
+    monkeypatch.setattr("sb._update.urllib.request.urlopen", _raise_http_error(404, "Not Found"))
+    test_real_github_api_plumbing_only()
+
+
+@pytest.mark.parametrize(
+    ("code", "reason"), [(500, "Internal Server Error"), (403, "Forbidden")]
+)
+def test_plumbing_check_still_fails_on_other_errors(monkeypatch, code: int, reason: str) -> None:
+    monkeypatch.setattr("sb._update.urllib.request.urlopen", _raise_http_error(code, reason))
+    with pytest.raises(AssertionError, match="unexpected fetch failure"):
+        test_real_github_api_plumbing_only()
