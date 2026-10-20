@@ -954,6 +954,8 @@ def _read_marker(root: str, *, dir_fd: int | None = None, expect: str | None = N
     try:
         raw = _read_bounded(_MARKER_NAME if dir_fd is not None else os.path.join(root, _MARKER_NAME), 4096, nofollow=True, dir_fd=dir_fd)
     except OSError as exc:
+        if exc.errno not in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP, errno.EACCES, errno.EPERM):
+            raise  # EMFILE, EIO ...: the environment failed, which says nothing about whose directory this is
         raise BenchmarkGateError("MARKER_MISSING", str(exc)) from exc
     except ValueError as exc:
         raise BenchmarkGateError("MARKER_INVALID", "not a regular file") from exc
@@ -1219,16 +1221,26 @@ def _failed(reason: str) -> str:
     return "REMOVE_FAILED"
 
 
-def _lock(fd: int) -> bool:
-    """Exclusive `flock` on a claimed directory: False when another cleanup (process or thread) holds it. The kernel drops it when
-    its holder dies, even by SIGKILL: that tells a live cleanup from an abandoned claim. True where there is no `flock`."""
+_NO_FLOCK = tuple(getattr(errno, name) for name in ("ENOLCK", "EOPNOTSUPP", "ENOTSUP", "ENOSYS", "EINVAL") if hasattr(errno, name))
+
+
+def _lock(fd: int) -> bool | None:
+    """Exclusive non-blocking `flock`: True (held), False (another process or thread holds it), None (this platform or filesystem has
+    no `flock`: `ImportError`, or an errno that means "unsupported", `_NO_FLOCK`; the caller proceeds on the rename claim alone and
+    never moves another cleanup's directory). Any other `OSError` (EIO, EBADF, EMFILE ...) is raised: it is not "unsupported", so the
+    caller refuses. The kernel drops the lock when its holder dies, even by SIGKILL. `ENOLCK` also means "out of locks" under kernel
+    pressure and then fails open too: accepted, it is the same errno network filesystems use for "no locking here"."""
     try:
         import fcntl
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         return False
-    except (ImportError, OSError):
-        pass
+    except ImportError:
+        return None
+    except OSError as exc:
+        if exc.errno in _NO_FLOCK:
+            return None
+        raise
     return True
 
 
@@ -1244,6 +1256,38 @@ def _claim_state(dir_fd: int, held: str, want: tuple[int, int]) -> str | None:
 def _id_at(dir_fd: int, name: str) -> tuple[int, int]:
     st = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
     return st.st_dev, st.st_ino
+
+
+def _open_locked(pfd: int, name: str, want: tuple[int, int], vanished: str) -> tuple[int | None, bool | str]:
+    """THE ownership rule: lock first, rename second, put back only under the lock you hold. Open the directory `name` of `pfd`
+    (identity `want`, mode repaired to `u+rwx`) and take its exclusive `flock`, waiting up to `_LOCK_WAIT_SECONDS`. Returns
+    `(fd, real_lock)` with the lock held (`real_lock` False when there is no `flock` here), or `(None, code)`: `vanished` when the name
+    is not there to open, `RETRY` when it vanished while waiting (finished, or put back by the holder), `ROOT_CHANGED`, or
+    `REMOVE_FAILED` (still locked after the wait, or the lock failed). Nothing is renamed on any of these paths."""
+    try:
+        fd = _open_dir(pfd, name, types.SimpleNamespace(st_dev=want[0], st_ino=want[1]), repair=True)
+    except FileNotFoundError:
+        return None, vanished
+    except OSError as exc:
+        return None, "ROOT_CHANGED" if isinstance(exc, _EntryChanged) or exc.errno in (errno.ELOOP, errno.ENOTDIR) else _failed(f"cannot open the claimed root: {exc}")
+    held = False
+    try:
+        deadline = time.monotonic() + _LOCK_WAIT_SECONDS
+        while (real := _lock(fd)) is False:  # another process holds it: a cleanup finishing this very directory, or a stray
+            state = _claim_state(pfd, name, want)
+            if state:
+                return None, state
+            if time.monotonic() > deadline:
+                return None, _failed("claimed root is locked by another process")
+            time.sleep(0.05)
+        state = _claim_state(pfd, name, want)  # the holder may have finished it or put it back just before we got the lock
+        held = not state
+        return (fd, real is True) if held else (None, state)
+    except OSError as exc:
+        return None, _failed(f"cannot lock the claimed root: {exc}")
+    finally:
+        if not held:
+            os.close(fd)
 
 
 def _remove_contents(cfd: int) -> str:
@@ -1276,10 +1320,13 @@ def _remove_contents(cfd: int) -> str:
 
 
 def _put_back(pfd: int, held: str, root: str, want: tuple[int, int], cfd: int, code: str | None, marker: dict | None = None) -> str | None:
-    """Best effort: rename the claimed `held` back to `root` if something is left in it (an empty one stays: nothing to retry),
-    `held` still names the claimed directory and `root` is free; a `marker` already deleted is written back first, so the retry finds it
+    """Best effort, for a caller that HOLDS THE LOCK on `cfd` (or made the claim itself where there is no `flock`): rename the claimed
+    `held` back to `root` if something is left in it (an empty one stays: nothing to retry), `cfd` is the claimed directory,
+    `held` still names it and `root` is free; a `marker` already deleted is written back first, so the retry finds it
     (and an interrupt or a failing `rmdir` after that deletion loses nothing). Returns `code`."""
     try:
+        if (os.fstat(cfd).st_dev, os.fstat(cfd).st_ino) != want:  # `cfd` is not the claimed directory: nothing here is ours to move
+            return code
         if marker is not None or os.listdir(cfd):
             if marker is not None and _MARKER_NAME not in os.listdir(cfd):
                 fd = os.open(_MARKER_NAME, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=cfd)
@@ -1296,44 +1343,25 @@ def _put_back(pfd: int, held: str, root: str, want: tuple[int, int], cfd: int, c
     return code
 
 
-def _finish(pfd: int, held: str, want: tuple[int, int], root: str, claimed_now: bool) -> str:
-    """Remove the directory `held` of `pfd` (identity `want`, marker naming `root`): the root this call just claimed, or an abandoned
-    claim. Opened ONCE (`O_NOFOLLOW`, checked against `want`), then locked; everything after goes through that descriptor or `pfd`.
-    The tree is put back (on a refusal or any `BaseException`) only while THIS call holds the lock: a cleanup that is merely waiting
-    must never move the directory of the one holding it. `RETRY`: the name vanished (finished, or put back) and the caller looks again."""
+def _finish(pfd: int, held: str, want: tuple[int, int], root: str, cfd: int, claimed_now: bool, real_lock: bool) -> str:
+    """Remove the directory `held` of `pfd` (identity `want`, marker naming `root`) through `cfd`, the descriptor the caller opened
+    and LOCKED (`_open_locked`; the caller closes it): the root this call just claimed, or an abandoned claim. The tree is put back
+    (on a refusal or any `BaseException`) only by a call that holds a real lock or made the claim itself; a recoverer without a real
+    lock (no `flock` here) leaves the claim alone. `RETRY`: the name vanished at the end (finished, or put back): look again."""
+    may_move, gone = claimed_now or real_lock, None  # `gone`: the marker, once it has been deleted
+
+    def back(code: str | None, marker: dict | None = None) -> str | None:
+        return _put_back(pfd, held, root, want, cfd, code, marker) if may_move else code
+
     try:
-        cfd = _open_dir(pfd, held, types.SimpleNamespace(st_dev=want[0], st_ino=want[1]), repair=True)
-    except FileNotFoundError:
-        return "RETRY"
-    except OSError as exc:
-        try:  # raced the claiming rename (what was moved is not what was validated) or cannot be opened: back it goes
-            if claimed_now:
-                os.rename(held, root, src_dir_fd=pfd, dst_dir_fd=pfd)
-        except OSError:
-            pass
-        return "ROOT_CHANGED" if isinstance(exc, _EntryChanged) or exc.errno in (errno.ELOOP, errno.ENOTDIR) else _failed(f"cannot open the claimed root: {exc}")
-    gone, locked = None, False  # the marker, once it has been deleted; whether this call holds the lock
-    try:
-        deadline = time.monotonic() + _LOCK_WAIT_SECONDS
-        while not _lock(cfd):  # another process holds it: a cleanup finishing this very directory, or a stray
-            state = _claim_state(pfd, held, want)
-            if state:
-                return state
-            if time.monotonic() > deadline:  # not ours to move: the claim stays, and the next call recovers it
-                return _failed("claimed root is locked by another process")
-            time.sleep(0.05)
-        locked = True
-        state = _claim_state(pfd, held, want)  # the holder may have finished or put it back just before we got the lock
-        if state:
-            return state
         try:
             marker = _read_marker("", dir_fd=cfd, expect=root)
         except BenchmarkGateError as exc:  # an EMPTY directory without its marker has nothing left to protect
             if exc.code != "MARKER_MISSING" or os.listdir(cfd):  # an unproven leftover stays where it is; a claimed root goes back
-                return _put_back(pfd, held, root, want, cfd, exc.code) if claimed_now else exc.code
+                return back(exc.code) if claimed_now else exc.code
         else:
             if _pid_alive(marker["pid"]):  # re-pointed (`claim_root`) after the pre-claim check
-                return _put_back(pfd, held, root, want, cfd, "OWNER_ALIVE")
+                return back("OWNER_ALIVE")
             try:
                 unseal_tree("", bounded=False, _at=(pfd, held, want))
             except BenchmarkGateError:
@@ -1345,7 +1373,7 @@ def _finish(pfd: int, held: str, want: tuple[int, int], root: str, claimed_now: 
             else:
                 why = "entries keep appearing in the claimed root"
             if why:
-                return _put_back(pfd, held, root, want, cfd, _failed(why))
+                return back(_failed(why))
             gone = marker  # before the unlink: an interrupt right after it must still find the marker to restore
             try:
                 os.unlink(_MARKER_NAME, dir_fd=cfd)
@@ -1355,23 +1383,21 @@ def _finish(pfd: int, held: str, want: tuple[int, int], root: str, claimed_now: 
             return "ROOT_CHANGED"
         os.rmdir(held, dir_fd=pfd)
         return "REMOVED"
-    except FileNotFoundError:
-        return "ABSENT"
+    except FileNotFoundError:  # the name vanished under us (finished or put back by someone else, without a lock to stop it): look again
+        return "RETRY"
     except OSError as exc:
-        return _put_back(pfd, held, root, want, cfd, _failed(str(exc)), gone) if locked else _failed(str(exc))
+        return back(_failed(str(exc)), gone)
     except BaseException:
-        if locked:
-            _put_back(pfd, held, root, want, cfd, None, gone)
+        back(None, gone)
         raise
-    finally:
-        os.close(cfd)
 
 
 def _recover(root: str | os.PathLike) -> str:
     """Finish the claims `.gone-<root>-<random>` of earlier cleanups of this root that died before they were done, so `ABSENT`
     means nothing is left that no live cleanup is working on. Selected by a VALIDATED MARKER (naming `root`, owner dead, a
-    directory of ours, not a link; the name only narrows the search), and only if its `flock` is free (`_finish`). A marker-less
-    empty one is just removed. Returns `REMOVED` / `ABSENT` / the refusal of any that was left."""
+    directory of ours, not a link; the name only narrows the search), and only under its `flock` (`_open_locked`). A marker-less
+    empty one is just removed. Returns `REMOVED` / `ABSENT` / the refusal of any that was left; `RETRY` (which dominates) when any
+    claim vanished or was put back meanwhile, and when `root` itself exists again after an empty scan."""
     path = os.path.abspath(os.fspath(root))
     name = os.path.basename(path)
     try:
@@ -1391,9 +1417,20 @@ def _recover(root: str | os.PathLike) -> str:
             except FileNotFoundError:
                 continue
             if stat.S_ISDIR(st.st_mode) and not _foreign(st):
-                code = _finish(pfd, entry, (st.st_dev, st.st_ino), name, False)
-                if code != "ABSENT" and result in ("ABSENT", "REMOVED", "RETRY"):
+                cfd, real = _open_locked(pfd, entry, (st.st_dev, st.st_ino), "RETRY")
+                if cfd is None:
+                    code = real
+                else:
+                    try:
+                        code = _finish(pfd, entry, (st.st_dev, st.st_ino), name, cfd, False, real)
+                    finally:
+                        os.close(cfd)
+                if code == "RETRY" or result == "RETRY":
+                    result = "RETRY"
+                elif code != "ABSENT" and result in ("ABSENT", "REMOVED"):
                     result = code
+        if result == "ABSENT" and os.path.lexists(os.path.join(os.path.dirname(path), name)):
+            return "RETRY"  # the holder of a claim put the tree back at the root name between the first look and this scan
     except OSError as exc:
         return _failed(f"cannot scan for abandoned claims: {exc}")
     finally:
@@ -1423,7 +1460,7 @@ def cleanup_root(root: str | os.PathLike) -> str:
     valid marker whose pid is not alive. The root is opened by descriptor, checked against the identity recorded at validation
     and given `u+rwx` (a mode-0 root with a valid marker is cleanable), then CLAIMED by an atomic rename to a private
     `.gone-<root>-<64 random bits>` name: of overlapping cleanups exactly one claims it, the rest find it gone and then wait for its lock (below). The
-    claimed directory is opened ONCE, checked against the validated identity and its marker read again (a pid re-pointed meanwhile
+    claimed directory is the one descriptor opened (and locked) before the rename, checked against the validated identity, and its marker read again (a pid re-pointed meanwhile
     is `OWNER_ALIVE`); unseal (no export entry bound: a legal root holds two exports and venvs), removal (marker LAST) and the
     final `rmdir` use that descriptor, never a path, so a same-user process that renames the claimed directory aside and plants
     a symlink cannot steer a delete (the contents still go, the verdict is `ROOT_CHANGED`). Anything left: renamed back,
@@ -1432,26 +1469,29 @@ def cleanup_root(root: str | os.PathLike) -> str:
     SIGINT, SIGTERM and SIGHUP (the CLI makes them `KeyboardInterrupt`, SIGINT even when it was inherited as ignored: on purpose) put the
     tree back, marker included even when the interrupt lands after the marker was deleted: the next call is `REMOVED`. The
     interrupted CLI exits 1 with EMPTY stdout ("exit 1 and no code" means retry). A cleanup killed by SIGKILL or power loss
-    after the claim leaves `.gone-<root>-<hex>` (maybe half removed or sealed), as does a refusal below. The next
-    `cleanup_root(<root>)` finishes each such leftover (`_recover`) whose VALIDATED MARKER names the root (owner dead; a directory
-    of ours, not a link; the name only narrows the search; an empty marker-less one is just removed) and answers `REMOVED`, or the
-    refusal for one it could not finish. A non-empty marker-less `.gone-<root>-<16 hex>` (e.g. a SIGKILL during the marker
-    restore) is `MARKER_MISSING` until a human removes it or writes the marker back. The directory is opened (mode repaired to
-    `u+rwx`) and then locked with an exclusive `flock`: the kernel drops the lock when its holder dies, which tells a live cleanup
-    (or a stray process holding the root locked) from an abandoned claim. A lock still held after `_LOCK_WAIT_SECONDS` (5.0 s,
-    long enough for a normal removal; tests set it small) is `REMOVE_FAILED` ("claimed root is locked by another process"): the
-    claim stays where it is, for the next call. **Callers (C4f): exit 1 with `REMOVE_FAILED` and that stderr text means retry
-    later; so does "no code".** A cleanup that only waits never moves the other one's directory; if the claim vanishes while it
-    waits (finished, or put back by the holder) it looks at the state again (up to 3 times) instead of answering `ABSENT`. So
-    `ABSENT` means: the path is gone AND no leftover of this root that this call could examine remains; an error while scanning
-    is `REMOVE_FAILED`. The losers of an N-way race therefore answer `ABSENT` only when the winner finishes within the wait.
-    Where `flock` is unavailable (no `fcntl`, or a filesystem without it) the rename claim alone applies and two cleaners may both
-    finish one claim: both may report `REMOVED`. A leftover of an earlier incarnation of `<root>` is not touched while `<root>`
-    exists (the next call finishes it). Killed before the claim, nothing changed but modes. The soft `RLIMIT_NOFILE` is raised
-    to `min(hard, 4096)` for the call: process-wide, so other threads see it (the CLI is unaffected). POSIX only. Depth bound: one
-    descriptor per level, so a chain deeper than ~4,090 levels is not removable under a soft `RLIMIT_NOFILE` of 256 (macOS;
-    Linux's usual 1M is not reached): hostile-only, no safety impact. Residual: a rename back onto an EMPTY directory at the
-    root name replaces it.
+    after the claim leaves `.gone-<root>-<hex>` (maybe half removed or sealed), as does a refusal below. **Ownership rule: lock
+    first, rename second, put back only under the lock you hold.** The root is opened (mode repaired to `u+rwx`) and its exclusive
+    `flock` taken BEFORE the claiming rename, and that one descriptor, with its identity, carries the whole call: a cleanup renames,
+    restores a marker, removes or puts a tree back only through a descriptor on which it holds the lock, so one that merely waits (or
+    was interrupted while waiting) never moves another cleanup's directory, and a recoverer can lock a claim only after its owner has
+    released it or died (the kernel drops the lock then, even for SIGKILL). A lock that stays held for `_LOCK_WAIT_SECONDS` (5.0 s,
+    long enough for a normal removal; tests set it small) is `REMOVE_FAILED` ("claimed root is locked by another process") with
+    NOTHING renamed. **Callers (C4f): exit 1 with `REMOVE_FAILED` and that stderr text means retry later; so does "no code".** The next
+    `cleanup_root(<root>)` finishes each leftover (`_recover`) whose VALIDATED MARKER names the root (owner dead; a directory of
+    ours, not a link; the name only narrows the search; an empty marker-less one is just removed) and answers `REMOVED`, or the
+    refusal for one it could not finish. A non-empty marker-less `.gone-<root>-<16 hex>` (e.g. a SIGKILL during the marker restore) is
+    `MARKER_MISSING` until a human removes it or writes the marker back. `RETRY` (internal) is any claim that vanished or was put
+    back while this call waited, and the root name existing again after an empty scan: `cleanup_root` looks again (up to 3 times,
+    then `REMOVE_FAILED`) and never turns it into `ABSENT`. So `ABSENT` means: the path is gone AND no leftover of this root that
+    this call could examine remains; an error while scanning is `REMOVE_FAILED`. The losers of an N-way race answer `ABSENT` only
+    when the winner finishes within the wait. `flock` failing with an errno that means "unsupported" (`ENOLCK`, `EOPNOTSUPP`,
+    `ENOSYS`, `EINVAL`, or no `fcntl`) leaves the rename claim alone: two cleaners may then both finish one claim (both may report
+    `REMOVED`), and only the call that made a claim ever puts it back; any other `flock` error (`EIO`, `EBADF`, `EMFILE`) is a
+    refusal. A leftover of an earlier incarnation of `<root>` is not touched while `<root>` exists (the next call finishes it).
+    Killed before the claim, nothing changed but modes. The soft `RLIMIT_NOFILE` is raised to `min(hard, 4096)` for the call:
+    process-wide, so other threads see it (the CLI is unaffected). POSIX only. Depth bound: one descriptor per level, so a chain
+    deeper than ~4,090 levels is not removable under a soft `RLIMIT_NOFILE` of 256 (macOS; Linux's usual 1M is not reached):
+    hostile-only, no safety impact. Residual: a rename back onto an EMPTY directory at the root name replaces it.
 
     The root's mode is repaired BEFORE the marker is read (a mode-0 root hides its marker), so a refused cleanup (bad marker,
     live owner) can leave a 0500 root at 0700. Residual: the fixed parent and the root are validated BY PATH and re-checked
@@ -1474,31 +1514,21 @@ def cleanup_root(root: str | os.PathLike) -> str:
                 pass
 
 
-def _return_claim(pfd: int, held: str, root: str, want: tuple[int, int]) -> None:
-    """Best effort after an exception: `_put_back` for a claim whose directory this call has not opened yet (or no longer holds)."""
-    try:
-        fd = os.open(held, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=pfd)
-    except OSError:
-        return
-    try:
-        if _lock(fd):  # somebody else working on it keeps it
-            _put_back(pfd, held, root, want, fd, None)
-    finally:
-        os.close(fd)
-
-
 def _cleanup(root: str | os.PathLike) -> str:
     try:
         path, identities = _checked_root(root)
     except BenchmarkGateError as exc:
         return exc.code
     parent, name = os.path.split(path)
-    pfd = -1
+    pfd = cfd = -1
     try:
         pfd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
         if (os.fstat(pfd).st_dev, os.fstat(pfd).st_ino) != identities[0]:
             return "ROOT_CHANGED"
-        os.close(_open_dir(pfd, name, types.SimpleNamespace(st_dev=identities[1][0], st_ino=identities[1][1]), repair=True))  # RECORDED identity
+        opened, real = _open_locked(pfd, name, identities[1], "ABSENT")  # LOCK FIRST (RECORDED identity): nothing below renames without it
+        if opened is None:
+            return real
+        cfd = opened
         marker = _read_marker(path)
         if _pid_alive(marker["pid"]):
             return "OWNER_ALIVE"
@@ -1507,12 +1537,13 @@ def _cleanup(root: str | os.PathLike) -> str:
             return "ROOT_CHANGED"
         try:
             os.rename(name, claimed, src_dir_fd=pfd, dst_dir_fd=pfd)
-            return _finish(pfd, claimed, identities[1], name, True)
-        except BaseException:  # an interrupt between the rename and `_finish`'s own handler would strand the claim
-            _return_claim(pfd, claimed, name, identities[1])
+            if _id_at(pfd, claimed) != identities[1]:  # raced the rename: what was moved is not what was validated; undo OUR rename
+                os.rename(claimed, name, src_dir_fd=pfd, dst_dir_fd=pfd)
+                return "ROOT_CHANGED"
+            return _finish(pfd, claimed, identities[1], name, cfd, True, real)
+        except BaseException:  # an interrupt anywhere from the rename on: put the claim back, through the locked descriptor
+            _put_back(pfd, claimed, name, identities[1], cfd, None)
             raise
-    except _EntryChanged:
-        return "ROOT_CHANGED"
     except BenchmarkGateError as exc:
         return "ABSENT" if exc.code == "MARKER_MISSING" and not os.path.lexists(path) else exc.code
     except FileNotFoundError:  # a concurrent cleanup claimed it first
@@ -1520,8 +1551,9 @@ def _cleanup(root: str | os.PathLike) -> str:
     except OSError as exc:
         return "ROOT_CHANGED" if exc.errno in (errno.ELOOP, errno.ENOTDIR) else _failed(str(exc))
     finally:
-        if pfd >= 0:
-            os.close(pfd)
+        for fd in (cfd, pfd):
+            if fd >= 0:
+                os.close(fd)
 
 
 # --- git: a private repository over the real object store ---------------------------------------------------------

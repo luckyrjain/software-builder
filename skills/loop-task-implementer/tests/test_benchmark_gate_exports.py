@@ -724,9 +724,11 @@ def test_cleanup_verdict_is_what_is_left_and_a_vanished_root_is_absent(root, mon
     monkeypatch.setattr(bg, "_open_dir", lambda *a, **k: (_ for _ in ()).throw(OSError(5, "I/O error")))
     assert bg.cleanup_root(root) == "REMOVE_FAILED"  # the repair open failed: not removed, not "absent"
     monkeypatch.setattr(bg, "_open_dir", real_open)
-    monkeypatch.setattr(bg, "_open_dir", lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError()))
+    saved = root.with_name("bench-saved001")
+    monkeypatch.setattr(bg, "_open_dir", lambda *a, **k: (root.rename(saved), (_ for _ in ()).throw(FileNotFoundError()))[1])
     assert bg.cleanup_root(root) == "ABSENT"  # gone between the checks and the repair open
     monkeypatch.setattr(bg, "_open_dir", real_open)
+    saved.rename(root)
     monkeypatch.setattr(bg, "_read_marker", lambda path: (real_rmtree(path), (_ for _ in ()).throw(Err("MARKER_MISSING")))[1])
     assert bg.cleanup_root(root) == "ABSENT"  # a racing cleanup removed it while the marker was read
 
@@ -1460,11 +1462,11 @@ def test_a_real_signal_in_a_short_window_puts_the_tree_back_and_the_cli_exits_1_
     monkeypatch.setattr(os, name, real[name])
     assert bg.cleanup_root(root) == "REMOVED"
 
-def test_a_claimed_directory_that_cannot_be_opened_is_put_back_with_a_refusal(root, monkeypatch):
+def test_a_root_that_cannot_be_opened_is_refused_and_nothing_is_renamed(root, monkeypatch):
     real = os.open
 
     def too_many(path, flags, mode=0o777, *, dir_fd=None):
-        if str(path).startswith(".gone-") and flags & os.O_DIRECTORY:
+        if path == root.name and flags & os.O_DIRECTORY:
             raise OSError(bg.errno.EMFILE, "too many open files")
         return real(path, flags, mode, dir_fd=dir_fd)
 
@@ -1503,12 +1505,13 @@ def test_a_lock_held_by_another_process_is_never_taken_for_a_finished_root(root,
                               stdout=subprocess.PIPE, text=True)  # another PROCESS holds the root, a shared lock: our exclusive one must fail
     try:
         assert holder.stdout.readline() == "locked\n"
-        assert bg.cleanup_root(root) == "REMOVE_FAILED" and not root.exists() and len(claimed(root.parent)) == 1  # the claim stays: not ours to move
+        assert bg.cleanup_root(root) == "REMOVE_FAILED" and root.exists() and not claimed(root.parent)  # locked first, so nothing was renamed
     finally:
         holder.kill()
         holder.wait()
-    assert bg.cleanup_root(root) == "REMOVED" and not claimed(root.parent)  # the holder is gone: the next call recovers it
+    assert bg.cleanup_root(root) == "REMOVED" and not claimed(root.parent)  # the holder is gone
     live, link, decoys = root.parent / (base + "c" * 16), root.parent / (base + "d" * 16), [root.parent / (base + "e" * n) for n in (15, 17)]
+    decoys.append(root.parent / ("x" * len(base) + "e" * 16))  # right length, wrong prefix
     for directory in (live, *decoys):
         directory.mkdir()
         write_marker(directory, root=root.name)
@@ -1644,13 +1647,16 @@ def test_without_flock_the_rename_claim_alone_applies_and_a_leftover_is_still_fi
     fcntl = pytest.importorskip("fcntl")
     real = fcntl.flock
     monkeypatch.setattr(fcntl, "flock", lambda fd, operation: (_ for _ in ()).throw(OSError(errno.ENOLCK, "no locks")))  # a filesystem without flock
-    assert bg._lock(0) is True
+    assert bg._lock(0) is None  # "unsupported" fails open
+    monkeypatch.setattr(fcntl, "flock", lambda fd, operation: (_ for _ in ()).throw(OSError(errno.EIO, "I/O error")))
+    with pytest.raises(OSError):  # anything else is not "unsupported": the caller refuses
+        bg._lock(0)
     monkeypatch.setattr(fcntl, "flock", real)
     monkeypatch.setitem(sys.modules, "fcntl", None)  # `import fcntl` now raises ImportError
     held = root.parent / f".gone-{root.name}-{'f' * 16}"
     root.rename(held)
     fd = os.open(held, os.O_RDONLY)
-    assert bg._lock(fd) is True  # nothing to lock with: proceed
+    assert bg._lock(fd) is None  # nothing to lock with: proceed
     os.close(fd)
     assert bg.cleanup_root(root) == "REMOVED" and not held.exists()
 
@@ -1722,22 +1728,19 @@ def test_a_waiter_interrupted_while_sleeping_leaves_the_leftover_under_its_name(
     os.close(fd)
 
 def test_a_waiting_cli_process_that_is_terminated_does_not_disturb_the_cleanup_it_waits_for(root):
-    child = (
-        "import importlib.util, sys, time, tempfile\n"
-        "spec = importlib.util.spec_from_file_location('bg', sys.argv[1]); bg = importlib.util.module_from_spec(spec); spec.loader.exec_module(bg)\n"
-        "tempfile.tempdir = sys.argv[3]\nreal = bg._remove_contents\n"
-        "bg._remove_contents = lambda cfd: (print('claimed', flush=True), time.sleep(3), real(cfd))[2]\n"
-        "print(bg.cleanup_root(sys.argv[2]), flush=True)\n")
+    load = "import importlib.util, sys, time, tempfile\nspec = importlib.util.spec_from_file_location('bg', sys.argv[1]); bg = importlib.util.module_from_spec(spec); spec.loader.exec_module(bg)\ntempfile.tempdir = sys.argv[3]\n"
+    winner_code = load + "real = bg._remove_contents\nbg._remove_contents = lambda cfd: (print('claimed', flush=True), time.sleep(3), real(cfd))[2]\nprint(bg.cleanup_root(sys.argv[2]), flush=True)\n"
+    waiter_code = load + "real = time.sleep\nbg.time.sleep = lambda seconds: (print('waiting', flush=True), real(seconds))[1]\nsys.exit(bg.main(['cleanup', '--root', sys.argv[2]]))\n"
     args = [str(_SCRIPTS / "benchmark_gate.py"), str(root), tempfile.tempdir]
-    winner = subprocess.Popen([sys.executable, "-c", child, *args], stdout=subprocess.PIPE, text=True)
+    winner = subprocess.Popen([sys.executable, "-c", winner_code, *args], stdout=subprocess.PIPE, text=True)
     waiter = None
     try:
         assert select.select([winner.stdout], [], [], 60)[0] and winner.stdout.readline() == "claimed\n"
-        waiter = subprocess.Popen([sys.executable, args[0], "cleanup", "--root", str(root)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=dict(os.environ, TMPDIR=tempfile.tempdir))
-        time.sleep(1)
+        waiter = subprocess.Popen([sys.executable, "-c", waiter_code, *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        assert select.select([waiter.stdout], [], [], 60)[0] and waiter.stdout.readline() == "waiting\n"  # handlers are installed and it is waiting
         waiter.send_signal(signal.SIGTERM)
         out, _ = waiter.communicate(timeout=60)
-        assert waiter.returncode == 1 and out == "" and len(claimed(root.parent)) == 1 and not root.exists()  # the winner's claim is where it was
+        assert waiter.returncode == 1 and set(out.split()) <= {"waiting"} and len(claimed(root.parent)) == 1 and not root.exists()  # no code; the claim is where it was
         assert winner.communicate(timeout=60)[0] == "REMOVED\n"
     finally:
         winner.kill()
@@ -1821,18 +1824,18 @@ def test_the_first_handled_signal_ignores_the_others_and_the_cli_gives_the_handl
     assert bg.main(["cleanup", "--root", str(root)]) == 1 and seen == [signal.SIG_IGN] * 3  # a second Ctrl-C cannot interrupt the put-back
     assert [signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)] == before
 
-def test_a_claimer_that_cannot_get_the_lock_never_moves_the_directory_whatever_stops_it(root, monkeypatch):
+def test_a_cleanup_that_cannot_get_the_lock_renames_nothing_whatever_stops_it(root, monkeypatch):
     fcntl = pytest.importorskip("fcntl")
     fd, real_sleep = os.open(root, os.O_RDONLY), time.sleep
     fcntl.flock(fd, fcntl.LOCK_EX)  # a foreign holder keeps the lock through the claiming rename
     monkeypatch.setattr(bg.time, "sleep", lambda seconds: (_ for _ in ()).throw(KeyboardInterrupt))
     with pytest.raises(KeyboardInterrupt):  # interrupted while waiting for a lock somebody else holds
         bg.cleanup_root(root)
-    assert not root.exists() and len(claimed(root.parent)) == 1
+    assert root.exists() and not claimed(root.parent)  # nothing was renamed: the lock is taken first
     real = bg._claim_state
     monkeypatch.setattr(bg.time, "sleep", real_sleep)
     monkeypatch.setattr(bg, "_claim_state", lambda *args: (_ for _ in ()).throw(OSError(errno.EIO, "I/O error")))
-    assert bg.cleanup_root(root) == "REMOVE_FAILED" and len(claimed(root.parent)) == 1  # an error while waiting: still not ours to move
+    assert bg.cleanup_root(root) == "REMOVE_FAILED" and root.exists() and not claimed(root.parent)  # an error while waiting: still nothing renamed
     monkeypatch.setattr(bg, "_claim_state", real)
     os.close(fd)
     assert bg.cleanup_root(root) == "REMOVED" and not claimed(root.parent)
@@ -1855,3 +1858,118 @@ def test_a_root_that_keeps_changing_under_the_cleanup_is_a_refusal_after_three_l
     looks = []
     monkeypatch.setattr(bg, "_cleanup", lambda path: looks.append(1) or "RETRY")
     assert bg.cleanup_root(root) == "REMOVE_FAILED" and len(looks) == 3
+
+def test_a_recoverer_cannot_touch_a_claim_while_its_claimer_is_parked_right_after_the_rename(root, monkeypatch):
+    real, seen = bg._finish, {}
+    monkeypatch.setattr(bg, "_LOCK_WAIT_SECONDS", 0.2)
+
+    def parked(*args):  # the claimer holds the lock it took BEFORE the rename: a recoverer cannot lock the claim first
+        thread = threading.Thread(target=lambda: seen.__setitem__("recoverer", bg.cleanup_root(root)))
+        thread.start()
+        thread.join(30)
+        seen["claim"] = (root.exists(), len(claimed(root.parent)))
+        return real(*args)
+
+    monkeypatch.setattr(bg, "_finish", parked)
+    assert bg.cleanup_root(root) == "REMOVED" and seen == {"recoverer": "REMOVE_FAILED", "claim": (False, 1)}
+    assert not root.exists() and bg.cleanup_root(root) == "ABSENT"
+
+def test_a_flock_that_fails_for_a_reason_other_than_unsupported_is_a_refusal_and_renames_nothing(root, monkeypatch):
+    fcntl = pytest.importorskip("fcntl")
+    held = root.parent / f".gone-{root.name}-{'a' * 16}"
+    monkeypatch.setattr(fcntl, "flock", lambda fd, operation: (_ for _ in ()).throw(OSError(errno.EIO, "I/O error")))
+    assert bg.cleanup_root(root) == "REMOVE_FAILED" and root.exists() and not claimed(root.parent)  # the claimer path
+    root.rename(held)
+    assert bg.cleanup_root(root) == "REMOVE_FAILED" and held.exists() and (held / bg._MARKER_NAME).exists() and not root.exists()  # the leftover path
+
+def test_without_flock_an_interrupted_recoverer_never_puts_back_the_claim_of_a_cleanup_still_running(root, monkeypatch):
+    real, state = bg._remove_contents, {"x": None, "y": None}
+    monkeypatch.setattr(bg, "_lock", lambda fd: None)  # no flock here: the rename claim alone
+
+    def hooked(cfd):
+        if threading.current_thread().name == "y":
+            raise KeyboardInterrupt
+        def other():
+            try:
+                bg.cleanup_root(root)
+            except KeyboardInterrupt:
+                state["y"] = "interrupted"
+        thread = threading.Thread(target=other, name="y")
+        thread.start()
+        thread.join(30)
+        return real(cfd)  # x resumes, mid-removal, after y was interrupted
+
+    monkeypatch.setattr(bg, "_remove_contents", hooked)
+    assert bg.cleanup_root(root) == "REMOVED" and state["y"] == "interrupted"
+    assert not root.exists() and not claimed(root.parent)  # y did not recreate the root empty and marker-less
+
+def test_a_scan_that_meets_a_claim_the_holder_put_back_does_not_say_removed_for_another(root, monkeypatch):
+    fcntl, base = pytest.importorskip("fcntl"), f".gone-{root.name}-"
+    first, second = root.parent / (base + "a" * 16), root.parent / (base + "b" * 16)
+    root.rename(first)
+    second.mkdir()
+    write_marker(second, root=root.name)
+    fd, real_sleep = os.open(first, os.O_RDONLY), time.sleep
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    monkeypatch.setattr(bg.time, "sleep", lambda seconds: (first.rename(root), os.close(fd)))  # the holder puts its tree back at the root name
+    assert bg._recover(root) == "RETRY" and root.exists() and not second.exists()  # the second one was finished, yet RETRY dominates
+    monkeypatch.setattr(bg.time, "sleep", real_sleep)
+    assert bg.cleanup_root(root) == "REMOVED"
+
+def test_an_empty_scan_that_finds_the_root_back_is_retry_and_cleanup_looks_again(root, monkeypatch):
+    assert bg._recover(root) == "RETRY"  # nothing to recover, but the root name exists: not ABSENT
+    real, calls = bg._cleanup, []
+    monkeypatch.setattr(bg, "_cleanup", lambda path: "ABSENT" if not calls and not calls.append(1) else real(path))  # a holder put it back after the first look
+    assert bg.cleanup_root(root) == "REMOVED" and not root.exists()
+
+def test_a_leftover_that_vanishes_before_it_can_be_opened_is_retry_and_refusals_outrank_removed(root, monkeypatch):
+    base = f".gone-{root.name}-"
+    root.rename(root.parent / (base + "a" * 16))
+    real = bg._open_dir
+    monkeypatch.setattr(bg, "_open_dir", lambda pfd, name, *a, **k: (_ for _ in ()).throw(FileNotFoundError()) if name.endswith("a" * 16) else real(pfd, name, *a, **k))
+    assert bg._recover(root) == "RETRY"  # not ABSENT
+    marker_less = root.parent / (base + "0" * 16)  # sorts first: a non-empty one without a marker is a refusal ...
+    marker_less.mkdir()
+    (marker_less / "x").write_text("x")
+    assert bg._recover(root) == "RETRY"  # ... that a claim vanishing after it outranks
+    monkeypatch.setattr(bg, "_open_dir", real)
+    (marker_less / "x").unlink()
+    marker_less.rmdir()
+    empty, kept = root.parent / (base + "0" * 16), root.parent / (base + "9" * 16)
+    empty.mkdir()
+    (empty / "x").write_text("x")
+    kept.mkdir()
+    assert bg._recover(root) == "MARKER_MISSING" and not (root.parent / (base + "a" * 16)).exists() and not kept.exists()  # a refusal that the removal of the next ones does not hide
+
+def test_a_put_back_only_moves_the_directory_its_own_descriptor_holds(root):
+    held, aside = root.parent / f".gone-{root.name}-{'c' * 16}", root.parent / "aside-directory"
+    root.rename(held)
+    ident = (held.stat().st_dev, held.stat().st_ino)
+    pfd, cfd = os.open(root.parent, os.O_RDONLY), os.open(held, os.O_RDONLY)
+    try:
+        held.rename(aside)
+        held.mkdir()
+        (held / "x").write_text("x")
+        other = (held.stat().st_dev, held.stat().st_ino)
+        bg._put_back(pfd, held.name, root.name, ident, cfd, None)  # the name no longer holds the claimed directory
+        bg._put_back(pfd, held.name, root.name, other, cfd, None)  # the descriptor is not what the name holds
+        assert not root.exists() and (held / "x").exists() and aside.exists()
+    finally:
+        os.close(cfd)
+        os.close(pfd)
+
+def test_a_directory_that_cannot_be_read_for_its_marker_is_a_failure_not_missing(root, monkeypatch):
+    real = os.open
+    monkeypatch.setattr(os, "open", lambda path, flags, mode=0o777, *, dir_fd=None: (_ for _ in ()).throw(OSError(errno.EMFILE, "too many")) if path == bg._MARKER_NAME else real(path, flags, mode, dir_fd=dir_fd))
+    with pytest.raises(OSError):
+        bg._read_marker("", dir_fd=os.open(root, os.O_RDONLY), expect=root.name)
+    monkeypatch.setattr(os, "open", real)
+    (root / bg._MARKER_NAME).unlink()
+    with pytest.raises(Err) as info:
+        bg._read_marker(str(root))
+    assert info.value.code == "MARKER_MISSING"
+
+def test_a_claim_that_vanishes_at_the_last_step_is_retry_not_absent(root, monkeypatch):
+    real = os.rmdir
+    monkeypatch.setattr(os, "rmdir", lambda path, **kw: (real(path, **kw), (_ for _ in ()).throw(FileNotFoundError()))[1] if ".gone-" in path else real(path, **kw))
+    assert bg._cleanup(root) == "RETRY"
