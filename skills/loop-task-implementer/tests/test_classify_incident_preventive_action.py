@@ -91,7 +91,10 @@ def test_disclosed_residual_qualifying_verb_plus_unlisted_infra_noun_still_quali
         "Fix the networkpolicy",
         "Fix the Roll-Back procedure",
         "Fix the load_balancer config",
-        "Fix the scroll back handler",  # accepted cross-boundary over-match ("rollback"), safe direction
+        "Fix the scroll back handler",  # mid-word substring over-match, already true before squashing
+        "Fix the load.balancer timeout",  # new: squashing ignores any separator, not just [\s_-]
+        "Fix the network/policy",
+        "Fix the security.group rule",
         "Fix the scaling config",
         "Fix the autoscaling config",
         "Fix the autoscaler threshold",

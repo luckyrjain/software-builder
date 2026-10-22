@@ -263,12 +263,17 @@ _BENCH_DIRECTORIES = frozenset({"benchmarks", "bench", "perf", "performance"})
 
 # Deny sets aligned with validate_task_target.py as of origin/main (hardened by #332 after the design was
 # written); a test compares them with that module so they cannot drift silently.
-_DENIED_COMPONENTS = frozenset({".git", ".ssh", ".aws"})
-_DENIED_NAMES_EXACT = frozenset({".netrc", ".npmrc", ".htpasswd", ".pgpass"})
-_DENIED_NAME_PREFIXES = (
-    ".env", "credentials", "kubeconfig", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
+_DENIED_COMPONENTS = frozenset({".git", ".ssh", ".aws", ".kube", ".docker", ".gnupg"})
+_DENIED_NAMES_EXACT = frozenset(
+    {".netrc", ".npmrc", ".htpasswd", ".pgpass", ".pypirc", ".git-credentials"}
 )
-_DENIED_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".p8", ".jks", ".tfvars")
+_DENIED_NAME_PREFIXES = (
+    ".env", "credentials", "kubeconfig", "terraform.tfstate",
+    "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
+)
+_DENIED_SUFFIXES = (
+    ".pem", ".key", ".p12", ".pfx", ".p8", ".jks", ".keystore", ".tfvars", ".tfstate",
+)
 
 
 def _benchmark_path_ok(path: str) -> bool:
