@@ -6,6 +6,7 @@ is needed. Design: docs/superpowers/specs/2026-10-02-c4-performance-review-execu
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import importlib.util
 import json
@@ -15,6 +16,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import types
 from pathlib import Path
 
 import pytest
@@ -226,14 +228,17 @@ def test_a_benchmark_present_at_base_but_different_is_modified(pair, variant):
     assert info.value.code == "BENCHMARK_MODIFIED"
 
 
-def hide_names(monkeypatch, *hidden: str) -> None:
-    """Make `os.listdir` of a directory descriptor omit `hidden`: the exact-name lookup then believes the entry is absent, as it
-    does for a case-folded twin on a case-insensitive filesystem. Deterministic on every platform."""
+def hide_names(monkeypatch, tree: Path, *hidden: str) -> None:
+    """Make `os.listdir` of a directory descriptor INSIDE `tree` omit `hidden`: the exact-name lookup then believes the entry is
+    absent, as it does for a case-folded twin on a case-insensitive filesystem. Deterministic on every platform."""
+    inodes = {d.stat().st_ino for d in [tree, *tree.rglob("*")] if d.is_dir() and not d.is_symlink()}
     real = os.listdir
 
     def listdir(path="."):
         names = real(path)
-        return [n for n in names if n not in hidden] if isinstance(path, int) else names
+        if isinstance(path, int) and os.fstat(path).st_ino in inodes:
+            return [n for n in names if n not in hidden]
+        return names
 
     monkeypatch.setattr(os, "listdir", listdir)
 
@@ -255,7 +260,7 @@ def test_a_leaf_that_exists_but_is_hidden_from_the_listing_is_refused_not_overwr
     base, head = pair
     add_head_bench(head)
     add_head_bench(base, data=b"different bytes\n")
-    hide_names(monkeypatch, "bench_orders.py")
+    hide_names(monkeypatch, base, "bench_orders.py")
     with pytest.raises(Err) as info:
         overlay(pair)
     assert info.value.code == "OVERLAY_PATH_CONFLICT" and (base / BENCH).read_bytes() == b"different bytes\n"  # O_EXCL, not O_TRUNC
@@ -265,7 +270,7 @@ def test_a_parent_hidden_from_the_listing_is_refused_and_nothing_is_created_belo
     base, head = pair
     add_head_bench(head)
     (base / "benchmarks").mkdir()
-    hide_names(monkeypatch, "benchmarks")
+    hide_names(monkeypatch, base, "benchmarks")
     with pytest.raises(Err) as info:
         overlay(pair)
     assert info.value.code == "OVERLAY_PATH_CONFLICT" and os.listdir(base / "benchmarks") == []
@@ -426,7 +431,7 @@ def test_an_unwritable_base_is_overlay_failed(pair):
 
 def test_the_overlay_validator_is_the_shared_one_and_a_missing_file_fails_closed(pair, monkeypatch):
     add_head_bench(pair[1])
-    monkeypatch.setattr(bg, "_task_target_module", None)
+    monkeypatch.setattr(bg, "_task_target_state", None)
     monkeypatch.setattr(bg, "__file__", str(pair[0] / "benchmark_gate.py"))  # no validate_task_target.py beside it
     with pytest.raises(Err) as info:
         overlay(pair)
@@ -663,20 +668,20 @@ def test_an_unloadable_validator_is_overlay_failed(pair, monkeypatch, tmp_path):
     bad = scripts / "validate_task_target.py"
     for content in ("(((\n", "x = 1\n"):  # a syntax error; a module without the function
         bad.write_text(content)
-        monkeypatch.setattr(bg, "_task_target_module", None)
+        monkeypatch.setattr(bg, "_task_target_state", None)
         monkeypatch.setattr(bg, "_task_target_path", lambda: bad)
         with pytest.raises(Err) as info:
             overlay(pair)
         assert info.value.code == "OVERLAY_FAILED"
     bad.unlink()
-    monkeypatch.setattr(bg, "_task_target_module", None)
+    monkeypatch.setattr(bg, "_task_target_state", None)
     with pytest.raises(Err) as info:
         overlay(pair)
     assert info.value.code == "OVERLAY_FAILED"
     if not IS_ROOT:
         bad.write_text("def validate_task_target(a, b):\n    return b\n")
         bad.chmod(0)
-        monkeypatch.setattr(bg, "_task_target_module", None)
+        monkeypatch.setattr(bg, "_task_target_state", None)
         with pytest.raises(Err) as info:
             overlay(pair)
         assert info.value.code == "OVERLAY_FAILED"
@@ -689,7 +694,7 @@ def test_the_validator_is_loaded_from_one_read_with_no_bytecode_cache(pair, monk
     real = Path(bg.__file__).with_name("validate_task_target.py")
     copy = scripts / "validate_task_target.py"
     copy.write_bytes(real.read_bytes())
-    monkeypatch.setattr(bg, "_task_target_module", None)
+    monkeypatch.setattr(bg, "_task_target_state", None)
     monkeypatch.setattr(bg, "_task_target_path", lambda: copy)
     monkeypatch.setattr(sys, "dont_write_bytecode", False)  # the environment may disable it; the loader must not depend on that
     assert overlay(pair) == "BUILDER_AUTHORED"
@@ -912,3 +917,699 @@ def test_a_hostile_deep_tree_is_a_coded_failure_not_a_crash(pair, monkeypatch):
     finally:
         resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
     assert len(bg.hash_tree(base)) == 64
+
+
+# --- round 2 review (the test auditor's mutation-driven additions) ---
+
+VALIDATOR = Path(bg.__file__).with_name("validate_task_target.py")
+
+
+def rec(kind, mode, rel, body):
+    return b"%s %o %d:%s %d:%s" % (kind, mode, len(rel), rel, len(body), body)
+
+
+def use_validator(monkeypatch, tmp_path, source: bytes) -> Path:
+    scripts = tmp_path / "vscripts"
+    scripts.mkdir(exist_ok=True)
+    copy = scripts / "validate_task_target.py"
+    copy.write_bytes(source)
+    monkeypatch.setattr(bg, "_task_target_state", None)
+    monkeypatch.setattr(bg, "_task_target_path", lambda: copy)
+    return copy
+
+
+# ---------------- hash_tree
+def test_X01_golden_literal_with_symlink(pair):
+    base, _ = pair
+    import shutil
+    shutil.rmtree(base / "src")
+    (base / "a").write_bytes(b"a"); (base / "a").chmod(0o644)
+    (base / "l").symlink_to("a")
+    base.chmod(0o755)
+    exp = hashlib.sha256(b"software-builder-bench-tree-v1\0")   # literal, not bg._HASH_MAGIC
+    exp.update(rec(b"D", 0o755, b"", b""))
+    exp.update(rec(b"F", 0o644, b"a", hashlib.sha256(b"a").hexdigest().encode() + b":1"))
+    exp.update(rec(b"L", 0, b"l", b"a"))
+    assert bg.hash_tree(base) == exp.hexdigest()
+
+
+def test_X02_a_file_swapped_for_another_inode_between_walk_and_open_is_refused(pair, monkeypatch):
+    base, _ = pair
+    real, done = os.open, []
+
+    def swap(path, flags, *a, **kw):
+        if path == "app.py" and kw.get("dir_fd") is not None and not done:
+            done.append(1)
+            os.unlink("app.py", dir_fd=kw["dir_fd"])
+            fd = real("app.py", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644, dir_fd=kw["dir_fd"])
+            os.write(fd, b"x = 1\n"); os.close(fd)   # same bytes, size, mode: only (dev, ino) differs
+        return real(path, flags, *a, **kw)
+    monkeypatch.setattr(os, "open", swap)
+    with pytest.raises(Err) as info:
+        bg.hash_tree(base)
+    assert done and info.value.code == "TREE_UNREADABLE"
+
+
+def test_X03_a_same_size_rewrite_during_the_read_is_refused(pair, monkeypatch):
+    base, _ = pair
+    real, n = os.read, []
+
+    def read(fd, size):
+        data = real(fd, size)
+        if data and not n:
+            n.append(1)
+            os.utime(base / "src" / "app.py", ns=(1, 1))   # size untouched, only mtime moves
+        return data
+    monkeypatch.setattr(os, "read", read)
+    with pytest.raises(Err) as info:
+        bg.hash_tree(base)
+    assert info.value.code == "TREE_UNREADABLE"
+
+
+def test_X04_special_and_unknown_kinds_have_their_own_records(pair, monkeypatch):
+    base, _ = pair
+    real_walk = bg._walk_fd
+    fakes = [("c", stat.S_IFCHR | 0o600, 0x1234), ("b", stat.S_IFBLK | 0o640, 7), ("f", stat.S_IFIFO | 0o644, 0),
+             ("k", stat.S_IFSOCK | 0o644, 0), ("w", 0o160000 | 0o600, 0)]
+
+    def walk(root, limit, *a, **kw):
+        gen = real_walk(root, limit, *a, **kw)
+        try:
+            yield next(gen)
+            for name, mode, rdev in fakes:
+                yield name, -1, name, types.SimpleNamespace(st_mode=mode, st_rdev=rdev, st_dev=0, st_ino=0), None
+        finally:
+            gen.close()
+    monkeypatch.setattr(bg, "_walk_fd", walk)
+    exp = hashlib.sha256(b"software-builder-bench-tree-v1\0")
+    exp.update(rec(b"D", stat.S_IMODE(base.stat().st_mode), b"", b""))
+    for kind, mode, name, body in ((b"C", 0o600, b"c", b"%d" % 0x1234), (b"B", 0o640, b"b", b"7"), (b"P", 0o644, b"f", b""),
+                                   (b"K", 0o644, b"k", b""), (b"S", 0o600, b"w", b"")):
+        exp.update(rec(kind, mode, name, body))
+    assert bg.hash_tree(base) == exp.hexdigest()
+
+
+def test_X05_out_of_memory_is_tree_too_large(pair, monkeypatch):
+    base, _ = pair
+    def boom(fd, size): raise MemoryError
+    monkeypatch.setattr(os, "read", boom)
+    with pytest.raises(Err) as info:
+        bg.hash_tree(base)
+    assert info.value.code == "TREE_TOO_LARGE"
+
+
+# ---------------- loader
+OK_SRC = b"def validate_task_target(a, b):\n    return b\n"
+
+def test_X06_validator_size_cap_is_exact(pair, monkeypatch, tmp_path):
+    add_head_bench(pair[1])
+    exact = OK_SRC + b"#" * ((1 << 20) - len(OK_SRC) - 1) + b"\n"
+    assert len(exact) == 1 << 20
+    use_validator(monkeypatch, tmp_path, exact)
+    assert overlay(pair) == "BUILDER_AUTHORED"
+    use_validator(monkeypatch, tmp_path, exact + b"#")
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_FAILED"
+
+
+@pytest.mark.parametrize("src", [b"validate_task_target = None\n", b"validate_task_target = 'x'\n", b"raise RuntimeError('boom')\n", b"import no_such_module_xyz\n"])
+def test_X07_a_validator_that_is_not_callable_or_fails_at_import_is_overlay_failed(pair, monkeypatch, tmp_path, src):
+    add_head_bench(pair[1])
+    use_validator(monkeypatch, tmp_path, src)
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_FAILED"
+
+
+def test_X08_the_loaded_code_is_the_hashed_code_even_if_the_file_changes_between_read_and_exec(pair, monkeypatch, tmp_path):
+    add_head_bench(pair[1])
+    copy = use_validator(monkeypatch, tmp_path, OK_SRC)
+    real = bg._read_bounded
+
+    def reading(path, *a, **kw):
+        data = real(path, *a, **kw)
+        if str(path).endswith("validate_task_target.py"):
+            copy.write_bytes(b"def validate_task_target(a, b):\n    return None\n")   # swapped after the read
+        return data
+    monkeypatch.setattr(bg, "_read_bounded", reading)
+    assert overlay(pair) == "BUILDER_AUTHORED"            # v1 ran
+    assert bg._task_target_sha256() == hashlib.sha256(OK_SRC).hexdigest()
+
+
+@pytest.mark.parametrize("exc", ["ImportError", "SyntaxError", "ValueError", "RecursionError", "MemoryError"])
+def test_X09_each_documented_exception_from_the_validator_is_overlay_failed(pair, monkeypatch, tmp_path, exc):
+    add_head_bench(pair[1])
+    use_validator(monkeypatch, tmp_path, f"def validate_task_target(a, b):\n    raise {exc}('x')\n".encode())
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_FAILED"
+
+
+def test_X10_sha_before_any_load_and_through_a_symlinked_script_path(pair, monkeypatch, tmp_path):
+    monkeypatch.setattr(bg, "_task_target_state", None)
+    assert bg._task_target_sha256() == hashlib.sha256(VALIDATOR.read_bytes()).hexdigest()
+    link_dir = tmp_path / "linked"; link_dir.mkdir()
+    (link_dir / "benchmark_gate.py").symlink_to(Path(bg.__file__).resolve())
+    monkeypatch.setattr(bg, "_task_target_state", None)
+    monkeypatch.setattr(bg, "__file__", str(link_dir / "benchmark_gate.py"))
+    add_head_bench(pair[1])
+    assert overlay(pair) == "BUILDER_AUTHORED"           # sibling found beside the REAL file
+
+
+# ---------------- _export_root
+def test_X11_a_forged_marker_outside_the_fixed_parent_is_refused(pair, tmp_path):
+    base, head = pair
+    add_head_bench(head)
+    fake = tmp_path / "bench-eeeeeeee"
+    (fake / "base").mkdir(parents=True); (fake / "head").mkdir()
+    marker = json.loads((base.parent / bg._MARKER_NAME).read_text()); marker["root"] = "bench-eeeeeeee"
+    (fake / bg._MARKER_NAME).write_text(json.dumps(marker))
+    Path(str(fake / "base") + ".export.json").write_text(json.dumps({"commit": BASE_SHA}))
+    add_head_bench(fake / "head")
+    refused((fake / "base", fake / "head"))
+
+
+def test_X12_an_alias_of_the_dispatch_root_is_refused_not_resolved(pair, tmp_path):
+    base, head = pair
+    add_head_bench(head)
+    alias = base.parent.parent / "bench-aliasrt"
+    alias.symlink_to(base.parent)
+    refused((alias / "base", head))
+    assert not (base / "benchmarks").exists()
+
+
+def test_X13_a_fixed_parent_reached_through_a_symlinked_temp_dir(pair, monkeypatch, tmp_path):
+    base, head = pair
+    add_head_bench(head)
+    alias = tmp_path / "tmp_alias"
+    alias.symlink_to(tempfile.tempdir)
+    monkeypatch.setattr(tempfile, "tempdir", str(alias))
+    assert overlay(pair) == "BUILDER_AUTHORED"
+
+
+def test_X14_an_absent_fixed_parent_is_refused_and_not_created(monkeypatch, tmp_path):
+    empty = tmp_path / "empty"; empty.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(empty))
+    parent = bg.fixed_parent()
+    with pytest.raises(Err) as info:
+        bg.overlay_benchmark_file(parent / "bench-aaaaaaaa" / "base", parent / "bench-aaaaaaaa" / "head", BASE_SHA, BENCH)
+    assert info.value.code == "DEST_REJECTED" and not os.path.lexists(parent)
+
+
+def test_X15_a_leaf_of_someone_else_a_vanished_leaf_and_a_nul_are_dest_rejected(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    refused((base, base.parent / "gone"))                                  # missing leaf (OSError)
+    refused((base, str(head) + "\0"))                                      # NUL in the leaf name -> regex
+    refused((base, str(head).replace("software-builder-bench", "software-builder-bench\0", 1)))  # NUL reaching lstat (ValueError)
+    ino = head.stat().st_ino
+    monkeypatch.setattr(bg, "_foreign", lambda st: st.st_ino == ino)       # only the head leaf looks foreign
+    refused((base, head))
+
+
+# ---------------- sidecar
+@pytest.mark.parametrize("kind", ["directory", "fifo"])
+def test_X16_a_sidecar_that_is_not_a_regular_file_is_a_mismatch(pair, kind):
+    base, head = pair
+    add_head_bench(head)
+    side = Path(str(base) + ".export.json"); side.unlink()
+    side.mkdir() if kind == "directory" else os.mkfifo(side)
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_COMMIT_MISMATCH"
+
+
+@pytest.mark.parametrize("body", ["[" * 4000, '{"commit": 5}', '{"commit": null}', '{"base": "%s"}' % BASE_SHA, '{"commit": "%s", "x": "é"}' % BASE_SHA])
+def test_X17_hostile_sidecar_bodies_are_a_mismatch(pair, body):
+    base, head = pair
+    add_head_bench(head)
+    Path(str(base) + ".export.json").write_bytes(body.encode())
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_COMMIT_MISMATCH"
+
+
+def test_X18_sidecar_size_boundary_is_4096(pair):
+    base, head = pair
+    add_head_bench(head)
+    side = Path(str(base) + ".export.json")
+    head_part = '{"commit": "%s", "pad": "' % BASE_SHA
+    for size, ok in ((4096, True), (4097, False)):
+        side.write_text(head_part + "x" * (size - len(head_part) - 2) + '"}')
+        assert side.stat().st_size == size
+        try:
+            overlay(pair); assert ok
+        except Err as exc:
+            assert not ok and exc.code == "OVERLAY_COMMIT_MISMATCH"
+        if (base / "benchmarks").exists():
+            import shutil; shutil.rmtree(base / "benchmarks")
+
+
+# ---------------- _head_bytes
+@pytest.mark.parametrize("name", ["benchmarks", "bench_orders.py"])
+@pytest.mark.parametrize("err", [errno.ENOENT, errno.EACCES, errno.EIO])
+def test_X19_only_not_a_directory_errnos_are_a_refusal_everything_else_is_a_failure(pair, monkeypatch, name, err):
+    base, head = pair
+    add_head_bench(head)
+    real = os.open
+    def flaky(path, flags, *a, **kw):
+        if path == name and kw.get("dir_fd") is not None and flags & os.O_NOFOLLOW:
+            raise OSError(err, "injected")
+        return real(path, flags, *a, **kw)
+    monkeypatch.setattr(os, "open", flaky)
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_FAILED" and not (base / "benchmarks").exists()
+
+
+@pytest.mark.parametrize("chunk", [1000, 1024, 7])
+def test_X20_short_reads_still_copy_every_byte_and_still_enforce_the_cap(pair, monkeypatch, chunk):
+    base, head = pair
+    real = os.read
+    monkeypatch.setattr(os, "read", lambda fd, n: real(fd, min(n, chunk)))
+    data = bytes(i % 251 for i in range(16384))
+    add_head_bench(head, data=data)
+    assert overlay(pair) == "BUILDER_AUTHORED" and (base / BENCH).read_bytes() == data
+    import shutil; shutil.rmtree(base / "benchmarks")
+    add_head_bench(head, data=data + b"x")
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_NOT_REGULAR"
+
+
+# ---------------- _overlay_into_base cleanup bookkeeping
+def test_X21_a_failure_opening_the_directory_just_made_removes_it(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    real_mkdir, real_open, armed = os.mkdir, os.open, []
+    monkeypatch.setattr(os, "mkdir", lambda *a, **kw: (real_mkdir(*a, **kw), armed.append(1))[0])
+    def flaky(path, flags, *a, **kw):
+        if armed and path == "benchmarks":
+            raise OSError(errno.EMFILE, "too many open files")
+        return real_open(path, flags, *a, **kw)
+    monkeypatch.setattr(os, "open", flaky)
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_FAILED" and not (base / "benchmarks").exists()
+
+
+def test_X22_every_directory_created_is_removed_on_failure_not_just_the_deepest(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head, rel="benchmarks/sub/deeper/bench_orders.py")
+    monkeypatch.setattr(os, "write", lambda fd, data: (_ for _ in ()).throw(OSError(errno.ENOSPC, "full")))
+    with pytest.raises(Err):
+        overlay(pair, path="benchmarks/sub/deeper/bench_orders.py")
+    assert not (base / "benchmarks").exists()
+
+
+def test_X23_a_keyboard_interrupt_mid_write_also_cleans_up(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head, rel="benchmarks/sub/bench_orders.py")
+    def interrupt(fd, data): raise KeyboardInterrupt
+    monkeypatch.setattr(os, "write", interrupt)
+    baseline = open_fds()
+    with pytest.raises(KeyboardInterrupt):
+        overlay(pair, path="benchmarks/sub/bench_orders.py")
+    monkeypatch.undo()
+    assert not (base / "benchmarks").exists() and open_fds() == baseline
+
+
+def test_X24_short_writes_are_looped(pair, monkeypatch):
+    base, head = pair
+    data = bytes(i % 251 for i in range(5000))
+    add_head_bench(head, data=data)
+    real = os.write
+    monkeypatch.setattr(os, "write", lambda fd, buf: real(fd, bytes(buf[:100])))
+    assert overlay(pair) == "BUILDER_AUTHORED"
+    monkeypatch.undo()
+    assert (base / BENCH).read_bytes() == data
+
+
+# ---------------- overlay_benchmark_file: lexical path rule independent of the validator
+@pytest.mark.parametrize("rel", ["src/bench_x.py", "benchmarks/helper.py", "benchmarks/bench_x.txt", "bench_x.py", "benchmarks/Bench_X.PY", "benchmarks/bench-x.py"])
+def test_X25_the_lexical_rule_refuses_paths_that_exist_in_the_head(pair, rel):
+    add_head_bench(pair[1], rel=rel)
+    with pytest.raises(Err) as info:
+        overlay(pair, path=rel)
+    assert info.value.code == "OVERLAY_PATH_REJECTED" and not (pair[0] / rel).exists()
+
+
+def test_X26_both_roots_bad_reports_the_base_first(pair):
+    with pytest.raises(Err) as info:
+        bg.overlay_benchmark_file("nope/x", "nope/y", BASE_SHA, BENCH)
+    assert "base_root" in info.value.detail
+
+
+def test_X27_walk_leak_after_emfile(pair):
+    base, _ = pair
+    deep = base
+    for _ in range(40):
+        deep = deep / "d"; deep.mkdir()
+    resource = pytest.importorskip("resource")
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    baseline = open_fds()
+    resource.setrlimit(resource.RLIMIT_NOFILE, (min(baseline + 10, hard), hard))
+    try:
+        with pytest.raises(Err):
+            bg.hash_tree(base)
+    finally:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
+    assert open_fds() == baseline
+
+
+# --- round 2 review: head binding, helpers for C4d, exact-name head lookup, strict types, identity-checked cleanup ---
+
+def case_insensitive(tmp_path) -> bool:
+    (tmp_path / "CaseProbe").write_text("x")
+    return (tmp_path / "caseprobe").exists()
+
+
+def test_a_socket_at_the_head_path_is_not_regular_and_not_a_failure(pair):
+    import socket
+
+    base, head = pair
+    (head / "benchmarks").mkdir()
+    sock = socket.socket(socket.AF_UNIX)
+    old = os.getcwd()
+    os.chdir(head / "benchmarks")  # a relative name stays under the AF_UNIX path limit
+    try:
+        sock.bind("bench_orders.py")
+    finally:
+        os.chdir(old)
+        sock.close()
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_NOT_REGULAR" and not (base / "benchmarks").exists()
+
+
+def test_the_head_is_looked_up_by_exact_name_so_a_case_variant_is_not_the_file(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    hide_names(monkeypatch, head, "bench_orders.py")  # what a case-insensitive filesystem does when the git path differs in case
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_PATH_REJECTED" and not (base / "benchmarks").exists()
+
+
+def test_a_real_case_variant_head_entry_is_refused(pair, tmp_path):
+    base, head = pair
+    add_head_bench(head, rel="Benchmarks/bench_orders.py")
+    if not case_insensitive(tmp_path):
+        pytest.skip("needs a case-insensitive filesystem; hide_names covers the same branch everywhere")
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_PATH_REJECTED" and not (base / "benchmarks").exists()
+
+
+def test_head_ref_commit_binds_the_head_export_too(pair):
+    base, head = pair
+    add_head_bench(head)
+    Path(str(head) + ".export.json").write_text(json.dumps({"commit": HEAD_SHA, "entries": 1}))
+    assert bg.export_commit(head) == HEAD_SHA and bg.export_commit(base) == BASE_SHA
+    with pytest.raises(Err) as info:
+        bg.overlay_benchmark_file(base, head, BASE_SHA, BENCH, head_ref_commit="c" * 40)
+    assert info.value.code == "OVERLAY_COMMIT_MISMATCH" and not (base / "benchmarks").exists()
+    with pytest.raises(Err) as info:
+        bg.overlay_benchmark_file(base, head, BASE_SHA, BENCH, head_ref_commit="nope")
+    assert info.value.code == "COMMIT_INVALID"
+    assert bg.overlay_benchmark_file(base, head, BASE_SHA, BENCH, head_ref_commit=HEAD_SHA) == "BUILDER_AUTHORED"
+
+
+def test_head_ref_commit_with_no_head_sidecar_is_a_mismatch(pair):
+    base, head = pair
+    add_head_bench(head)
+    with pytest.raises(Err) as info:
+        bg.overlay_benchmark_file(base, head, BASE_SHA, BENCH, head_ref_commit=HEAD_SHA)
+    assert info.value.code == "OVERLAY_COMMIT_MISMATCH"
+    assert overlay(pair) == "BUILDER_AUTHORED"  # optional: omitted, the head is not bound
+
+
+def test_a_sha1_and_a_sha256_commit_cannot_be_mixed(pair):
+    base, head = pair
+    add_head_bench(head)
+    Path(str(head) + ".export.json").write_text(json.dumps({"commit": "d" * 64}))
+    with pytest.raises(Err) as info:
+        bg.overlay_benchmark_file(base, head, BASE_SHA, BENCH, head_ref_commit="d" * 64)
+    assert info.value.code == "COMMIT_INVALID"
+
+
+def test_export_commit_errors_are_coded(pair):
+    base, _ = pair
+    Path(str(base) + ".export.json").unlink()
+    with pytest.raises(Err) as info:
+        bg.export_commit(base)
+    assert info.value.code == "OVERLAY_COMMIT_MISMATCH"
+
+
+def test_harness_sha256_covers_both_files_and_fails_with_its_own_code(pair, monkeypatch, tmp_path):
+    own = Path(bg.__file__).resolve().read_bytes()
+    validator = hashlib.sha256(VALIDATOR.read_bytes()).hexdigest().encode()
+    expected = hashlib.sha256(b"software-builder-bench-harness-v1\0%d:%s%d:%s" % (len(own), own, len(validator), validator)).hexdigest()
+    monkeypatch.setattr(bg, "_task_target_state", None)
+    assert bg.harness_sha256() == expected
+    copy = use_validator(monkeypatch, tmp_path, VALIDATOR.read_bytes() + b"# changed\n")
+    assert bg.harness_sha256() != expected  # a different validator is a different harness
+    copy.write_bytes(b"(((\n")
+    monkeypatch.setattr(bg, "_task_target_state", None)
+    with pytest.raises(Err) as info:
+        bg.harness_sha256()
+    assert info.value.code == "HARNESS_UNREADABLE"
+
+
+def test_read_benchmark_returns_the_bytes_under_the_same_rules(pair, tmp_path):
+    base, head = pair
+    add_head_bench(head)
+    overlay(pair)
+    assert bg.read_benchmark(base, BENCH) == SRC
+    for bad, code in (("benchmarks/missing_bench.py", "OVERLAY_PATH_REJECTED"), ("../x.py", "OVERLAY_PATH_REJECTED"), (7, "OVERLAY_PATH_REJECTED")):
+        with pytest.raises(Err) as info:
+            bg.read_benchmark(base, bad)
+        assert info.value.code == code
+    with pytest.raises(Err) as info:
+        bg.read_benchmark(tmp_path, BENCH)
+    assert info.value.code == "DEST_REJECTED"
+    (base / BENCH).unlink()
+    (base / BENCH).symlink_to("../src/app.py")
+    with pytest.raises(Err) as info:
+        bg.read_benchmark(base, BENCH)
+    assert info.value.code == "OVERLAY_NOT_REGULAR"
+
+
+def test_a_sealed_base_is_refused_up_front_for_new_and_existing_files_alike(pair):
+    base, head = pair
+    add_head_bench(head)
+    add_head_bench(base)
+    bg.seal_tree(base)
+    with pytest.raises(Err) as info:
+        overlay(pair)  # identical bytes: would otherwise be a silent PRE_EXISTING
+    assert info.value.code == "OVERLAY_FAILED" and "sealed" in info.value.detail
+    bg.unseal_tree(base)
+
+
+def test_a_second_overlay_on_the_same_base_answers_pre_existing(pair):
+    add_head_bench(pair[1])
+    assert overlay(pair) == "BUILDER_AUTHORED" and overlay(pair) == "PRE_EXISTING"  # documented: retry from fresh exports
+
+
+def test_the_two_roots_being_the_same_directory_by_inode_is_refused(pair, tmp_path):
+    base, head = pair
+    add_head_bench(head)
+    if not case_insensitive(tmp_path):
+        pytest.skip("needs a case-insensitive filesystem to name one directory two ways")
+    alias = base.parent / "BASE"
+    Path(str(alias) + ".export.json").write_text(json.dumps({"commit": BASE_SHA}))
+    refused((base, alias))
+
+
+@pytest.mark.parametrize("returned", ["''", "0", "object()", "None", "'other/bench_x.py'"])
+def test_only_the_validator_returning_the_very_path_passes(pair, monkeypatch, tmp_path, returned):
+    add_head_bench(pair[1])
+    use_validator(monkeypatch, tmp_path, f"def validate_task_target(a, b):\n    return {returned}\n".encode())
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_PATH_REJECTED"
+
+
+@pytest.mark.parametrize("exc", ["AttributeError", "KeyError", "TypeError", "RuntimeError", "OverflowError", "AssertionError", "NotImplementedError", "SystemExit"])
+def test_any_exception_from_the_validator_is_overlay_failed(pair, monkeypatch, tmp_path, exc):
+    add_head_bench(pair[1])
+    use_validator(monkeypatch, tmp_path, f"def validate_task_target(a, b):\n    raise {exc}('x')\n".encode())
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_FAILED"
+
+
+def test_a_system_exit_at_import_is_overlay_failed(pair, monkeypatch, tmp_path):
+    add_head_bench(pair[1])
+    use_validator(monkeypatch, tmp_path, b"raise SystemExit(3)\n")
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_FAILED"
+
+
+def test_the_validator_may_use_dataclasses_and_its_own_file_name(pair, monkeypatch, tmp_path):
+    add_head_bench(pair[1])
+    source = (b"from __future__ import annotations\nimport dataclasses\n\n@dataclasses.dataclass\nclass Box:\n    value: str\n\n"
+             b"def validate_task_target(root, target):\n    assert __file__.endswith('validate_task_target.py')\n    return Box(target).value\n")
+    use_validator(monkeypatch, tmp_path, source)
+    assert overlay(pair) == "BUILDER_AUTHORED"
+    assert "_benchmark_gate_validate_task_target" in sys.modules
+    bg._reset_task_target_cache()
+
+
+def test_a_failed_validator_load_is_not_left_registered(pair, monkeypatch, tmp_path):
+    add_head_bench(pair[1])
+    use_validator(monkeypatch, tmp_path, b"raise RuntimeError('boom')\n")
+    with pytest.raises(Err):
+        overlay(pair)
+    assert "_benchmark_gate_validate_task_target" not in sys.modules
+
+
+def test_the_validator_cache_can_be_reset_and_is_one_unit(monkeypatch):
+    monkeypatch.setattr(bg, "_task_target_state", None)
+    module, digest = bg._load_task_target()
+    assert callable(module.validate_task_target) and len(digest) == 64 and bg._load_task_target()[0] is module
+    bg._reset_task_target_cache()
+    assert bg._task_target_state is None
+
+
+class _LyingStr(str):
+    def __len__(self):
+        raise RuntimeError("len")
+
+    def __bool__(self):
+        raise RuntimeError("bool")
+
+
+class _HostilePath:
+    def __fspath__(self):
+        raise RuntimeError("fspath")
+
+
+class _BytesPath:
+    def __init__(self, value):
+        self.value = value
+
+    def __fspath__(self):
+        return self.value
+
+
+@pytest.mark.parametrize("bad", [_LyingStr("/x"), _HostilePath(), _BytesPath(3)])
+def test_hostile_root_arguments_are_coded_refusals(pair, bad):
+    with pytest.raises(Err) as info:
+        bg.hash_tree(bad)
+    assert info.value.code == "TREE_UNREADABLE"
+    with pytest.raises(Err) as info:
+        bg.overlay_benchmark_file(bad, pair[1], BASE_SHA, BENCH)
+    assert info.value.code == "DEST_REJECTED"
+
+
+def test_a_str_subclass_root_is_refused_not_trusted(pair):
+    class Sneaky(str):
+        pass
+
+    with pytest.raises(Err) as info:
+        bg.hash_tree(Sneaky(str(pair[0])))
+    assert info.value.code == "TREE_UNREADABLE"
+
+
+@pytest.mark.parametrize("err,code", [(errno.EMFILE, "OVERLAY_FAILED"), (errno.EIO, "OVERLAY_FAILED"), (errno.ENOENT, "DEST_REJECTED"), (errno.EACCES, "DEST_REJECTED")])
+def test_environmental_errors_in_the_root_checks_are_failures_not_bad_input(pair, monkeypatch, err, code):
+    add_head_bench(pair[1])
+
+    def broken(create):
+        raise OSError(err, "injected")
+
+    monkeypatch.setattr(bg, "_check_parent", broken)
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == code
+
+
+def test_the_hash_depth_cap_is_enforced(pair, monkeypatch):
+    base, _ = pair
+    (base / "a" / "b" / "c").mkdir(parents=True)
+    with monkeypatch.context() as patch:
+        patch.setattr(bg, "_MAX_HASH_DEPTH", 2)
+        with pytest.raises(Err) as info:
+            bg.hash_tree(base)
+        assert info.value.code == "TREE_TOO_LARGE"
+        patch.setattr(bg, "_MAX_HASH_DEPTH", 3)
+        assert len(bg.hash_tree(base)) == 64
+    assert bg._MAX_HASH_DEPTH == 128
+
+
+def test_a_chmod_or_ctime_change_during_the_read_is_refused(pair, monkeypatch):
+    base, _ = pair
+    real, hit = os.read, []
+
+    def read(fd, size):
+        data = real(fd, size)
+        if data and not hit:
+            hit.append(1)
+            os.chmod(base / "src" / "app.py", 0o600)  # ctime moves; size and mtime do not
+        return data
+
+    monkeypatch.setattr(os, "read", read)
+    with pytest.raises(Err) as info:
+        bg.hash_tree(base)
+    assert info.value.code == "TREE_UNREADABLE"
+
+
+def test_cleanup_never_deletes_a_file_it_did_not_create(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head, rel="benchmarks/sub/bench_orders.py")
+    real_write = os.write
+
+    def write(fd, data):  # another actor swaps the created file for its own, then the write fails
+        victim = base / "benchmarks" / "sub" / "bench_orders.py"
+        victim.unlink()
+        victim.write_text("someone else's file")
+        raise OSError(errno.ENOSPC, "full")
+
+    monkeypatch.setattr(os, "write", write)
+    with pytest.raises(Err) as info:
+        overlay(pair, path="benchmarks/sub/bench_orders.py")
+    monkeypatch.setattr(os, "write", real_write)
+    assert info.value.code == "OVERLAY_FAILED"
+    assert (base / "benchmarks" / "sub" / "bench_orders.py").read_text() == "someone else's file"
+
+
+def test_cleanup_never_removes_a_directory_that_was_replaced(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head, rel="benchmarks/sub/bench_orders.py")
+
+    def write(fd, data):
+        (base / "benchmarks" / "sub" / "bench_orders.py").unlink()
+        (base / "benchmarks" / "sub").rmdir()
+        (base / "benchmarks" / "sub").mkdir()  # a different inode with the same name
+        raise OSError(errno.ENOSPC, "full")
+
+    monkeypatch.setattr(os, "write", write)
+    with pytest.raises(Err):
+        overlay(pair, path="benchmarks/sub/bench_orders.py")
+    assert (base / "benchmarks" / "sub").is_dir()  # the replacement is not ours to delete
+
+
+def test_a_failing_cleanup_step_never_hides_the_original_error_and_the_rest_still_run(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head, rel="benchmarks/sub/bench_orders.py")
+    monkeypatch.setattr(os, "write", lambda fd, data: (_ for _ in ()).throw(OSError(errno.ENOSPC, "full")))
+    real_unlink = os.unlink
+    monkeypatch.setattr(os, "unlink", lambda *a, **kw: (_ for _ in ()).throw(OSError(errno.EIO, "cleanup")))
+    with pytest.raises(Err) as info:
+        overlay(pair, path="benchmarks/sub/bench_orders.py")
+    monkeypatch.setattr(os, "unlink", real_unlink)
+    assert info.value.code == "OVERLAY_FAILED" and "ENOSPC" not in info.value.detail and "full" in info.value.detail
+    assert not (base / "benchmarks" / "sub").exists() or (base / "benchmarks" / "sub" / "bench_orders.py").exists()
+
+
+def test_the_dispatch_root_check_does_not_follow_a_symlinked_leaf(pair, tmp_path):
+    base, head = pair
+    add_head_bench(head)
+    target = tmp_path / "real_head"
+    shutil.copytree(head, target)
+    swapped = base.parent / "linkhead"
+    swapped.symlink_to(target)
+    refused((base, swapped))
