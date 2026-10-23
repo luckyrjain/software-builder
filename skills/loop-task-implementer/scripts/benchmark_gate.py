@@ -1914,181 +1914,309 @@ _HASH_MAGIC = b"software-builder-bench-tree-v1\0"
 _MAX_HASH_BYTES = 4 << 30
 _MAX_BENCHMARK_FILE_BYTES = 16 * 1024
 _NOFOLLOW_DIR = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+_NOT_A_DIRECTORY_ERRNOS = frozenset({errno.ELOOP, errno.ENOTDIR, errno.EMLINK})  # what `O_NOFOLLOW | O_DIRECTORY` says of a symlink or file
+_SPECIAL_KINDS = {stat.S_IFIFO: b"P", stat.S_IFSOCK: b"K", stat.S_IFCHR: b"C", stat.S_IFBLK: b"B"}
 
 
 def hash_tree(root: str | os.PathLike) -> str:
-    """sha256 (hex) of the tree under `root`, a real directory, walked by descriptor with no symlink followed. One record per
-    entry, sorted by path bytes: kind (`D` directory, `F` file, `L` symlink, `S` anything else), permission bits (so a
-    `chmod` back after `seal_tree` changes the hash), the path, and the file's sha256 or the symlink's target. Directories and
-    symlinks are covered (an empty directory, a gitlink, appears); timestamps are not. Length-prefixed fields: no two trees
-    share a record stream. Raises `BenchmarkGateError`: `TREE_UNREADABLE` (any `OSError`, a swapped entry, an unreadable
-    file), `TREE_TOO_LARGE` (over 100,000 entries or 4 GiB of file content)."""
-    records: list[tuple[bytes, bytes, int, bytes]] = []
+    """sha256 (hex) of the tree under `root`, a real directory, walked by descriptor with no symlink followed. Take it AFTER
+    `seal_tree` (and after the install and the overlay): it covers permission bits, so it differs before and after a seal, and a
+    `chmod` back changes it. One record per entry, in the walk's canonical order (names sorted at every level, depth first, so
+    the order is a function of the tree alone): kind (`D` directory, `F` file, `L` symlink, `P` FIFO, `K` socket, `C` / `B`
+    character / block device, `S` other), permission bits (0 for a symlink, whose mode follows the umask on macOS), the path,
+    and a body: a file's sha256 and link count, a symlink's target, a device's `st_rdev`. Directories and empty directories
+    (a gitlink) appear; timestamps and extended attributes do not. Length-prefixed fields make the record stream injective.
+    Memory is constant in the tree size (records stream into the digest). A file whose size or mtime moves while it is read
+    is an `_EntryChanged` failure. Raises `BenchmarkGateError`: `TREE_UNREADABLE` (any `OSError`, a root that is not a usable
+    non-empty path, a swapped or changing entry, an unreadable file), `TREE_TOO_LARGE` (over 100,000 entries or 4 GiB of file
+    content)."""
+    try:
+        root_path = os.fspath(root)
+        if not root_path:
+            raise ValueError("empty root (it would mean the working directory)")
+    except (TypeError, ValueError) as exc:
+        raise BenchmarkGateError("TREE_UNREADABLE", f"root is not a usable path: {exc}") from exc
+    out = hashlib.sha256(_HASH_MAGIC)
     total = 0
     try:
-        for rel, pfd, name, st, dfd in _walk_fd(os.fspath(root), _MAX_TREE_ENTRIES):
+        for rel, pfd, name, st, dfd in _walk_fd(root_path, _MAX_TREE_ENTRIES):
             mode = stat.S_IMODE(st.st_mode)
             if dfd is not None:
                 kind, body = b"D", b""
             elif stat.S_ISLNK(st.st_mode):
-                kind, body = b"L", os.fsencode(os.readlink(name, dir_fd=pfd))
+                kind, mode, body = b"L", 0, os.fsencode(os.readlink(name, dir_fd=pfd))
             elif stat.S_ISREG(st.st_mode):
                 fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0), dir_fd=pfd)
                 try:
-                    after = os.fstat(fd)
-                    if not stat.S_ISREG(after.st_mode) or (after.st_dev, after.st_ino) != (st.st_dev, st.st_ino):
+                    before = os.fstat(fd)
+                    if not stat.S_ISREG(before.st_mode) or (before.st_dev, before.st_ino) != (st.st_dev, st.st_ino):
                         raise _EntryChanged("entry changed while it was being read")
-                    digest = hashlib.sha256()
+                    digest, size = hashlib.sha256(), 0
                     while chunk := os.read(fd, 1 << 20):
+                        size += len(chunk)
                         total += len(chunk)
                         if total > _MAX_HASH_BYTES:
                             raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_HASH_BYTES} bytes of content")
                         digest.update(chunk)
+                    after = os.fstat(fd)
+                    if size != before.st_size or (after.st_size, after.st_mtime_ns) != (before.st_size, before.st_mtime_ns):
+                        raise _EntryChanged("a file changed while it was being hashed")
                 finally:
                     os.close(fd)
-                kind, body = b"F", digest.hexdigest().encode("ascii")
+                kind, body = b"F", b"%s:%d" % (digest.hexdigest().encode("ascii"), before.st_nlink)
             else:
-                kind, body = b"S", b""
-            records.append((os.fsencode(rel), kind, mode, body))
-    except OSError as exc:
+                kind = _SPECIAL_KINDS.get(stat.S_IFMT(st.st_mode), b"S")
+                body = b"%d" % st.st_rdev if kind in (b"C", b"B") else b""
+            path = os.fsencode(rel)
+            out.update(b"%s %o %d:%s %d:%s" % (kind, mode, len(path), path, len(body), body))
+    except (OSError, ValueError) as exc:  # ValueError: an embedded NUL in the root
         raise BenchmarkGateError("TREE_UNREADABLE", str(exc)) from exc
-    records.sort()
-    out = hashlib.sha256(_HASH_MAGIC)
-    for rel, kind, mode, body in records:
-        out.update(b"%s %o %d:%s %d:%s" % (kind, mode, len(rel), rel, len(body), body))
+    except MemoryError as exc:
+        raise BenchmarkGateError("TREE_TOO_LARGE", "out of memory while hashing") from exc
     return out.hexdigest()
 
 
 _task_target_module = None
+_task_target_digest = ""
 
 
-def _task_target_validator():
-    """`validate_task_target.py` from beside this file, loaded once (the overlay reuses its deny list instead of copying it;
-    `compare` also hashes that file into `harness_sha256`)."""
-    global _task_target_module
+def _task_target_path() -> Path:
+    """`validate_task_target.py` beside this file: the one place both the loader and `compare`'s `harness_sha256` look."""
+    return Path(__file__).resolve().with_name("validate_task_target.py")
+
+
+def _load_task_target():
+    """Load the sibling `validate_task_target.py` once and return its module. The source is read ONCE and the module is built from
+    those bytes by a loader with no bytecode cache, so what runs is exactly what `_task_target_sha256` reports (no stale `.pyc`,
+    no swap between a hash and the load). Any failure is `OVERLAY_FAILED`."""
+    global _task_target_module, _task_target_digest
     if _task_target_module is None:
-        import importlib.util  # lazy: only the overlay needs it
-        path = Path(__file__).resolve().with_name("validate_task_target.py")
-        spec = importlib.util.spec_from_file_location("_benchmark_gate_validate_task_target", path) if path.is_file() else None
-        if spec is None or spec.loader is None:
-            raise BenchmarkGateError("OVERLAY_FAILED", "validate_task_target.py is missing beside benchmark_gate.py")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        _task_target_module = module
-    return _task_target_module.validate_task_target
+        import importlib.abc
+        import importlib.util
+
+        path = _task_target_path()
+        try:
+            source = _read_bounded(os.fspath(path), 1 << 20)
+            if len(source) > 1 << 20:
+                raise ValueError("over 1 MiB")
+
+            class _SourceOnly(importlib.abc.SourceLoader):  # no `path_stats` / `set_data`: nothing is cached or written
+                def get_filename(self, fullname):
+                    return os.fspath(path)
+
+                def get_data(self, data_path):
+                    return source
+
+            loader = _SourceOnly()
+            spec = importlib.util.spec_from_loader("_benchmark_gate_validate_task_target", loader, origin=os.fspath(path))
+            module = importlib.util.module_from_spec(spec)
+            loader.exec_module(module)
+            validator = module.validate_task_target
+        except Exception as exc:  # unreadable, a syntax error, a missing name: all fail closed as one coded refusal
+            raise BenchmarkGateError("OVERLAY_FAILED", f"cannot load validate_task_target.py: {type(exc).__name__}: {exc}") from exc
+        if not callable(validator):
+            raise BenchmarkGateError("OVERLAY_FAILED", "validate_task_target.py has no validate_task_target function")
+        _task_target_module, _task_target_digest = module, hashlib.sha256(source).hexdigest()
+    return _task_target_module
+
+
+def _task_target_sha256() -> str:
+    """sha256 of the exact bytes of `validate_task_target.py` that were loaded (for `harness_sha256` in C4d)."""
+    _load_task_target()
+    return _task_target_digest
 
 
 def _export_root(path: object, label: str) -> str:
-    """The same shape `export` produces: `<fixed parent>/<root name>/<leaf name>`, a real directory of ours (`DEST_REJECTED`)."""
+    """The same shape `export` produces: `<fixed parent>/<root name>/<leaf name>`, resolved, with the dispatch root a real
+    directory of ours directly under the private fixed parent and carrying a valid marker, and the leaf a real directory of ours.
+    `DEST_REJECTED` otherwise."""
     try:
         leaf_path = Path(os.path.abspath(os.fspath(path)))  # type: ignore[arg-type]
-        ok = (
-            _ROOT_NAME_RE.fullmatch(leaf_path.parent.name) and _LEAF_NAME_RE.fullmatch(leaf_path.name)
-            and os.path.realpath(leaf_path.parent.parent) == os.path.realpath(fixed_parent())
-        )
-        resolved = os.path.join(os.path.realpath(leaf_path.parent), leaf_path.name)
-        st = os.lstat(resolved) if ok else None
+        if not (_ROOT_NAME_RE.fullmatch(leaf_path.parent.name) and _LEAF_NAME_RE.fullmatch(leaf_path.name)):
+            raise BenchmarkGateError("DEST_REJECTED", f"{label} must be <fixed parent>/<root name>/<leaf name>")
+        root_dir = os.path.realpath(leaf_path.parent)
+        if os.path.dirname(root_dir) != os.path.realpath(_check_parent(create=False)):
+            raise BenchmarkGateError("DEST_REJECTED", f"{label} must be under {fixed_parent()}")
+        root_st = os.lstat(root_dir)
+        if not stat.S_ISDIR(root_st.st_mode) or _foreign(root_st):
+            raise BenchmarkGateError("DEST_REJECTED", f"{label}'s dispatch root is not a real directory of this user")
+        _read_marker(root_dir)
+        resolved = os.path.join(root_dir, leaf_path.name)
+        st = os.lstat(resolved)
+    except BenchmarkGateError as exc:
+        raise BenchmarkGateError("DEST_REJECTED", exc.detail or exc.code) from exc
     except (TypeError, ValueError, OSError) as exc:
         raise BenchmarkGateError("DEST_REJECTED", f"{label} is not an export directory: {exc}") from exc
-    if st is None or not stat.S_ISDIR(st.st_mode) or _foreign(st):
+    if not stat.S_ISDIR(st.st_mode) or _foreign(st):
         raise BenchmarkGateError("DEST_REJECTED", f"{label} must be a real <fixed parent>/<root>/<leaf> directory of this user")
     return resolved
 
 
 def _base_commit_of(base_root: str) -> str:
+    """The commit recorded in `<base_root>.export.json` (written by `export_tree`), or `OVERLAY_COMMIT_MISMATCH` when the sidecar
+    is absent, not a plain small file, or not valid. An I/O failure (EIO, EMFILE) is not a mismatch: it propagates as `OSError`."""
     try:
-        record = json.loads(_read_bounded(base_root + ".export.json", 4096, nofollow=True).decode("ascii"))
-    except (OSError, ValueError, RecursionError) as exc:
-        raise BenchmarkGateError("OVERLAY_COMMIT_MISMATCH", "the base export has no readable sidecar") from exc
+        raw = _read_bounded(base_root + ".export.json", 4096, nofollow=True)
+    except OSError as exc:
+        if exc.errno in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP, errno.EMLINK):
+            raise BenchmarkGateError("OVERLAY_COMMIT_MISMATCH", "the base export has no readable sidecar") from exc
+        raise
+    except ValueError as exc:
+        raise BenchmarkGateError("OVERLAY_COMMIT_MISMATCH", "the base export's sidecar is not a regular file") from exc
+    try:
+        record = json.loads(raw.decode("ascii")) if len(raw) <= 4096 else None
+    except (ValueError, RecursionError):
+        record = None
     commit = record.get("commit") if isinstance(record, dict) else None
     return commit if isinstance(commit, str) and _COMMIT_RE.fullmatch(commit) else ""
 
 
 def _head_bytes(head_root: str, parts: list[str]) -> bytes:
-    """The head's benchmark bytes: every component opened with `O_NOFOLLOW` relative to its parent (no symlinked parent), the file
-    regular and at most 16 KiB."""
+    """The head's benchmark bytes: every component opened with `O_NOFOLLOW` relative to its parent (no symlinked parent), the leaf a
+    regular file with ONE link (a hard link would read a file outside the export) and at most 16 KiB. A symlink, a non-directory
+    parent, a special file or a hard link is `OVERLAY_NOT_REGULAR`; any other `OSError` (EIO, EMFILE, a vanished entry) propagates."""
+    def refuse(detail: str) -> BenchmarkGateError:
+        return BenchmarkGateError("OVERLAY_NOT_REGULAR", f"head benchmark: {detail}")
+
     fd = os.open(head_root, _NOFOLLOW_DIR)
     try:
         for part in parts[:-1]:
-            fd, old = os.open(part, _NOFOLLOW_DIR, dir_fd=fd), fd
-            os.close(old)
-        data = _read_bounded(parts[-1], _MAX_BENCHMARK_FILE_BYTES, nofollow=True, dir_fd=fd)
-    except (OSError, ValueError) as exc:
-        raise BenchmarkGateError("OVERLAY_NOT_REGULAR", f"head benchmark: {exc}") from exc
+            try:
+                child = os.open(part, _NOFOLLOW_DIR, dir_fd=fd)
+            except OSError as exc:
+                if exc.errno in _NOT_A_DIRECTORY_ERRNOS:
+                    raise refuse(f"a parent is not a directory: {exc}") from exc
+                raise
+            os.close(fd)
+            fd = child
+        try:
+            leaf = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0), dir_fd=fd)
+        except OSError as exc:
+            if exc.errno in _NOT_A_DIRECTORY_ERRNOS:
+                raise refuse(f"not a regular file: {exc}") from exc
+            raise
+        try:
+            st = os.fstat(leaf)
+            if not stat.S_ISREG(st.st_mode) or st.st_nlink > 1:
+                raise refuse("not a regular file with a single link")
+            chunks, size = [], 0
+            while size <= _MAX_BENCHMARK_FILE_BYTES and (chunk := os.read(leaf, _MAX_BENCHMARK_FILE_BYTES + 1 - size)):
+                chunks.append(chunk)
+                size += len(chunk)
+        finally:
+            os.close(leaf)
     finally:
         os.close(fd)
-    if len(data) > _MAX_BENCHMARK_FILE_BYTES:
-        raise BenchmarkGateError("OVERLAY_NOT_REGULAR", "the benchmark file is over 16 KiB")
-    return data
+    if size > _MAX_BENCHMARK_FILE_BYTES:
+        raise refuse("the benchmark file is over 16 KiB")
+    return b"".join(chunks)
 
 
 def _overlay_into_base(base_root: str, parts: list[str], data: bytes) -> str:
     """Look `parts` up in the base export by EXACT name (a listing, never the filesystem's case folding) and either confirm the
-    bytes equal `data` (`PRE_EXISTING`) or create the file (`BUILDER_AUTHORED`), creating missing parent directories only below
-    `base_root`. Every step is relative to an `O_NOFOLLOW` directory descriptor."""
-    fd = os.open(base_root, _NOFOLLOW_DIR)
+    bytes equal `data` (`PRE_EXISTING`) or create the file (`BUILDER_AUTHORED`), creating missing parent directories (mode 0755,
+    set explicitly: `mkdir` is masked by the umask) only below `base_root`. Every step is relative to an `O_NOFOLLOW` directory
+    descriptor. On ANY failure what this call created (the file, then the directories) is removed again."""
+    fds = [os.open(base_root, _NOFOLLOW_DIR)]
+    made: list[tuple[int, str]] = []  # (index into fds of the parent, name) of directories this call created
+    leaf_made = False
     try:
         for part in parts[:-1]:
-            if part in os.listdir(fd):
+            parent = fds[-1]
+            if part in os.listdir(parent):
                 try:
-                    fd, old = os.open(part, _NOFOLLOW_DIR, dir_fd=fd), fd
+                    fds.append(os.open(part, _NOFOLLOW_DIR, dir_fd=parent))
                 except OSError as exc:
-                    raise BenchmarkGateError("OVERLAY_PATH_CONFLICT", f"base component is not a directory: {exc}") from exc
-                os.close(old)
+                    if exc.errno in _NOT_A_DIRECTORY_ERRNOS:
+                        raise BenchmarkGateError("OVERLAY_PATH_CONFLICT", f"base component is not a directory: {exc}") from exc
+                    raise
                 continue
             try:
-                os.mkdir(part, 0o755, dir_fd=fd)  # a case-folded twin ("Benchmarks" for "benchmarks") raises FileExistsError
+                os.mkdir(part, 0o755, dir_fd=parent)  # a case-folded twin ("Benchmarks" for "benchmarks") raises FileExistsError
             except FileExistsError as exc:
-                raise BenchmarkGateError("OVERLAY_PATH_CONFLICT", "a case-folded twin of a parent exists in the base") from exc
-            fd, old = os.open(part, _NOFOLLOW_DIR, dir_fd=fd), fd
-            os.close(old)
-        leaf = parts[-1]
-        if leaf in os.listdir(fd):
+                raise BenchmarkGateError("OVERLAY_PATH_CONFLICT", "a parent appeared concurrently or has a case-folded twin in the base") from exc
+            made.append((len(fds) - 1, part))
+            fds.append(os.open(part, _NOFOLLOW_DIR, dir_fd=parent))
+            os.fchmod(fds[-1], 0o755)
+        parent, leaf = fds[-1], parts[-1]
+        if leaf in os.listdir(parent):
             try:
-                same = _read_bounded(leaf, _MAX_BENCHMARK_FILE_BYTES, nofollow=True, dir_fd=fd) == data
+                same = _read_bounded(leaf, _MAX_BENCHMARK_FILE_BYTES, nofollow=True, dir_fd=parent) == data
             except (OSError, ValueError):
                 same = False  # a directory, symlink or special file where the head has a regular file
             if not same:
                 raise BenchmarkGateError("BENCHMARK_MODIFIED", "the benchmark exists at the base and differs")
             return "PRE_EXISTING"
         try:
-            out = os.open(leaf, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=fd)
+            out = os.open(leaf, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=parent)
         except FileExistsError as exc:
-            raise BenchmarkGateError("OVERLAY_PATH_CONFLICT", "a case-folded twin of the benchmark exists in the base") from exc
-        with os.fdopen(out, "wb") as handle:
-            os.fchmod(handle.fileno(), 0o644)
-            handle.write(data)
+            raise BenchmarkGateError("OVERLAY_PATH_CONFLICT", "the benchmark appeared concurrently or has a case-folded twin in the base") from exc
+        leaf_made = True
+        try:
+            os.fchmod(out, 0o644)
+            view = memoryview(data)
+            while view:
+                view = view[os.write(out, view):]
+        finally:
+            os.close(out)
         return "BUILDER_AUTHORED"
+    except BaseException:
+        if leaf_made:
+            try:
+                os.unlink(parts[-1], dir_fd=fds[-1])
+            except OSError:
+                pass
+        for index, name in reversed(made):
+            try:
+                os.rmdir(name, dir_fd=fds[index])
+            except OSError:
+                pass
+        raise
     finally:
-        os.close(fd)
+        for fd in fds:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
 
 
 def overlay_benchmark_file(base_root: str | os.PathLike, head_root: str | os.PathLike, base_ref_commit: str, path: str) -> str:
-    """Make the benchmark file exist in the BASE export exactly as the head has it. Returns `PRE_EXISTING` (present at base with
-    the same bytes) or `BUILDER_AUTHORED` (absent at base: copied in, mode 0644, parents created only inside `base_root`).
-    `compare` calls this after the installs and before `seal_tree`, while the base is still writable. The Orchestrator
-    re-derives the origin itself (`git cat-file -e <base>:<path>`), never from this return value or the JSON.
+    """Make the benchmark file exist in the BASE export exactly as the head has it. Returns the str `PRE_EXISTING` (present at base with
+    the same bytes) or `BUILDER_AUTHORED` (absent at base: copied in, mode 0644, parents created only inside `base_root`, mode
+    0755). `compare` calls this after the installs and before `seal_tree`, while the base is still writable. The return value is
+    NOT authoritative for the file's origin: presence is read from the base export AFTER the project install, so a build step that
+    wrote that path would make a Builder-authored file look `PRE_EXISTING`. The Orchestrator re-derives the origin itself
+    (`git cat-file -e <base>:<path>`), never from this value or the JSON.
 
     Refusals (`BenchmarkGateError`, see `OVERLAY_REFUSAL_CODES`), in this order: `DEST_REJECTED` (either root is not an export
-    directory, or the two are the same), `COMMIT_INVALID` (`base_ref_commit` is not 40 or 64 hex), `OVERLAY_COMMIT_MISMATCH` (it
-    is not the commit in the base export's `.export.json` sidecar: the overlay is bound to the tree it is applied to),
-    `OVERLAY_PATH_REJECTED` (the gate's lexical path rules, or `validate_task_target(head_root, path)`: containment, symlinks,
-    deny list, existence), `OVERLAY_NOT_REGULAR`, `OVERLAY_PATH_CONFLICT`, `BENCHMARK_MODIFIED`. Any other `OSError` is
-    `OVERLAY_FAILED`. Presence is decided from the base export's own listing by exact name, so a case-insensitive filesystem
-    cannot make `Benchmarks/` stand in for `benchmarks/`; on such a filesystem the create step finds the twin and refuses."""
-    base, head = _export_root(base_root, "base_root"), _export_root(head_root, "head_root")
-    if os.path.samefile(base, head):
-        raise BenchmarkGateError("DEST_REJECTED", "base_root and head_root are the same directory")
-    _check_commits(base_ref_commit)
-    if _base_commit_of(base) != base_ref_commit:
-        raise BenchmarkGateError("OVERLAY_COMMIT_MISMATCH", "base_ref_commit is not the commit the base export was made from")
-    if not isinstance(path, str) or not _benchmark_path_ok(path) or _task_target_validator()(head, path) is None:
-        raise BenchmarkGateError("OVERLAY_PATH_REJECTED", escape_diagnostic(path, 120))
-    parts = path.split("/")
+    directory under a private fixed parent with a valid marker, the two are the same, or they are not in the same dispatch root),
+    `COMMIT_INVALID` (`base_ref_commit` is not 40 or 64 hex), `OVERLAY_COMMIT_MISMATCH` (it is not the commit in the base
+    export's `.export.json` sidecar, which `export_tree` writes: the overlay is bound to the tree it is applied to; a missing or
+    malformed sidecar is a mismatch; the sidecar is writable by the same user, so this guards against slips and stale directories,
+    not against a same-user attacker), `OVERLAY_PATH_REJECTED` (not a `str`, the gate's lexical path rules, or
+    `validate_task_target(head_root, path)`: containment, symlinks, deny list, existence), `OVERLAY_NOT_REGULAR` (the head file is
+    a symlink, behind a symlinked parent, a special file, hard-linked, or over 16 KiB), `OVERLAY_PATH_CONFLICT`,
+    `BENCHMARK_MODIFIED`. Every other failure (an I/O error, the validator unloadable) is `OVERLAY_FAILED`. A failure of any kind
+    leaves no file or directory this call created; `compare` should still treat an overlay failure as terminal and `cleanup`.
+    Presence is decided from the base export's own listing by exact name, so a case-insensitive filesystem cannot make
+    `Benchmarks/` stand in for `benchmarks/`; on such a filesystem the create step finds the twin and refuses."""
     try:
+        base, head = _export_root(base_root, "base_root"), _export_root(head_root, "head_root")
+        if base == head or os.path.dirname(base) != os.path.dirname(head):
+            raise BenchmarkGateError("DEST_REJECTED", "base_root and head_root must be two exports in one dispatch root")
+        _check_commits(base_ref_commit)
+        if _base_commit_of(base) != base_ref_commit:
+            raise BenchmarkGateError("OVERLAY_COMMIT_MISMATCH", "base_ref_commit is not the commit the base export was made from")
+        if type(path) is not str:
+            raise BenchmarkGateError("OVERLAY_PATH_REJECTED", f"path is a {type(path).__name__}, not a str")
+        if not _benchmark_path_ok(path) or _load_task_target().validate_task_target(head, path) is None:
+            raise BenchmarkGateError("OVERLAY_PATH_REJECTED", escape_diagnostic(path, 120))
+        parts = path.split("/")
         return _overlay_into_base(base, parts, _head_bytes(head, parts))
-    except OSError as exc:
-        raise BenchmarkGateError("OVERLAY_FAILED", str(exc)) from exc
+    except BenchmarkGateError:
+        raise
+    except (OSError, ImportError, SyntaxError, ValueError, RecursionError, MemoryError) as exc:
+        raise BenchmarkGateError("OVERLAY_FAILED", f"{type(exc).__name__}: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
