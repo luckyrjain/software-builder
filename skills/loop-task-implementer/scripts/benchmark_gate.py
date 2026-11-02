@@ -1204,9 +1204,11 @@ def _root_path(root: object, code: str) -> str | bytes:
     """`root` as a non-empty `str` or `bytes` path, else a coded refusal. An empty string would mean the working directory (it is
     what `os.path.abspath("")` returns), and a `str` subclass could lie about its contents."""
     try:
-        path = os.fspath(root)  # type: ignore[arg-type]
+        path = os.fspath(root)  # type: ignore[arg-type]  # a hostile __fspath__ may raise anything, even SystemExit
         if type(path) not in (str, bytes) or not path:
             raise ValueError("root must be a non-empty str or bytes path (an empty one would mean the working directory)")
+        if os.fsencode(path).count(b"\0"):  # also proves a str is encodable (a lone surrogate is not)
+            raise ValueError("root contains a NUL byte")
     except (Exception, SystemExit) as exc:
         raise BenchmarkGateError(code, f"root is not a usable path: {_describe(exc)}") from exc
     return path
@@ -2084,13 +2086,16 @@ def _load_task_target() -> tuple:
             sys.modules[name] = module
             try:
                 loader.exec_module(module)
+            except SystemExit as exc:  # the module's own code asked to exit: hostile, not a shutdown of ours
+                sys.modules.pop(name, None)
+                raise RuntimeError(f"the validator module raised SystemExit({exc.code!r})") from exc
             except BaseException:
                 sys.modules.pop(name, None)
                 raise
             if not callable(getattr(module, "validate_task_target", None)):
                 sys.modules.pop(name, None)
                 raise AttributeError("no callable validate_task_target")
-        except (Exception, SystemExit) as exc:  # unreadable, a syntax error, an import-time failure: one coded refusal
+        except Exception as exc:  # unreadable, a syntax error, an import-time failure: one coded refusal
             raise BenchmarkGateError("OVERLAY_FAILED", f"cannot load validate_task_target.py: {_describe(exc)}") from exc
         finally:
             _task_target_loading = False
@@ -2100,14 +2105,25 @@ def _load_task_target() -> tuple:
         _task_target_lock.release()
 
 
+def _call_validator(root: str, target: str) -> object:
+    """`validate_task_target(root, target)` of the loaded validator. The validator is third-party code from this function's point of
+    view: whatever it raises, even `SystemExit`, is `OVERLAY_FAILED` (a shutdown request of OUR process never passes through here)."""
+    function = _load_task_target()[0].validate_task_target
+    try:
+        return function(root, target)
+    except (Exception, SystemExit) as exc:
+        raise BenchmarkGateError("OVERLAY_FAILED", f"validate_task_target raised {_describe(exc)}") from exc
+
+
 def _task_target_sha256() -> str:
     """sha256 of the exact bytes of `validate_task_target.py` that were loaded."""
     return _load_task_target()[1]
 
 
 def _digest_own_file() -> str:
-    """sha256 (hex) of this file's bytes as read when the module is imported, or "" if they cannot be read (then `harness_sha256`
-    is `HARNESS_UNREADABLE`, never a digest of something else)."""
+    """sha256 (hex) of this file's SOURCE bytes as they are on disk when the module is imported, or "" if they cannot be read (then
+    `harness_sha256` is `HARNESS_UNREADABLE`, never a digest of something else). It is the source, not the code object that runs: a
+    stale `.pyc` that matches the source's size and mtime would not be noticed (needs a same-user writer; the accepted residual)."""
     try:
         with open(os.fspath(Path(__file__).resolve()), "rb") as handle:
             data = handle.read(4 << 20 | 1)
@@ -2120,9 +2136,10 @@ _SELF_DIGEST = _digest_own_file()  # at import: the file the importer used, not 
 
 
 def harness_sha256() -> str:
-    """The `harness_sha256` of the `compare` result: sha256 over the digest of this file's bytes as read at IMPORT and the digest of
+    """The `harness_sha256` of the `compare` result: sha256 over the digest of this file's source as on disk at IMPORT and the digest of
     the loaded `validate_task_target.py` (length-prefixed, domain `software-builder-bench-harness-v1`). Both name the code this
-    process has been using: this file is digested when it is imported, the validator when it is loaded (and cached until
+    process has been using (up to the stale-`.pyc` residual of `_digest_own_file`): this file is digested when it is imported, the
+    validator when it is loaded (and cached until
     `_reset_task_target_cache()`). C4d adds the trace plugin and any new harness file to this definition and bumps the domain string.
     `HARNESS_UNREADABLE` if either part cannot be read."""
     try:
@@ -2132,7 +2149,7 @@ def harness_sha256() -> str:
         validator = _task_target_sha256().encode("ascii")
     except BenchmarkGateError as exc:
         raise BenchmarkGateError("HARNESS_UNREADABLE", exc.detail or exc.code) from exc
-    except (Exception, SystemExit) as exc:
+    except Exception as exc:
         raise BenchmarkGateError("HARNESS_UNREADABLE", _describe(exc)) from exc
     return hashlib.sha256(b"software-builder-bench-harness-v1\0%d:%s%d:%s" % (len(own_digest), own_digest, len(validator), validator)).hexdigest()
 
@@ -2143,9 +2160,12 @@ def _export_root(path: object, label: str) -> str:
     ours. `path` must be a `str` or a `PathLike` returning a `str`. `DEST_REJECTED` for anything wrong with the path or the ownership;
     an environmental failure (EIO, EMFILE) is an `OSError` for the caller to classify as `OVERLAY_FAILED`."""
     try:
-        raw = os.fspath(path)  # type: ignore[arg-type]
+        raw = os.fspath(path)  # type: ignore[arg-type]  # a hostile __fspath__ may raise anything, even SystemExit
         if type(raw) is not str or not raw:
             raise TypeError("not a non-empty str path")
+    except (Exception, SystemExit) as exc:
+        raise BenchmarkGateError("DEST_REJECTED", f"{label} is not a usable path: {_describe(exc)}") from exc
+    try:
         leaf_path = Path(os.path.abspath(raw))
         if not (_ROOT_NAME_RE.fullmatch(leaf_path.parent.name) and _LEAF_NAME_RE.fullmatch(leaf_path.name)):
             raise BenchmarkGateError("DEST_REJECTED", f"{label} must be <fixed parent>/<root name>/<leaf name>")
@@ -2168,7 +2188,7 @@ def _export_root(path: object, label: str) -> str:
         if exc.errno in _BAD_PATH_ERRNOS:
             raise BenchmarkGateError("DEST_REJECTED", f"{label} is not an export directory: {_describe(exc)}") from exc
         raise
-    except (Exception, SystemExit) as exc:  # a hostile __fspath__, a NUL, a surrogate: the argument is bad, nothing more
+    except Exception as exc:  # a NUL, a surrogate: the argument is bad, nothing more (a real SystemExit is not ours to swallow)
         raise BenchmarkGateError("DEST_REJECTED", f"{label} is not a usable path: {_describe(exc)}") from exc
     if not stat.S_ISDIR(st.st_mode) or _foreign(st):
         raise BenchmarkGateError("DEST_REJECTED", f"{label} must be a real <fixed parent>/<root>/<leaf> directory of this user")
@@ -2233,6 +2253,10 @@ def _read_small_file(parent_fd: int, name: str, *, permission_is_refusal: bool =
         while size <= _MAX_BENCHMARK_FILE_BYTES and (chunk := os.read(leaf, _MAX_BENCHMARK_FILE_BYTES + 1 - size)):
             chunks.append(chunk)
             size += len(chunk)
+        done = os.fstat(leaf)
+        moved = any(getattr(done, f) != getattr(st, f) for f in ("st_dev", "st_ino", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns"))
+        if moved or (st.st_size <= _MAX_BENCHMARK_FILE_BYTES and size != st.st_size):
+            raise _FileRefused("the file was being written while it was read")  # torn bytes: a writer rewrote it in place
         after = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         if (after.st_dev, after.st_ino, after.st_nlink) != (st.st_dev, st.st_ino, st.st_nlink):
             raise _FileRefused("the name no longer points to the file that was read")
@@ -2300,7 +2324,7 @@ def read_benchmark(export_root: str | os.PathLike, path: str) -> bytes:
         return _head_bytes(root, path.split("/"))
     except BenchmarkGateError:
         raise
-    except (Exception, SystemExit) as exc:
+    except Exception as exc:
         raise BenchmarkGateError("OVERLAY_FAILED", _describe(exc)) from exc
 
 
@@ -2345,7 +2369,7 @@ def repo_top_levels(export_root: str | os.PathLike) -> frozenset[str]:
         return frozenset(names)
     except BenchmarkGateError:
         raise
-    except (Exception, SystemExit) as exc:
+    except Exception as exc:
         raise BenchmarkGateError("OVERLAY_FAILED", _describe(exc)) from exc
 
 
@@ -2453,6 +2477,8 @@ def _overlay_into_base(base_root: str, parts: list[str], data: bytes) -> str:
         steps = ([remove_leaf] if leaf_made else []) + [(lambda i=i, n=n, d=d: remove_dir(i, n, d)) for i, n, d in reversed(made)]
         failure, fatal = _run_cleanup(steps)  # the descriptors are still open here, so the inode numbers cannot have been reused
         if not isinstance(original, Exception):
+            if failure is not None:  # the interrupt stays an interrupt, but a leftover must not be silent
+                original.add_note(f"overlay cleanup incomplete: {_describe(failure)}")
             raise  # Ctrl-C or SystemExit stays what it is, however the cleanup went
         if fatal is not None:
             raise fatal
@@ -2509,7 +2535,7 @@ def overlay_benchmark_file(
             raise BenchmarkGateError("OVERLAY_COMMIT_MISMATCH", "head_ref_commit is not the commit the head export was made from")
         if type(path) is not str:
             raise BenchmarkGateError("OVERLAY_PATH_REJECTED", f"path is a {type(path).__name__}, not a str")
-        if not _benchmark_path_ok(path) or _load_task_target()[0].validate_task_target(head, path) != path:
+        if not _benchmark_path_ok(path) or _call_validator(head, path) != path:
             raise BenchmarkGateError("OVERLAY_PATH_REJECTED", escape_diagnostic(path, 120))
         if not os.lstat(base).st_mode & 0o200:
             raise BenchmarkGateError("OVERLAY_BASE_SEALED", "the base export is sealed: overlay before seal_tree")
@@ -2517,7 +2543,7 @@ def overlay_benchmark_file(
         return _overlay_into_base(base, parts, _head_bytes(head, parts))
     except BenchmarkGateError:
         raise
-    except (Exception, SystemExit) as exc:  # whatever the validator, an I/O error or a hostile argument raised: one coded failure
+    except Exception as exc:  # an I/O error or anything unexpected: one coded failure (a real SystemExit/KeyboardInterrupt passes through)
         raise BenchmarkGateError("OVERLAY_FAILED", _describe(exc)) from exc
 
 

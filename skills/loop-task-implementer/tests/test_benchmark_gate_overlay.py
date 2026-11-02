@@ -2478,3 +2478,132 @@ def test_a_validator_load_waits_a_bounded_time_for_the_lock(pair, monkeypatch):
 def test_commit_mismatch_is_a_harness_fault_not_a_verdict_about_the_pr():
     assert "OVERLAY_COMMIT_MISMATCH" not in bg.OVERLAY_REFUSAL_CODES and "OVERLAY_COMMIT_MISMATCH" in bg.ERROR_CODES
     assert "OVERLAY_BASE_SEALED" not in bg.OVERLAY_REFUSAL_CODES
+
+
+# --- round 5 review: a real SystemExit passes through, interrupt notes, NUL/surrogate roots, torn reads ---
+
+def test_a_shutdown_request_during_the_write_is_re_raised_as_itself_after_cleanup(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head, rel="benchmarks/sub/bench_orders.py")
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "write", lambda fd, data: (_ for _ in ()).throw(SystemExit(143)))  # a SIGTERM handler calling sys.exit
+        with pytest.raises(SystemExit) as info:
+            overlay(pair, path="benchmarks/sub/bench_orders.py")
+    assert info.value.code == 143 and not (base / "benchmarks").exists()
+
+
+def test_a_shutdown_request_during_cleanup_is_re_raised_as_itself(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "write", lambda fd, data: (_ for _ in ()).throw(OSError(errno.ENOSPC, "full")))
+        patch.setattr(os, "unlink", lambda *a, **kw: (_ for _ in ()).throw(SystemExit(3)))
+        with pytest.raises(SystemExit):
+            overlay(pair)
+
+
+def test_a_shutdown_request_is_not_swallowed_by_the_read_helpers(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    overlay(pair)
+    for call in (lambda: bg.read_benchmark(base, BENCH), lambda: bg.repo_top_levels(base)):
+        with monkeypatch.context() as patch:
+            patch.setattr(os, "listdir", lambda *a, **kw: (_ for _ in ()).throw(SystemExit(5)))
+            with pytest.raises(SystemExit):
+                call()
+
+
+def test_an_interrupt_with_a_failed_cleanup_carries_a_note_about_the_leftover(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "write", lambda fd, data: (_ for _ in ()).throw(KeyboardInterrupt()))
+        patch.setattr(os, "unlink", lambda *a, **kw: (_ for _ in ()).throw(PermissionError(errno.EACCES, "no unlink")))
+        with pytest.raises(KeyboardInterrupt) as info:
+            overlay(pair)
+    assert any("overlay cleanup incomplete" in note and "no unlink" in note for note in info.value.__notes__)
+    assert (base / BENCH).exists()  # and the leftover is exactly what the note reports
+
+
+def test_an_interrupt_with_a_clean_cleanup_has_no_note(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "write", lambda fd, data: (_ for _ in ()).throw(KeyboardInterrupt()))
+        with pytest.raises(KeyboardInterrupt) as info:
+            overlay(pair)
+    assert not getattr(info.value, "__notes__", []) and not (base / "benchmarks").exists()
+
+
+def test_a_validator_asking_to_exit_is_overlay_failed_but_ours_is_not(pair, monkeypatch, tmp_path):
+    add_head_bench(pair[1])
+    use_validator(monkeypatch, tmp_path, b"def validate_task_target(a, b):\n    raise SystemExit(9)\n")
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_FAILED" and "validate_task_target raised" in info.value.detail
+
+
+@pytest.mark.parametrize("bad", ["a\0b", b"a\0b", "\ud800x"])
+def test_seal_unseal_and_hash_refuse_a_root_with_a_nul_or_a_lone_surrogate(bad):
+    for func in (bg.seal_tree, bg.unseal_tree, bg.hash_tree):
+        with pytest.raises(Err) as info:
+            func(bad)
+        assert info.value.code == "TREE_UNREADABLE"
+
+
+def torn(pair, monkeypatch, how):
+    base, head = pair
+    add_head_bench(head, data=b"x" * 3000)
+    target = head / BENCH
+    real_read, state = os.read, {"n": 0}
+
+    def read(fd, size):
+        data = real_read(fd, size)
+        state["n"] += 1
+        if state["n"] == 1:
+            if how == "same_size_rewrite":
+                with open(target, "r+b") as handle:
+                    handle.write(b"y" * 3000)  # same size, same inode: the mtime moves
+                time.sleep(0.01)
+                os.utime(target, ns=(1, 2))
+            else:
+                with open(target, "wb") as handle:  # truncated and rewritten shorter
+                    handle.write(b"z" * 10)
+        return data
+
+    return read
+
+
+@pytest.mark.parametrize("how", ["same_size_rewrite", "truncate_rewrite"])
+def test_a_head_file_rewritten_in_place_while_it_is_read_is_refused(pair, monkeypatch, how):
+    base, head = pair
+    read = torn(pair, monkeypatch, how)
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "read", read)
+        with pytest.raises(Err) as info:
+            overlay(pair)
+    assert info.value.code == "OVERLAY_NOT_REGULAR" and "being written" in info.value.detail and not (base / "benchmarks").exists()
+
+
+def test_each_stability_field_of_the_read_is_checked(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    for field in ("st_size", "st_mtime_ns", "st_ctime_ns", "st_nlink", "st_ino"):
+        real_fstat, calls, leaf_ino = os.fstat, {"n": 0}, (head / BENCH).stat().st_ino
+
+        def fstat(fd, field=field):
+            result = real_fstat(fd)
+            if stat.S_ISREG(result.st_mode) and result.st_ino == leaf_ino:
+                calls["n"] += 1
+                if calls["n"] == 2:  # the second fstat of the head leaf is the one after the read
+                    values = {f: getattr(result, f) for f in ("st_dev", "st_ino", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns", "st_mode")}
+                    values[field] += 1
+                    return types.SimpleNamespace(**values)
+            return result
+
+        with monkeypatch.context() as patch:
+            patch.setattr(os, "fstat", fstat)
+            with pytest.raises(Err) as info:
+                overlay(pair)
+        assert info.value.code == "OVERLAY_NOT_REGULAR", field
+        assert not (base / "benchmarks").exists(), field
