@@ -3163,7 +3163,7 @@ def test_c21_a_parent_whose_listed_name_differs_in_case_is_a_conflict(pair, monk
 def test_c22_a_file_that_replaced_a_directory_whose_identity_is_unknown_is_left_alone_and_not_reported(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
-    real_stat, real_write = os.stat, os.write
+    real_stat = os.stat
     state = {"hit": False}
     def stat_(path, *a, **kw):
         if path == "benchmarks" and kw.get("dir_fd") is not None and not state["hit"] and (base / "benchmarks").exists():
@@ -3252,8 +3252,7 @@ def test_r8_02_unstable_existing_base_file_is_a_crash_not_modified(pair, monkeyp
     def always(*a, **kw):
         raise bg._FileUnstable("moving")
     monkeypatch.setattr(bg, "_read_small_file_once", always)
-    # head read also uses it -> make only the base-side call unstable
-    real = bg._head_bytes
+    # the head read also goes through _read_small_file: stub _head_bytes so only the base-side read can be unstable
     monkeypatch.setattr(bg, "_head_bytes", lambda *a, **k: SRC)
     with pytest.raises(Err) as info:
         overlay(pair)
