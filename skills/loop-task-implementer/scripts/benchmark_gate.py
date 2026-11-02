@@ -1183,9 +1183,15 @@ def _walk_fd(root: str, limit: int | None, repair: bool = False, at: tuple[int, 
             yield (f"{rel}/{child}" if rel else child), dfd, child, cst, cfd
     finally:
         for _, open_fd, _ in frames:
-            os.close(open_fd)
+            try:
+                os.close(open_fd)
+            except OSError:  # one failing close must not leak the rest
+                pass
         if at is None:
-            os.close(pfd)
+            try:
+                os.close(pfd)
+            except OSError:
+                pass
 
 
 def _fchmod_file(parent_fd: int, name: str, st: os.stat_result, clear: int, add: int) -> None:
@@ -2331,8 +2337,8 @@ def _head_bytes(head_root: str, parts: list[str]) -> bytes:
                 if exc.errno in _NOT_A_DIRECTORY_ERRNOS or isinstance(exc, PermissionError):
                     raise refuse(f"a parent is not an openable directory: {exc}") from exc
                 raise
-            os.close(fd)
-            fd = child
+            old, fd = fd, child  # detach first: if closing the parent raises, the `finally` below owns the child, not the stale parent
+            os.close(old)
         try:
             return _read_small_file(fd, parts[-1])
         except _FileRefused as exc:

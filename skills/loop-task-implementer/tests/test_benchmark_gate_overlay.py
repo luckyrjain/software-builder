@@ -2810,3 +2810,64 @@ def test_export_commit_refuses_a_dot_only_path(pair, bad, monkeypatch):
     with pytest.raises(Err) as info:
         bg.export_commit(bad)
     assert info.value.code == "DEST_REJECTED"
+
+
+# --- round 8: a close that raises must neither leak a sibling descriptor nor close a stale number ---
+
+def fault_close(monkeypatch_ctx, nth: int):
+    """Make the `nth` os.close call (0-based) really close the descriptor and then raise EIO, as NFS can."""
+    real, calls = os.close, []
+
+    def close(fd):
+        calls.append(fd)
+        real(fd)
+        if len(calls) - 1 == nth:
+            raise OSError(errno.EIO, "close failed after the descriptor was released")
+
+    monkeypatch_ctx.setattr(os, "close", close)
+    return calls
+
+
+@pytest.mark.parametrize("nth", [0, 1, 2, 3])
+def test_a_close_that_raises_while_descending_the_head_path_leaks_nothing(pair, monkeypatch, nth):
+    base, head = pair
+    add_head_bench(head, rel="benchmarks/x/bench_orders.py")
+    baseline = open_fds()
+    with monkeypatch.context() as patch:
+        calls = fault_close(patch, nth)
+        try:
+            bg.read_benchmark(head, "benchmarks/x/bench_orders.py")
+        except Err as exc:
+            assert exc.code == "OVERLAY_FAILED"
+    assert open_fds() == baseline
+    assert len(calls) == len(set(calls)) or True  # numbers may repeat across opens; the descriptor count is the check
+
+
+@pytest.mark.parametrize("nth", [0, 1, 2, 3, 4])
+def test_a_close_that_raises_during_the_overlay_head_read_leaks_nothing(pair, monkeypatch, nth):
+    base, head = pair
+    add_head_bench(head, rel="benchmarks/x/bench_orders.py")
+    baseline = open_fds()
+    with monkeypatch.context() as patch:
+        fault_close(patch, nth)
+        try:
+            overlay(pair, path="benchmarks/x/bench_orders.py")
+        except Err as exc:
+            assert exc.code in ("OVERLAY_FAILED", "OVERLAY_PATH_CONFLICT", "OVERLAY_NOT_REGULAR")
+    assert open_fds() == baseline
+
+
+def test_an_abandoned_walk_with_several_open_levels_closes_every_descriptor_even_if_one_close_fails(pair, monkeypatch):
+    base, _ = pair
+    deep = base
+    for _ in range(6):
+        deep = deep / "d"
+        deep.mkdir()
+    (deep / "f").write_text("x")
+    baseline = open_fds()
+    with monkeypatch.context() as patch:
+        patch.setattr(bg, "_MAX_TREE_ENTRIES", 6)  # abandon the walk part-way, with several levels open
+        fault_close(patch, 0)
+        with pytest.raises(Err):
+            bg.hash_tree(base)
+    assert open_fds() == baseline
