@@ -1238,7 +1238,7 @@ def unseal_tree(root: str | os.PathLike, *, bounded: bool = True, _at: tuple[int
     `at` (cleanup walks the directory it claimed, never a path). Raises
     `BenchmarkGateError`: `TREE_UNREADABLE` (an `OSError`, a non-directory root, or a root that is not a non-empty `str`/`bytes` path),
     `TREE_TOO_LARGE`."""
-    root_path = _root_path(root, "TREE_UNREADABLE")
+    root_path = _root_path(root, "TREE_UNREADABLE") if _at is None else ""  # `cleanup` walks a directory it holds open: no path is used
     try:
         for _, pfd, name, st, dfd in _walk_fd(root_path, _MAX_TREE_ENTRIES if bounded else None, repair=True, at=_at):
             if dfd is None and stat.S_ISREG(st.st_mode):
