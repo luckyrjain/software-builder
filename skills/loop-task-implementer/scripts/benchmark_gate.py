@@ -1238,6 +1238,8 @@ def seal_tree(root: str | os.PathLike) -> None:
             elif stat.S_ISREG(st.st_mode):
                 _fchmod_file(pfd, name, st, 0o222, 0)
     except OSError as exc:
+        if not os.path.lexists(root_path):  # the root itself vanished between the check above and the walk
+            raise BenchmarkGateError("TREE_UNREADABLE", str(exc)) from exc
         raise BenchmarkGateError("SEAL_FAILED", str(exc)) from exc
 
 
@@ -2210,7 +2212,7 @@ def export_commit(root: str | os.PathLike) -> str:
     try:
         raw = os.fspath(root)
         if type(raw) is str:
-            raw = raw.rstrip("/" + os.sep) if raw.strip("/" + os.sep) else ""  # a trailing separator is normalised, as everywhere else
+            raw = os.path.abspath(raw) if raw.strip("/" + os.sep) and raw.strip("/" + os.sep + ".") else ""  # same normalisation as `_export_root`
         if type(raw) is not str or not raw or "\0" in raw:
             raise TypeError("not a non-empty str path without NUL")
     except (Exception, SystemExit) as exc:

@@ -2754,3 +2754,59 @@ def test_a_failed_validator_load_is_retried_not_cached(pair, monkeypatch, tmp_pa
         overlay(pair)
     copy.write_bytes(b"def validate_task_target(a, b):\n    return b\n")  # fixed on disk: the next call loads it
     assert overlay(pair) == "BUILDER_AUTHORED"
+
+
+# --- round 7: root vanishing under seal_tree, export_commit with '.' components ---
+
+def test_a_root_that_vanishes_between_the_precheck_and_the_walk_is_tree_unreadable(pair, monkeypatch):
+    base, _ = pair
+    real = bg._walk_fd
+
+    def vanishing(root, *a, **kw):
+        shutil.rmtree(base)  # gone right after seal_tree's own lstat said it was a directory
+        yield from real(root, *a, **kw)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(bg, "_walk_fd", vanishing)
+        with pytest.raises(Err) as info:
+            bg.seal_tree(base)
+    assert info.value.code == "TREE_UNREADABLE"
+
+
+def test_an_entry_vanishing_inside_the_tree_is_still_a_seal_failure(pair, monkeypatch):
+    base, _ = pair
+    real = bg._fchmod_file
+
+    def vanishing(parent_fd, name, st, clear, add):
+        (base / "src" / "app.py").unlink()
+        return real(parent_fd, name, st, clear, add)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(bg, "_fchmod_file", vanishing)
+        with pytest.raises(Err) as info:
+            bg.seal_tree(base)
+    assert info.value.code == "SEAL_FAILED"
+
+
+@pytest.mark.parametrize("suffix", ["/.", "/./", "//.//", "///", "/sub/..", "/"])
+def test_export_commit_normalises_dot_components_and_trailing_separators(pair, suffix):
+    base, _ = pair
+    assert bg.export_commit(str(base) + suffix) == BASE_SHA
+
+
+def test_export_commit_never_reads_a_sidecar_planted_inside_the_export(pair):
+    base, head = pair
+    (head / "..export.json").write_text(json.dumps({"commit": "c" * 40}))  # what "<head>/." + ".export.json" would have named
+    assert bg.export_commit(head) == HEAD_SHA
+    for spelling in (str(head) + "/.", str(head) + "/./", str(head) + "//.//"):
+        assert bg.export_commit(spelling) == HEAD_SHA
+
+
+@pytest.mark.parametrize("bad", [".", "./", "..", "/.", "/..", "//"])
+def test_export_commit_refuses_a_dot_only_path(pair, bad, monkeypatch):
+    base, head = pair
+    monkeypatch.chdir(head)  # "." must not mean "the sidecar named '..export.json' in the working directory"
+    (head / "..export.json").write_text(json.dumps({"commit": "c" * 40}))
+    with pytest.raises(Err) as info:
+        bg.export_commit(bad)
+    assert info.value.code == "DEST_REJECTED"
