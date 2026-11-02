@@ -3226,3 +3226,314 @@ def test_c27_unseal_of_a_missing_or_non_directory_root_is_tree_unreadable(pair, 
         with pytest.raises(Err) as info:
             bg.unseal_tree(bad)
         assert info.value.code == "TREE_UNREADABLE", bad
+
+
+# --- round 8 test auditor: surviving mutants turned into tests ---
+
+@pytest.mark.skipif(IS_ROOT, reason="root can write anywhere")
+def test_r8_01_mkdir_permission_error_is_base_sealed(pair):
+    base, head = pair
+    add_head_bench(head, rel="benchmarks/sub/bench_orders.py")
+    (base / "benchmarks").mkdir()
+    (base / "benchmarks").chmod(0o555)
+    try:
+        with pytest.raises(Err) as info:
+            overlay(pair, path="benchmarks/sub/bench_orders.py")
+    finally:
+        (base / "benchmarks").chmod(0o755)
+    assert info.value.code == "OVERLAY_BASE_SEALED" and not (base / "benchmarks" / "sub").exists()
+
+
+def test_r8_02_unstable_existing_base_file_is_a_crash_not_modified(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    (base / "benchmarks").mkdir()
+    (base / BENCH).write_bytes(SRC)
+    def always(*a, **kw):
+        raise bg._FileUnstable("moving")
+    monkeypatch.setattr(bg, "_read_small_file_once", always)
+    # head read also uses it -> make only the base-side call unstable
+    real = bg._head_bytes
+    monkeypatch.setattr(bg, "_head_bytes", lambda *a, **k: SRC)
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_FAILED"
+
+
+def test_r8_03_transient_instability_of_the_base_file_is_retried(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    (base / "benchmarks").mkdir()
+    (base / BENCH).write_bytes(SRC)
+    real, n = bg._read_small_file_once, []
+    def flaky(*a, **kw):
+        if kw.get("permission_is_refusal") is False:  # the BASE-side read
+            n.append(1)
+            if len(n) == 1:
+                raise bg._FileUnstable("blip")
+        return real(*a, **kw)
+    monkeypatch.setattr(bg, "_read_small_file_once", flaky)
+    assert overlay(pair) == "PRE_EXISTING" and len(n) == 2
+
+
+def test_r8_04_refused_is_not_retried_and_two_blips_then_success(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    os.link(head / BENCH, head.parent / "alias.py")
+    real, n = bg._read_small_file_once, []
+    def spy(*a, **kw):
+        n.append(1)
+        return real(*a, **kw)
+    monkeypatch.setattr(bg, "_read_small_file_once", spy)
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_NOT_REGULAR" and len(n) == 1
+
+
+def test_r8_05_exactly_two_blips_then_success(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    real, n = bg._read_small_file_once, []
+    def flaky(*a, **kw):
+        n.append(1)
+        if len(n) <= 2:
+            raise bg._FileUnstable("blip")
+        return real(*a, **kw)
+    monkeypatch.setattr(bg, "_read_small_file_once", flaky)
+    assert overlay(pair) == "BUILDER_AUTHORED" and len(n) == 3
+
+
+def test_r8_06_three_blips_is_a_crash_after_exactly_three_reads(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    n = []
+    def always(*a, **kw):
+        n.append(1)
+        raise bg._FileUnstable("blip")
+    monkeypatch.setattr(bg, "_read_small_file_once", always)
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_FAILED" and len(n) == 3
+
+
+def test_r8_07_keyboard_interrupt_from_validator_passes_through(pair, monkeypatch, tmp_path):
+    add_head_bench(pair[1])
+    use_validator(monkeypatch, tmp_path, b"def validate_task_target(a, b):\n    raise KeyboardInterrupt\n")
+    with pytest.raises(KeyboardInterrupt):
+        overlay(pair)
+
+
+@pytest.mark.parametrize("which", ["seal", "hash"])
+def test_r8_08_export_helpers_use_the_resolved_root(pair, monkeypatch, which):
+    base, _ = pair
+    seen = []
+    monkeypatch.setattr(bg, "seal_tree", lambda r: seen.append(r))
+    monkeypatch.setattr(bg, "hash_tree", lambda r: seen.append(r) or "h")
+    (bg.seal_export if which == "seal" else bg.hash_export)(base)
+    assert seen == [os.path.realpath(base)] and type(seen[0]) is str
+
+
+@pytest.mark.parametrize("fn", ["seal_export", "hash_export", "repo_top_levels"])
+def test_r8_09_interrupt_while_checking_the_root_passes_through(pair, monkeypatch, fn):
+    base, _ = pair
+    def boom(*a, **k):
+        raise KeyboardInterrupt
+    monkeypatch.setattr(bg, "_check_parent", boom)
+    with pytest.raises(KeyboardInterrupt):
+        getattr(bg, fn)(base)
+
+
+def test_r8_10_seal_tree_root_kinds(pair, tmp_path):
+    f = tmp_path / "f"; f.write_text("x")
+    d = tmp_path / "d"; d.mkdir(); l = tmp_path / "l"; l.symlink_to(d)
+    for r in (f, l, tmp_path / "gone"):
+        with pytest.raises(Err) as info:
+            bg.seal_tree(r)
+        assert info.value.code == "TREE_UNREADABLE", r
+
+
+def test_r8_11_seal_clears_group_and_other_write_bits(tmp_path):
+    root = tmp_path / "r"; root.mkdir(); sub = root / "s"; sub.mkdir()
+    f = sub / "f"; f.write_text("x")
+    os.chmod(f, 0o666); os.chmod(sub, 0o777); os.chmod(root, 0o777)
+    bg.seal_tree(root)
+    assert os.stat(f).st_mode & 0o222 == 0 and os.stat(sub).st_mode & 0o222 == 0 and os.stat(root).st_mode & 0o222 == 0
+    bg.unseal_tree(root)
+
+
+def test_r8_12_export_commit_bytes_root(pair):
+    base, _ = pair
+    with pytest.raises(Err) as info:
+        bg.export_commit(os.fsencode(base))
+    assert info.value.code == "DEST_REJECTED"
+
+
+def test_r8_13_deeply_nested_sidecar_is_a_mismatch(pair):
+    base, _ = pair
+    (base.parent / "base.export.json").write_bytes(b"[" * 4000)
+    with pytest.raises(Err) as info:
+        bg.export_commit(base)
+    assert info.value.code == "OVERLAY_COMMIT_MISMATCH"
+
+
+def test_r8_14_run_cleanup_first_fatal_wins_and_fatal_is_not_a_failure():
+    def k(): raise KeyboardInterrupt
+    def s(): raise SystemExit(1)
+    failure, fatal = bg._run_cleanup([k, s])
+    assert failure is None and isinstance(fatal, KeyboardInterrupt)
+
+
+def test_r8_15_systemexit_with_ordinary_cleanup_failure_stays_systemexit_with_note(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "write", lambda fd, data: (_ for _ in ()).throw(SystemExit(143)))
+        patch.setattr(os, "unlink", lambda *a, **kw: (_ for _ in ()).throw(PermissionError(errno.EACCES, "no unlink")))
+        with pytest.raises(SystemExit) as info:
+            overlay(pair)
+    assert info.value.code == 143 and any("no unlink" in n for n in info.value.__notes__)
+
+
+def test_r8_16_fatal_note_without_earlier_failure_has_no_none(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    (base / "benchmarks").mkdir()
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "write", lambda fd, data: (_ for _ in ()).throw(OSError(errno.EIO, "disk")))
+        patch.setattr(os, "unlink", lambda *a, **kw: (_ for _ in ()).throw(SystemExit(143)))
+        with pytest.raises(SystemExit) as info:
+            overlay(pair)
+    notes = " ".join(info.value.__notes__)
+    assert "may remain" in notes and "earlier cleanup failure" not in notes and "None" not in notes
+
+
+def test_r8_17_leaf_eloop_at_open_is_not_regular(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    real = os.open
+    def op(path, flags, *a, **kw):
+        if path == "bench_orders.py" and kw.get("dir_fd") is not None and flags & os.O_NOFOLLOW:
+            raise OSError(errno.ELOOP, "swapped for a symlink")
+        return real(path, flags, *a, **kw)
+    monkeypatch.setattr(os, "open", op)
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_NOT_REGULAR"
+
+
+def test_r8_18_non_ascii_top_levels_are_excluded(pair):
+    base, _ = pair
+    (base / "pkgé").mkdir(); (base / "modé.py").write_text("")
+    (base / "ok_pkg").mkdir()
+    assert bg.repo_top_levels(base) >= {"ok_pkg", "src"} and not any(not n.isascii() for n in bg.repo_top_levels(base))
+
+
+def test_r8_19_detail_of_a_rejected_path_is_escaped(pair):
+    _, head = pair
+    with pytest.raises(Err) as info:
+        overlay(pair, path="benchmarks/\x1b[31mx\n" + "a" * 500 + ".py")
+    assert info.value.code == "OVERLAY_PATH_REJECTED"
+    d = info.value.detail
+    assert "\x1b" not in d and "\n" not in d and len(d) < 300
+
+
+def test_r8_20_read_benchmark_str_subclass(pair):
+    base, head = pair
+    add_head_bench(head)
+    add_head_bench(head, rel="benchmarks/bench_other.py", data=b"# other\n")
+    class Liar(str):
+        def split(self, *a): return ["benchmarks", "bench_other.py"]
+    with pytest.raises(Err) as info:
+        bg.read_benchmark(head, Liar(BENCH))
+    assert info.value.code == "OVERLAY_PATH_REJECTED"
+
+
+def test_r8_23_top_level_entry_bound_is_inclusive(pair, monkeypatch):
+    base, _ = pair
+    monkeypatch.setattr(bg, "_MAX_TREE_ENTRIES", 3)
+    (base / "p1").mkdir(); (base / "p2").mkdir()      # src + p1 + p2 == 3 entries: allowed
+    assert {"p1", "p2", "src"} <= bg.repo_top_levels(base)
+    (base / "p3").mkdir()                              # 4 > 3
+    with pytest.raises(Err) as info:
+        bg.repo_top_levels(base)
+    assert info.value.code == "TREE_TOO_LARGE"
+
+
+@pytest.mark.parametrize("persistent", [False, True])
+def test_r8_21_name_swapped_after_the_read_is_retried_or_a_crash(pair, monkeypatch, persistent):
+    base, head = pair
+    add_head_bench(head)
+    NEW = SRC + b"# new\n"
+    real, n = os.stat, []
+    def st(path, *a, **kw):
+        if path == "bench_orders.py" and kw.get("dir_fd") is not None and kw.get("follow_symlinks") is False:
+            n.append(1)
+            if len(n) % 2 == 0 and (persistent or len(n) == 2):  # the 2nd stat of an attempt is the `after` one
+                (head / "tmp.py").write_bytes(NEW if not persistent else SRC)
+                os.replace(head / "tmp.py", head / BENCH)
+        return real(path, *a, **kw)
+    monkeypatch.setattr(os, "stat", st)
+    if persistent:
+        with pytest.raises(Err) as info:
+            overlay(pair)
+        assert info.value.code == "OVERLAY_FAILED"
+    else:
+        assert overlay(pair) == "BUILDER_AUTHORED"
+        assert (base / BENCH).read_bytes() == NEW
+
+
+def test_r8_22_a_premature_eof_is_retried_not_an_empty_benchmark(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    real, n = os.read, []
+    def rd(fd, k):
+        if not n and k > 100:
+            n.append(1)
+            return b""
+        return real(fd, k)
+    monkeypatch.setattr(os, "read", rd)
+    assert overlay(pair) == "BUILDER_AUTHORED" and (base / BENCH).read_bytes() == SRC
+
+
+def test_r8_24_a_head_file_swapped_for_a_fifo_between_stat_and_open_does_not_hang(pair, monkeypatch):
+    import signal
+    base, head = pair
+    add_head_bench(head)
+    real, done = os.open, []
+    def op(path, flags, *a, **kw):
+        if path == "bench_orders.py" and kw.get("dir_fd") is not None and flags & os.O_NOFOLLOW and not done:
+            done.append(1)
+            os.unlink(path, dir_fd=kw["dir_fd"]); os.mkfifo(path, dir_fd=kw["dir_fd"])
+        return real(path, flags, *a, **kw)
+    class Hang(BaseException):
+        pass
+    def boom(*_):
+        raise Hang("open of a FIFO blocked")
+    monkeypatch.setattr(os, "open", op)
+    old = signal.signal(signal.SIGALRM, boom)
+    signal.alarm(5)
+    try:
+        with pytest.raises(Err) as info:
+            overlay(pair)
+    finally:
+        signal.alarm(0); signal.signal(signal.SIGALRM, old)
+    assert done and info.value.code == "OVERLAY_NOT_REGULAR"
+
+
+@pytest.mark.skipif(IS_ROOT, reason="root reads anything")
+def test_r8_25_a_permission_error_in_our_base_is_not_retried(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    (base / "benchmarks").mkdir(); (base / BENCH).write_bytes(SRC); (base / BENCH).chmod(0)
+    real, n = bg._read_small_file_once, []
+    def spy(*a, **kw):
+        if kw.get("permission_is_refusal") is False:
+            n.append(1)
+        return real(*a, **kw)
+    monkeypatch.setattr(bg, "_read_small_file_once", spy)
+    try:
+        with pytest.raises(Err) as info:
+            overlay(pair)
+    finally:
+        (base / BENCH).chmod(0o644)
+    assert info.value.code == "OVERLAY_FAILED" and len(n) == 1
