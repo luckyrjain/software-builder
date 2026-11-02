@@ -2543,6 +2543,8 @@ def _overlay_into_base(base_root: str, parts: list[str], data: bytes) -> str:
         if not isinstance(original, Exception):
             if failure is not None:  # the interrupt stays an interrupt, but a leftover must not be silent
                 original.add_note(f"overlay cleanup incomplete: {_describe(failure)}")
+            if fatal is not None:  # a second shutdown request struck during the cleanup: it is recorded, not dropped
+                original.add_note(f"overlay cleanup was also interrupted by {_describe(fatal)}; entries may remain")
             raise  # Ctrl-C or SystemExit stays what it is, however the cleanup went
         if fatal is not None:
             fatal.add_note("overlay cleanup was interrupted: entries this call created may remain in the base"

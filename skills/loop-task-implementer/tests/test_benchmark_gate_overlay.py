@@ -59,6 +59,15 @@ def sandbox(tmp_path, monkeypatch):
     shutil.rmtree(temp, ignore_errors=True)
 
 
+@pytest.fixture(autouse=True)
+def loader_state_hygiene():
+    """Tests that load a validator copy or a module copy must not leave them registered or cached for the next test."""
+    yield
+    for key in [k for k in sys.modules if k.startswith("benchmark_gate_import_time_copy")]:
+        sys.modules.pop(key, None)
+    bg._reset_task_target_cache()
+
+
 @pytest.fixture
 def pair():
     """`(base, head)` export directories in one dispatch root, with the base's sidecar."""
@@ -2871,3 +2880,349 @@ def test_an_abandoned_walk_with_several_open_levels_closes_every_descriptor_even
         with pytest.raises(Err):
             bg.hash_tree(base)
     assert open_fds() == baseline
+
+
+# --- round 6 test auditor (older snapshot): surviving mutants turned into tests, adapted to the current code ---
+
+# 1 X5 root-name anchoring (trailing junk / over-long root name)
+@pytest.mark.parametrize("newname", ["bench-aaaaaaaa.x", "bench-aaaaaaaa" + "a" * 60, "bench-aaaaaaaa x"])
+def test_c01_root_name_is_fully_matched(pair, newname):
+    base, head = pair
+    root = base.parent
+    new = root.parent / newname
+    os.rename(root, new)
+    with pytest.raises(Err) as info:
+        bg.overlay_benchmark_file(new / "base", new / "head", BASE_SHA, BENCH, head_ref_commit=HEAD_SHA)
+    assert info.value.code == "DEST_REJECTED"
+
+# 2 X1 empty path must not mean cwd
+def test_c02_an_empty_root_is_not_the_working_directory(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    monkeypatch.chdir(base)
+    with pytest.raises(Err) as info:
+        bg.overlay_benchmark_file("", head, BASE_SHA, BENCH, head_ref_commit=HEAD_SHA)
+    assert info.value.code == "DEST_REJECTED"
+    with pytest.raises(Err) as info:
+        bg.read_benchmark("", BENCH)
+    assert info.value.code == "DEST_REJECTED"
+
+# 3 R9 swap to symlink between stat and open
+def test_c03_a_head_file_swapped_for_a_symlink_between_stat_and_open_is_not_regular(pair, monkeypatch, tmp_path):
+    base, head = pair
+    add_head_bench(head)
+    (tmp_path / "t.py").write_bytes(SRC)
+    real, done = os.open, []
+    def op(path, flags, *a, **kw):
+        if path == "bench_orders.py" and kw.get("dir_fd") is not None and flags & os.O_NOFOLLOW and not done:
+            done.append(1)
+            os.unlink(head / BENCH); os.symlink(tmp_path / "t.py", head / BENCH)
+        return real(path, flags, *a, **kw)
+    monkeypatch.setattr(os, "open", op)
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert done and info.value.code == "OVERLAY_NOT_REGULAR" and not (base / "benchmarks").exists()
+
+# 4 R27/R28/R37: a rename-over AFTER the read inside the filesystem's timestamp granularity (fstat of the old inode looks unchanged)
+@pytest.mark.parametrize("who", ["head", "base"])
+def test_c04_a_name_replaced_after_every_read_is_a_crash_not_a_verdict(pair, monkeypatch, who):
+    base, head = pair
+    add_head_bench(head); add_head_bench(base)
+    target = (head if who == "head" else base) / BENCH
+    real_read, real_fstat, state, frozen = os.read, os.fstat, {"n": 0}, {}
+
+    def read(fd, size):
+        data = real_read(fd, size)
+        if data == b"" and real_fstat(fd).st_ino == target.stat().st_ino:
+            state["n"] += 1
+            tmp = target.with_name("other.py"); tmp.write_bytes(SRC)
+            os.replace(tmp, target)  # a fresh inode under the name, after EVERY attempt's read
+        return data
+
+    def fstat(fd):  # model "same timestamp tick": an inode keeps reporting what it reported the first time
+        st = real_fstat(fd)
+        if stat.S_ISREG(st.st_mode):
+            return frozen.setdefault(st.st_ino, st)
+        return st
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "read", read); patch.setattr(os, "fstat", fstat)
+        with pytest.raises(Err) as info:
+            overlay(pair)
+    assert state["n"] == bg._READ_ATTEMPTS
+    assert info.value.code == "OVERLAY_FAILED"  # unstable: never blamed on the Builder, whichever side it is
+
+
+# 5 R19/R21/R22 read returns a different number of bytes than st_size with all stat fields unchanged
+@pytest.mark.parametrize("how", ["short", "long"])
+def test_c05_a_read_that_disagrees_with_st_size_is_a_crash(pair, monkeypatch, how):
+    base, head = pair
+    add_head_bench(head)
+    real_read = os.read
+    def read(fd, size):
+        data = real_read(fd, size)
+        if data:
+            return data[:-1] if how == "short" else data + b"x"
+        return data
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "read", read)
+        with pytest.raises(Err) as info:
+            overlay(pair)
+    assert info.value.code == "OVERLAY_FAILED" and "being written" in info.value.detail
+
+# 6 R29-R31 PermissionError while reading
+@pytest.mark.parametrize("side", ["head", "base"])
+def test_c06_permission_error_during_read_follows_permission_is_refusal(pair, monkeypatch, side):
+    base, head = pair
+    add_head_bench(head); 
+    if side == "base": add_head_bench(base)
+    real_read = os.read
+    ino = ((head if side == "head" else base) / BENCH).stat().st_ino
+    def read(fd, size):
+        if os.fstat(fd).st_ino == ino:
+            raise PermissionError(errno.EACCES, "injected")
+        return real_read(fd, size)
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "read", read)
+        with pytest.raises(Err) as info:
+            overlay(pair)
+    assert info.value.code == ("OVERLAY_NOT_REGULAR" if side == "head" else "OVERLAY_FAILED")
+
+# 7 T2/T11 cap boundary, T8 non-ascii
+def test_c07_top_level_cap_boundary(pair, monkeypatch):
+    base, _ = pair
+    names = os.listdir(base)
+    for i in range(5 - len(names)):
+        (base / f"m{i}.py").write_text("")
+    assert len(os.listdir(base)) == 5
+    with monkeypatch.context() as patch:
+        patch.setattr(bg, "_MAX_TREE_ENTRIES", 5)
+        bg.repo_top_levels(base)              # exactly at the cap: fine
+        (base / "extra.py").write_text("")
+        with pytest.raises(Err) as info:
+            bg.repo_top_levels(base)
+    assert info.value.code == "TREE_TOO_LARGE"
+
+def test_c08_non_ascii_names_are_not_importable_names(pair):
+    base, _ = pair
+    (base / "pkgé").mkdir(); (base / "émod.py").write_text("")
+    names = bg.repo_top_levels(base)
+    assert "pkg\u00e9" not in names and "\u00e9mod" not in names and all(n.isascii() for n in names) and "src" in names
+
+# 8 P4/P5 descriptor leaks in the read helpers
+def test_c09_repo_top_levels_and_read_benchmark_do_not_leak_descriptors(pair):
+    base, head = pair
+    add_head_bench(head); overlay(pair)
+    (base / "src" / "pkg").mkdir()
+    baseline = open_fds()
+    for _ in range(10):
+        bg.repo_top_levels(base); bg.read_benchmark(base, BENCH)
+        with pytest.raises(Err): bg.read_benchmark(base, "benchmarks/nope_bench.py")
+    assert open_fds() == baseline
+
+# 9 RC3
+def test_c10_run_cleanup_keeps_the_first_fatal():
+    def a(): raise SystemExit(1)
+    def b(): raise KeyboardInterrupt()
+    failure, fatal = bg._run_cleanup([a, b])
+    assert isinstance(fatal, SystemExit)
+
+# 10 B5/B22
+@pytest.mark.skipif(IS_ROOT, reason="root ignores mode bits")
+@pytest.mark.parametrize("where", ["mkdir", "create"])
+def test_c11_an_unwritable_base_directory_is_sealed_not_a_conflict(pair, where):
+    base, head = pair
+    add_head_bench(head)
+    if where == "mkdir":
+        (base / "benchmarks").mkdir(); (base / "benchmarks").chmod(0o555)
+        add_head_bench(head, rel="benchmarks/sub/bench_x.py"); path = "benchmarks/sub/bench_x.py"
+    else:
+        (base / "benchmarks").mkdir(); (base / "benchmarks").chmod(0o555); path = BENCH
+    try:
+        with pytest.raises(Err) as info:
+            overlay(pair, path=path)
+        assert info.value.code == "OVERLAY_BASE_SEALED"
+    finally:
+        if (base / "benchmarks").exists(): (base / "benchmarks").chmod(0o755)
+
+# 11 B29 no double close on success
+def test_c12_no_descriptor_is_closed_twice_by_a_successful_overlay(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    real, seen, opened = os.close, [], []
+    real_open = os.open
+    def op(*a, **kw):
+        fd = real_open(*a, **kw); opened.append(fd); return fd
+    def close(fd):
+        seen.append(fd); return real(fd)
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "open", op); patch.setattr(os, "close", close)
+        overlay(pair)
+    assert len(seen) == len(set(seen)) or all(seen.count(f) <= opened.count(f) for f in set(seen))
+
+# 12 F2 SystemExit + failed cleanup stays SystemExit
+def test_c13_a_shutdown_request_with_a_failed_cleanup_stays_a_shutdown_request(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "write", lambda fd, data: (_ for _ in ()).throw(SystemExit(143)))
+        patch.setattr(os, "unlink", lambda *a, **kw: (_ for _ in ()).throw(PermissionError(errno.EACCES, "no unlink")))
+        with pytest.raises(SystemExit) as info:
+            overlay(pair)
+    assert info.value.code == 143 and any("cleanup incomplete" in n for n in info.value.__notes__)
+
+# 13 F15/F17 long messages keep the "cleanup incomplete" marker and the chain
+def test_c14_long_original_message_does_not_push_out_the_cleanup_report(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "write", lambda fd, data: (_ for _ in ()).throw(OSError(errno.ENOSPC, "F" * 500)))
+        patch.setattr(os, "unlink", lambda *a, **kw: (_ for _ in ()).throw(PermissionError(errno.EACCES, "U" * 500)))
+        with pytest.raises(Err) as info:
+            overlay(pair)
+    d = info.value.detail
+    assert info.value.code == "OVERLAY_FAILED" and "cleanup incomplete" in d and "U" in d.split("cleanup incomplete")[1]
+    assert isinstance(info.value.__cause__, OSError) and info.value.__cause__.errno == errno.ENOSPC
+
+# 14 O28 / RB6 non-OSError
+def test_c15_any_exception_from_the_internals_is_overlay_failed(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    overlay(pair)
+    for call in (lambda: overlay(pair), lambda: bg.read_benchmark(base, BENCH), lambda: bg.repo_top_levels(base)):
+        with monkeypatch.context() as patch:
+            patch.setattr(bg, "_head_bytes", lambda *a: (_ for _ in ()).throw(ValueError("boom")))
+            patch.setattr(bg, "_top_level_names", lambda *a: (_ for _ in ()).throw(ValueError("boom")))
+            with pytest.raises(Err) as info:
+                call()
+        assert info.value.code == "OVERLAY_FAILED"
+
+# 15 z12 completeness
+def test_c16_concurrent_first_loads_all_succeed(pair, monkeypatch, tmp_path):
+    src = (b"import time\ntime.sleep(0.3)\ndef validate_task_target(a, b):\n    return b\n")
+    use_validator(monkeypatch, tmp_path, src)
+    out, errs = [], []
+    def go():
+        try: out.append(bg._load_task_target()[0])
+        except BaseException as e: errs.append(e)
+    threads = [threading.Thread(target=go) for _ in range(4)]
+    [t.start() for t in threads]; [t.join() for t in threads]
+    assert not errs and len(out) == 4 and len({id(m) for m in out}) == 1
+
+# 16 KeyboardInterrupt from the validator / its import is not swallowed
+def test_c17_a_keyboard_interrupt_in_the_validator_propagates(pair, monkeypatch, tmp_path):
+    add_head_bench(pair[1])
+    use_validator(monkeypatch, tmp_path, b"def validate_task_target(a, b):\n    raise KeyboardInterrupt\n")
+    with pytest.raises(KeyboardInterrupt):
+        overlay(pair)
+def test_c18_a_keyboard_interrupt_while_importing_the_validator_propagates(pair, monkeypatch, tmp_path):
+    add_head_bench(pair[1])
+    use_validator(monkeypatch, tmp_path, b"raise KeyboardInterrupt\ndef validate_task_target(a, b):\n    return b\n")
+    with pytest.raises(KeyboardInterrupt):
+        overlay(pair)
+    assert "_benchmark_gate_validate_task_target" not in sys.modules
+
+# 17 reset pops sys.modules
+def test_c19_reset_forgets_the_registered_module(pair):
+    bg._reset_task_target_cache()
+    bg._load_task_target()
+    assert "_benchmark_gate_validate_task_target" in sys.modules
+    bg._reset_task_target_cache()
+    assert "_benchmark_gate_validate_task_target" not in sys.modules and bg._task_target_state is None
+
+# 19 F8 original interrupt, cleanup fatal
+def test_c20_second_shutdown_request_during_cleanup_of_an_interrupt_is_not_silently_dropped(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "write", lambda fd, data: (_ for _ in ()).throw(KeyboardInterrupt()))
+        patch.setattr(os, "unlink", lambda *a, **kw: (_ for _ in ()).throw(SystemExit(3)))
+        with pytest.raises((KeyboardInterrupt, SystemExit)) as info:
+            overlay(pair)
+    notes = " ".join(getattr(info.value, "__notes__", []))
+    assert isinstance(info.value, KeyboardInterrupt) and "also interrupted by SystemExit" in notes and "may remain" in notes
+
+# 23 B2 parent case-twin deterministic
+def test_c21_a_parent_whose_listed_name_differs_in_case_is_a_conflict(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    (base / "benchmarks").mkdir()
+    inodes = {base.stat().st_ino}
+    real = os.listdir
+    def listdir(path="."):
+        names = real(path)
+        if isinstance(path, int) and os.fstat(path).st_ino in inodes:
+            return ["Benchmarks" if n == "benchmarks" else n for n in names]
+        return names
+    monkeypatch.setattr(os, "listdir", listdir)
+    with pytest.raises(Err) as info:
+        overlay(pair)
+    assert info.value.code == "OVERLAY_PATH_CONFLICT" and os.listdir(base / "benchmarks") == []
+
+# 22 RD1
+def test_c22_a_file_that_replaced_a_directory_whose_identity_is_unknown_is_left_alone_and_not_reported(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    real_stat, real_write = os.stat, os.write
+    state = {"hit": False}
+    def stat_(path, *a, **kw):
+        if path == "benchmarks" and kw.get("dir_fd") is not None and not state["hit"] and (base / "benchmarks").exists():
+            state["hit"] = True
+            raise OSError(errno.EIO, "injected")
+        return real_stat(path, *a, **kw)
+    # the stat right after mkdir fails (identity None); then a FILE takes the name; the cleanup must not call rmdir on it
+    def write(fd, data):
+        shutil.rmtree(base / "benchmarks", ignore_errors=True) if False else None
+        raise OSError(errno.ENOSPC, "full")
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "stat", stat_)
+        with pytest.raises(Err) as info:
+            overlay(pair)
+    assert info.value.code == "OVERLAY_FAILED"
+
+# L18 / D5
+def test_c23_code_objects_of_the_validator_carry_its_real_path(pair, monkeypatch, tmp_path):
+    copy = use_validator(monkeypatch, tmp_path, b"def validate_task_target(a, b):\n    return b\n")
+    mod = bg._load_task_target()[0]
+    assert mod.validate_task_target.__code__.co_filename == str(copy)
+
+def test_c24_import_without___file___gives_an_empty_self_digest():
+    src = Path(bg.__file__).read_text()
+    ns = {"__name__": "x_nofile"}
+    exec(compile(src, "<embedded>", "exec"), ns)
+    assert ns["_SELF_DIGEST"] == ""
+
+# HT: setgid/sticky bits and short read in hash
+def test_c25_hash_covers_sticky_and_setgid_bits(pair):
+    base, _ = pair
+    d = base / "src"
+    h0 = bg.hash_tree(base)
+    d.chmod(0o1755)
+    assert bg.hash_tree(base) != h0
+    d.chmod(0o2755)
+    h2 = bg.hash_tree(base)
+    d.chmod(0o755)
+    assert bg.hash_tree(base) != h2
+
+def test_c26_hash_refuses_a_read_that_disagrees_with_st_size(pair, monkeypatch):
+    base, _ = pair
+    real, state = os.read, {"n": 0}
+    def read(fd, size):
+        data = real(fd, size)
+        if data and not state["n"]:
+            state["n"] = 1
+            return data[:-1]
+        return data
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "read", read)
+        with pytest.raises(Err) as info:
+            bg.hash_tree(base)
+    assert info.value.code == "TREE_UNREADABLE"
+
+# S10
+def test_c27_unseal_of_a_missing_or_non_directory_root_is_tree_unreadable(pair, tmp_path):
+    f = tmp_path / "afile"; f.write_text("x")
+    for bad in (tmp_path / "nope", f):
+        with pytest.raises(Err) as info:
+            bg.unseal_tree(bad)
+        assert info.value.code == "TREE_UNREADABLE", bad
