@@ -6,11 +6,14 @@ C4 (C4a core, C4b lint, C4c-1a export, C4c-1b seal/cleanup, C4c-1c claim recover
 lifecycle validator or other script calls it until C4f. So far it holds the pure, string-level and arithmetic
 pieces (``validate``, ``lint``) and C4c-1 (a: export, b: seal and cleanup, c: claim recovery): ``export``, ``fixed-parent``, ``cleanup`` and the library
 functions ``compare`` will call (``export_tree``, ``seal_tree``, ``unseal_tree``, ``cleanup_root``). C4c-2 is delivered in three parts: 2a (this file so far) adds the library functions ``hash_tree``,
-``overlay_benchmark_file``, ``read_benchmark``, ``export_commit``, ``repo_top_levels`` and ``harness_sha256``; 2b the protected-path diff and the
+``overlay_benchmark_file``, ``read_benchmark``, ``export_commit``, ``repo_top_levels``, ``seal_export``, ``hash_export`` and
+``harness_sha256``; 2b the protected-path diff and the
 token tripwire; 2c the venv ``.pth`` check with ``snapshot-venv``. Calling order for ``compare`` (C4d): ``export_tree`` x2 (the dispatch root's
-marker pid defaults to the exporting process, so pass ``--owner-pid`` when ``cleanup`` will run from another process), venv and install,
-``repo_top_levels(base)``, ``overlay_benchmark_file(..., head_ref_commit=...)``, ``read_benchmark`` and the lint, ``seal_tree`` x2,
-``hash_tree`` x2, measure, ``hash_tree`` x2, ``harness_sha256``; C4d adds measurement, the trace, ``compare`` and ``run-once``, C4e
+marker pid defaults to the exporting process, so pass ``--owner-pid`` when ``cleanup`` will run from another process),
+``repo_top_levels(base)`` (BEFORE the install: afterwards ``build/``, ``dist/`` and ``venv/`` would join the lint's allowlist), venv and
+install, ``overlay_benchmark_file(..., head_ref_commit=...)``, ``seal_export`` x2, ``read_benchmark`` on BOTH roots (required equal) and
+the lint, ``hash_export`` x2, measure, ``hash_export`` x2; ``harness_sha256`` at any point (both parts are fixed at import and at the
+first load of the validator, whose module body it therefore runs); C4d adds measurement, the trace, ``compare`` and ``run-once``, C4e
 the classifier and docs, C4f the workflow wiring. Specification (revision 5, the converged result of four review
 rounds): ``docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md`` (APIs table,
 Data model, Capacity, Threat model). This docstring states each function's own contract and the reason each
@@ -1207,7 +1210,7 @@ def _root_path(root: object, code: str) -> str | bytes:
         path = os.fspath(root)  # type: ignore[arg-type]  # a hostile __fspath__ may raise anything, even SystemExit
         if type(path) not in (str, bytes) or not path:
             raise ValueError("root must be a non-empty str or bytes path (an empty one would mean the working directory)")
-        if os.fsencode(path).count(b"\0"):  # also proves a str is encodable (a lone surrogate is not)
+        if os.fsencode(path).count(b"\0"):  # also proves a str is encodable (a lone HIGH surrogate is not; \udc80-\udcff are undecodable bytes)
             raise ValueError("root contains a NUL byte")
     except (Exception, SystemExit) as exc:
         raise BenchmarkGateError(code, f"root is not a usable path: {_describe(exc)}") from exc
@@ -1224,6 +1227,11 @@ def seal_tree(root: str | os.PathLike) -> None:
     would mean the working directory). Call it only on roots `export_tree` returned."""
     root_path = _root_path(root, "TREE_UNREADABLE")
     try:
+        if not stat.S_ISDIR(os.lstat(root_path).st_mode):
+            raise BenchmarkGateError("TREE_UNREADABLE", "root is not a real directory")
+    except OSError as exc:  # the root itself cannot be looked at: not a sealing failure
+        raise BenchmarkGateError("TREE_UNREADABLE", str(exc)) from exc
+    try:
         for _, pfd, name, st, dfd in _walk_fd(root_path, _MAX_TREE_ENTRIES):
             if dfd is not None:
                 os.fchmod(dfd, stat.S_IMODE(st.st_mode) & ~0o222)
@@ -1234,13 +1242,13 @@ def seal_tree(root: str | os.PathLike) -> None:
 
 
 def unseal_tree(root: str | os.PathLike, *, bounded: bool = True, _at: tuple[int, str, tuple[int, int]] | None = None) -> None:
-    """Inverse of `seal_tree` for `cleanup`, by descriptor only: directories `u+rwx` (an unopenable one via
-    `_chmod_dir_nofollow`; where that is unavailable it stays), regular files `u+w` (hard-linked or unopenable ones are
-    skipped: deleting a file needs write on its directory only). `bounded=False` lifts the entry bound; `_at` is `_walk_fd`'s
-    `at` (cleanup walks the directory it claimed, never a path). Raises
-    `BenchmarkGateError`: `TREE_UNREADABLE` (an `OSError`, a non-directory root, or a root that is not a non-empty `str`/`bytes` path),
-    `TREE_TOO_LARGE`."""
-    root_path = _root_path(root, "TREE_UNREADABLE") if _at is None else ""  # `cleanup` walks a directory it holds open: no path is used
+    """Inverse of `seal_tree`, by descriptor only: directories `u+rwx` (an unopenable one via `_chmod_dir_nofollow`; where that is
+    unavailable it stays), regular files `u+w` (hard-linked or unopenable ones are skipped: deleting a file needs write on its
+    directory only). `bounded=False` lifts the entry bound; `_at` is `_walk_fd`'s `at` (`cleanup` walks the directory it claimed and
+    holds open, never a path; `root` is then ignored, so callers outside `cleanup` pass a path and no `_at`). Raises
+    `BenchmarkGateError`: `TREE_UNREADABLE` (an `OSError`, a non-directory root, or a root that is not a non-empty `str`/`bytes`
+    path without NUL), `TREE_TOO_LARGE`."""
+    root_path = _root_path(root, "TREE_UNREADABLE") if _at is None else ""  # `cleanup` holds the directory open: no path is used
     try:
         for _, pfd, name, st, dfd in _walk_fd(root_path, _MAX_TREE_ENTRIES if bounded else None, repair=True, at=_at):
             if dfd is None and stat.S_ISREG(st.st_mode):
@@ -2051,8 +2059,8 @@ def _load_task_target() -> tuple:
     """`(module, sha256)` of the sibling `validate_task_target.py`, loaded once. The source is read ONCE and the module is built from
     those bytes by a loader with no bytecode cache, so what runs is exactly what the digest reports (no stale `.pyc`, no swap
     between a hash and the load). The module is registered under a private name and has `__file__`, so a later edit using
-    dataclasses, enums or typing helpers keeps working. Any failure, including a `SystemExit` raised by the module or a
-    re-entrant load from the module's own code, is `OVERLAY_FAILED`."""
+    dataclasses, enums or typing helpers keeps working. Any `Exception`, including a re-entrant load from the module's own code, is `OVERLAY_FAILED`; a `SystemExit`
+    or `KeyboardInterrupt` passes through (see `_call_validator`)."""
     global _task_target_state, _task_target_loading
     if not _task_target_lock.acquire(timeout=_LOAD_LOCK_SECONDS):  # another thread is stuck loading (e.g. the module body joins a thread of ours)
         raise BenchmarkGateError("OVERLAY_FAILED", "timed out waiting for the validator load")
@@ -2086,10 +2094,7 @@ def _load_task_target() -> tuple:
             sys.modules[name] = module
             try:
                 loader.exec_module(module)
-            except SystemExit as exc:  # the module's own code asked to exit: hostile, not a shutdown of ours
-                sys.modules.pop(name, None)
-                raise RuntimeError(f"the validator module raised SystemExit({exc.code!r})") from exc
-            except BaseException:
+            except BaseException:  # SystemExit/KeyboardInterrupt included: it passes through, the half-loaded module does not stay
                 sys.modules.pop(name, None)
                 raise
             if not callable(getattr(module, "validate_task_target", None)):
@@ -2106,12 +2111,13 @@ def _load_task_target() -> tuple:
 
 
 def _call_validator(root: str, target: str) -> object:
-    """`validate_task_target(root, target)` of the loaded validator. The validator is third-party code from this function's point of
-    view: whatever it raises, even `SystemExit`, is `OVERLAY_FAILED` (a shutdown request of OUR process never passes through here)."""
+    """`validate_task_target(root, target)` of the loaded validator. Any `Exception` it raises is `OVERLAY_FAILED`. A `SystemExit`
+    or `KeyboardInterrupt` is NOT converted: it cannot be told from a shutdown request of our own process delivered while this
+    frame is running (a signal handler runs in whatever frame is current), and the validator is this repository's own file."""
     function = _load_task_target()[0].validate_task_target
     try:
         return function(root, target)
-    except (Exception, SystemExit) as exc:
+    except Exception as exc:
         raise BenchmarkGateError("OVERLAY_FAILED", f"validate_task_target raised {_describe(exc)}") from exc
 
 
@@ -2198,13 +2204,15 @@ def _export_root(path: object, label: str) -> str:
 def export_commit(root: str | os.PathLike) -> str:
     """The commit recorded in an export's sidecar `<root>.export.json` (the file `export_tree` writes beside the export directory) as 40
     or 64 hex, for `compare` to check each export against the commit it was asked for. `root` must be a `str` (or `PathLike`
-    returning one) without a trailing separator or NUL, else `DEST_REJECTED`. `OVERLAY_COMMIT_MISMATCH` when the sidecar is absent, not
+    returning one) without NUL (a trailing separator is ignored), else `DEST_REJECTED`. `OVERLAY_COMMIT_MISMATCH` when the sidecar is absent, not
     a plain small file, or not valid; an I/O failure (EIO, EMFILE) propagates as `OSError`. The sidecar sits in the dispatch root, which
     the same user can write: this guards against slips and stale directories, not against a same-user attacker."""
     try:
         raw = os.fspath(root)
-        if type(raw) is not str or not raw or raw.endswith(("/", os.sep)) or "\0" in raw:
-            raise TypeError("not a str path without a trailing separator or NUL")
+        if type(raw) is str:
+            raw = raw.rstrip("/" + os.sep) if raw.strip("/" + os.sep) else ""  # a trailing separator is normalised, as everywhere else
+        if type(raw) is not str or not raw or "\0" in raw:
+            raise TypeError("not a non-empty str path without NUL")
     except (Exception, SystemExit) as exc:
         raise BenchmarkGateError("DEST_REJECTED", f"root is not a usable path: {_describe(exc)}") from exc
     try:
@@ -2225,13 +2233,13 @@ def export_commit(root: str | os.PathLike) -> str:
     return commit
 
 
-def _read_small_file(parent_fd: int, name: str, *, permission_is_refusal: bool = True) -> bytes:
+def _read_small_file_once(parent_fd: int, name: str, *, permission_is_refusal: bool) -> bytes:
     """The bytes of regular file `name` of directory `parent_fd`: looked at by name first (a socket cannot be opened), then opened
     with `O_NOFOLLOW | O_NONBLOCK`, and the open descriptor must be the very file that was looked at (`fstat`), regular, with ONE
     link (a hard link would read a file outside the export), and still be what the name points to after the read (a by-name
-    `stat`); at most 16 KiB. `_FileRefused` for a symlink, special file, hard link, swap or oversize, and (when
-    `permission_is_refusal`, true for the Builder's head tree) a permission error; any other `OSError` (EIO, EMFILE, a vanished
-    entry, and a permission error in OUR base tree) propagates."""
+    `stat`); at most 16 KiB. `_FileRefused` for a symlink, special file, hard link or oversize, and (when
+    `permission_is_refusal`, true for the Builder's head tree) a permission error; `_FileUnstable` for a swap or a change while
+    reading; any other `OSError` (EIO, EMFILE, a vanished entry, and a permission error in OUR base tree) propagates."""
     try:
         before = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         if not stat.S_ISREG(before.st_mode) or before.st_nlink > 1:
@@ -2248,7 +2256,7 @@ def _read_small_file(parent_fd: int, name: str, *, permission_is_refusal: bool =
     try:
         st = os.fstat(leaf)
         if not stat.S_ISREG(st.st_mode) or st.st_nlink > 1 or (st.st_dev, st.st_ino) != (before.st_dev, before.st_ino):
-            raise _FileRefused("the file changed while it was being opened")
+            raise _FileUnstable("the file changed while it was being opened")
         chunks, size = [], 0
         while size <= _MAX_BENCHMARK_FILE_BYTES and (chunk := os.read(leaf, _MAX_BENCHMARK_FILE_BYTES + 1 - size)):
             chunks.append(chunk)
@@ -2256,10 +2264,10 @@ def _read_small_file(parent_fd: int, name: str, *, permission_is_refusal: bool =
         done = os.fstat(leaf)
         moved = any(getattr(done, f) != getattr(st, f) for f in ("st_dev", "st_ino", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns"))
         if moved or (st.st_size <= _MAX_BENCHMARK_FILE_BYTES and size != st.st_size):
-            raise _FileRefused("the file was being written while it was read")  # torn bytes: a writer rewrote it in place
+            raise _FileUnstable("the file was being written while it was read")  # torn bytes: a writer rewrote it in place
         after = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         if (after.st_dev, after.st_ino, after.st_nlink) != (st.st_dev, st.st_ino, st.st_nlink):
-            raise _FileRefused("the name no longer points to the file that was read")
+            raise _FileUnstable("the name no longer points to the file that was read")
     except PermissionError as exc:
         if permission_is_refusal:
             raise _FileRefused(f"permission denied: {exc}") from exc
@@ -2272,7 +2280,27 @@ def _read_small_file(parent_fd: int, name: str, *, permission_is_refusal: bool =
 
 
 class _FileRefused(Exception):
-    """The file is not an acceptable benchmark (kind, links, size, permissions, swapped): a refusal, not an environmental failure."""
+    """The file is not an acceptable benchmark (kind, links, size, permissions): a refusal, not an environmental failure."""
+
+
+class _FileUnstable(Exception):
+    """The file kept changing while it was read (a writer, a swap, a background attribute change). Not a verdict about the file's
+    kind: it surfaces as `OVERLAY_FAILED` (a crash for `compare`, not a refusal blamed on the Builder) after `_READ_ATTEMPTS` tries."""
+
+
+_READ_ATTEMPTS = 3
+
+
+def _read_small_file(parent_fd: int, name: str, *, permission_is_refusal: bool = True) -> bytes:
+    """`_read_small_file_once`, retried a few times when the file is seen changing mid-read (a macOS background xattr write, an NFS
+    attribute refresh and similar disturb ctime for an instant). `_FileUnstable` if it never settles; `_FileRefused` at once."""
+    for attempt in range(_READ_ATTEMPTS):
+        try:
+            return _read_small_file_once(parent_fd, name, permission_is_refusal=permission_is_refusal)
+        except _FileUnstable:
+            if attempt == _READ_ATTEMPTS - 1:
+                raise
+    raise AssertionError("unreachable")  # pragma: no cover
 
 
 def _head_bytes(head_root: str, parts: list[str]) -> bytes:
@@ -2340,6 +2368,30 @@ def _top_level_names(dir_fd: int, names: set[str]) -> None:
         stem = name[:-3] if name.endswith(".py") and stat.S_ISREG(st.st_mode) else name if stat.S_ISDIR(st.st_mode) else ""
         if stem.isascii() and stem.isidentifier():
             names.add(stem)
+
+
+def seal_export(export_root: str | os.PathLike) -> None:
+    """`seal_tree` for an EXPORT: the root must pass the same shape check as the overlay (`<fixed parent>/<root>/<leaf>`, a real directory
+    of ours with a valid marker), so a wrong path argument cannot silently seal some other tree. `DEST_REJECTED` for a bad root,
+    `OVERLAY_FAILED` for an environmental error; otherwise the errors of `seal_tree`. `compare` should use this, not `seal_tree`."""
+    try:
+        root = _export_root(export_root, "export_root")
+    except BenchmarkGateError:
+        raise
+    except Exception as exc:
+        raise BenchmarkGateError("OVERLAY_FAILED", _describe(exc)) from exc
+    seal_tree(root)
+
+
+def hash_export(export_root: str | os.PathLike) -> str:
+    """`hash_tree` for an EXPORT, with the root checked like `seal_export` (same errors)."""
+    try:
+        root = _export_root(export_root, "export_root")
+    except BenchmarkGateError:
+        raise
+    except Exception as exc:
+        raise BenchmarkGateError("OVERLAY_FAILED", _describe(exc)) from exc
+    return hash_tree(root)
 
 
 def repo_top_levels(export_root: str | os.PathLike) -> frozenset[str]:
@@ -2424,6 +2476,8 @@ def _overlay_into_base(base_root: str, parts: list[str], data: bytes) -> str:
                 continue
             try:
                 os.mkdir(part, 0o755, dir_fd=parent)  # a case-folded twin ("Benchmarks" for "benchmarks") raises FileExistsError
+            except PermissionError as exc:  # a sub-directory of the base is read-only: sealed below its root
+                raise BenchmarkGateError("OVERLAY_BASE_SEALED", f"cannot create {part!r}: {_describe(exc)}") from exc
             except FileExistsError as exc:
                 raise BenchmarkGateError("OVERLAY_PATH_CONFLICT", "a parent appeared concurrently or has a case-folded twin in the base") from exc
             made.append([len(fds) - 1, part, None])  # at once, before anything else can fail: the identity is filled in next
@@ -2445,6 +2499,8 @@ def _overlay_into_base(base_root: str, parts: list[str], data: bytes) -> str:
             return "PRE_EXISTING"
         try:
             out = os.open(leaf, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=parent)
+        except PermissionError as exc:
+            raise BenchmarkGateError("OVERLAY_BASE_SEALED", f"cannot create the benchmark: {_describe(exc)}") from exc
         except FileExistsError as exc:
             raise BenchmarkGateError("OVERLAY_PATH_CONFLICT", "the benchmark appeared concurrently or has a case-folded twin in the base") from exc
         leaf_made.append([leaf, None])  # the name is ours from here on (O_EXCL); the identity is filled in next
@@ -2481,6 +2537,8 @@ def _overlay_into_base(base_root: str, parts: list[str], data: bytes) -> str:
                 original.add_note(f"overlay cleanup incomplete: {_describe(failure)}")
             raise  # Ctrl-C or SystemExit stays what it is, however the cleanup went
         if fatal is not None:
+            fatal.add_note("overlay cleanup was interrupted: entries this call created may remain in the base"
+                           + (f" (earlier cleanup failure: {_describe(failure)})" if failure is not None else ""))
             raise fatal
         if failure is not None:
             raise BenchmarkGateError(

@@ -1438,7 +1438,7 @@ def test_only_the_validator_returning_the_very_path_passes(pair, monkeypatch, tm
     assert info.value.code == "OVERLAY_PATH_REJECTED"
 
 
-@pytest.mark.parametrize("exc", ["AttributeError", "KeyError", "TypeError", "RuntimeError", "OverflowError", "AssertionError", "NotImplementedError", "SystemExit"])
+@pytest.mark.parametrize("exc", ["AttributeError", "KeyError", "TypeError", "RuntimeError", "OverflowError", "AssertionError", "NotImplementedError"])
 def test_any_exception_from_the_validator_is_overlay_failed(pair, monkeypatch, tmp_path, exc):
     add_head_bench(pair[1])
     use_validator(monkeypatch, tmp_path, f"def validate_task_target(a, b):\n    raise {exc}('x')\n".encode())
@@ -1447,12 +1447,13 @@ def test_any_exception_from_the_validator_is_overlay_failed(pair, monkeypatch, t
     assert info.value.code == "OVERLAY_FAILED"
 
 
-def test_a_system_exit_at_import_is_overlay_failed(pair, monkeypatch, tmp_path):
+def test_a_system_exit_at_import_passes_through_and_leaves_nothing_registered(pair, monkeypatch, tmp_path):
     add_head_bench(pair[1])
     use_validator(monkeypatch, tmp_path, b"raise SystemExit(3)\n")
-    with pytest.raises(Err) as info:
-        overlay(pair)
-    assert info.value.code == "OVERLAY_FAILED"
+    with pytest.raises(SystemExit) as info:
+        overlay(pair)  # indistinguishable from a shutdown request delivered while the loader runs, so it is not converted
+    assert info.value.code == 3
+    assert "_benchmark_gate_validate_task_target" not in sys.modules and bg._task_target_state is None and bg._task_target_loading is False
 
 
 def test_the_validator_may_use_dataclasses_and_its_own_file_name(pair, monkeypatch, tmp_path):
@@ -1801,7 +1802,7 @@ def test_harness_sha256_survives_an_undefined_file_and_caches_its_own_digest(pai
     assert info.value.code == "HARNESS_UNREADABLE"
 
 
-@pytest.mark.parametrize("root", [None, 5, b"/x", "", "/x/", "x\0y"])
+@pytest.mark.parametrize("root", [None, 5, b"/x", "", "///", "x\0y"])
 def test_export_commit_arguments_are_coded(pair, root):
     with pytest.raises(Err) as info:
         bg.export_commit(root)
@@ -1810,7 +1811,7 @@ def test_export_commit_arguments_are_coded(pair, root):
 
 def test_export_commit_names_the_sidecar_beside_the_export(pair):
     base, _ = pair
-    assert bg.export_commit(base) == BASE_SHA == bg.export_commit(str(base))
+    assert bg.export_commit(base) == BASE_SHA == bg.export_commit(str(base)) == bg.export_commit(str(base) + "/") == bg.export_commit(str(base) + "//")
 
 
 def test_repo_top_levels_is_taken_before_the_overlay(pair):
@@ -2018,7 +2019,7 @@ def test_z10b_export_commit_with_a_non_path_argument_is_dest_rejected(pair, bad)
     assert info.value.code == "DEST_REJECTED"
 
 
-@pytest.mark.parametrize("src", [b"x = 1\n", b"validate_task_target = 3\n", b"raise SystemExit(2)\n"])
+@pytest.mark.parametrize("src", [b"x = 1\n", b"validate_task_target = 3\n"])
 def test_z11_the_loader_and_harness_sha_fail_coded_and_leave_nothing_registered(pair, monkeypatch, tmp_path, src):
     use_validator(monkeypatch, tmp_path, src)
     with pytest.raises(Err) as info:
@@ -2119,8 +2120,31 @@ def test_z17_a_file_replaced_by_a_fifo_between_walk_and_open_does_not_hang(pair,
     assert done and info.value.code == "TREE_UNREADABLE"
 
 
-@pytest.mark.parametrize("how", ["alias", "replace"])
-def test_z18_a_head_file_changed_between_its_stat_and_its_open_is_not_regular(pair, monkeypatch, tmp_path, how):
+@pytest.mark.parametrize("how,expected", [("alias", "OVERLAY_NOT_REGULAR"), ("replace", "OVERLAY_FAILED")])
+def test_z18_a_head_file_changed_between_its_stat_and_its_open(pair, monkeypatch, tmp_path, how, expected):
+    base, head = pair
+    add_head_bench(head)
+    real, count = os.open, []
+
+    def op(path, flags, *a, **kw):
+        if path == "bench_orders.py" and kw.get("dir_fd") is not None and flags & os.O_NOFOLLOW:
+            count.append(1)
+            if how == "alias" and len(count) == 1:
+                os.link(head / BENCH, tmp_path / "alias.py")
+            elif how == "replace":  # on EVERY attempt: the file never settles
+                (head / "tmp.py").write_bytes(SRC); os.replace(head / "tmp.py", head / BENCH)
+        return real(path, flags, *a, **kw)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "open", op)
+        with pytest.raises(Err) as info:
+            overlay(pair)
+    assert count and info.value.code == expected and not (base / "benchmarks").exists()
+    if how == "replace":
+        assert len(count) == bg._READ_ATTEMPTS  # retried, then gave up as a crash rather than a verdict
+
+
+def test_z18b_a_single_swap_between_stat_and_open_is_retried_and_succeeds(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     real, done = os.open, []
@@ -2128,16 +2152,13 @@ def test_z18_a_head_file_changed_between_its_stat_and_its_open_is_not_regular(pa
     def op(path, flags, *a, **kw):
         if path == "bench_orders.py" and kw.get("dir_fd") is not None and flags & os.O_NOFOLLOW and not done:
             done.append(1)
-            if how == "alias":
-                os.link(head / BENCH, tmp_path / "alias.py")
-            else:
-                (head / "tmp.py").write_bytes(SRC); os.replace(head / "tmp.py", head / BENCH)
+            (head / "tmp.py").write_bytes(SRC); os.replace(head / "tmp.py", head / BENCH)
         return real(path, flags, *a, **kw)
 
-    monkeypatch.setattr(os, "open", op)
-    with pytest.raises(Err) as info:
-        overlay(pair)
-    assert done and info.value.code == "OVERLAY_NOT_REGULAR" and not (base / "benchmarks").exists()
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "open", op)
+        assert overlay(pair) == "BUILDER_AUTHORED"
+    assert done and (base / BENCH).read_bytes() == SRC
 
 
 @pytest.mark.parametrize("err", [errno.ELOOP, errno.ENOTDIR, errno.EMLINK])
@@ -2535,12 +2556,12 @@ def test_an_interrupt_with_a_clean_cleanup_has_no_note(pair, monkeypatch):
     assert not getattr(info.value, "__notes__", []) and not (base / "benchmarks").exists()
 
 
-def test_a_validator_asking_to_exit_is_overlay_failed_but_ours_is_not(pair, monkeypatch, tmp_path):
+def test_a_systemexit_raised_while_the_validator_runs_passes_through(pair, monkeypatch, tmp_path):
     add_head_bench(pair[1])
     use_validator(monkeypatch, tmp_path, b"def validate_task_target(a, b):\n    raise SystemExit(9)\n")
-    with pytest.raises(Err) as info:
+    with pytest.raises(SystemExit) as info:
         overlay(pair)
-    assert info.value.code == "OVERLAY_FAILED" and "validate_task_target raised" in info.value.detail
+    assert info.value.code == 9
 
 
 @pytest.mark.parametrize("bad", ["a\0b", b"a\0b", "\ud800x"])
@@ -2551,38 +2572,49 @@ def test_seal_unseal_and_hash_refuse_a_root_with_a_nul_or_a_lone_surrogate(bad):
         assert info.value.code == "TREE_UNREADABLE"
 
 
-def torn(pair, monkeypatch, how):
+def torn(pair, monkeypatch, how, times=None):
     base, head = pair
     add_head_bench(head, data=b"x" * 3000)
     target = head / BENCH
-    real_read, state = os.read, {"n": 0}
+    real_read, state = os.read, {"n": 0, "attempts": 0}
 
     def read(fd, size):
         data = real_read(fd, size)
-        state["n"] += 1
-        if state["n"] == 1:
-            if how == "same_size_rewrite":
-                with open(target, "r+b") as handle:
-                    handle.write(b"y" * 3000)  # same size, same inode: the mtime moves
-                time.sleep(0.01)
-                os.utime(target, ns=(1, 2))
-            else:
-                with open(target, "wb") as handle:  # truncated and rewritten shorter
-                    handle.write(b"z" * 10)
+        if data and size > 1:  # the first chunk of each read attempt (the digest/other reads use other sizes or fds)
+            state["attempts"] += 1
+            if times is None or state["attempts"] <= times:
+                if how == "same_size_rewrite":
+                    with open(target, "r+b") as handle:
+                        handle.write(b"y" * 3000)  # same size, same inode
+                    time.sleep(0.01)
+                    os.utime(target, ns=(1, 2 + state["attempts"]))  # the mtime moves
+                else:
+                    with open(target, "wb") as handle:  # truncated and rewritten shorter
+                        handle.write(b"z" * (10 + state["attempts"]))
         return data
 
-    return read
+    return read, state
 
 
 @pytest.mark.parametrize("how", ["same_size_rewrite", "truncate_rewrite"])
-def test_a_head_file_rewritten_in_place_while_it_is_read_is_refused(pair, monkeypatch, how):
+def test_a_head_file_rewritten_in_place_on_every_attempt_is_a_crash_not_a_verdict(pair, monkeypatch, how):
     base, head = pair
-    read = torn(pair, monkeypatch, how)
+    read, state = torn(pair, monkeypatch, how)
     with monkeypatch.context() as patch:
         patch.setattr(os, "read", read)
         with pytest.raises(Err) as info:
             overlay(pair)
-    assert info.value.code == "OVERLAY_NOT_REGULAR" and "being written" in info.value.detail and not (base / "benchmarks").exists()
+    assert info.value.code == "OVERLAY_FAILED" and "being written" in info.value.detail and not (base / "benchmarks").exists()
+
+
+@pytest.mark.parametrize("how", ["same_size_rewrite", "truncate_rewrite"])
+def test_a_head_file_rewritten_once_while_read_is_retried_and_copied_stable(pair, monkeypatch, how):
+    base, head = pair
+    read, state = torn(pair, monkeypatch, how, times=1)
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "read", read)
+        assert overlay(pair) == "BUILDER_AUTHORED"
+    assert (base / BENCH).read_bytes() == (head / BENCH).read_bytes() and state["attempts"] >= 2
 
 
 def test_each_stability_field_of_the_read_is_checked(pair, monkeypatch):
@@ -2595,7 +2627,7 @@ def test_each_stability_field_of_the_read_is_checked(pair, monkeypatch):
             result = real_fstat(fd)
             if stat.S_ISREG(result.st_mode) and result.st_ino == leaf_ino:
                 calls["n"] += 1
-                if calls["n"] == 2:  # the second fstat of the head leaf is the one after the read
+                if calls["n"] % 2 == 0:  # every second fstat of the head leaf is the one after the read, on every attempt
                     values = {f: getattr(result, f) for f in ("st_dev", "st_ino", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns", "st_mode")}
                     values[field] += 1
                     return types.SimpleNamespace(**values)
@@ -2605,5 +2637,120 @@ def test_each_stability_field_of_the_read_is_checked(pair, monkeypatch):
             patch.setattr(os, "fstat", fstat)
             with pytest.raises(Err) as info:
                 overlay(pair)
-        assert info.value.code == "OVERLAY_NOT_REGULAR", field
+        assert info.value.code == "OVERLAY_FAILED" and ("changed" in info.value.detail or "written" in info.value.detail), field
         assert not (base / "benchmarks").exists(), field
+
+
+# --- round 6 review: export-checked seal/hash wrappers, sub-level seals, notes on interrupted cleanup, path-only unseal ---
+
+def test_seal_export_and_hash_export_check_the_root_is_an_export(pair, tmp_path):
+    base, head = pair
+    stray = tmp_path / "stray"
+    (stray / "sub").mkdir(parents=True)
+    (stray / "sub" / "f").write_text("x")
+    before = {p: stat.S_IMODE(p.stat().st_mode) for p in [stray, *stray.rglob("*")]}
+    for func in (bg.seal_export, bg.hash_export):
+        for bad in (stray, tmp_path, base.parent, "", None, os.fsencode(base)):
+            with pytest.raises(Err) as info:
+                func(bad)
+            assert info.value.code == "DEST_REJECTED"
+    assert {p: stat.S_IMODE(p.stat().st_mode) for p in [stray, *stray.rglob("*")]} == before  # nothing was sealed
+    bg.seal_export(base)
+    assert not (stat.S_IMODE(base.stat().st_mode) & 0o222)
+    sealed = bg.hash_export(base)
+    assert sealed == bg.hash_tree(base)
+    bg.unseal_tree(base)
+    assert bg.hash_export(base) != sealed  # the unsealed tree differs: modes are in the hash
+
+
+def test_seal_export_wraps_environmental_errors(pair, monkeypatch):
+    base, _ = pair
+
+    def broken(create):
+        raise OSError(errno.EIO, "injected")
+
+    monkeypatch.setattr(bg, "_check_parent", broken)
+    for func in (bg.seal_export, bg.hash_export):
+        with pytest.raises(Err) as info:
+            func(base)
+        assert info.value.code == "OVERLAY_FAILED"
+
+
+def test_seal_tree_on_a_missing_root_is_tree_unreadable_like_the_others(tmp_path):
+    for func in (bg.seal_tree, bg.unseal_tree, bg.hash_tree):
+        with pytest.raises(Err) as info:
+            func(tmp_path / "nowhere")
+        assert info.value.code == "TREE_UNREADABLE"
+    (tmp_path / "afile").write_text("x")
+    with pytest.raises(Err) as info:
+        bg.seal_tree(tmp_path / "afile")
+    assert info.value.code == "TREE_UNREADABLE"
+
+
+@pytest.mark.skipif(IS_ROOT, reason="root can write anywhere")
+def test_a_readonly_subdirectory_of_a_writable_base_is_base_sealed(pair):
+    base, head = pair
+    add_head_bench(head)
+    (base / "benchmarks").mkdir()
+    (base / "benchmarks").chmod(0o555)  # the base root is writable, one level below is not
+    try:
+        with pytest.raises(Err) as info:
+            overlay(pair)
+    finally:
+        (base / "benchmarks").chmod(0o755)
+    assert info.value.code == "OVERLAY_BASE_SEALED" and not (base / BENCH).exists()
+
+
+@pytest.mark.skipif(IS_ROOT, reason="root can write anywhere")
+def test_a_readonly_base_root_below_the_dispatch_level_is_also_base_sealed(pair):
+    base, head = pair
+    add_head_bench(head, rel="benchmarks/sub/bench_orders.py")
+    (base / "benchmarks").mkdir()
+    (base / "benchmarks" / "sub").mkdir()
+    (base / "benchmarks" / "sub").chmod(0o555)
+    try:
+        with pytest.raises(Err) as info:
+            overlay(pair, path="benchmarks/sub/bench_orders.py")
+    finally:
+        (base / "benchmarks" / "sub").chmod(0o755)
+    assert info.value.code == "OVERLAY_BASE_SEALED"
+
+
+def test_a_shutdown_during_cleanup_after_an_ordinary_failure_carries_a_note(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head)
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "write", lambda fd, data: (_ for _ in ()).throw(OSError(errno.EIO, "disk")))
+        patch.setattr(os, "unlink", lambda *a, **kw: (_ for _ in ()).throw(SystemExit(143)))
+        with pytest.raises(SystemExit) as info:
+            overlay(pair)
+    assert any("cleanup was interrupted" in note for note in info.value.__notes__)
+    assert (base / BENCH).exists()  # and the note says so
+
+
+def test_a_shutdown_during_cleanup_with_an_earlier_cleanup_failure_names_both(pair, monkeypatch):
+    base, head = pair
+    add_head_bench(head, rel="benchmarks/sub/bench_orders.py")
+    calls = []
+
+    def unlink(*a, **kw):
+        calls.append(1)
+        raise PermissionError(errno.EACCES, "no unlink")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "write", lambda fd, data: (_ for _ in ()).throw(OSError(errno.EIO, "disk")))
+        patch.setattr(os, "unlink", unlink)
+        patch.setattr(os, "rmdir", lambda *a, **kw: (_ for _ in ()).throw(SystemExit(143)))
+        with pytest.raises(SystemExit) as info:
+            overlay(pair, path="benchmarks/sub/bench_orders.py")
+    notes = " ".join(info.value.__notes__)
+    assert "cleanup was interrupted" in notes and "no unlink" in notes
+
+
+def test_a_failed_validator_load_is_retried_not_cached(pair, monkeypatch, tmp_path):
+    add_head_bench(pair[1])
+    copy = use_validator(monkeypatch, tmp_path, b"(((\n")
+    with pytest.raises(Err):
+        overlay(pair)
+    copy.write_bytes(b"def validate_task_target(a, b):\n    return b\n")  # fixed on disk: the next call loads it
+    assert overlay(pair) == "BUILDER_AUTHORED"
