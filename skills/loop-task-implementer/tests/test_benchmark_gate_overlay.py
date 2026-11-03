@@ -952,7 +952,7 @@ def use_validator(monkeypatch, tmp_path, source: bytes) -> Path:
 
 
 # ---------------- hash_tree
-def test_X01_golden_literal_with_symlink(pair):
+def test_golden_literal_with_symlink(pair):
     base, _ = pair
     import shutil
     shutil.rmtree(base / "src")
@@ -966,7 +966,7 @@ def test_X01_golden_literal_with_symlink(pair):
     assert bg.hash_tree(base) == exp.hexdigest()
 
 
-def test_X02_a_file_swapped_for_another_inode_between_walk_and_open_is_refused(pair, monkeypatch):
+def test_a_file_swapped_for_another_inode_between_walk_and_open_is_refused(pair, monkeypatch):
     base, _ = pair
     real, done = os.open, []
 
@@ -983,7 +983,7 @@ def test_X02_a_file_swapped_for_another_inode_between_walk_and_open_is_refused(p
     assert done and info.value.code == "TREE_UNREADABLE"
 
 
-def test_X03_a_same_size_rewrite_during_the_read_is_refused(pair, monkeypatch):
+def test_a_same_size_rewrite_during_the_read_is_refused(pair, monkeypatch):
     base, _ = pair
     real, n = os.read, []
 
@@ -999,7 +999,7 @@ def test_X03_a_same_size_rewrite_during_the_read_is_refused(pair, monkeypatch):
     assert info.value.code == "TREE_UNREADABLE"
 
 
-def test_X04_special_and_unknown_kinds_have_their_own_records(pair, monkeypatch):
+def test_special_and_unknown_kinds_have_their_own_records(pair, monkeypatch):
     base, _ = pair
     real_walk = bg._walk_fd
     fakes = [("c", stat.S_IFCHR | 0o600, 0x1234), ("b", stat.S_IFBLK | 0o640, 7), ("f", stat.S_IFIFO | 0o644, 0),
@@ -1022,7 +1022,7 @@ def test_X04_special_and_unknown_kinds_have_their_own_records(pair, monkeypatch)
     assert bg.hash_tree(base) == exp.hexdigest()
 
 
-def test_X05_out_of_memory_is_tree_too_large(pair, monkeypatch):
+def test_out_of_memory_is_tree_too_large(pair, monkeypatch):
     base, _ = pair
     def boom(fd, size): raise MemoryError
     monkeypatch.setattr(os, "read", boom)
@@ -1034,7 +1034,7 @@ def test_X05_out_of_memory_is_tree_too_large(pair, monkeypatch):
 # ---------------- loader
 OK_SRC = b"def validate_task_target(a, b):\n    return b\n"
 
-def test_X06_validator_size_cap_is_exact(pair, monkeypatch, tmp_path):
+def test_validator_size_cap_is_exact(pair, monkeypatch, tmp_path):
     add_head_bench(pair[1])
     exact = OK_SRC + b"#" * ((1 << 20) - len(OK_SRC) - 1) + b"\n"
     assert len(exact) == 1 << 20
@@ -1047,7 +1047,7 @@ def test_X06_validator_size_cap_is_exact(pair, monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("src", [b"validate_task_target = None\n", b"validate_task_target = 'x'\n", b"raise RuntimeError('boom')\n", b"import no_such_module_xyz\n"])
-def test_X07_a_validator_that_is_not_callable_or_fails_at_import_is_overlay_failed(pair, monkeypatch, tmp_path, src):
+def test_a_validator_that_is_not_callable_or_fails_at_import_is_overlay_failed(pair, monkeypatch, tmp_path, src):
     add_head_bench(pair[1])
     use_validator(monkeypatch, tmp_path, src)
     with pytest.raises(Err) as info:
@@ -1055,7 +1055,7 @@ def test_X07_a_validator_that_is_not_callable_or_fails_at_import_is_overlay_fail
     assert info.value.code == "OVERLAY_FAILED"
 
 
-def test_X08_the_loaded_code_is_the_hashed_code_even_if_the_file_changes_between_read_and_exec(pair, monkeypatch, tmp_path):
+def test_the_loaded_code_is_the_hashed_code_even_if_the_file_changes_between_read_and_exec(pair, monkeypatch, tmp_path):
     add_head_bench(pair[1])
     copy = use_validator(monkeypatch, tmp_path, OK_SRC)
     real = bg._read_bounded
@@ -1071,7 +1071,7 @@ def test_X08_the_loaded_code_is_the_hashed_code_even_if_the_file_changes_between
 
 
 @pytest.mark.parametrize("exc", ["ImportError", "SyntaxError", "ValueError", "RecursionError", "MemoryError"])
-def test_X09_each_documented_exception_from_the_validator_is_overlay_failed(pair, monkeypatch, tmp_path, exc):
+def test_each_documented_exception_from_the_validator_is_overlay_failed(pair, monkeypatch, tmp_path, exc):
     add_head_bench(pair[1])
     use_validator(monkeypatch, tmp_path, f"def validate_task_target(a, b):\n    raise {exc}('x')\n".encode())
     with pytest.raises(Err) as info:
@@ -1079,7 +1079,7 @@ def test_X09_each_documented_exception_from_the_validator_is_overlay_failed(pair
     assert info.value.code == "OVERLAY_FAILED"
 
 
-def test_X10_sha_before_any_load_and_through_a_symlinked_script_path(pair, monkeypatch, tmp_path):
+def test_sha_before_any_load_and_through_a_symlinked_script_path(pair, monkeypatch, tmp_path):
     monkeypatch.setattr(bg, "_task_target_state", None)
     assert bg._task_target_sha256() == hashlib.sha256(VALIDATOR.read_bytes()).hexdigest()
     link_dir = tmp_path / "linked"; link_dir.mkdir()
@@ -1091,7 +1091,7 @@ def test_X10_sha_before_any_load_and_through_a_symlinked_script_path(pair, monke
 
 
 # ---------------- _export_root
-def test_X11_a_forged_marker_outside_the_fixed_parent_is_refused(pair, tmp_path):
+def test_a_forged_marker_outside_the_fixed_parent_is_refused(pair, tmp_path):
     base, head = pair
     add_head_bench(head)
     fake = tmp_path / "bench-eeeeeeee"
@@ -1103,7 +1103,7 @@ def test_X11_a_forged_marker_outside_the_fixed_parent_is_refused(pair, tmp_path)
     refused((fake / "base", fake / "head"))
 
 
-def test_X12_an_alias_of_the_dispatch_root_is_refused_not_resolved(pair, tmp_path):
+def test_an_alias_of_the_dispatch_root_is_refused_not_resolved(pair, tmp_path):
     base, head = pair
     add_head_bench(head)
     alias = base.parent.parent / "bench-aliasrt"
@@ -1112,7 +1112,7 @@ def test_X12_an_alias_of_the_dispatch_root_is_refused_not_resolved(pair, tmp_pat
     assert not (base / "benchmarks").exists()
 
 
-def test_X13_a_fixed_parent_reached_through_a_symlinked_temp_dir(pair, monkeypatch, tmp_path):
+def test_a_fixed_parent_reached_through_a_symlinked_temp_dir(pair, monkeypatch, tmp_path):
     base, head = pair
     add_head_bench(head)
     alias = tmp_path / "tmp_alias"
@@ -1121,7 +1121,7 @@ def test_X13_a_fixed_parent_reached_through_a_symlinked_temp_dir(pair, monkeypat
     assert overlay(pair) == "BUILDER_AUTHORED"
 
 
-def test_X14_an_absent_fixed_parent_is_refused_and_not_created(monkeypatch, tmp_path):
+def test_an_absent_fixed_parent_is_refused_and_not_created(monkeypatch, tmp_path):
     empty = tmp_path / "empty"; empty.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(empty))
     parent = bg.fixed_parent()
@@ -1130,7 +1130,7 @@ def test_X14_an_absent_fixed_parent_is_refused_and_not_created(monkeypatch, tmp_
     assert info.value.code == "DEST_REJECTED" and not os.path.lexists(parent)
 
 
-def test_X15_a_leaf_of_someone_else_a_vanished_leaf_and_a_nul_are_dest_rejected(pair, monkeypatch):
+def test_a_leaf_of_someone_else_a_vanished_leaf_and_a_nul_are_dest_rejected(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     refused((base, base.parent / "gone"))                                  # missing leaf (OSError)
@@ -1143,7 +1143,7 @@ def test_X15_a_leaf_of_someone_else_a_vanished_leaf_and_a_nul_are_dest_rejected(
 
 # ---------------- sidecar
 @pytest.mark.parametrize("kind", ["directory", "fifo"])
-def test_X16_a_sidecar_that_is_not_a_regular_file_is_a_mismatch(pair, kind):
+def test_a_sidecar_that_is_not_a_regular_file_is_a_mismatch(pair, kind):
     base, head = pair
     add_head_bench(head)
     side = Path(str(base) + ".export.json"); side.unlink()
@@ -1154,7 +1154,7 @@ def test_X16_a_sidecar_that_is_not_a_regular_file_is_a_mismatch(pair, kind):
 
 
 @pytest.mark.parametrize("body", ["[" * 4000, '{"commit": 5}', '{"commit": null}', '{"base": "%s"}' % BASE_SHA, '{"commit": "%s", "x": "é"}' % BASE_SHA])
-def test_X17_hostile_sidecar_bodies_are_a_mismatch(pair, body):
+def test_hostile_sidecar_bodies_are_a_mismatch(pair, body):
     base, head = pair
     add_head_bench(head)
     Path(str(base) + ".export.json").write_bytes(body.encode())
@@ -1163,7 +1163,7 @@ def test_X17_hostile_sidecar_bodies_are_a_mismatch(pair, body):
     assert info.value.code == "OVERLAY_COMMIT_MISMATCH"
 
 
-def test_X18_sidecar_size_boundary_is_4096(pair):
+def test_sidecar_size_boundary_is_4096(pair):
     base, head = pair
     add_head_bench(head)
     side = Path(str(base) + ".export.json")
@@ -1182,7 +1182,7 @@ def test_X18_sidecar_size_boundary_is_4096(pair):
 # ---------------- _head_bytes
 @pytest.mark.parametrize("name", ["benchmarks", "bench_orders.py"])
 @pytest.mark.parametrize("err", [errno.ENOENT, errno.EACCES, errno.EIO])
-def test_X19_only_kind_and_permission_errors_are_a_refusal_everything_else_is_a_failure(pair, monkeypatch, name, err):
+def test_only_kind_and_permission_errors_are_a_refusal_everything_else_is_a_failure(pair, monkeypatch, name, err):
     base, head = pair
     add_head_bench(head)
     real = os.open
@@ -1198,7 +1198,7 @@ def test_X19_only_kind_and_permission_errors_are_a_refusal_everything_else_is_a_
 
 
 @pytest.mark.parametrize("chunk", [1000, 1024, 7])
-def test_X20_short_reads_still_copy_every_byte_and_still_enforce_the_cap(pair, monkeypatch, chunk):
+def test_short_reads_still_copy_every_byte_and_still_enforce_the_cap(pair, monkeypatch, chunk):
     base, head = pair
     real = os.read
     monkeypatch.setattr(os, "read", lambda fd, n: real(fd, min(n, chunk)))
@@ -1213,7 +1213,7 @@ def test_X20_short_reads_still_copy_every_byte_and_still_enforce_the_cap(pair, m
 
 
 # ---------------- _overlay_into_base cleanup bookkeeping
-def test_X21_a_failure_opening_the_directory_just_made_removes_it(pair, monkeypatch):
+def test_a_failure_opening_the_directory_just_made_removes_it(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     real_mkdir, real_open, armed = os.mkdir, os.open, []
@@ -1228,7 +1228,7 @@ def test_X21_a_failure_opening_the_directory_just_made_removes_it(pair, monkeypa
     assert info.value.code == "OVERLAY_FAILED" and not (base / "benchmarks").exists()
 
 
-def test_X22_every_directory_created_is_removed_on_failure_not_just_the_deepest(pair, monkeypatch):
+def test_every_directory_created_is_removed_on_failure_not_just_the_deepest(pair, monkeypatch):
     base, head = pair
     add_head_bench(head, rel="benchmarks/sub/deeper/bench_orders.py")
     monkeypatch.setattr(os, "write", lambda fd, data: (_ for _ in ()).throw(OSError(errno.ENOSPC, "full")))
@@ -1237,7 +1237,7 @@ def test_X22_every_directory_created_is_removed_on_failure_not_just_the_deepest(
     assert not (base / "benchmarks").exists()
 
 
-def test_X23_a_keyboard_interrupt_mid_write_also_cleans_up(pair, monkeypatch):
+def test_a_keyboard_interrupt_mid_write_also_cleans_up(pair, monkeypatch):
     base, head = pair
     add_head_bench(head, rel="benchmarks/sub/bench_orders.py")
     def interrupt(fd, data): raise KeyboardInterrupt
@@ -1249,7 +1249,7 @@ def test_X23_a_keyboard_interrupt_mid_write_also_cleans_up(pair, monkeypatch):
     assert not (base / "benchmarks").exists() and open_fds() == baseline
 
 
-def test_X24_short_writes_are_looped(pair, monkeypatch):
+def test_short_writes_are_looped(pair, monkeypatch):
     base, head = pair
     data = bytes(i % 251 for i in range(5000))
     add_head_bench(head, data=data)
@@ -1262,20 +1262,20 @@ def test_X24_short_writes_are_looped(pair, monkeypatch):
 
 # ---------------- overlay_benchmark_file: lexical path rule independent of the validator
 @pytest.mark.parametrize("rel", ["src/bench_x.py", "benchmarks/helper.py", "benchmarks/bench_x.txt", "bench_x.py", "benchmarks/Bench_X.PY", "benchmarks/bench-x.py"])
-def test_X25_the_lexical_rule_refuses_paths_that_exist_in_the_head(pair, rel):
+def test_the_lexical_rule_refuses_paths_that_exist_in_the_head(pair, rel):
     add_head_bench(pair[1], rel=rel)
     with pytest.raises(Err) as info:
         overlay(pair, path=rel)
     assert info.value.code == "OVERLAY_PATH_REJECTED" and not (pair[0] / rel).exists()
 
 
-def test_X26_both_roots_bad_reports_the_base_first(pair):
+def test_both_roots_bad_reports_the_base_first(pair):
     with pytest.raises(Err) as info:
         bg.overlay_benchmark_file("nope/x", "nope/y", BASE_SHA, BENCH, head_ref_commit=HEAD_SHA)
     assert "base_root" in info.value.detail
 
 
-def test_X27_walk_leak_after_emfile(pair):
+def test_walk_leak_after_emfile(pair):
     base, _ = pair
     deep = base
     for _ in range(40):
@@ -1555,6 +1555,25 @@ def test_the_hash_depth_cap_is_enforced(pair, monkeypatch):
         patch.setattr(bg, "_MAX_HASH_DEPTH", 3)
         assert len(bg.hash_tree(base)) == 64
     assert bg._MAX_HASH_DEPTH == 128
+
+
+def test_a_directory_over_the_hash_depth_cap_is_refused_before_its_descriptor_is_opened(pair, monkeypatch):
+    base, _ = pair
+    (base / "a" / "b" / "c").mkdir(parents=True)
+    opened = []
+    real_open_dir = bg._open_dir
+
+    def spy(parent_fd, name, st, repair):
+        opened.append(name)
+        return real_open_dir(parent_fd, name, st, repair)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(bg, "_MAX_HASH_DEPTH", 2)
+        patch.setattr(bg, "_open_dir", spy)
+        with pytest.raises(Err) as info:
+            bg.hash_tree(base)
+    assert info.value.code == "TREE_TOO_LARGE"
+    assert "c" not in opened  # the third level was refused without a descriptor, so a deep tree cannot fail with EMFILE first
 
 
 def test_a_chmod_or_ctime_change_during_the_read_is_refused(pair, monkeypatch):
@@ -1907,7 +1926,7 @@ def test_bytes_roots_are_refused_by_the_export_helpers_but_hashable(pair):
 
 
 @pytest.mark.parametrize("base_data", [b"", SRC[:10], SRC[:-1]])
-def test_z01_a_truncated_base_file_is_modified_not_pre_existing(pair, base_data):
+def test_a_truncated_base_file_is_modified_not_pre_existing(pair, base_data):
     base, head = pair
     add_head_bench(head)
     add_head_bench(base, data=base_data)
@@ -1916,7 +1935,7 @@ def test_z01_a_truncated_base_file_is_modified_not_pre_existing(pair, base_data)
     assert info.value.code == "BENCHMARK_MODIFIED"
 
 
-def test_z02_a_base_file_one_byte_longer_than_a_16_kib_head_is_modified(pair):
+def test_a_base_file_one_byte_longer_than_a_16_kib_head_is_modified(pair):
     base, head = pair
     full = b"#" * 16384
     add_head_bench(head, data=full)
@@ -1926,7 +1945,7 @@ def test_z02_a_base_file_one_byte_longer_than_a_16_kib_head_is_modified(pair):
     assert info.value.code == "BENCHMARK_MODIFIED"
 
 
-def test_z03_run_cleanup_runs_every_step_and_keeps_the_first_failure_and_the_first_fatal():
+def test_run_cleanup_runs_every_step_and_keeps_the_first_failure_and_the_first_fatal():
     calls = []
 
     def a():
@@ -1946,7 +1965,7 @@ def test_z03_run_cleanup_runs_every_step_and_keeps_the_first_failure_and_the_fir
     assert str(failure) == "first" and fatal is None  # the FIRST ordinary failure is kept
 
 
-def test_z04_a_failing_unlink_does_not_stop_the_directory_removals(pair, monkeypatch):
+def test_a_failing_unlink_does_not_stop_the_directory_removals(pair, monkeypatch):
     base, head = pair
     add_head_bench(head, rel="benchmarks/sub/bench_orders.py")
     monkeypatch.setattr(os, "write", lambda fd, data: (_ for _ in ()).throw(OSError(errno.ENOSPC, "full")))
@@ -1960,7 +1979,7 @@ def test_z04_a_failing_unlink_does_not_stop_the_directory_removals(pair, monkeyp
     assert rmdirs == ["sub", "benchmarks"]
 
 
-def test_z05_a_rejected_path_is_escaped_and_bounded_in_the_detail(pair):
+def test_a_rejected_path_is_escaped_and_bounded_in_the_detail(pair):
     bad = "x\x1b[31m\n`|" + "A" * 5000 + ".py"
     with pytest.raises(Err) as info:
         overlay(pair, path=bad)
@@ -1969,7 +1988,7 @@ def test_z05_a_rejected_path_is_escaped_and_bounded_in_the_detail(pair):
 
 
 @pytest.mark.parametrize("err", [errno.ENOENT, errno.ENOTDIR, errno.ELOOP, errno.EACCES, errno.EPERM, errno.ENAMETOOLONG])
-def test_z06_each_bad_path_errno_in_the_root_checks_is_dest_rejected(pair, monkeypatch, err):
+def test_each_bad_path_errno_in_the_root_checks_is_dest_rejected(pair, monkeypatch, err):
     add_head_bench(pair[1])
 
     def broken(create):
@@ -1981,7 +2000,7 @@ def test_z06_each_bad_path_errno_in_the_root_checks_is_dest_rejected(pair, monke
     assert info.value.code == "DEST_REJECTED"
 
 
-def test_z07_a_wrong_parent_refusal_does_not_create_the_fixed_parent(monkeypatch, tmp_path):
+def test_a_wrong_parent_refusal_does_not_create_the_fixed_parent(monkeypatch, tmp_path):
     empty = tmp_path / "empty"; empty.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(empty))
     parent = bg.fixed_parent()
@@ -1992,7 +2011,7 @@ def test_z07_a_wrong_parent_refusal_does_not_create_the_fixed_parent(monkeypatch
     assert info.value.code == "DEST_REJECTED" and not os.path.lexists(parent)
 
 
-def test_z08_a_4097_byte_sidecar_whose_first_4096_bytes_are_valid_json_is_refused(pair):
+def test_a_4097_byte_sidecar_whose_first_4096_bytes_are_valid_json_is_refused(pair):
     base, head = pair
     add_head_bench(head)
     side = Path(str(base) + ".export.json")
@@ -2006,7 +2025,7 @@ def test_z08_a_4097_byte_sidecar_whose_first_4096_bytes_are_valid_json_is_refuse
 
 
 @pytest.mark.parametrize("commit", ["g" * 40, "a" * 41, "a" * 39, "A" * 40, "a" * 40 + "\n", "not hex at all", 1234567890123456789012345678901234567890])
-def test_z09_export_commit_returns_only_a_40_or_64_lowercase_hex_string(pair, commit):
+def test_export_commit_returns_only_a_40_or_64_lowercase_hex_string(pair, commit):
     base, _ = pair
     Path(str(base) + ".export.json").write_text(json.dumps({"commit": commit}))
     with pytest.raises(Err) as info:
@@ -2014,7 +2033,7 @@ def test_z09_export_commit_returns_only_a_40_or_64_lowercase_hex_string(pair, co
     assert info.value.code == "OVERLAY_COMMIT_MISMATCH"
 
 
-def test_z10_export_commit_under_a_file_parent_and_bad_argument_types_are_coded(pair, tmp_path):
+def test_export_commit_under_a_file_parent_and_bad_argument_types_are_coded(pair, tmp_path):
     (tmp_path / "afile").write_text("x")
     with pytest.raises(Err) as info:
         bg.export_commit(tmp_path / "afile" / "base")
@@ -2029,7 +2048,7 @@ def test_z10b_export_commit_with_a_non_path_argument_is_dest_rejected(pair, bad)
 
 
 @pytest.mark.parametrize("src", [b"x = 1\n", b"validate_task_target = 3\n"])
-def test_z11_the_loader_and_harness_sha_fail_coded_and_leave_nothing_registered(pair, monkeypatch, tmp_path, src):
+def test_the_loader_and_harness_sha_fail_coded_and_leave_nothing_registered(pair, monkeypatch, tmp_path, src):
     use_validator(monkeypatch, tmp_path, src)
     with pytest.raises(Err) as info:
         bg._load_task_target()
@@ -2040,7 +2059,7 @@ def test_z11_the_loader_and_harness_sha_fail_coded_and_leave_nothing_registered(
     assert info.value.code == "HARNESS_UNREADABLE" and "cannot load validate_task_target.py" in info.value.detail
 
 
-def test_z12_concurrent_first_loads_execute_the_validator_once(pair, monkeypatch, tmp_path):
+def test_concurrent_first_loads_execute_the_validator_once(pair, monkeypatch, tmp_path):
     import builtins
     src = (b"import builtins, time\nbuiltins._z_count = getattr(builtins, '_z_count', 0) + 1\ntime.sleep(0.3)\n"
            b"def validate_task_target(a, b):\n    return b\n")
@@ -2055,7 +2074,7 @@ def test_z12_concurrent_first_loads_execute_the_validator_once(pair, monkeypatch
             del builtins._z_count
 
 
-def test_z13_an_oversize_harness_file_is_unreadable_not_silently_truncated(pair, monkeypatch, tmp_path):
+def test_an_oversize_harness_file_is_unreadable_not_silently_truncated(pair, monkeypatch, tmp_path):
     big = tmp_path / "gate_copy.py"
     big.write_bytes(b"#" * ((4 << 20) + 1))
     monkeypatch.setattr(bg, "__file__", str(big))
@@ -2068,7 +2087,7 @@ def test_z13_an_oversize_harness_file_is_unreadable_not_silently_truncated(pair,
     assert info.value.code == "HARNESS_UNREADABLE"
 
 
-def test_z14_a_str_subclass_export_root_is_refused_by_the_overlay(pair):
+def test_a_str_subclass_export_root_is_refused_by_the_overlay(pair):
     class Sneaky(str):
         pass
     with pytest.raises(Err) as info:
@@ -2076,14 +2095,14 @@ def test_z14_a_str_subclass_export_root_is_refused_by_the_overlay(pair):
     assert info.value.code == "DEST_REJECTED"
 
 
-def test_z15_read_benchmark_applies_the_lexical_rules_to_files_that_exist(pair):
+def test_read_benchmark_applies_the_lexical_rules_to_files_that_exist(pair):
     base, _ = pair
     with pytest.raises(Err) as info:
         bg.read_benchmark(base, "src/app.py")
     assert info.value.code == "OVERLAY_PATH_REJECTED"
 
 
-def test_z16_a_directory_swapped_between_mkdir_and_open_is_a_conflict_and_the_swap_survives(pair, monkeypatch):
+def test_a_directory_swapped_between_mkdir_and_open_is_a_conflict_and_the_swap_survives(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     real, done = os.open, []
@@ -2101,7 +2120,7 @@ def test_z16_a_directory_swapped_between_mkdir_and_open_is_a_conflict_and_the_sw
     assert done and info.value.code == "OVERLAY_PATH_CONFLICT" and (base / "benchmarks").is_dir()
 
 
-def test_z17_a_file_replaced_by_a_fifo_between_walk_and_open_does_not_hang(pair, monkeypatch):
+def test_a_file_replaced_by_a_fifo_between_walk_and_open_does_not_hang(pair, monkeypatch):
     base, _ = pair
     real, done = os.open, []
 
@@ -2130,7 +2149,7 @@ def test_z17_a_file_replaced_by_a_fifo_between_walk_and_open_does_not_hang(pair,
 
 
 @pytest.mark.parametrize("how,expected", [("alias", "OVERLAY_NOT_REGULAR"), ("replace", "OVERLAY_FAILED")])
-def test_z18_a_head_file_changed_between_its_stat_and_its_open(pair, monkeypatch, tmp_path, how, expected):
+def test_a_head_file_changed_between_its_stat_and_its_open(pair, monkeypatch, tmp_path, how, expected):
     base, head = pair
     add_head_bench(head)
     real, count = os.open, []
@@ -2172,7 +2191,7 @@ def test_z18b_a_single_swap_between_stat_and_open_is_retried_and_succeeds(pair, 
 
 @pytest.mark.parametrize("err", [errno.ELOOP, errno.ENOTDIR, errno.EMLINK])
 @pytest.mark.parametrize("side", ["head", "base"])
-def test_z19_every_not_a_directory_errno_is_a_refusal_for_a_parent(pair, monkeypatch, err, side):
+def test_every_not_a_directory_errno_is_a_refusal_for_a_parent(pair, monkeypatch, err, side):
     base, head = pair
     add_head_bench(head)
     (base / "benchmarks").mkdir()
@@ -2191,7 +2210,7 @@ def test_z19_every_not_a_directory_errno_is_a_refusal_for_a_parent(pair, monkeyp
     assert info.value.code == ("OVERLAY_NOT_REGULAR" if side == "head" else "OVERLAY_PATH_CONFLICT")
 
 
-def test_z20_a_sealed_base_is_reported_after_commit_and_path_problems(pair):
+def test_a_sealed_base_is_reported_after_commit_and_path_problems(pair):
     base, head = pair
     add_head_bench(head)
     bg.seal_tree(base)
@@ -2204,7 +2223,7 @@ def test_z20_a_sealed_base_is_reported_after_commit_and_path_problems(pair):
         bg.unseal_tree(base)
 
 
-def test_z21_existing_parents_two_levels_deep_are_walked_one_level_at_a_time(pair):
+def test_existing_parents_two_levels_deep_are_walked_one_level_at_a_time(pair):
     base, head = pair
     rel = "benchmarks/sub/bench_orders.py"
     add_head_bench(head, rel=rel)
@@ -2213,7 +2232,7 @@ def test_z21_existing_parents_two_levels_deep_are_walked_one_level_at_a_time(pai
     assert overlay(pair, path=rel) == "PRE_EXISTING"
 
 
-def test_z22_a_failing_close_of_a_descriptor_does_not_mask_a_successful_overlay(pair, monkeypatch):
+def test_a_failing_close_of_a_descriptor_does_not_mask_a_successful_overlay(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     real, state = os.close, {"armed": False}
@@ -2237,7 +2256,7 @@ def test_z22_a_failing_close_of_a_descriptor_does_not_mask_a_successful_overlay(
 
 
 @pytest.mark.parametrize("err", [errno.ENOENT, errno.ENOTDIR, errno.ELOOP, errno.EMLINK])
-def test_z23_export_commit_sidecar_open_errnos_that_mean_not_a_file_are_a_mismatch(pair, monkeypatch, err):
+def test_export_commit_sidecar_open_errnos_that_mean_not_a_file_are_a_mismatch(pair, monkeypatch, err):
     def broken(*a, **kw):
         raise OSError(err, "injected")
     monkeypatch.setattr(bg, "_read_bounded", broken)
@@ -2247,7 +2266,7 @@ def test_z23_export_commit_sidecar_open_errnos_that_mean_not_a_file_are_a_mismat
 
 
 @pytest.mark.parametrize("err", [errno.EIO, errno.EMFILE, errno.EACCES])
-def test_z24_export_commit_environmental_errnos_propagate(pair, monkeypatch, err):
+def test_export_commit_environmental_errnos_propagate(pair, monkeypatch, err):
     def broken(*a, **kw):
         raise OSError(err, "injected")
     monkeypatch.setattr(bg, "_read_bounded", broken)
@@ -2886,7 +2905,7 @@ def test_an_abandoned_walk_with_several_open_levels_closes_every_descriptor_even
 
 # 1 X5 root-name anchoring (trailing junk / over-long root name)
 @pytest.mark.parametrize("newname", ["bench-aaaaaaaa.x", "bench-aaaaaaaa" + "a" * 60, "bench-aaaaaaaa x"])
-def test_c01_root_name_is_fully_matched(pair, newname):
+def test_root_name_is_fully_matched(pair, newname):
     base, head = pair
     root = base.parent
     new = root.parent / newname
@@ -2896,7 +2915,7 @@ def test_c01_root_name_is_fully_matched(pair, newname):
     assert info.value.code == "DEST_REJECTED"
 
 # 2 X1 empty path must not mean cwd
-def test_c02_an_empty_root_is_not_the_working_directory(pair, monkeypatch):
+def test_an_empty_root_is_not_the_working_directory(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     monkeypatch.chdir(base)
@@ -2908,7 +2927,7 @@ def test_c02_an_empty_root_is_not_the_working_directory(pair, monkeypatch):
     assert info.value.code == "DEST_REJECTED"
 
 # 3 R9 swap to symlink between stat and open
-def test_c03_a_head_file_swapped_for_a_symlink_between_stat_and_open_is_not_regular(pair, monkeypatch, tmp_path):
+def test_a_head_file_swapped_for_a_symlink_between_stat_and_open_is_not_regular(pair, monkeypatch, tmp_path):
     base, head = pair
     add_head_bench(head)
     (tmp_path / "t.py").write_bytes(SRC)
@@ -2925,7 +2944,7 @@ def test_c03_a_head_file_swapped_for_a_symlink_between_stat_and_open_is_not_regu
 
 # 4 R27/R28/R37: a rename-over AFTER the read inside the filesystem's timestamp granularity (fstat of the old inode looks unchanged)
 @pytest.mark.parametrize("who", ["head", "base"])
-def test_c04_a_name_replaced_after_every_read_is_a_crash_not_a_verdict(pair, monkeypatch, who):
+def test_a_name_replaced_after_every_read_is_a_crash_not_a_verdict(pair, monkeypatch, who):
     base, head = pair
     add_head_bench(head); add_head_bench(base)
     target = (head if who == "head" else base) / BENCH
@@ -2955,7 +2974,7 @@ def test_c04_a_name_replaced_after_every_read_is_a_crash_not_a_verdict(pair, mon
 
 # 5 R19/R21/R22 read returns a different number of bytes than st_size with all stat fields unchanged
 @pytest.mark.parametrize("how", ["short", "long"])
-def test_c05_a_read_that_disagrees_with_st_size_is_a_crash(pair, monkeypatch, how):
+def test_a_read_that_disagrees_with_st_size_is_a_crash(pair, monkeypatch, how):
     base, head = pair
     add_head_bench(head)
     real_read = os.read
@@ -2972,7 +2991,7 @@ def test_c05_a_read_that_disagrees_with_st_size_is_a_crash(pair, monkeypatch, ho
 
 # 6 R29-R31 PermissionError while reading
 @pytest.mark.parametrize("side", ["head", "base"])
-def test_c06_permission_error_during_read_follows_permission_is_refusal(pair, monkeypatch, side):
+def test_permission_error_during_read_follows_permission_is_refusal(pair, monkeypatch, side):
     base, head = pair
     add_head_bench(head); 
     if side == "base": add_head_bench(base)
@@ -2989,7 +3008,7 @@ def test_c06_permission_error_during_read_follows_permission_is_refusal(pair, mo
     assert info.value.code == ("OVERLAY_NOT_REGULAR" if side == "head" else "OVERLAY_FAILED")
 
 # 7 T2/T11 cap boundary, T8 non-ascii
-def test_c07_top_level_cap_boundary(pair, monkeypatch):
+def test_top_level_cap_boundary(pair, monkeypatch):
     base, _ = pair
     names = os.listdir(base)
     for i in range(5 - len(names)):
@@ -3003,14 +3022,14 @@ def test_c07_top_level_cap_boundary(pair, monkeypatch):
             bg.repo_top_levels(base)
     assert info.value.code == "TREE_TOO_LARGE"
 
-def test_c08_non_ascii_names_are_not_importable_names(pair):
+def test_non_ascii_names_are_not_importable_names(pair):
     base, _ = pair
     (base / "pkgé").mkdir(); (base / "émod.py").write_text("")
     names = bg.repo_top_levels(base)
     assert "pkg\u00e9" not in names and "\u00e9mod" not in names and all(n.isascii() for n in names) and "src" in names
 
 # 8 P4/P5 descriptor leaks in the read helpers
-def test_c09_repo_top_levels_and_read_benchmark_do_not_leak_descriptors(pair):
+def test_repo_top_levels_and_read_benchmark_do_not_leak_descriptors(pair):
     base, head = pair
     add_head_bench(head); overlay(pair)
     (base / "src" / "pkg").mkdir()
@@ -3021,7 +3040,7 @@ def test_c09_repo_top_levels_and_read_benchmark_do_not_leak_descriptors(pair):
     assert open_fds() == baseline
 
 # 9 RC3
-def test_c10_run_cleanup_keeps_the_first_fatal():
+def test_run_cleanup_keeps_the_first_fatal():
     def a(): raise SystemExit(1)
     def b(): raise KeyboardInterrupt()
     failure, fatal = bg._run_cleanup([a, b])
@@ -3030,7 +3049,7 @@ def test_c10_run_cleanup_keeps_the_first_fatal():
 # 10 B5/B22
 @pytest.mark.skipif(IS_ROOT, reason="root ignores mode bits")
 @pytest.mark.parametrize("where", ["mkdir", "create"])
-def test_c11_an_unwritable_base_directory_is_sealed_not_a_conflict(pair, where):
+def test_an_unwritable_base_directory_is_sealed_not_a_conflict(pair, where):
     base, head = pair
     add_head_bench(head)
     if where == "mkdir":
@@ -3046,7 +3065,7 @@ def test_c11_an_unwritable_base_directory_is_sealed_not_a_conflict(pair, where):
         if (base / "benchmarks").exists(): (base / "benchmarks").chmod(0o755)
 
 # 11 B29 no double close on success
-def test_c12_no_descriptor_is_closed_twice_by_a_successful_overlay(pair, monkeypatch):
+def test_no_descriptor_is_closed_twice_by_a_successful_overlay(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     real, seen, opened = os.close, [], []
@@ -3061,7 +3080,7 @@ def test_c12_no_descriptor_is_closed_twice_by_a_successful_overlay(pair, monkeyp
     assert len(seen) == len(set(seen)) or all(seen.count(f) <= opened.count(f) for f in set(seen))
 
 # 12 F2 SystemExit + failed cleanup stays SystemExit
-def test_c13_a_shutdown_request_with_a_failed_cleanup_stays_a_shutdown_request(pair, monkeypatch):
+def test_a_shutdown_request_with_a_failed_cleanup_stays_a_shutdown_request(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     with monkeypatch.context() as patch:
@@ -3072,7 +3091,7 @@ def test_c13_a_shutdown_request_with_a_failed_cleanup_stays_a_shutdown_request(p
     assert info.value.code == 143 and any("cleanup incomplete" in n for n in info.value.__notes__)
 
 # 13 F15/F17 long messages keep the "cleanup incomplete" marker and the chain
-def test_c14_long_original_message_does_not_push_out_the_cleanup_report(pair, monkeypatch):
+def test_long_original_message_does_not_push_out_the_cleanup_report(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     with monkeypatch.context() as patch:
@@ -3085,7 +3104,7 @@ def test_c14_long_original_message_does_not_push_out_the_cleanup_report(pair, mo
     assert isinstance(info.value.__cause__, OSError) and info.value.__cause__.errno == errno.ENOSPC
 
 # 14 O28 / RB6 non-OSError
-def test_c15_any_exception_from_the_internals_is_overlay_failed(pair, monkeypatch):
+def test_any_exception_from_the_internals_is_overlay_failed(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     overlay(pair)
@@ -3098,7 +3117,7 @@ def test_c15_any_exception_from_the_internals_is_overlay_failed(pair, monkeypatc
         assert info.value.code == "OVERLAY_FAILED"
 
 # 15 z12 completeness
-def test_c16_concurrent_first_loads_all_succeed(pair, monkeypatch, tmp_path):
+def test_concurrent_first_loads_all_succeed(pair, monkeypatch, tmp_path):
     src = (b"import time\ntime.sleep(0.3)\ndef validate_task_target(a, b):\n    return b\n")
     use_validator(monkeypatch, tmp_path, src)
     out, errs = [], []
@@ -3110,12 +3129,12 @@ def test_c16_concurrent_first_loads_all_succeed(pair, monkeypatch, tmp_path):
     assert not errs and len(out) == 4 and len({id(m) for m in out}) == 1
 
 # 16 KeyboardInterrupt from the validator / its import is not swallowed
-def test_c17_a_keyboard_interrupt_in_the_validator_propagates(pair, monkeypatch, tmp_path):
+def test_a_keyboard_interrupt_in_the_validator_propagates(pair, monkeypatch, tmp_path):
     add_head_bench(pair[1])
     use_validator(monkeypatch, tmp_path, b"def validate_task_target(a, b):\n    raise KeyboardInterrupt\n")
     with pytest.raises(KeyboardInterrupt):
         overlay(pair)
-def test_c18_a_keyboard_interrupt_while_importing_the_validator_propagates(pair, monkeypatch, tmp_path):
+def test_a_keyboard_interrupt_while_importing_the_validator_propagates(pair, monkeypatch, tmp_path):
     add_head_bench(pair[1])
     use_validator(monkeypatch, tmp_path, b"raise KeyboardInterrupt\ndef validate_task_target(a, b):\n    return b\n")
     with pytest.raises(KeyboardInterrupt):
@@ -3123,7 +3142,7 @@ def test_c18_a_keyboard_interrupt_while_importing_the_validator_propagates(pair,
     assert "_benchmark_gate_validate_task_target" not in sys.modules
 
 # 17 reset pops sys.modules
-def test_c19_reset_forgets_the_registered_module(pair):
+def test_reset_forgets_the_registered_module(pair):
     bg._reset_task_target_cache()
     bg._load_task_target()
     assert "_benchmark_gate_validate_task_target" in sys.modules
@@ -3131,7 +3150,7 @@ def test_c19_reset_forgets_the_registered_module(pair):
     assert "_benchmark_gate_validate_task_target" not in sys.modules and bg._task_target_state is None
 
 # 19 F8 original interrupt, cleanup fatal
-def test_c20_second_shutdown_request_during_cleanup_of_an_interrupt_is_not_silently_dropped(pair, monkeypatch):
+def test_second_shutdown_request_during_cleanup_of_an_interrupt_is_not_silently_dropped(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     with monkeypatch.context() as patch:
@@ -3143,7 +3162,7 @@ def test_c20_second_shutdown_request_during_cleanup_of_an_interrupt_is_not_silen
     assert isinstance(info.value, KeyboardInterrupt) and "also interrupted by SystemExit" in notes and "may remain" in notes
 
 # 23 B2 parent case-twin deterministic
-def test_c21_a_parent_whose_listed_name_differs_in_case_is_a_conflict(pair, monkeypatch):
+def test_a_parent_whose_listed_name_differs_in_case_is_a_conflict(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     (base / "benchmarks").mkdir()
@@ -3160,7 +3179,7 @@ def test_c21_a_parent_whose_listed_name_differs_in_case_is_a_conflict(pair, monk
     assert info.value.code == "OVERLAY_PATH_CONFLICT" and os.listdir(base / "benchmarks") == []
 
 # 22 RD1
-def test_c22_a_file_that_replaced_a_directory_whose_identity_is_unknown_is_left_alone_and_not_reported(pair, monkeypatch):
+def test_a_file_that_replaced_a_directory_whose_identity_is_unknown_is_left_alone_and_not_reported(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     real_stat = os.stat
@@ -3181,19 +3200,19 @@ def test_c22_a_file_that_replaced_a_directory_whose_identity_is_unknown_is_left_
     assert info.value.code == "OVERLAY_FAILED"
 
 # L18 / D5
-def test_c23_code_objects_of_the_validator_carry_its_real_path(pair, monkeypatch, tmp_path):
+def test_code_objects_of_the_validator_carry_its_real_path(pair, monkeypatch, tmp_path):
     copy = use_validator(monkeypatch, tmp_path, b"def validate_task_target(a, b):\n    return b\n")
     mod = bg._load_task_target()[0]
     assert mod.validate_task_target.__code__.co_filename == str(copy)
 
-def test_c24_import_without___file___gives_an_empty_self_digest():
+def test_import_without___file___gives_an_empty_self_digest():
     src = Path(bg.__file__).read_text()
     ns = {"__name__": "x_nofile"}
     exec(compile(src, "<embedded>", "exec"), ns)
     assert ns["_SELF_DIGEST"] == ""
 
 # HT: setgid/sticky bits and short read in hash
-def test_c25_hash_covers_sticky_and_setgid_bits(pair):
+def test_hash_covers_sticky_and_setgid_bits(pair):
     base, _ = pair
     d = base / "src"
     h0 = bg.hash_tree(base)
@@ -3204,7 +3223,7 @@ def test_c25_hash_covers_sticky_and_setgid_bits(pair):
     d.chmod(0o755)
     assert bg.hash_tree(base) != h2
 
-def test_c26_hash_refuses_a_read_that_disagrees_with_st_size(pair, monkeypatch):
+def test_hash_refuses_a_read_that_disagrees_with_st_size(pair, monkeypatch):
     base, _ = pair
     real, state = os.read, {"n": 0}
     def read(fd, size):
@@ -3220,7 +3239,7 @@ def test_c26_hash_refuses_a_read_that_disagrees_with_st_size(pair, monkeypatch):
     assert info.value.code == "TREE_UNREADABLE"
 
 # S10
-def test_c27_unseal_of_a_missing_or_non_directory_root_is_tree_unreadable(pair, tmp_path):
+def test_unseal_of_a_missing_or_non_directory_root_is_tree_unreadable(pair, tmp_path):
     f = tmp_path / "afile"; f.write_text("x")
     for bad in (tmp_path / "nope", f):
         with pytest.raises(Err) as info:
@@ -3231,7 +3250,7 @@ def test_c27_unseal_of_a_missing_or_non_directory_root_is_tree_unreadable(pair, 
 # --- round 8 test auditor: surviving mutants turned into tests ---
 
 @pytest.mark.skipif(IS_ROOT, reason="root can write anywhere")
-def test_r8_01_mkdir_permission_error_is_base_sealed(pair):
+def test_mkdir_permission_error_is_base_sealed(pair):
     base, head = pair
     add_head_bench(head, rel="benchmarks/sub/bench_orders.py")
     (base / "benchmarks").mkdir()
@@ -3244,7 +3263,7 @@ def test_r8_01_mkdir_permission_error_is_base_sealed(pair):
     assert info.value.code == "OVERLAY_BASE_SEALED" and not (base / "benchmarks" / "sub").exists()
 
 
-def test_r8_02_unstable_existing_base_file_is_a_crash_not_modified(pair, monkeypatch):
+def test_unstable_existing_base_file_is_a_crash_not_modified(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     (base / "benchmarks").mkdir()
@@ -3259,7 +3278,7 @@ def test_r8_02_unstable_existing_base_file_is_a_crash_not_modified(pair, monkeyp
     assert info.value.code == "OVERLAY_FAILED"
 
 
-def test_r8_03_transient_instability_of_the_base_file_is_retried(pair, monkeypatch):
+def test_transient_instability_of_the_base_file_is_retried(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     (base / "benchmarks").mkdir()
@@ -3275,7 +3294,7 @@ def test_r8_03_transient_instability_of_the_base_file_is_retried(pair, monkeypat
     assert overlay(pair) == "PRE_EXISTING" and len(n) == 2
 
 
-def test_r8_04_refused_is_not_retried_and_two_blips_then_success(pair, monkeypatch):
+def test_refused_is_not_retried_and_two_blips_then_success(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     os.link(head / BENCH, head.parent / "alias.py")
@@ -3289,7 +3308,7 @@ def test_r8_04_refused_is_not_retried_and_two_blips_then_success(pair, monkeypat
     assert info.value.code == "OVERLAY_NOT_REGULAR" and len(n) == 1
 
 
-def test_r8_05_exactly_two_blips_then_success(pair, monkeypatch):
+def test_exactly_two_blips_then_success(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     real, n = bg._read_small_file_once, []
@@ -3302,7 +3321,7 @@ def test_r8_05_exactly_two_blips_then_success(pair, monkeypatch):
     assert overlay(pair) == "BUILDER_AUTHORED" and len(n) == 3
 
 
-def test_r8_06_three_blips_is_a_crash_after_exactly_three_reads(pair, monkeypatch):
+def test_three_blips_is_a_crash_after_exactly_three_reads(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     n = []
@@ -3315,7 +3334,7 @@ def test_r8_06_three_blips_is_a_crash_after_exactly_three_reads(pair, monkeypatc
     assert info.value.code == "OVERLAY_FAILED" and len(n) == 3
 
 
-def test_r8_07_keyboard_interrupt_from_validator_passes_through(pair, monkeypatch, tmp_path):
+def test_keyboard_interrupt_from_validator_passes_through(pair, monkeypatch, tmp_path):
     add_head_bench(pair[1])
     use_validator(monkeypatch, tmp_path, b"def validate_task_target(a, b):\n    raise KeyboardInterrupt\n")
     with pytest.raises(KeyboardInterrupt):
@@ -3323,7 +3342,7 @@ def test_r8_07_keyboard_interrupt_from_validator_passes_through(pair, monkeypatc
 
 
 @pytest.mark.parametrize("which", ["seal", "hash"])
-def test_r8_08_export_helpers_use_the_resolved_root(pair, monkeypatch, which):
+def test_export_helpers_use_the_resolved_root(pair, monkeypatch, which):
     base, _ = pair
     seen = []
     monkeypatch.setattr(bg, "seal_tree", lambda r: seen.append(r))
@@ -3333,7 +3352,7 @@ def test_r8_08_export_helpers_use_the_resolved_root(pair, monkeypatch, which):
 
 
 @pytest.mark.parametrize("fn", ["seal_export", "hash_export", "repo_top_levels"])
-def test_r8_09_interrupt_while_checking_the_root_passes_through(pair, monkeypatch, fn):
+def test_interrupt_while_checking_the_root_passes_through(pair, monkeypatch, fn):
     base, _ = pair
     def boom(*a, **k):
         raise KeyboardInterrupt
@@ -3342,7 +3361,7 @@ def test_r8_09_interrupt_while_checking_the_root_passes_through(pair, monkeypatc
         getattr(bg, fn)(base)
 
 
-def test_r8_10_seal_tree_root_kinds(pair, tmp_path):
+def test_seal_tree_root_kinds(pair, tmp_path):
     f = tmp_path / "f"; f.write_text("x")
     d = tmp_path / "d"; d.mkdir(); l = tmp_path / "l"; l.symlink_to(d)
     for r in (f, l, tmp_path / "gone"):
@@ -3351,7 +3370,7 @@ def test_r8_10_seal_tree_root_kinds(pair, tmp_path):
         assert info.value.code == "TREE_UNREADABLE", r
 
 
-def test_r8_11_seal_clears_group_and_other_write_bits(tmp_path):
+def test_seal_clears_group_and_other_write_bits(tmp_path):
     root = tmp_path / "r"; root.mkdir(); sub = root / "s"; sub.mkdir()
     f = sub / "f"; f.write_text("x")
     os.chmod(f, 0o666); os.chmod(sub, 0o777); os.chmod(root, 0o777)
@@ -3360,14 +3379,14 @@ def test_r8_11_seal_clears_group_and_other_write_bits(tmp_path):
     bg.unseal_tree(root)
 
 
-def test_r8_12_export_commit_bytes_root(pair):
+def test_export_commit_bytes_root(pair):
     base, _ = pair
     with pytest.raises(Err) as info:
         bg.export_commit(os.fsencode(base))
     assert info.value.code == "DEST_REJECTED"
 
 
-def test_r8_13_deeply_nested_sidecar_is_a_mismatch(pair):
+def test_deeply_nested_sidecar_is_a_mismatch(pair):
     base, _ = pair
     (base.parent / "base.export.json").write_bytes(b"[" * 4000)
     with pytest.raises(Err) as info:
@@ -3375,14 +3394,14 @@ def test_r8_13_deeply_nested_sidecar_is_a_mismatch(pair):
     assert info.value.code == "OVERLAY_COMMIT_MISMATCH"
 
 
-def test_r8_14_run_cleanup_first_fatal_wins_and_fatal_is_not_a_failure():
+def test_run_cleanup_first_fatal_wins_and_fatal_is_not_a_failure():
     def k(): raise KeyboardInterrupt
     def s(): raise SystemExit(1)
     failure, fatal = bg._run_cleanup([k, s])
     assert failure is None and isinstance(fatal, KeyboardInterrupt)
 
 
-def test_r8_15_systemexit_with_ordinary_cleanup_failure_stays_systemexit_with_note(pair, monkeypatch):
+def test_systemexit_with_ordinary_cleanup_failure_stays_systemexit_with_note(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     with monkeypatch.context() as patch:
@@ -3393,7 +3412,7 @@ def test_r8_15_systemexit_with_ordinary_cleanup_failure_stays_systemexit_with_no
     assert info.value.code == 143 and any("no unlink" in n for n in info.value.__notes__)
 
 
-def test_r8_16_fatal_note_without_earlier_failure_has_no_none(pair, monkeypatch):
+def test_fatal_note_without_earlier_failure_has_no_none(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     (base / "benchmarks").mkdir()
@@ -3406,7 +3425,7 @@ def test_r8_16_fatal_note_without_earlier_failure_has_no_none(pair, monkeypatch)
     assert "may remain" in notes and "earlier cleanup failure" not in notes and "None" not in notes
 
 
-def test_r8_17_leaf_eloop_at_open_is_not_regular(pair, monkeypatch):
+def test_leaf_eloop_at_open_is_not_regular(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     real = os.open
@@ -3420,14 +3439,14 @@ def test_r8_17_leaf_eloop_at_open_is_not_regular(pair, monkeypatch):
     assert info.value.code == "OVERLAY_NOT_REGULAR"
 
 
-def test_r8_18_non_ascii_top_levels_are_excluded(pair):
+def test_non_ascii_top_levels_are_excluded(pair):
     base, _ = pair
     (base / "pkgé").mkdir(); (base / "modé.py").write_text("")
     (base / "ok_pkg").mkdir()
     assert bg.repo_top_levels(base) >= {"ok_pkg", "src"} and not any(not n.isascii() for n in bg.repo_top_levels(base))
 
 
-def test_r8_19_detail_of_a_rejected_path_is_escaped(pair):
+def test_detail_of_a_rejected_path_is_escaped(pair):
     _, head = pair
     with pytest.raises(Err) as info:
         overlay(pair, path="benchmarks/\x1b[31mx\n" + "a" * 500 + ".py")
@@ -3436,7 +3455,7 @@ def test_r8_19_detail_of_a_rejected_path_is_escaped(pair):
     assert "\x1b" not in d and "\n" not in d and len(d) < 300
 
 
-def test_r8_20_read_benchmark_str_subclass(pair):
+def test_read_benchmark_str_subclass(pair):
     base, head = pair
     add_head_bench(head)
     add_head_bench(head, rel="benchmarks/bench_other.py", data=b"# other\n")
@@ -3447,7 +3466,7 @@ def test_r8_20_read_benchmark_str_subclass(pair):
     assert info.value.code == "OVERLAY_PATH_REJECTED"
 
 
-def test_r8_23_top_level_entry_bound_is_inclusive(pair, monkeypatch):
+def test_top_level_entry_bound_is_inclusive(pair, monkeypatch):
     base, _ = pair
     monkeypatch.setattr(bg, "_MAX_TREE_ENTRIES", 3)
     (base / "p1").mkdir(); (base / "p2").mkdir()      # src + p1 + p2 == 3 entries: allowed
@@ -3459,7 +3478,7 @@ def test_r8_23_top_level_entry_bound_is_inclusive(pair, monkeypatch):
 
 
 @pytest.mark.parametrize("persistent", [False, True])
-def test_r8_21_name_swapped_after_the_read_is_retried_or_a_crash(pair, monkeypatch, persistent):
+def test_name_swapped_after_the_read_is_retried_or_a_crash(pair, monkeypatch, persistent):
     base, head = pair
     add_head_bench(head)
     NEW = SRC + b"# new\n"
@@ -3481,7 +3500,7 @@ def test_r8_21_name_swapped_after_the_read_is_retried_or_a_crash(pair, monkeypat
         assert (base / BENCH).read_bytes() == NEW
 
 
-def test_r8_22_a_premature_eof_is_retried_not_an_empty_benchmark(pair, monkeypatch):
+def test_a_premature_eof_is_retried_not_an_empty_benchmark(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     real, n = os.read, []
@@ -3494,7 +3513,7 @@ def test_r8_22_a_premature_eof_is_retried_not_an_empty_benchmark(pair, monkeypat
     assert overlay(pair) == "BUILDER_AUTHORED" and (base / BENCH).read_bytes() == SRC
 
 
-def test_r8_24_a_head_file_swapped_for_a_fifo_between_stat_and_open_does_not_hang(pair, monkeypatch):
+def test_a_head_file_swapped_for_a_fifo_between_stat_and_open_does_not_hang(pair, monkeypatch):
     import signal
     base, head = pair
     add_head_bench(head)
@@ -3520,7 +3539,7 @@ def test_r8_24_a_head_file_swapped_for_a_fifo_between_stat_and_open_does_not_han
 
 
 @pytest.mark.skipif(IS_ROOT, reason="root reads anything")
-def test_r8_25_a_permission_error_in_our_base_is_not_retried(pair, monkeypatch):
+def test_a_permission_error_in_our_base_is_not_retried(pair, monkeypatch):
     base, head = pair
     add_head_bench(head)
     (base / "benchmarks").mkdir(); (base / BENCH).write_bytes(SRC); (base / BENCH).chmod(0)

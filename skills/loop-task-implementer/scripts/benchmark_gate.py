@@ -1137,13 +1137,15 @@ def _listing(fd: int) -> list[str]:
         raise
 
 
-def _walk_fd(root: str, limit: int | None, repair: bool = False, at: tuple[int, str, tuple[int, int]] | None = None):
+def _walk_fd(root: str, limit: int | None, repair: bool = False, at: tuple[int, str, tuple[int, int]] | None = None,
+             max_depth: int | None = None):
     """Yield `(rel, parent_fd, name, lstat, dir_fd)` for `root` ("" first) and everything below, depth first, names sorted,
     using ONLY descriptors: each child is `stat`ed and opened relative to its parent's descriptor with `O_NOFOLLOW` and checked
     against the `stat` result, so a directory swapped for a symlink mid-walk is refused, never followed; no path-based chmod.
     `dir_fd` is a directory's own descriptor (closed by the walker), else None. `limit` bounds the entries (None: unbounded,
     for removal). `repair` also tolerates an entry vanishing (a concurrent cleanup). `at=(parent_fd, name, (dev, ino))` walks that
-    directory of the caller's open `parent_fd` instead of `root`, refusing it unless it still has that identity. Raises `OSError` / `BenchmarkGateError`.
+    directory of the caller's open `parent_fd` instead of `root`, refusing it unless it still has that identity. `max_depth` refuses
+    (`TREE_TOO_LARGE`) a directory more than that many levels below `root`, BEFORE its descriptor is opened. Raises `OSError` / `BenchmarkGateError`.
     Cost: one open descriptor per directory level (`RLIMIT_NOFILE` bounds the depth) and every entry of a large tree is stat'ed."""
     want = None
     if at is None:
@@ -1170,6 +1172,8 @@ def _walk_fd(root: str, limit: int | None, repair: bool = False, at: tuple[int, 
             child = names.pop()
             try:
                 cst = os.stat(child, dir_fd=dfd, follow_symlinks=False)
+                if max_depth is not None and len(frames) > max_depth and stat.S_ISDIR(cst.st_mode):
+                    raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {max_depth} levels")
                 cfd = _open_dir(dfd, child, cst, repair) if stat.S_ISDIR(cst.st_mode) else None
                 if cfd is not None:
                     frames.append((f"{rel}/{child}" if rel else child, cfd, _listing(cfd)))
@@ -2004,7 +2008,7 @@ def hash_tree(root: str | os.PathLike) -> str:
     out = hashlib.sha256(_HASH_MAGIC)
     total = 0
     try:
-        for rel, pfd, name, st, dfd in _walk_fd(root_path, _MAX_TREE_ENTRIES):
+        for rel, pfd, name, st, dfd in _walk_fd(root_path, _MAX_TREE_ENTRIES, max_depth=_MAX_HASH_DEPTH):
             if rel.count("/") >= _MAX_HASH_DEPTH:
                 raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_HASH_DEPTH} levels")
             mode = stat.S_IMODE(st.st_mode)
