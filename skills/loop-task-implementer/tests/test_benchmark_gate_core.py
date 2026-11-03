@@ -891,7 +891,7 @@ def test_cli_usage_errors_exit_2(tmp_path, capsys):
 _TOP_LEVEL_IMPORT_ALLOWLIST = {
     "__future__", "argparse", "ast", "codecs", "dis", "errno", "fractions", "hashlib", "io", "json", "math",
     "os", "pathlib", "posixpath", "re", "shutil", "stat", "subprocess", "sys", "tempfile", "time", "tokenize", "types",
-    "unicodedata", "warnings",
+    "threading", "typing", "unicodedata", "warnings",
 }
 
 
