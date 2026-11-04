@@ -2653,7 +2653,7 @@ _PROTECTED_PREFIXES_SUFFIXES = (  # (prefix, suffix) of the casefolded basename
 _STARTUP_MODULES = frozenset({"sitecustomize", "usercustomize"})
 _STDLIB_FOLDED = frozenset(name.casefold() for name in sys.stdlib_module_names)
 _TRIPWIRE_TOKENS = (b"PYTEST_CURRENT_TEST", b"BENCH_RESULT_DIGEST", b"BENCH_TRACE_LINES", b"os._exit", b"sys.argv")  # + the benchmark's path
-_MODULE_FILE_RE = re.compile(r"([^.]+)(?:\.[^.]+)?\.(?:py|so|pyd)")  # `json.py`, `json.so`, `json.cpython-312-darwin.so`, `json.abi3.so`
+_MODULE_FILE_RE = re.compile(r"([^.]+)(?:\.[^.]+)?\.(?:py|pyc|so|pyd)")  # `json.py`, a sourceless `json.pyc` (imported straight from the directory), `json.so`, `json.cpython-312-darwin.so`, `json.abi3.so`
 _GIT_ESCAPES = {b"a": b"\a", b"b": b"\b", b"t": b"\t", b"n": b"\n", b"v": b"\v", b"f": b"\f", b"r": b"\r", b'"': b'"', b"\\": b"\\"}
 _HUNK_RE = re.compile(rb"@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
@@ -3077,7 +3077,7 @@ def check_venv(bin_dir: str | os.PathLike, snapshot_path: str | os.PathLike, exp
         real_root = os.path.realpath(root)
         export = os.path.realpath(os.fspath(export_root))
         if not os.path.isdir(export):
-            raise BenchmarkGateError("VENV_NOT_ISOLATED", "export_root is not a directory")
+            raise BenchmarkGateError("DEST_REJECTED", "export_root is not a directory")  # a caller error, not a verdict on the venv
         for other in (export, *(os.path.realpath(os.fspath(r)) for r in other_roots)):
             if _inside(real_root, other) or _inside(other, real_root):
                 raise BenchmarkGateError("VENV_NOT_ISOLATED", "the venv and an export root contain each other")

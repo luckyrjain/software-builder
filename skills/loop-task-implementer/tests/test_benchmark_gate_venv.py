@@ -164,7 +164,7 @@ def test_pth_names_python_or_a_filesystem_may_still_read_are_judged(world, name)
 
 @pytest.mark.parametrize("name, is_dir", [
     ("sitecustomize.py", False), ("usercustomize.py", False), ("SiteCustomize.py", False), ("sitecustomize.cpython-312-darwin.so", False),
-    ("usercustomize.abi3.so", False), ("sitecustomize.pyd", False), ("sitecustomize", True), ("usercustomize", True),
+    ("usercustomize.abi3.so", False), ("sitecustomize.pyc", False), ("usercustomize.cpython-312.pyc", False), ("sitecustomize.pyd", False), ("sitecustomize", True), ("usercustomize", True),
 ])
 def test_a_new_startup_module_in_any_form_is_refused(world, name, is_dir):
     snapshot(world)
@@ -353,7 +353,7 @@ def test_a_missing_export_root_is_refused(world):
     snapshot(world)
     with pytest.raises(Err) as info:
         bg.check_venv(str(world[1]), str(world[4]), str(world[3] / "nope"))
-    assert info.value.code == "VENV_NOT_ISOLATED"
+    assert info.value.code == "DEST_REJECTED"
 
 
 # --- CLI ------------------------------------------------------------------------------------------------------------------------
