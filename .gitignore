@@ -50,6 +50,3 @@ cli/sb/_registry_snapshot/
 cli/dist/
 cli/build/
 cli/*.egg-info/
-
-# graft's local graph cache — regenerable, not committed (run `graft build`).
-/graft/

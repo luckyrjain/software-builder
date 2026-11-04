@@ -351,8 +351,11 @@ def test_a_symlink_target_is_an_added_line(repo):
     refused(bg.token_tripwire, repo, {"src/link": ("link", "sys.argv")}, "BENCHMARK_AWARE_CODE")
 
 
-def test_binary_content_and_a_missing_final_newline_are_scanned(repo):
+def test_binary_content_is_scanned(repo):
     refused(bg.token_tripwire, repo, {"data.bin": b"\x00\x01\x02 os._exit \x00"}, "BENCHMARK_AWARE_CODE")
+
+
+def test_a_missing_final_newline_is_scanned(repo):
     refused(bg.token_tripwire, repo, {"src/a.py": b"x = 1\ny = sys.argv"}, "BENCHMARK_AWARE_CODE")
 
 
@@ -455,6 +458,9 @@ def test_other_files_named_like_a_standard_library_module_are_not_shadows(repo, 
 
 def test_the_benchmark_directory_rule_ignores_case(repo):
     refused(bg.protected_path_diff, repo, {"Benchmarks/__init__.py": "x\n"}, "PROTECTED_PATH_CHANGED")
+
+
+def test_the_benchmark_directory_rule_ignores_case_all_capitals(repo):
     refused(bg.protected_path_diff, repo, {"BENCHMARKS/helper.py": "x\n"}, "PROTECTED_PATH_CHANGED")
 
 
