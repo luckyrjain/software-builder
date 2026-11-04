@@ -2973,6 +2973,8 @@ def _venv_layout(bin_dir: object) -> tuple[str, list[str]]:
     for lib in sorted(os.listdir(root)):
         if lib == "lib" or lib == "lib64":
             lib_path = os.path.join(root, lib)
+            if not os.path.isdir(lib_path):
+                raise BenchmarkGateError("VENV_NOT_ISOLATED", f"{lib} is not a directory")
             for py in sorted(os.listdir(lib_path)):
                 site = os.path.join(lib_path, py, "site-packages")
                 if py.startswith("python3") and os.path.isdir(site):
@@ -2988,7 +2990,7 @@ def _venv_layout(bin_dir: object) -> tuple[str, list[str]]:
 def _venv_entries(root: str, sites: list[str]) -> dict[str, dict]:
     """Every `*.pth` and every `sitecustomize` / `usercustomize` entry (module file in any form, or package directory) directly in a
     site-packages directory, keyed by its path relative to the venv root: `{"kind": file|dir|link|other, "sha256": ...}`
-    (hashed for a regular file only; a `.pth` over 64 KiB is `VENV_HOOK_REJECTED` where it is read, not here)."""
+    (hashed over its first 1 MiB for a regular file only; a `.pth` over 64 KiB is `VENV_HOOK_REJECTED` where it is read, not here)."""
     entries: dict[str, dict] = {}
     for site in sites:
         with os.scandir(site) as scan:
@@ -3091,7 +3093,7 @@ def check_venv(bin_dir: str | os.PathLike, snapshot_path: str | os.PathLike, exp
         real_root = os.path.realpath(root)
         if not isinstance(other_roots, (tuple, list)):
             raise BenchmarkGateError("DEST_REJECTED", "other_roots must be a tuple or list of paths")
-        if type(_fs(export_root)) is not str or any(type(_fs(r)) is not str for r in other_roots):
+        if any(type(_fs(r)) is not str or not _fs(r) or "\0" in _fs(r) for r in (export_root, *other_roots)):
             raise BenchmarkGateError("DEST_REJECTED", "export_root and other_roots must be paths")
         export = os.path.realpath(_fs(export_root))
         if not os.path.isdir(export):

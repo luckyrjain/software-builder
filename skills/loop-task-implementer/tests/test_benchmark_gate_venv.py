@@ -747,7 +747,7 @@ def test_a_pyvenv_cfg_dropped_into_bin_by_the_install_is_refused(world):
     rejected(world, "VENV_NOT_ISOLATED")
 
 
-@pytest.mark.parametrize("export, others", [(None, ()), (b"/x", ()), ("OK", (None,)), ("OK", (3,)), ("OK", "/some/root"), ("OK", None), ("OK", 5)])
+@pytest.mark.parametrize("export, others", [(None, ()), ("", ()), ("a\0b", ()), ("OK", ("",)), ("OK", ("a\0b",)), (b"/x", ()), ("OK", (None,)), ("OK", (3,)), ("OK", "/some/root"), ("OK", None), ("OK", 5)])
 def test_bad_root_arguments_are_caller_errors(world, export, others):
     snapshot(world)
     export = str(world[3]) if export == "OK" else export
@@ -781,3 +781,15 @@ def test_a_path_outside_the_export_is_still_refused_through_a_symlinked_parent(w
         assert info.value.code == "VENV_HOOK_REJECTED"
     finally:
         os.unlink(alias)
+
+
+@pytest.mark.parametrize("lib", ["lib", "lib64"])
+def test_a_lib_that_is_a_file_is_not_isolated_not_unreadable(world, lib):
+    (world[0] / "lib64").write_text("x") if lib == "lib64" else None
+    if lib == "lib":
+        import shutil
+        shutil.rmtree(world[0] / "lib")
+        (world[0] / "lib").write_text("x")
+    with pytest.raises(Err) as info:
+        snapshot(world)
+    assert info.value.code == "VENV_NOT_ISOLATED"
