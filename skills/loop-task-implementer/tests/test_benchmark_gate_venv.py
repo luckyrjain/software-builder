@@ -383,3 +383,343 @@ def test_an_unreadable_site_directory_is_tree_unreadable(world):
         assert info.value.code == "TREE_UNREADABLE"
     finally:
         os.chmod(world[2], 0o700)
+
+
+
+
+# --- additional tests from the mutation audit ------------------------------------------------------------------------------------
+
+def _good_snapshot(w):
+    snapshot(w)
+    return json.loads(w[4].read_text())
+
+
+def _invalid_snapshot(w, data):
+    w[4].write_text(json.dumps(data))
+    with pytest.raises(Err) as info:
+        check(w)
+    assert info.value.code == "VENV_SNAPSHOT_INVALID"
+
+
+@pytest.mark.parametrize("cfg", [
+    "Include-System-Site-Packages = True\n",
+    "include-system-site-packages = TRUE\n",
+    "include-system-site-packages = yes\n",
+    "include-system-site-packages =\n",
+    "home = /x\rinclude-system-site-packages = true\r",             # a bare CR ends a line for Python
+    "include-system-site-packages = false\ninclude-system-site-packages = true\n",
+])
+def test_every_spelling_that_may_enable_system_site_packages_is_refused(world, cfg):
+    (world[0] / "pyvenv.cfg").write_text(cfg)
+    with pytest.raises(Err) as info:
+        snapshot(world)
+    assert info.value.code == "VENV_NOT_ISOLATED"
+
+
+def test_a_cfg_spelling_false_in_any_case_is_isolated(world):
+    (world[0] / "pyvenv.cfg").write_text("home = /x\n Include-System-Site-Packages = False \n")
+    snapshot(world)
+
+
+def test_bin_must_be_a_directory_named_bin(world):
+    (world[0] / "scripts").mkdir()
+    with pytest.raises(Err) as info:
+        bg.snapshot_venv(str(world[0] / "scripts"), str(world[4]))
+    assert info.value.code == "VENV_NOT_ISOLATED"
+
+
+def test_a_nul_or_empty_bin_is_not_isolated_exactly(world, monkeypatch):
+    with pytest.raises(Err) as info:
+        bg.snapshot_venv(f"{world[0]}\0/bin", str(world[4]))
+    assert info.value.code == "VENV_NOT_ISOLATED"
+    monkeypatch.chdir(world[1])  # "" is the current directory, which here is named `bin`
+    with pytest.raises(Err) as info:
+        bg.snapshot_venv("", str(world[4]))
+    assert info.value.code == "VENV_NOT_ISOLATED"
+
+
+def test_a_venv_reached_through_a_symlinked_path_is_one_venv(world, tmp_path):
+    link = tmp_path / "link"
+    os.symlink(world[0], link)
+    bg.snapshot_venv(str(link / "bin"), str(world[4]))
+    assert json.loads(world[4].read_text())["venv"] == str(world[0].resolve())
+    (world[2] / "pkg.pth").write_text(f"{world[3]}\n")
+    bg.check_venv(str(link / "bin"), str(world[4]), str(world[3]))
+    bg.check_venv(str(world[1]), str(world[4]), str(world[3]))
+
+
+def test_roots_are_compared_after_resolving_symlinks(world, tmp_path):
+    snapshot(world)
+    (world[2] / "pkg.pth").write_text(f"{world[3]}/src\n")
+    export_link = tmp_path / "export-link"
+    os.symlink(world[3], export_link)
+    bg.check_venv(str(world[1]), str(world[4]), str(export_link))  # a symlinked export root still matches its real path lines
+    inner = world[0] / "inner"
+    inner.mkdir()
+    inner_link = tmp_path / "inner-link"
+    os.symlink(inner, inner_link)
+    with pytest.raises(Err) as info:  # an export root that is a symlink into the venv
+        bg.check_venv(str(world[1]), str(world[4]), str(inner_link))
+    assert info.value.code == "VENV_NOT_ISOLATED"
+    parent_link = tmp_path / "parent-link"
+    os.symlink(tmp_path, parent_link)
+    with pytest.raises(Err) as info:  # an other root that is a symlink to a directory containing the venv
+        check(world, other_roots=(str(parent_link),))
+    assert info.value.code == "VENV_NOT_ISOLATED"
+
+
+def test_the_filesystem_root_contains_the_venv(world):
+    snapshot(world)
+    with pytest.raises(Err) as info:
+        check(world, other_roots=("/",))
+    assert info.value.code == "VENV_NOT_ISOLATED"
+
+
+def test_site_packages_symlinked_to_a_sibling_sharing_the_venv_name_prefix_is_outside(world, tmp_path):
+    sibling = tmp_path / "venv2" / "sp"
+    sibling.mkdir(parents=True)
+    os.rmdir(world[2])
+    os.symlink(sibling, world[2])
+    with pytest.raises(Err) as info:
+        snapshot(world)
+    assert info.value.code == "VENV_NOT_ISOLATED"
+
+
+def test_a_real_lib64_directory_is_scanned_as_well_as_lib(world):
+    site64 = world[0] / "lib64" / "python3.12" / "site-packages"
+    site64.mkdir(parents=True)
+    snapshot(world)
+    (world[2] / "a.pth").write_text("import os\n")
+    (site64 / "b.pth").write_text("import os\n")
+    assert [h["path"] for h in rejected(world).hits] == ["lib/python3.12/site-packages/a.pth", "lib64/python3.12/site-packages/b.pth"]
+
+
+def test_relative_pth_lines_resolve_against_their_own_site_directory(world):
+    site64 = world[0] / "lib64" / "python3.12" / "site-packages"
+    site64.mkdir(parents=True)
+    os.symlink(world[3], world[0] / "lib64" / "python3.12" / "linkdir")  # only lib64's python3.12 has it
+    snapshot(world)
+    (site64 / "x.pth").write_text("../linkdir\n")
+    check(world)
+
+
+def test_entry_keys_name_the_lib_path_whichever_way_lib64_is_listed(world, monkeypatch):
+    os.symlink("lib", world[0] / "lib64")
+    (world[2] / "a.pth").write_text("# x\n")
+    real = os.listdir
+    monkeypatch.setattr(bg.os, "listdir", lambda p: sorted(real(p), reverse=True))
+    assert list(_good_snapshot(world)["entries"]) == ["lib/python3.12/site-packages/a.pth"]
+
+
+def test_a_site_packages_symlink_inside_the_venv_keeps_its_own_path_in_the_report(world):
+    target = world[0] / "elsewhere"
+    target.mkdir()
+    os.rmdir(world[2])
+    os.symlink(target, world[2])
+    snapshot(world)
+    (target / "x.pth").write_text("import os\n")
+    assert rejected(world).hits[0]["path"] == "lib/python3.12/site-packages/x.pth"
+
+
+def test_ten_thousand_hook_candidates_are_the_limit(world):
+    for i in range(10_000):
+        (world[2] / f"p{i}.pth").touch()
+    snapshot(world)
+    (world[2] / "one-more.pth").touch()
+    error = rejected(world, "TREE_TOO_LARGE")
+    assert "10000" in error.detail
+
+
+def test_entry_kinds_are_recorded(world):
+    (world[2] / "d.pth").mkdir()
+    os.symlink(world[3], world[2] / "l.pth")
+    os.mkfifo(world[2] / "f.pth")
+    entries = _good_snapshot(world)["entries"]
+    base = "lib/python3.12/site-packages/"
+    assert {n: entries[base + n]["kind"] for n in ("d.pth", "l.pth", "f.pth")} == {"d.pth": "dir", "l.pth": "link", "f.pth": "other"}
+
+
+def test_a_fifo_pth_is_refused_not_read(world):
+    snapshot(world)
+    os.mkfifo(world[2] / "f.pth")
+    assert "not a regular file" in rejected(world).hits[0]["reason"]
+
+
+def test_a_prior_pth_is_hashed_over_its_whole_content_up_to_the_cap(world):
+    (world[2] / "a.pth").write_text("#" * 50 + "\n")
+    (world[2] / "big.pth").write_text("#" * 70_000)
+    snapshot(world)
+    (world[2] / "a.pth").write_text("#" * 50 + "\nimport os\n")      # differs only after byte 11
+    (world[2] / "big.pth").write_text("#" * 70_000 + "\nimport os\n")  # differs only after the 64 KiB mark
+    assert {h["path"].rsplit("/", 1)[1] for h in rejected(world).hits} == {"a.pth", "big.pth"}
+
+
+def test_every_read_inside_the_venv_refuses_symlinks(world, monkeypatch):
+    calls = []
+    real = bg._read_bounded
+
+    def spy(path, limit, nofollow=False, dir_fd=None):
+        calls.append((os.path.basename(path), nofollow))
+        return real(path, limit, nofollow, dir_fd)
+
+    monkeypatch.setattr(bg, "_read_bounded", spy)
+    (world[2] / "a.pth").write_text("# x\n")
+    snapshot(world)
+    (world[2] / "b.pth").write_text(f"{world[3]}\n")
+    check(world)
+    assert {name for name, _ in calls} >= {"pyvenv.cfg", "a.pth", "b.pth", "snap.json"} and all(flag is True for _, flag in calls)
+
+
+def test_a_dangling_symlink_or_empty_or_bytes_snapshot_path_is_refused(world, tmp_path):
+    os.symlink(tmp_path / "nowhere", world[4])
+    with pytest.raises(Err) as info:
+        snapshot(world)
+    assert info.value.code == "DEST_REJECTED" and not (tmp_path / "nowhere").exists()
+    for bad in ("", b"snap2.json"):
+        with pytest.raises(Err) as info:
+            bg.snapshot_venv(str(world[1]), bad)
+        assert info.value.code == "DEST_REJECTED"
+
+
+def test_a_deeply_nested_snapshot_is_invalid_not_a_crash(world):
+    world[4].write_bytes(b"[" * 200_000 + b"]" * 200_000)
+    with pytest.raises(Err) as info:
+        check(world)
+    assert info.value.code == "VENV_SNAPSHOT_INVALID"
+
+
+def test_a_snapshot_of_this_venv_with_a_wrong_header_or_entry_is_invalid(world):
+    data = _good_snapshot(world)
+    for key, value in (("version", 2), ("kind", "other"), ("entries", [])):
+        _invalid_snapshot(world, {**data, key: value})
+    for entry in (1, {"kind": 1, "sha256": ""}, {"kind": "file", "sha256": 5}, {"kind": "file"}, {"sha256": ""}):
+        _invalid_snapshot(world, {**data, "entries": {"lib/python3.12/site-packages/a.pth": entry}})
+    w4 = world[4]
+    w4.write_text(json.dumps(data))
+    check(world)  # the untampered one is accepted
+
+
+def test_the_snapshot_file_size_limit_is_exactly_4_mib(world):
+    text = json.dumps(_good_snapshot(world))
+    world[4].write_text(text + " " * ((4 << 20) - len(text)))
+    check(world)
+    world[4].write_text(text + " " * ((4 << 20) + 1 - len(text)))
+    with pytest.raises(Err) as info:
+        check(world)
+    assert info.value.code == "VENV_SNAPSHOT_INVALID"
+
+
+def test_pth_size_and_line_limits_are_exact(world):
+    snapshot(world)
+    (world[2] / "ok1.pth").write_bytes(b"#" * 65_536)
+    (world[2] / "ok2.pth").write_bytes(b"#\n" * 1000)
+    check(world)
+    (world[2] / "big.pth").write_bytes(b"#" * 65_537)
+    (world[2] / "long.pth").write_bytes(b"#\n" * 1001)
+    assert {h["path"].rsplit("/", 1)[1]: h["reason"] for h in rejected(world).hits} == {
+        "big.pth": "a .pth file over 64 KiB", "long.pth": "a .pth file over 1000 lines"}
+
+
+def test_a_non_utf8_byte_in_an_otherwise_good_path_is_refused_for_that_reason(world):
+    snapshot(world)
+    (world[2] / "a.pth").write_bytes(f"{world[3]}/".encode() + b"\xff\n")
+    assert rejected(world).hits[0]["reason"] == "a .pth file that is not UTF-8"
+
+
+@pytest.mark.parametrize("content", ["# c\rimport os\n", "# c\r\nimport os\n"])
+def test_a_bare_cr_starts_a_new_line(world, content):
+    snapshot(world)
+    (world[2] / "a.pth").write_bytes(content.encode())
+    assert rejected(world).hits[0]["reason"].startswith("import line")
+
+
+@pytest.mark.parametrize("content", [
+    "  \t \n",                            # a whitespace-only line is the site directory itself
+    "{export}  \t\n",                    # trailing whitespace is stripped from a path line
+    "import/../../../../../export\n",  # "import" without the space is a path line
+    " import /../../../../../export\n",  # so is an indented import
+])
+def test_lines_python_reads_as_paths_or_comments_are_accepted(world, content):
+    snapshot(world)
+    (world[2] / "a.pth").write_text(content.format(export=world[3]), encoding="utf-8")
+    check(world)
+
+
+@pytest.mark.parametrize("content, reason", [
+    (" # not a comment\n", "path outside the export"),         # only a line STARTING with # is a comment
+    (" {export}\n", "path outside the export"),                 # leading whitespace is part of the name
+    ("import\t../../../../../../export\n", "import line"),     # `import<TAB>` is executed
+    ("import _editable_impl_\n", "import line"),
+    ("import __editable____finder; __editable____finder.install()\n", "import line"),
+    ("import __editable__pkg_finder; __editable__pkg_finder.install()\n", "import line"),
+])
+def test_other_lines_are_refused_for_the_right_reason(world, content, reason):
+    snapshot(world)
+    (world[2] / "a.pth").write_text(content.format(export=world[3]))
+    assert rejected(world).hits[0]["reason"].startswith(reason)
+
+
+def test_a_path_through_a_symlink_that_leaves_the_export_is_refused(world, tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    os.symlink(outside, world[3] / "lnk")
+    snapshot(world)
+    (world[2] / "a.pth").write_text(f"{world[3]}/lnk\n")
+    assert rejected(world).hits[0]["reason"].startswith("path outside the export")
+
+
+def test_hits_are_reported_in_path_order_with_their_reasons(world):
+    snapshot(world)
+    for name in ("p3", "p1", "p2"):
+        (world[2] / f"{name}.pth").write_text("import os\n")
+    error = rejected(world)
+    assert [h["path"].rsplit("/", 1)[1] for h in error.hits] == ["p1.pth", "p2.pth", "p3.pth"]
+    assert error.detail.index("p1.pth") < error.detail.index("p2.pth") < error.detail.index("p3.pth") and "p1.pth (" in error.detail
+
+
+def test_a_hit_path_is_escaped(world):
+    snapshot(world)
+    (world[2] / "a\nb.pth").write_text("import os\n")
+    assert "\n" not in rejected(world).hits[0]["path"]
+
+
+def test_a_changed_kind_is_a_change_even_when_neither_kind_is_hashed(world, tmp_path):
+    (world[2] / "sitecustomize").mkdir()
+    (world[2] / "x.pth").mkdir()
+    snapshot(world)
+    os.rmdir(world[2] / "sitecustomize")
+    os.rmdir(world[2] / "x.pth")
+    os.symlink(world[3], world[2] / "sitecustomize")
+    os.symlink(world[3], world[2] / "x.pth")
+    assert {h["path"].rsplit("/", 1)[1] for h in rejected(world).hits} == {"sitecustomize", "x.pth"}
+
+
+def test_upper_case_pth_names_are_judged_as_pth_files(world):
+    snapshot(world)
+    (world[2] / "PKG.PTH").write_text(f"{world[3]}\n")
+    check(world)
+    (world[2] / "OTHER.PTH").write_text("import os\n")
+    assert rejected(world).hits[0]["reason"].startswith("import line")
+
+
+def test_check_failures_other_than_hooks_are_tree_unreadable(world):
+    snapshot(world)
+    with pytest.raises(Err) as info:
+        bg.check_venv(str(world[1]), str(world[4]), None)
+    assert info.value.code == "TREE_UNREADABLE"
+    if os.geteuid() != 0:
+        os.chmod(world[2], 0)
+        try:
+            with pytest.raises(Err) as info:
+                check(world)
+            assert info.value.code == "TREE_UNREADABLE"
+        finally:
+            os.chmod(world[2], 0o700)
+
+
+def test_reasons_name_the_nul_and_the_offending_line(world):
+    snapshot(world)
+    (world[2] / "a.pth").write_bytes(b"x\0\n")
+    (world[2] / "b.pth").write_text("/usr/lib/python3\n")
+    reasons = {h["path"].rsplit("/", 1)[1]: h["reason"] for h in rejected(world).hits}
+    assert reasons == {"a.pth": "a .pth file with a NUL", "b.pth": "path outside the export: /usr/lib/python3"}
