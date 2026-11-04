@@ -8,11 +8,11 @@ pieces (``validate``, ``lint``) and C4c-1 (a: export, b: seal and cleanup, c: cl
 functions ``compare`` will call (``export_tree``, ``seal_tree``, ``unseal_tree``, ``cleanup_root``). C4c-2 is delivered in three parts: 2a adds the library functions ``hash_tree``,
 ``overlay_benchmark_file``, ``read_benchmark``, ``export_commit``, ``repo_top_levels``, ``seal_export``, ``hash_export`` and
 ``harness_sha256``; 2b (``protected_path_diff``, ``token_tripwire``, ``diff_checks``, ``is_ancestor``) the protected-path diff and the
-token tripwire; 2c the venv ``.pth`` check with ``snapshot-venv``. Calling order for ``compare`` (C4d): ``is_ancestor`` and ``diff_checks`` first (they
+token tripwire; 2c (``snapshot_venv``, ``check_venv``, CLI ``snapshot-venv``) the venv ``.pth`` and startup-file check. Calling order for ``compare`` (C4d): ``is_ancestor`` and ``diff_checks`` first (they
 read only the repository and the two commits, no export, so they can run before anything is built), then ``export_tree`` x2 (the dispatch root's
 marker pid defaults to the exporting process, so pass ``--owner-pid`` when ``cleanup`` will run from another process),
 ``repo_top_levels(base)`` (BEFORE the install: afterwards ``build/``, ``dist/`` and ``venv/`` would join the lint's allowlist), venv and
-install, ``overlay_benchmark_file(..., head_ref_commit=...)``, ``seal_export`` x2, ``read_benchmark`` on BOTH roots (required equal) and
+``check_venv`` x2 (after each install), ``overlay_benchmark_file(..., head_ref_commit=...)``, ``seal_export`` x2, ``read_benchmark`` on BOTH roots (required equal) and
 the lint, ``hash_export`` x2, measure, ``hash_export`` x2; ``harness_sha256`` at any point (both parts are fixed at import and at the
 first load of the validator, whose module body it therefore runs); C4d adds measurement, the trace, ``compare`` and ``run-once``, C4e
 the classifier and docs, C4f the workflow wiring. Specification (revision 5, the converged result of four review
@@ -2907,6 +2907,208 @@ def is_ancestor(repo: str | os.PathLike, base_commit: str, head_commit: str) -> 
 
 
 # ---------------------------------------------------------------------------
+# C4c-2c: the venv hook check (`snapshot-venv`)
+#
+# A virtualenv runs code at interpreter start: every `*.pth` line in `site-packages` that begins with `import`, and a `sitecustomize` /
+# `usercustomize` module found there. The harness runs the measured code with `-P` under a fresh venv, so the one way to get a
+# benchmark-aware hook in front of it is the project's own install. Order (design, APIs table): fresh venv -> `snapshot_venv` ->
+# project install -> `check_venv`. The check is on CONTENT, not file names (hatchling and pdm write `_editable_impl_*.pth`, flit and
+# poetry `<pkg>.pth`, pytest-cov `a1_coverage.pth`).
+#
+# A tripwire, not a boundary: the install runs the head's build backend, which can write anywhere, and the editable finder module a
+# recognised `import` line names is trusted by name only. The control for that class is a human reading the fix; this refuses the
+# accidental and the lazy hook. Verified against nothing live in unit tests (fake venvs only); the real backends are in the design's list.
+# ---------------------------------------------------------------------------
+
+VENV_REFUSAL_CODES = (
+    "VENV_NOT_ISOLATED",        # not a fresh venv (no pyvenv.cfg, system site-packages on), or a root contains the venv
+    "VENV_HOOK_REJECTED",       # a new or changed `.pth` line that is not a path inside the export or a recognised editable finder, or a new startup module
+)
+# VENV_SNAPSHOT_INVALID is a caller error (a missing, tampered or foreign snapshot), not a verdict: `compare` must not blame the Builder.
+ERROR_CODES += VENV_REFUSAL_CODES + ("VENV_SNAPSHOT_INVALID",)
+
+_VENV_SNAPSHOT_KIND = "software-builder-bench-venv-snapshot"
+_VENV_MAX_ENTRIES = 10_000
+_VENV_MAX_SNAPSHOT_BYTES = 4 << 20
+_PTH_MAX_BYTES = 64 << 10
+_PTH_MAX_LINES = 1000
+_EDITABLE_LINE_RES = (  # setuptools' finder, and the `_editable_impl_<pkg>` import form
+    re.compile(r"import (__editable___[A-Za-z0-9_]+_finder); \1\.install\(\)", re.ASCII),
+    re.compile(r"import _editable_impl_[A-Za-z0-9_]+", re.ASCII),
+)
+_PTH_NEWLINES_RE = re.compile(r"\r\n|\r|\n")  # Python reads a `.pth` in text mode: a bare `\r` also ends a line
+
+
+def _venv_layout(bin_dir: object) -> tuple[str, list[str]]:
+    """`(venv root, site-packages directories)` of a venv given its `bin` directory, refusing anything that is not a plain,
+    fresh, isolated venv: `bin` a real directory named `bin`, `pyvenv.cfg` a regular file next to it that does not enable the
+    system site-packages, and at least one `lib*/python3*/site-packages` that is a real directory inside the venv."""
+    if type(bin_dir) is not str or not bin_dir or "\0" in bin_dir or os.path.basename(os.path.abspath(bin_dir)) != "bin":
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "bin must be the path of a venv's `bin` directory")
+    bin_path = os.path.abspath(bin_dir)
+    if not stat.S_ISDIR(os.lstat(bin_path).st_mode):
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "bin is a symlink or not a directory")
+    root = os.path.dirname(bin_path)
+    cfg = os.path.join(root, "pyvenv.cfg")
+    try:
+        text = _read_bounded(cfg, 64 << 10, nofollow=True).decode("utf-8", "replace")
+    except (OSError, ValueError) as exc:
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", f"no pyvenv.cfg next to bin: {escape_diagnostic(str(exc), 120)}") from exc
+    for line in text.splitlines():
+        key, _, value = line.partition("=")
+        if key.strip().casefold() == "include-system-site-packages" and value.strip().casefold() != "false":
+            raise BenchmarkGateError("VENV_NOT_ISOLATED", "the venv includes the system site-packages")
+    real_root = os.path.realpath(root)
+    sites: dict[str, str] = {}
+    for lib in sorted(os.listdir(root)):
+        if lib == "lib" or lib == "lib64":
+            lib_path = os.path.join(root, lib)
+            for py in sorted(os.listdir(lib_path)):
+                site = os.path.join(lib_path, py, "site-packages")
+                if py.startswith("python3") and os.path.isdir(site):
+                    real = os.path.realpath(site)
+                    if real != real_root and not real.startswith(real_root + os.sep):
+                        raise BenchmarkGateError("VENV_NOT_ISOLATED", "site-packages resolves outside the venv")
+                    sites.setdefault(real, site)
+    if not sites:
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "no lib/python3*/site-packages in the venv")
+    return root, sorted(sites.values())
+
+
+def _venv_entries(root: str, sites: list[str]) -> dict[str, dict]:
+    """Every `*.pth` and every `sitecustomize` / `usercustomize` entry (module file in any form, or package directory) directly in a
+    site-packages directory, keyed by its path relative to the venv root: `{"kind": file|dir|link|other, "sha256": ...}`
+    (hashed for a regular file only; a `.pth` over 64 KiB is `VENV_HOOK_REJECTED` where it is read, not here)."""
+    entries: dict[str, dict] = {}
+    for site in sites:
+        with os.scandir(site) as scan:
+            for item in scan:
+                folded = _fold_component(item.name)
+                module = _MODULE_FILE_RE.fullmatch(folded)
+                if not (folded.endswith(".pth") or folded in _STARTUP_MODULES or (module and module[1] in _STARTUP_MODULES)):
+                    continue
+                if len(entries) >= _VENV_MAX_ENTRIES:
+                    raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_VENV_MAX_ENTRIES} hook candidates in site-packages")
+                mode = os.lstat(item.path).st_mode
+                kind = "file" if stat.S_ISREG(mode) else "dir" if stat.S_ISDIR(mode) else "link" if stat.S_ISLNK(mode) else "other"
+                digest = ""
+                if kind == "file":
+                    digest = hashlib.sha256(_read_bounded(item.path, _PTH_MAX_BYTES * 16, nofollow=True)).hexdigest()
+                entries[os.path.relpath(item.path, root)] = {"kind": kind, "sha256": digest}
+    return entries
+
+
+def snapshot_venv(bin_dir: str | os.PathLike, out_path: str | os.PathLike) -> None:
+    """Record the hook candidates of a FRESH venv (run after creating it and BEFORE installing the project) to `out_path`, JSON, written
+    atomically; an existing `out_path` is refused (`DEST_REJECTED`). `VENV_NOT_ISOLATED` if the venv is not a plain isolated one;
+    `TREE_UNREADABLE` for an I/O error. Anything already in the snapshot (the venv's own `distutils-precedence.pth`, say) is not judged later."""
+    try:
+        root, sites = _venv_layout(os.fspath(bin_dir))
+        out = os.fspath(out_path)
+        if type(out) is not str or not out or os.path.lexists(out):
+            raise BenchmarkGateError("DEST_REJECTED", "the snapshot path must be a new file")
+        _write_json_atomic(out, {"kind": _VENV_SNAPSHOT_KIND, "version": 1, "venv": os.path.realpath(root),
+                                 "entries": _venv_entries(root, sites)})
+    except BenchmarkGateError:
+        raise
+    except (OSError, ValueError, TypeError) as exc:
+        raise BenchmarkGateError("TREE_UNREADABLE", _describe(exc)) from exc
+
+
+def _load_venv_snapshot(path: object, real_root: str) -> dict[str, dict]:
+    try:
+        raw = _read_bounded(os.fspath(path), _VENV_MAX_SNAPSHOT_BYTES, nofollow=True)  # type: ignore[arg-type]
+        data = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError, TypeError, RecursionError) as exc:
+        raise BenchmarkGateError("VENV_SNAPSHOT_INVALID", f"cannot read the snapshot: {escape_diagnostic(str(exc), 120)}") from exc
+    entries = data.get("entries") if isinstance(data, dict) else None
+    if (not isinstance(data, dict) or data.get("kind") != _VENV_SNAPSHOT_KIND or data.get("version") != 1
+            or not isinstance(entries, dict) or len(raw) > _VENV_MAX_SNAPSHOT_BYTES
+            or not all(type(k) is str and isinstance(v, dict) and type(v.get("kind")) is str and type(v.get("sha256")) is str
+                       for k, v in entries.items())):
+        raise BenchmarkGateError("VENV_SNAPSHOT_INVALID", "not a snapshot written by `snapshot-venv`")
+    if data.get("venv") != real_root:
+        raise BenchmarkGateError("VENV_SNAPSHOT_INVALID", "the snapshot belongs to another venv")
+    return entries
+
+
+def _inside(path: str, root: str) -> bool:
+    return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
+
+
+def _pth_problem(site: str, data: bytes, export_root: str) -> str | None:
+    """Why a `.pth` file's content may not run, or None. Mirrors `site.addpackage`: a line starting with `#` is a comment, one
+    starting with `import ` or `import<TAB>` is executed, anything else is a path joined to the site directory. Allowed: comments,
+    blank lines, a path that resolves INSIDE the export, and exactly the recognised editable-finder `import` lines."""
+    if len(data) > _PTH_MAX_BYTES:
+        return "a .pth file over 64 KiB"
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return "a .pth file that is not UTF-8"
+    if "\0" in text:
+        return "a .pth file with a NUL"
+    lines = _PTH_NEWLINES_RE.split(text)
+    if len(lines) > _PTH_MAX_LINES:
+        return "a .pth file over 1000 lines"
+    for line in lines:
+        if line.startswith("#") or not line.strip():  # a blank line names the site directory itself, already on the path
+            continue
+        if line.startswith(("import ", "import\t")):
+            if not any(pattern.fullmatch(line) for pattern in _EDITABLE_LINE_RES):
+                return f"import line: {escape_diagnostic(line, 60)}"
+            continue
+        target = os.path.realpath(os.path.join(site, line.rstrip()))
+        if not _inside(target, export_root):
+            return f"path outside the export: {escape_diagnostic(line, 60)}"
+    return None
+
+
+def check_venv(bin_dir: str | os.PathLike, snapshot_path: str | os.PathLike, export_root: str | os.PathLike,
+               other_roots: tuple[str, ...] = ()) -> None:
+    """After the project's install: refuse a venv that gained a hook. Raises `VENV_NOT_ISOLATED` (not a fresh isolated venv, or the venv
+    lies inside `export_root` or any of `other_roots`, or a root lies inside the venv), `VENV_HOOK_REJECTED` (every NEW or CHANGED
+    `.pth` or startup entry is judged: a `.pth` must be a regular file whose lines are comments, blank, a path resolving inside
+    `export_root`, or exactly `import __editable___<pkg>_finder; __editable___<pkg>_finder.install()` / `import _editable_impl_<pkg>`;
+    a new `sitecustomize` / `usercustomize` in any form is refused; a pytest-cov `a1_coverage.pth` is refused), `VENV_SNAPSHOT_INVALID`
+    (missing, tampered or another venv's snapshot: a caller error) or `TREE_UNREADABLE`. The error carries `hits`
+    (`{"path": <relative to the venv>, "reason": ...}`). Entries only removed since the snapshot are ignored."""
+    try:
+        root, sites = _venv_layout(os.fspath(bin_dir))
+        real_root = os.path.realpath(root)
+        export = os.path.realpath(os.fspath(export_root))
+        if not os.path.isdir(export):
+            raise BenchmarkGateError("VENV_NOT_ISOLATED", "export_root is not a directory")
+        for other in (export, *(os.path.realpath(os.fspath(r)) for r in other_roots)):
+            if _inside(real_root, other) or _inside(other, real_root):
+                raise BenchmarkGateError("VENV_NOT_ISOLATED", "the venv and an export root contain each other")
+        before = _load_venv_snapshot(snapshot_path, real_root)
+        hits: list[dict] = []
+        for rel, entry in sorted(_venv_entries(root, sites).items()):
+            if before.get(rel) == entry:
+                continue
+            name = _fold_component(os.path.basename(rel))
+            module = _MODULE_FILE_RE.fullmatch(name)
+            if not name.endswith(".pth") or name in _STARTUP_MODULES or (module and module[1] in _STARTUP_MODULES):
+                reason = "a new or changed startup module"
+            elif entry["kind"] != "file":
+                reason = "a .pth that is not a regular file"
+            else:
+                reason = _pth_problem(os.path.dirname(os.path.join(root, rel)),
+                                      _read_bounded(os.path.join(root, rel), _PTH_MAX_BYTES + 1, nofollow=True), export)
+            if reason:
+                hits.append({"path": escape_diagnostic(rel, 200), "reason": reason})
+        if hits:
+            error = BenchmarkGateError("VENV_HOOK_REJECTED", "venv hooks, " + _shown([h["path"] + " (" + h["reason"] + ")" for h in hits]))
+            error.hits = hits
+            raise error
+    except BenchmarkGateError:
+        raise
+    except (OSError, ValueError, TypeError) as exc:
+        raise BenchmarkGateError("TREE_UNREADABLE", _describe(exc)) from exc
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -3049,6 +3251,15 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_snapshot_venv(args: argparse.Namespace) -> int:
+    """Record a fresh venv's `.pth` and startup files before the project install (exit 0; 2 on any failure, with the code on stderr)."""
+    try:
+        snapshot_venv(args.bin, args.out)
+    except BenchmarkGateError as exc:
+        return _fail(exc)
+    return 0
+
+
 def _cmd_fixed_parent(_args: argparse.Namespace) -> int:
     """Print `fixed_parent()`: C4f builds `export --dest` and `cleanup --root` paths from it."""
     print(fixed_parent())
@@ -3086,8 +3297,8 @@ def _cmd_cleanup(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point: ``validate`` (C4a), ``lint`` (C4b), ``export``, ``fixed-parent`` (C4c-1a) and ``cleanup`` (C4c-1b, C4c-1c). Later
-    PRs add ``snapshot-venv`` (C4c-2), ``compare`` and ``run-once`` (C4d) by adding a subparser with ``set_defaults(func=...)``. There is no catch-all
+    """CLI entry point: ``validate`` (C4a), ``lint`` (C4b), ``export``, ``fixed-parent`` (C4c-1a) and ``cleanup`` (C4c-1b, C4c-1c) and ``snapshot-venv`` (C4c-2c). Later
+    PRs add ``compare`` and ``run-once`` (C4d) by adding a subparser with ``set_defaults(func=...)``. There is no catch-all
     here on purpose: C4d owns the exit-code contract for a crash."""
     parser = argparse.ArgumentParser(prog="benchmark_gate.py", description="Benchmark gate: validate, lint, export, fixed-parent, cleanup.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -3108,6 +3319,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="pid in a NEW root's marker, a positive int below 2**31 (default: this short-lived process, so cleanup is "
                              "allowed at once; ignored for an existing root)")
     export.set_defaults(func=_cmd_export)
+    snapshot = sub.add_parser("snapshot-venv", help="record a fresh venv's .pth and startup files; run BEFORE installing the project (exit 0, 2 failure)")
+    snapshot.add_argument("--bin", required=True, metavar="DIR", help="the venv's bin directory")
+    snapshot.add_argument("--out", required=True, metavar="FILE", help="a new file")
+    snapshot.set_defaults(func=_cmd_snapshot_venv)
     fixed = sub.add_parser("fixed-parent", help="print the per-user directory that roots live in")
     fixed.set_defaults(func=_cmd_fixed_parent)
     cleanup = sub.add_parser("cleanup", help="remove a dispatch-unique root (exit 0 removed/absent, 1 refused or interrupted, no code on stdout = retry; "
