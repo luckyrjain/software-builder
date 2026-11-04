@@ -118,6 +118,15 @@ def test_a_pth_line_that_is_not_a_path_in_the_export_or_an_editable_finder_is_re
     assert error.hits[0]["path"].endswith("a1_coverage.pth") and error.detail.startswith("venv hooks, 1, first 1: ")
 
 
+@pytest.mark.parametrize("sep", ["\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029"])
+@pytest.mark.parametrize("before", ["# comment", "{export}"])
+def test_every_line_separator_python_may_use_hides_nothing(world, sep, before):
+    snapshot(world)
+    body = before.format(export=world[3]) + sep + "import os; open('x', 'w')\n"
+    (world[2] / "x.pth").write_text(body, encoding="utf-8")
+    rejected(world)
+
+
 def test_a_pth_symlink_into_the_export_is_refused(world):
     snapshot(world)
     (world[3] / "real.pth").write_text("import os\n")

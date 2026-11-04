@@ -2936,7 +2936,6 @@ _EDITABLE_LINE_RES = (  # setuptools' finder, and the `_editable_impl_<pkg>` imp
     re.compile(r"import (__editable___[A-Za-z0-9_]+_finder); \1\.install\(\)", re.ASCII),
     re.compile(r"import _editable_impl_[A-Za-z0-9_]+", re.ASCII),
 )
-_PTH_NEWLINES_RE = re.compile(r"\r\n|\r|\n")  # Python reads a `.pth` in text mode: a bare `\r` also ends a line
 
 
 def _venv_layout(bin_dir: object) -> tuple[str, list[str]]:
@@ -3048,7 +3047,7 @@ def _pth_problem(site: str, data: bytes, export_root: str) -> str | None:
         return "a .pth file that is not UTF-8"
     if "\0" in text:
         return "a .pth file with a NUL"
-    lines = _PTH_NEWLINES_RE.split(text)
+    lines = text.splitlines()  # a SUPERSET of every Python's split (3.12 text-mode `\r`/`\n`, newer `str.splitlines()`: also VT, FF, FS, GS, RS, NEL, LS, PS)
     if len(lines) > _PTH_MAX_LINES:
         return "a .pth file over 1000 lines"
     for line in lines:
