@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validation, lint and statistics core of the performance-review -> loop-task-implementer benchmark gate (Epic C).
 
-**This module is not wired into anything yet.** It is delivered by a series of ten PRs for gap-backlog ticket
+**This module is not wired into anything yet.** It is delivered by a series of eleven PRs for gap-backlog ticket
 C4 (C4a core, C4b lint, C4c-1a export, C4c-1b seal/cleanup, C4c-1c claim recovery, C4c-2 overlay/diff/venv check, C4d harness, C4e classifier/docs, C4f wiring); no workflow file,
 lifecycle validator or other script calls it until C4f. So far it holds the pure, string-level and arithmetic
 pieces (``validate``, ``lint``) and C4c-1 (a: export, b: seal and cleanup, c: claim recovery): ``export``, ``fixed-parent``, ``cleanup`` and the library
@@ -864,7 +864,7 @@ OVERLAY_REFUSAL_CODES = (
 # NOT verdicts about the PR: a wrong or missing export (OVERLAY_COMMIT_MISMATCH: a stale directory, a swapped root, a tampered or absent
 # sidecar), a sealed base (a caller-order error), an unreadable harness file, an I/O error. `compare` must not blame the Builder for them.
 ERROR_CODES += OVERLAY_REFUSAL_CODES + ("OVERLAY_COMMIT_MISMATCH", "OVERLAY_FAILED", "OVERLAY_BASE_SEALED", "HARNESS_UNREADABLE")
-# C4c-2b: refusals of the two diff checks (library results that `compare` maps to `REJECTED`, `PROPOSED_BLOCKING`). A failure to RUN the
+# C4c-2b: refusals of the two diff checks (library results that `compare` maps per the design: PROTECTED_PATH_CHANGED -> PROPOSED_BLOCKING, BENCHMARK_AWARE_CODE -> REJECTED with NEEDS_EVIDENCE). A failure to RUN the
 # check (a missing commit, an unreadable repository, git failing) is one of the git codes above: a crash, not a verdict.
 DIFF_REFUSAL_CODES = (
     "PROTECTED_PATH_CHANGED",   # a protected path (a startup hook, config, shadowing module, ...) was added, changed or removed between the commits

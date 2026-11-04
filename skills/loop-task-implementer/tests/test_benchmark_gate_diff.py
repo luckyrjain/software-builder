@@ -1,4 +1,4 @@
-"""Tests for the C4c-2b pieces of `benchmark_gate.py`: `protected_path_diff` and `token_tripwire`.
+"""Tests for the C4c-2b pieces of `benchmark_gate.py`: `protected_path_diff`, `token_tripwire`, `diff_checks` and `is_ancestor`.
 
 Both run against real temporary git repositories (scrubbed environment), because what they guard is git's own record of the two
 commits. Design: docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md (`compare`, protected-path diff
