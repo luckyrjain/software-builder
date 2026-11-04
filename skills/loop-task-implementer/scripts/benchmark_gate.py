@@ -3046,7 +3046,7 @@ def _inside(path: str, root: str) -> bool:
     return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
 
 
-def _pth_problem(site: str, data: bytes, export_root: str) -> str | None:
+def _pth_problem(site: str, data: bytes, export_root: str, export_aliases: tuple[str, ...] = ()) -> str | None:
     """Why a `.pth` file's content may not run, or None. Mirrors `site.addpackage`: a line starting with `#` is a comment, one
     starting with `import ` or `import<TAB>` is executed, anything else is a path joined to the site directory. Allowed: comments,
     blank lines, a path that resolves INSIDE the export, and exactly the recognised editable-finder `import` lines."""
@@ -3071,7 +3071,8 @@ def _pth_problem(site: str, data: bytes, export_root: str) -> str | None:
         joined = os.path.join(site, line.rstrip())
         # BOTH: CPython puts the lexical `abspath` (`..` collapsed without resolving symlinks) on `sys.path`, and the directory it
         # names may itself reach elsewhere through a link; a symlink inside the export plus `..` makes the two differ
-        if not (_inside(os.path.abspath(joined), export_root) and _inside(os.path.realpath(joined), export_root)):
+        lexical = os.path.abspath(joined)  # compared with the root as given too: the venv path (so `site`) may go through a symlink (macOS /var -> /private/var)
+        if not (any(_inside(lexical, root) for root in (export_root, *export_aliases)) and _inside(os.path.realpath(joined), export_root)):
             return f"path outside the export: {escape_diagnostic(line, 60)}"
     return None
 
@@ -3088,6 +3089,8 @@ def check_venv(bin_dir: str | os.PathLike, snapshot_path: str | os.PathLike, exp
     try:
         root, sites = _venv_layout(_fs(bin_dir))
         real_root = os.path.realpath(root)
+        if not isinstance(other_roots, (tuple, list)):
+            raise BenchmarkGateError("DEST_REJECTED", "other_roots must be a tuple or list of paths")
         if type(_fs(export_root)) is not str or any(type(_fs(r)) is not str for r in other_roots):
             raise BenchmarkGateError("DEST_REJECTED", "export_root and other_roots must be paths")
         export = os.path.realpath(_fs(export_root))
@@ -3109,7 +3112,8 @@ def check_venv(bin_dir: str | os.PathLike, snapshot_path: str | os.PathLike, exp
                 reason = "a .pth that is not a regular file"
             else:
                 reason = _pth_problem(os.path.dirname(os.path.join(root, rel)),
-                                      _read_bounded(os.path.join(root, rel), _PTH_MAX_BYTES + 1, nofollow=True), export)
+                                      _read_bounded(os.path.join(root, rel), _PTH_MAX_BYTES + 1, nofollow=True), export,
+                                      (os.path.abspath(_fs(export_root)),))
             if reason:
                 hits.append({"path": escape_diagnostic(rel, 200), "reason": reason})
         if hits:

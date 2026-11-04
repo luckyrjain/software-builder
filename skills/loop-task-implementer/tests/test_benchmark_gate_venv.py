@@ -747,10 +747,37 @@ def test_a_pyvenv_cfg_dropped_into_bin_by_the_install_is_refused(world):
     rejected(world, "VENV_NOT_ISOLATED")
 
 
-@pytest.mark.parametrize("export, others", [(None, ()), (b"/x", ()), ("OK", (None,)), ("OK", (3,))])
+@pytest.mark.parametrize("export, others", [(None, ()), (b"/x", ()), ("OK", (None,)), ("OK", (3,)), ("OK", "/some/root"), ("OK", None), ("OK", 5)])
 def test_bad_root_arguments_are_caller_errors(world, export, others):
     snapshot(world)
     export = str(world[3]) if export == "OK" else export
     with pytest.raises(Err) as info:
         bg.check_venv(str(world[1]), str(world[4]), export, others)
     assert info.value.code == "DEST_REJECTED"
+
+
+@pytest.mark.parametrize("line", ["{alias}/export/src\n", "../../../../export/src\n", "{real}/export/src\n"])
+def test_paths_through_a_symlinked_parent_are_judged_by_where_they_point(world, tmp_path, line):
+    """macOS: the temp directory is `/var/...` -> `/private/var/...`; a caller may hold the venv and the export by the alias."""
+    snapshot(world)
+    alias = tmp_path.parent / (tmp_path.name + "-alias")
+    os.symlink(tmp_path, alias)
+    try:
+        bin_alias, export_alias = str(alias / "venv" / "bin"), str(alias / "export")
+        (world[2] / "x.pth").write_text(line.format(alias=alias, real=tmp_path))
+        assert bg.check_venv(bin_alias, str(world[4]), export_alias, ()) == os.path.realpath(world[0])
+    finally:
+        os.unlink(alias)
+
+
+def test_a_path_outside_the_export_is_still_refused_through_a_symlinked_parent(world, tmp_path):
+    snapshot(world)
+    alias = tmp_path.parent / (tmp_path.name + "-alias2")
+    os.symlink(tmp_path, alias)
+    try:
+        (world[2] / "x.pth").write_text(f"{alias}/venv\n")
+        with pytest.raises(Err) as info:
+            bg.check_venv(str(alias / "venv" / "bin"), str(world[4]), str(alias / "export"), ())
+        assert info.value.code == "VENV_HOOK_REJECTED"
+    finally:
+        os.unlink(alias)
