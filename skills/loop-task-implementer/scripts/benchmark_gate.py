@@ -2938,6 +2938,11 @@ _EDITABLE_LINE_RES = (  # setuptools' finder, and the `_editable_impl_<pkg>` imp
 )
 
 
+def _fs(value: object) -> object:
+    """`os.fspath` for a str or path-like; anything else is passed through, so the caller's own check refuses it with a coded error."""
+    return os.fspath(value) if isinstance(value, (str, os.PathLike)) else value
+
+
 def _venv_layout(bin_dir: object) -> tuple[str, list[str]]:
     """`(venv root, site-packages directories)` of a venv given its `bin` directory, refusing anything that is not a plain,
     fresh, isolated venv: `bin` a real directory named `bin`, `pyvenv.cfg` a regular file next to it that does not enable the
@@ -2945,7 +2950,11 @@ def _venv_layout(bin_dir: object) -> tuple[str, list[str]]:
     if type(bin_dir) is not str or not bin_dir or "\0" in bin_dir or os.path.basename(os.path.abspath(bin_dir)) != "bin":
         raise BenchmarkGateError("VENV_NOT_ISOLATED", "bin must be the path of a venv's `bin` directory")
     bin_path = os.path.abspath(bin_dir)
-    if not stat.S_ISDIR(os.lstat(bin_path).st_mode):
+    try:
+        is_dir = stat.S_ISDIR(os.lstat(bin_path).st_mode)
+    except OSError as exc:
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", f"bin does not exist: {escape_diagnostic(str(exc), 120)}") from exc
+    if not is_dir:
         raise BenchmarkGateError("VENV_NOT_ISOLATED", "bin is a symlink or not a directory")
     root = os.path.dirname(bin_path)
     cfg = os.path.join(root, "pyvenv.cfg")
@@ -3002,8 +3011,8 @@ def snapshot_venv(bin_dir: str | os.PathLike, out_path: str | os.PathLike) -> No
     atomically; an existing `out_path` is refused (`DEST_REJECTED`). `VENV_NOT_ISOLATED` if the venv is not a plain isolated one;
     `TREE_UNREADABLE` for an I/O error. Anything already in the snapshot (the venv's own `distutils-precedence.pth`, say) is not judged later."""
     try:
-        root, sites = _venv_layout(os.fspath(bin_dir))
-        out = os.fspath(out_path)
+        root, sites = _venv_layout(_fs(bin_dir))
+        out = _fs(out_path)
         if type(out) is not str or not out or os.path.lexists(out):
             raise BenchmarkGateError("DEST_REJECTED", "the snapshot path must be a new file")
         _write_json_atomic(out, {"kind": _VENV_SNAPSHOT_KIND, "version": 1, "venv": os.path.realpath(root),
@@ -3064,16 +3073,16 @@ def _pth_problem(site: str, data: bytes, export_root: str) -> str | None:
 
 
 def check_venv(bin_dir: str | os.PathLike, snapshot_path: str | os.PathLike, export_root: str | os.PathLike,
-               other_roots: tuple[str, ...] = ()) -> None:
+               other_roots: tuple[str, ...]) -> str:
     """After the project's install: refuse a venv that gained a hook. Raises `VENV_NOT_ISOLATED` (not a fresh isolated venv, or the venv
     lies inside `export_root` or any of `other_roots`, or a root lies inside the venv), `VENV_HOOK_REJECTED` (every NEW or CHANGED
     `.pth` or startup entry is judged: a `.pth` must be a regular file whose lines are comments, blank, a path resolving inside
     `export_root`, or exactly `import __editable___<pkg>_finder; __editable___<pkg>_finder.install()` / `import _editable_impl_<pkg>`;
     a new `sitecustomize` / `usercustomize` in any form is refused; a pytest-cov `a1_coverage.pth` is refused), `VENV_SNAPSHOT_INVALID`
-    (missing, tampered or another venv's snapshot: a caller error) or `TREE_UNREADABLE`. The error carries `hits`
+    (missing, tampered or another venv's snapshot: a caller error), `DEST_REJECTED` (`export_root` is not a directory: a caller error) or `TREE_UNREADABLE`. Returns the venv's real root, so `compare` can require the two sides' venvs to be DISTINCT (not decidable from one side) and `other_roots` is required (omit nothing: the OTHER side's export must be passed). Not enforced here: that the venv was created after the exports (only `pyvenv.cfg` one level up is checked). The error carries `hits`
     (`{"path": <relative to the venv>, "reason": ...}`). Entries only removed since the snapshot are ignored."""
     try:
-        root, sites = _venv_layout(os.fspath(bin_dir))
+        root, sites = _venv_layout(_fs(bin_dir))
         real_root = os.path.realpath(root)
         export = os.path.realpath(os.fspath(export_root))
         if not os.path.isdir(export):
@@ -3101,6 +3110,7 @@ def check_venv(bin_dir: str | os.PathLike, snapshot_path: str | os.PathLike, exp
             error = BenchmarkGateError("VENV_HOOK_REJECTED", "venv hooks, " + _shown([h["path"] + " (" + h["reason"] + ")" for h in hits]))
             error.hits = hits
             raise error
+        return real_root
     except BenchmarkGateError:
         raise
     except (OSError, ValueError, TypeError) as exc:
@@ -3299,7 +3309,7 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry point: ``validate`` (C4a), ``lint`` (C4b), ``export``, ``fixed-parent`` (C4c-1a) and ``cleanup`` (C4c-1b, C4c-1c) and ``snapshot-venv`` (C4c-2c). Later
     PRs add ``compare`` and ``run-once`` (C4d) by adding a subparser with ``set_defaults(func=...)``. There is no catch-all
     here on purpose: C4d owns the exit-code contract for a crash."""
-    parser = argparse.ArgumentParser(prog="benchmark_gate.py", description="Benchmark gate: validate, lint, export, fixed-parent, cleanup.")
+    parser = argparse.ArgumentParser(prog="benchmark_gate.py", description="Benchmark gate: validate, lint, export, fixed-parent, cleanup, snapshot-venv.")
     sub = parser.add_subparsers(dest="command", required=True)
     validate = sub.add_parser("validate", help="validate specialist_inputs.benchmark_gate")
     validate.add_argument("--specialist-inputs", required=True, metavar="FILE")

@@ -49,8 +49,8 @@ def snapshot(w):
     bg.snapshot_venv(str(w[1]), str(w[4]))
 
 
-def check(w, **kwargs):
-    bg.check_venv(str(w[1]), str(w[4]), str(w[3]), **kwargs)
+def check(w, other_roots=()):
+    return bg.check_venv(str(w[1]), str(w[4]), str(w[3]), other_roots)
 
 
 def rejected(w, code="VENV_HOOK_REJECTED"):
@@ -222,11 +222,16 @@ def test_a_pyvenv_cfg_symlink_is_not_followed(world, tmp_path):
     assert info.value.code == "VENV_NOT_ISOLATED"
 
 
-@pytest.mark.parametrize("bad", [None, 3, "", "relative-name-not-bin", "x\0/bin", b"/tmp/bin"])
+@pytest.mark.parametrize("bad", [None, 3, "", "relative-name-not-bin", "x\0/bin", b"/tmp/bin", "/nonexistent-dir/bin"])
 def test_a_bad_bin_argument_is_refused(world, bad):
     with pytest.raises(Err) as info:
         bg.snapshot_venv(bad, str(world[4]))
-    assert info.value.code in ("VENV_NOT_ISOLATED", "TREE_UNREADABLE")
+    assert info.value.code == "VENV_NOT_ISOLATED"
+
+
+def test_check_venv_returns_the_real_root_of_the_venv_so_the_two_sides_can_be_told_apart(world):
+    snapshot(world)
+    assert check(world) == os.path.realpath(world[0])
 
 
 def test_a_venv_without_site_packages_is_not_isolated(world):
@@ -266,9 +271,9 @@ def test_lib64_pointing_at_lib_is_one_site_directory(world):
 def test_a_venv_inside_an_export_is_not_isolated(world, tmp_path):
     inner = world[3] / "venv"
     os.rename(world[0], inner)
+    bg.snapshot_venv(str(inner / "bin"), str(world[4]))
     with pytest.raises(Err) as info:
-        bg.snapshot_venv(str(inner / "bin"), str(world[4]))
-        bg.check_venv(str(inner / "bin"), str(world[4]), str(world[3]))
+        bg.check_venv(str(inner / "bin"), str(world[4]), str(world[3]), ())
     assert info.value.code == "VENV_NOT_ISOLATED"
 
 
@@ -277,7 +282,7 @@ def test_an_export_inside_the_venv_is_not_isolated(world):
     export.mkdir()
     snapshot(world)
     with pytest.raises(Err) as info:
-        bg.check_venv(str(world[1]), str(world[4]), str(export))
+        bg.check_venv(str(world[1]), str(world[4]), str(export), ())
     assert info.value.code == "VENV_NOT_ISOLATED"
 
 
@@ -352,7 +357,7 @@ def test_a_snapshot_that_is_a_symlink_is_not_followed(world, tmp_path):
 def test_a_missing_export_root_is_refused(world):
     snapshot(world)
     with pytest.raises(Err) as info:
-        bg.check_venv(str(world[1]), str(world[4]), str(world[3] / "nope"))
+        bg.check_venv(str(world[1]), str(world[4]), str(world[3] / "nope"), ())
     assert info.value.code == "DEST_REJECTED"
 
 
@@ -444,8 +449,8 @@ def test_a_venv_reached_through_a_symlinked_path_is_one_venv(world, tmp_path):
     bg.snapshot_venv(str(link / "bin"), str(world[4]))
     assert json.loads(world[4].read_text())["venv"] == str(world[0].resolve())
     (world[2] / "pkg.pth").write_text(f"{world[3]}\n")
-    bg.check_venv(str(link / "bin"), str(world[4]), str(world[3]))
-    bg.check_venv(str(world[1]), str(world[4]), str(world[3]))
+    bg.check_venv(str(link / "bin"), str(world[4]), str(world[3]), ())
+    bg.check_venv(str(world[1]), str(world[4]), str(world[3]), ())
 
 
 def test_roots_are_compared_after_resolving_symlinks(world, tmp_path):
@@ -453,13 +458,13 @@ def test_roots_are_compared_after_resolving_symlinks(world, tmp_path):
     (world[2] / "pkg.pth").write_text(f"{world[3]}/src\n")
     export_link = tmp_path / "export-link"
     os.symlink(world[3], export_link)
-    bg.check_venv(str(world[1]), str(world[4]), str(export_link))  # a symlinked export root still matches its real path lines
+    bg.check_venv(str(world[1]), str(world[4]), str(export_link), ())  # a symlinked export root still matches its real path lines
     inner = world[0] / "inner"
     inner.mkdir()
     inner_link = tmp_path / "inner-link"
     os.symlink(inner, inner_link)
     with pytest.raises(Err) as info:  # an export root that is a symlink into the venv
-        bg.check_venv(str(world[1]), str(world[4]), str(inner_link))
+        bg.check_venv(str(world[1]), str(world[4]), str(inner_link), ())
     assert info.value.code == "VENV_NOT_ISOLATED"
     parent_link = tmp_path / "parent-link"
     os.symlink(tmp_path, parent_link)
@@ -705,7 +710,7 @@ def test_upper_case_pth_names_are_judged_as_pth_files(world):
 def test_check_failures_other_than_hooks_are_tree_unreadable(world):
     snapshot(world)
     with pytest.raises(Err) as info:
-        bg.check_venv(str(world[1]), str(world[4]), None)
+        bg.check_venv(str(world[1]), str(world[4]), None, ())
     assert info.value.code == "TREE_UNREADABLE"
     if os.geteuid() != 0:
         os.chmod(world[2], 0)
