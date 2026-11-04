@@ -2643,13 +2643,14 @@ def overlay_benchmark_file(
 
 _DIFF_NAME_LIMIT = 5
 _PROTECTED_BASENAMES = frozenset({  # compared casefolded: a macOS filesystem is case-insensitive
-    "conftest.py", "pytest.ini", "pyproject.toml", "setup.cfg", "setup.py", "tox.ini", "noxfile.py", "manifest.in",
+    "conftest.py", "pytest.ini", ".pytest.ini", "pytest.toml", ".pytest.toml", ".coveragerc", "pyproject.toml", "setup.cfg", "setup.py", "tox.ini", "noxfile.py", "manifest.in",
     "environment.yml", "environment.yaml", "poetry.lock", "uv.lock", "pdm.lock", "pylock.toml",
 })
 _PROTECTED_PREFIXES_SUFFIXES = (  # (prefix, suffix) of the casefolded basename
     ("sitecustomize", ".py"), ("usercustomize", ".py"), ("", ".pth"), ("requirements", ".txt"), ("constraints", ".txt"),
     ("", ".in"), ("pipfile", ""),
 )
+_STARTUP_MODULES = frozenset({"sitecustomize", "usercustomize"})
 _STDLIB_FOLDED = frozenset(name.casefold() for name in sys.stdlib_module_names)
 _TRIPWIRE_TOKENS = (b"PYTEST_CURRENT_TEST", b"BENCH_RESULT_DIGEST", b"BENCH_TRACE_LINES", b"os._exit", b"sys.argv")  # + the benchmark's path
 _MODULE_FILE_RE = re.compile(r"([^.]+)(?:\.[^.]+)?\.(?:py|so|pyd)")  # `json.py`, `json.so`, `json.cpython-312-darwin.so`, `json.abi3.so`
@@ -2673,6 +2674,9 @@ def _protected_reason(path: str, benchmark_path: str) -> str | None:
         name.startswith(prefix) and name.endswith(suffix) and len(name) >= len(prefix) + len(suffix)
         for prefix, suffix in _PROTECTED_PREFIXES_SUFFIXES
     ):
+        return "configuration, startup or dependency file"
+    startup = _MODULE_FILE_RE.fullmatch(name)  # the interpreter imports these from any sys.path entry, in any form
+    if _STARTUP_MODULES.intersection(folded[:-1]) or (startup and startup[1] in _STARTUP_MODULES):
         return "configuration, startup or dependency file"
     if "requirements" in folded[:-1] and name.endswith(".txt"):
         return "dependency file"

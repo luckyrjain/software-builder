@@ -840,3 +840,16 @@ def test_a_context_line_inside_a_u0_hunk_is_refused_even_when_the_counts_still_a
 
 def test_the_file_stem_alone_is_not_a_token(repo):
     check(bg.token_tripwire, repo, {"README.md": "see bench_orders for the numbers\n"})
+
+
+@pytest.mark.parametrize("path", [
+    ".pytest.ini", "pytest.toml", ".pytest.toml", ".coveragerc", "sub/.coveragerc",
+    "sitecustomize/__init__.py", "src/usercustomize/x.txt", "sitecustomize.cpython-312-darwin.so", "x/usercustomize.pyd",
+])
+def test_current_pytest_config_and_non_py_startup_hooks_are_refused(repo, path):
+    refused(bg.protected_path_diff, repo, {path: "x\n"}, "PROTECTED_PATH_CHANGED")
+
+
+@pytest.mark.parametrize("path", ["sitecustomize.txt", "docs/usercustomizer.md"])
+def test_startup_hook_near_misses_are_not_protected(repo, path):
+    check(bg.protected_path_diff, repo, {path: "x\n"})
