@@ -464,9 +464,10 @@ def test_code_vocabularies_are_pinned():
         TREE_TOO_LARGE SEAL_FAILED MARKER_MISSING MARKER_INVALID OVERLAY_PATH_REJECTED OVERLAY_NOT_REGULAR OVERLAY_PATH_CONFLICT
         BENCHMARK_MODIFIED OVERLAY_COMMIT_MISMATCH OVERLAY_FAILED OVERLAY_BASE_SEALED HARNESS_UNREADABLE
         PROTECTED_PATH_CHANGED BENCHMARK_AWARE_CODE""".split())
+    assert bg.DIFF_REFUSAL_CODES == ("PROTECTED_PATH_CHANGED", "BENCHMARK_AWARE_CODE")
     assert bg.OVERLAY_REFUSAL_CODES == tuple(
         "OVERLAY_PATH_REJECTED OVERLAY_NOT_REGULAR OVERLAY_PATH_CONFLICT BENCHMARK_MODIFIED".split())
-    for vocabulary in (bg.EXPORT_REFUSAL_CODES, bg.CLEANUP_CODES, bg.ERROR_CODES, bg.OVERLAY_REFUSAL_CODES):
+    for vocabulary in (bg.EXPORT_REFUSAL_CODES, bg.CLEANUP_CODES, bg.ERROR_CODES, bg.OVERLAY_REFUSAL_CODES, bg.DIFF_REFUSAL_CODES):
         assert len(set(vocabulary)) == len(vocabulary)
         assert all(code.isascii() and code.replace("_", "").isalpha() and bg.escape_diagnostic(code) == code for code in vocabulary)
 

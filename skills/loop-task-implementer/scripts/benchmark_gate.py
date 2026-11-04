@@ -5,10 +5,11 @@
 C4 (C4a core, C4b lint, C4c-1a export, C4c-1b seal/cleanup, C4c-1c claim recovery, C4c-2 overlay/diff/venv check, C4d harness, C4e classifier/docs, C4f wiring); no workflow file,
 lifecycle validator or other script calls it until C4f. So far it holds the pure, string-level and arithmetic
 pieces (``validate``, ``lint``) and C4c-1 (a: export, b: seal and cleanup, c: claim recovery): ``export``, ``fixed-parent``, ``cleanup`` and the library
-functions ``compare`` will call (``export_tree``, ``seal_tree``, ``unseal_tree``, ``cleanup_root``). C4c-2 is delivered in three parts: 2a (this file so far) adds the library functions ``hash_tree``,
+functions ``compare`` will call (``export_tree``, ``seal_tree``, ``unseal_tree``, ``cleanup_root``). C4c-2 is delivered in three parts: 2a adds the library functions ``hash_tree``,
 ``overlay_benchmark_file``, ``read_benchmark``, ``export_commit``, ``repo_top_levels``, ``seal_export``, ``hash_export`` and
-``harness_sha256``; 2b the protected-path diff and the
-token tripwire; 2c the venv ``.pth`` check with ``snapshot-venv``. Calling order for ``compare`` (C4d): ``export_tree`` x2 (the dispatch root's
+``harness_sha256``; 2b (``protected_path_diff``, ``token_tripwire``, ``diff_checks``, ``is_ancestor``) the protected-path diff and the
+token tripwire; 2c the venv ``.pth`` check with ``snapshot-venv``. Calling order for ``compare`` (C4d): ``is_ancestor`` and ``diff_checks`` first (they
+read only the repository and the two commits, no export, so they can run before anything is built), then ``export_tree`` x2 (the dispatch root's
 marker pid defaults to the exporting process, so pass ``--owner-pid`` when ``cleanup`` will run from another process),
 ``repo_top_levels(base)`` (BEFORE the install: afterwards ``build/``, ``dist/`` and ``venv/`` would join the lint's allowlist), venv and
 install, ``overlay_benchmark_file(..., head_ref_commit=...)``, ``seal_export`` x2, ``read_benchmark`` on BOTH roots (required equal) and
@@ -855,7 +856,7 @@ ERROR_CODES = (  # MARKER_MISSING / MARKER_INVALID also appear in CLEANUP_CODES:
 # `export`); a failure that is not one of these is OVERLAY_FAILED (an I/O error or a broken validator: a crash, not a verdict), and
 # OVERLAY_BASE_SEALED is a caller-order error (the overlay ran after `seal_tree`).
 OVERLAY_REFUSAL_CODES = (
-    "OVERLAY_PATH_REJECTED",    # the path fails the gate's lexical rules or `validate_task_target`, or no entry of that exact name
+    "OVERLAY_PATH_REJECTED",    # the path fails the gate's lexical rules (also for the C4c-2b diff checks) or `validate_task_target`, or no entry of that exact name
     "OVERLAY_NOT_REGULAR",      # the head file is a symlink, hard-linked, special, unreadable or over 16 KiB, or behind a symlinked parent
     "OVERLAY_PATH_CONFLICT",    # a base component that should be a directory is not one, or a case-folded twin exists there
     "BENCHMARK_MODIFIED",       # present at base, and the head's bytes, kind or link count differ
@@ -904,6 +905,7 @@ class BenchmarkGateError(Exception):
         super().__init__(code)
         self.code = code
         self.detail = escape_diagnostic(detail, 200)
+        self.hits: list[dict] = []  # the diff checks put what they found here (already escaped), for the evidence a human is shown
 
     def __str__(self) -> str:  # a traceback or log line shows the reason, not only the code
         return f"{self.code}: {self.detail}" if self.detail else self.code
@@ -2649,9 +2651,10 @@ _PROTECTED_PREFIXES_SUFFIXES = (  # (prefix, suffix) of the casefolded basename
     ("", ".in"), ("pipfile", ""),
 )
 _STDLIB_FOLDED = frozenset(name.casefold() for name in sys.stdlib_module_names)
-_TRIPWIRE_TOKENS = (b"PYTEST_CURRENT_TEST", b"BENCH_RESULT_DIGEST", b"BENCH_TRACE_LINES", b"os._exit", b"sys.argv")
+_TRIPWIRE_TOKENS = (b"PYTEST_CURRENT_TEST", b"BENCH_RESULT_DIGEST", b"BENCH_TRACE_LINES", b"os._exit", b"sys.argv")  # + the benchmark's path
+_MODULE_FILE_RE = re.compile(r"([^.]+)(?:\.[^.]+)?\.(?:py|so|pyd)")  # `json.py`, `json.so`, `json.cpython-312-darwin.so`, `json.abi3.so`
 _GIT_ESCAPES = {b"a": b"\a", b"b": b"\b", b"t": b"\t", b"n": b"\n", b"v": b"\v", b"f": b"\f", b"r": b"\r", b'"': b'"', b"\\": b"\\"}
-_HUNK_RE = re.compile(rb"@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@")
+_HUNK_RE = re.compile(rb"@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
 
 def _diff_arguments(commits: tuple[object, object], benchmark_path: object) -> int:
@@ -2676,10 +2679,11 @@ def _protected_reason(path: str, benchmark_path: str) -> str | None:
     if "__pycache__" in folded or name.endswith((".pyc", ".pyo")):
         return "compiled bytecode"
     top = folded[1:] if folded[0] == "src" and len(folded) > 1 else folded  # the two directories `repo_top_levels` reads
-    importable = top[0][:-3] if len(top) == 1 and top[0].endswith(".py") else top[0] if len(top) > 1 else ""
+    module = _MODULE_FILE_RE.fullmatch(top[0]) if len(top) == 1 else None  # a module file, source or compiled extension
+    importable = module[1] if module else top[0] if len(top) > 1 else ""
     if importable in _STDLIB_FOLDED:
         return "module that shadows the standard library"
-    if parts[:-1] == benchmark_path.split("/")[:-1] and path != benchmark_path:
+    if folded[:-1] == [_fold_component(part) for part in benchmark_path.split("/")[:-1]] and path != benchmark_path:
         return "file beside the benchmark (it is imported with the benchmark)"
     return None
 
@@ -2706,6 +2710,46 @@ def _shown(items: list[str]) -> str:
     return f"{len(items)}, first {len(shown)}: " + ", ".join(escape_diagnostic(item, 40) for item in shown)
 
 
+def _diff_findings(repo, base_commit, head_commit, benchmark_path, *, protected: bool, aware: bool) -> tuple[list[dict], list[dict]]:
+    """`(protected hits, benchmark-aware hits)` for the two commits, each hit a dict of escaped strings. One private git, one pass."""
+    try:
+        length = _diff_arguments((base_commit, head_commit), benchmark_path)
+        tokens = _TRIPWIRE_TOKENS + (benchmark_path.encode("ascii"),)
+        with _PrivateGit(repo, length) as git:
+            git.require_commit(base_commit)
+            git.require_commit(head_commit)
+            paths = _changed_paths(git, base_commit, head_commit) if protected else []
+            patch = (git.run("diff", "-U0", "--no-renames", "--no-textconv", "--no-ext-diff", "--no-color", "--text",
+                             "--src-prefix=a/", "--dst-prefix=b/", base_commit, head_commit, cap=_GIT_OUTPUT_CAP) if aware else b"")
+        protected_hits = [{"path": escape_diagnostic(path, 200), "reason": reason} for path in paths if path != benchmark_path
+                          for reason in [_protected_reason(path, benchmark_path)] if reason]
+        aware_hits: dict[tuple[str, bytes], dict] = {}
+        for path, number, line in _added_lines(patch):
+            if path != benchmark_path:
+                for token in tokens:
+                    if token in line and (path, token) not in aware_hits:
+                        aware_hits[path, token] = {"path": escape_diagnostic(path, 200), "token": token.decode("ascii"),
+                                                   "line_number": number, "line": escape_diagnostic(line.decode("utf-8", "replace"), 200)}
+        return protected_hits, list(aware_hits.values())
+    except BenchmarkGateError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - an unexpected failure is a crash with a code, never a bare exception
+        raise BenchmarkGateError("GIT_FAILED", _describe(exc)) from exc
+
+
+def _refuse_protected(hits: list[dict]) -> BenchmarkGateError:
+    error = BenchmarkGateError("PROTECTED_PATH_CHANGED", f"protected paths differ, {_shown([hit['path'] for hit in hits])}")
+    error.hits = hits
+    return error
+
+
+def _refuse_aware(hits: list[dict]) -> BenchmarkGateError:
+    error = BenchmarkGateError("BENCHMARK_AWARE_CODE", "benchmark-aware patterns added outside the benchmark, "
+                               + _shown([f"{hit['token']} in {hit['path']}" for hit in hits]))
+    error.hits = hits
+    return error
+
+
 def protected_path_diff(repo: str | os.PathLike, base_commit: str, head_commit: str, benchmark_path: str) -> None:
     """Raise `PROTECTED_PATH_CHANGED` if the head commit adds, changes or removes a protected path relative to `base_commit`. Protected,
     anywhere in the tree and compared casefolded: `conftest.py`; `sitecustomize*.py` and `usercustomize*.py` (run at interpreter
@@ -2716,24 +2760,14 @@ def protected_path_diff(repo: str | os.PathLike, base_commit: str, head_commit: 
     safe for the second import path); and any file in the benchmark's own directory other than the benchmark (an `__init__.py`, a
     helper imported by it). A removal counts: a head that deletes a base `conftest.py` can make the base slower than the head. The
     benchmark file itself is not checked here (the overlay and the lint own it). `compare` checks that `base_commit` is an ancestor of
-    `head_commit` (a merge base) and echoes both; this function only compares the two trees.
+    `head_commit` (`is_ancestor`) and echoes both; this function only compares the two trees. `diff_checks` runs this and the tripwire together.
 
-    Raises `BenchmarkGateError`: `PROTECTED_PATH_CHANGED` (the detail counts the paths and names the first five); `COMMIT_INVALID`, `COMMIT_NOT_FOUND`,
+    Raises `BenchmarkGateError`: `PROTECTED_PATH_CHANGED` (the detail counts the paths and names the first five; `hits` has one `{path, reason}` per path, escaped); `COMMIT_INVALID`, `COMMIT_NOT_FOUND`,
     `REPO_UNREADABLE`, `GIT_FAILED`, `GIT_TIMEOUT`, `GIT_OUTPUT_TOO_LARGE`, `GIT_TOO_OLD`, `TREE_TOO_LARGE` (over 100,000 changed paths)
     for a check that could not run; `OVERLAY_PATH_REJECTED` for a `benchmark_path` that fails the gate's lexical rules."""
-    try:
-        length = _diff_arguments((base_commit, head_commit), benchmark_path)
-        with _PrivateGit(repo, length) as git:
-            git.require_commit(base_commit)
-            git.require_commit(head_commit)
-            paths = _changed_paths(git, base_commit, head_commit)
-        hits = [path for path in paths if path != benchmark_path and _protected_reason(path, benchmark_path)]
-    except BenchmarkGateError:
-        raise
-    except Exception as exc:  # noqa: BLE001 - an unexpected failure is a crash with a code, never a bare exception
-        raise BenchmarkGateError("GIT_FAILED", _describe(exc)) from exc
+    hits, _ = _diff_findings(repo, base_commit, head_commit, benchmark_path, protected=True, aware=False)
     if hits:
-        raise BenchmarkGateError("PROTECTED_PATH_CHANGED", f"protected paths differ, {_shown(hits)}")
+        raise _refuse_protected(hits)
 
 
 def _git_unquote(token: bytes) -> bytes:
@@ -2781,7 +2815,7 @@ def _header_path(line: bytes) -> str:
 
 
 def _added_lines(patch: bytes):
-    """Yield `(path, line)` for every line a `-U0` patch adds. The hunk header's counts say exactly how many lines follow, so a
+    """Yield `(path, line number in the new file, line)` for every line a `-U0` patch adds. The hunk header's counts say exactly how many lines follow, so a
     content line that looks like a header (`+++ x`, `diff --git ...`) is never mistaken for one."""
     lines = patch.split(b"\n")
     index, path = 0, ""
@@ -2796,7 +2830,9 @@ def _added_lines(patch: bytes):
             found = _HUNK_RE.match(line)
             if found is None:
                 raise BenchmarkGateError("GIT_FAILED", "unparseable hunk header")
-            removed, added = (1 if count is None else int(count) for count in found.groups())
+            removed = 1 if found[1] is None else int(found[1])
+            added = 1 if found[3] is None else int(found[3])
+            number = int(found[2])
             index += 1
             while removed or added or (index < len(lines) and lines[index].startswith(b"\\")):
                 if index >= len(lines):
@@ -2809,7 +2845,8 @@ def _added_lines(patch: bytes):
                     removed -= 1
                 elif body.startswith(b"+") and added:
                     added -= 1
-                    yield path, body[1:]
+                    yield path, number, body[1:]
+                    number += 1
                 else:
                     raise BenchmarkGateError("GIT_FAILED", "unparseable hunk body")
         else:
@@ -2818,33 +2855,48 @@ def _added_lines(patch: bytes):
 
 def token_tripwire(repo: str | os.PathLike, base_commit: str, head_commit: str, benchmark_path: str) -> None:
     """Raise `BENCHMARK_AWARE_CODE` if a line ADDED between the commits, in any file other than the benchmark, contains one of
-    `PYTEST_CURRENT_TEST`, `BENCH_RESULT_DIGEST`, `BENCH_TRACE_LINES`, `os._exit`, `sys.argv`, the benchmark's path or its file name:
+    `PYTEST_CURRENT_TEST`, `BENCH_RESULT_DIGEST`, `BENCH_TRACE_LINES`, `os._exit`, `sys.argv` or the benchmark's full path:
     what a fix needs to behave differently when it is being measured, or to forge the harness's output. Added lines come from
     a zero-context patch of the two trees (binary files are read as text, no rename detection, no textconv or external diff). A TRIPWIRE: a
-    token built at run time passes, and a line that moved is still an added line. The detail counts the `path: token` pairs and names the first five.
+    token built at run time passes, and a line that moved is still an added line. The detail counts the `token in path` pairs and names the
+    first five; `hits` has one `{path, token, line_number, line}` per (path, token), escaped, for the evidence a human is shown.
 
     Raises `BenchmarkGateError`: `BENCHMARK_AWARE_CODE`; the same failure codes as `protected_path_diff` otherwise (`GIT_OUTPUT_TOO_LARGE` when
     the patch is over 64 MiB)."""
+    _, hits = _diff_findings(repo, base_commit, head_commit, benchmark_path, protected=False, aware=True)
+    if hits:
+        raise _refuse_aware(hits)
+
+
+def diff_checks(repo: str | os.PathLike, base_commit: str, head_commit: str, benchmark_path: str) -> None:
+    """`protected_path_diff` and `token_tripwire` in one pass over one private git. When both would fire, `BENCHMARK_AWARE_CODE` is raised
+    (it needs a human; the Builder cannot fix it by touching fewer files, so it must not hide behind a fixable `PROTECTED_PATH_CHANGED`).
+    Same arguments, failure codes and `hits` as the two functions."""
+    protected_hits, aware_hits = _diff_findings(repo, base_commit, head_commit, benchmark_path, protected=True, aware=True)
+    if aware_hits:
+        raise _refuse_aware(aware_hits)
+    if protected_hits:
+        raise _refuse_protected(protected_hits)
+
+
+def is_ancestor(repo: str | os.PathLike, base_commit: str, head_commit: str) -> bool:
+    """True if `base_commit` is an ancestor of (or equal to) `head_commit`: `git merge-base --is-ancestor`, which `compare` requires of the
+    review package's merge base. False means it is not (exit 1). The checks above only compare two trees and say nothing about ancestry.
+    Raises `BenchmarkGateError` `COMMIT_INVALID`, `COMMIT_NOT_FOUND`, `REPO_UNREADABLE`, `GIT_FAILED` (any other git exit, for example a
+    shallow repository that lacks the history), `GIT_TIMEOUT`, `GIT_TOO_OLD`."""
     try:
-        length = _diff_arguments((base_commit, head_commit), benchmark_path)
-        tokens = _TRIPWIRE_TOKENS + (benchmark_path.encode("ascii"), benchmark_path.rsplit("/", 1)[-1].encode("ascii"))
+        length = _check_commits(base_commit, head_commit)
         with _PrivateGit(repo, length) as git:
             git.require_commit(base_commit)
             git.require_commit(head_commit)
-            patch = git.run("diff", "-U0", "--no-renames", "--no-textconv", "--no-ext-diff", "--no-color", "--text",
-                            "--src-prefix=a/", "--dst-prefix=b/", base_commit, head_commit, cap=_GIT_OUTPUT_CAP)
-        found: dict[str, None] = {}
-        for path, line in _added_lines(patch):
-            if path != benchmark_path:
-                for token in tokens:
-                    if token in line:
-                        found.setdefault(f"{path}: {token.decode('ascii')}")
+            code, detail = _PrivateGit._run_raw(["merge-base", "--is-ancestor", base_commit, head_commit], git.env, git._dir, 2048)
     except BenchmarkGateError:
         raise
-    except Exception as exc:  # noqa: BLE001 - see protected_path_diff
+    except Exception as exc:  # noqa: BLE001 - see _diff_findings
         raise BenchmarkGateError("GIT_FAILED", _describe(exc)) from exc
-    if found:
-        raise BenchmarkGateError("BENCHMARK_AWARE_CODE", f"benchmark-aware patterns added outside the benchmark, {_shown(list(found))}")
+    if code not in (0, 1):
+        raise BenchmarkGateError("GIT_FAILED", f"git merge-base exit {code}: {detail.decode('utf-8', 'replace')}")
+    return code == 0
 
 
 # ---------------------------------------------------------------------------

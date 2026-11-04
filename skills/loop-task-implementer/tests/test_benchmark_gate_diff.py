@@ -306,9 +306,12 @@ def test_each_token_added_outside_the_benchmark_is_refused(repo, token):
     assert "src/app/run.py" in error.detail and token in error.detail
 
 
-def test_the_benchmarks_path_and_file_name_are_tokens(repo):
+def test_the_benchmarks_full_path_is_a_token(repo):
     refused(bg.token_tripwire, repo, {"src/app/run.py": f'P = "{BENCH}"\n'}, "BENCHMARK_AWARE_CODE")
-    refused(bg.token_tripwire, repo, {"src/app/run.py": 'N = "bench_orders.py"\n'}, "BENCHMARK_AWARE_CODE")
+
+
+def test_the_benchmarks_file_name_alone_is_not_a_token(repo):
+    check(bg.token_tripwire, repo, {"README.md": "run bench_orders.py to measure\n"})  # documentation may name the file
 
 
 def test_the_tokens_may_appear_in_the_benchmark_file(repo):
@@ -411,7 +414,7 @@ def test_a_patch_over_the_output_cap_is_an_environment_error(repo, monkeypatch):
 def test_added_lines_follow_the_hunk_counts():
     patch = (b"diff --git a/f.py b/f.py\nindex 1..2 100644\n--- a/f.py\n+++ b/f.py\n@@ -1,2 +1,2 @@\n-old1\n-old2\n+new1\n+new2\n"
              b"\\ No newline at end of file\n@@ -9 +9,0 @@\n-gone\n@@ -20,0 +21 @@\n+tail\n")
-    assert list(bg._added_lines(patch)) == [("f.py", b"new1"), ("f.py", b"new2"), ("f.py", b"tail")]
+    assert list(bg._added_lines(patch)) == [("f.py", 1, b"new1"), ("f.py", 2, b"new2"), ("f.py", 21, b"tail")]
 
 
 @pytest.mark.parametrize("patch", [
@@ -433,3 +436,149 @@ def test_header_paths_are_decoded():
     assert bg._header_path(b'diff --git "a/t\\tab.py" "b/t\\tab.py"') == "t\tab.py"
     assert bg._header_path(b'diff --git "a/\\303\\274.py" "b/\\303\\274.py"') == "ü.py"
     assert bg._header_path(b'diff --git "a/q\\"x.py" "b/q\\"x.py"') == 'q"x.py'
+
+
+# --- round 1: rules, evidence, shared entry, ancestry ---
+
+@pytest.mark.parametrize("path", [
+    "json.so", "json.cpython-312-darwin.so", "json.abi3.so", "json.pyd", "_thread.so", "src/json.cpython-312-x86_64-linux-gnu.so",
+    "Json.SO",
+])
+def test_a_compiled_extension_that_shadows_the_standard_library_is_refused(repo, path):
+    refused(bg.protected_path_diff, repo, {path: b"\x7fELF"}, "PROTECTED_PATH_CHANGED")
+
+
+@pytest.mark.parametrize("path", ["json.md", "json.txt", "json.pyi", "pkg/json.so", "src/pkg/json.so", "myjson.so", "json.a.b.so"])
+def test_other_files_named_like_a_standard_library_module_are_not_shadows(repo, path):
+    check(bg.protected_path_diff, repo, {path: b"x"})
+
+
+def test_the_benchmark_directory_rule_ignores_case(repo):
+    refused(bg.protected_path_diff, repo, {"Benchmarks/__init__.py": "x\n"}, "PROTECTED_PATH_CHANGED")
+    refused(bg.protected_path_diff, repo, {"BENCHMARKS/helper.py": "x\n"}, "PROTECTED_PATH_CHANGED")
+
+
+def test_the_error_carries_structured_hits_for_the_protected_paths(repo):
+    error = refused(bg.protected_path_diff, repo, {"conftest.py": "x\n", "json.py": "y\n"}, "PROTECTED_PATH_CHANGED")
+    assert {hit["path"] for hit in error.hits} == {"conftest.py", "json.py"}
+    assert all(set(hit) == {"path", "reason"} and hit["reason"] for hit in error.hits)
+
+
+def test_the_error_carries_the_token_the_line_number_and_the_line(repo):
+    error = refused(bg.token_tripwire, repo, {"src/run.py": "a = 1\nb = 2\nimport sys\nargs = sys.argv\n"}, "BENCHMARK_AWARE_CODE")
+    assert error.hits == [{"path": "src/run.py", "token": "sys.argv", "line_number": 4, "line": "args = sys.argv"}]
+
+
+def test_line_numbers_follow_the_new_file_across_hunks(tmp_path):
+    r = make_repo(tmp_path)
+    base = commit(r, {"src/a.py": "".join(f"l{i}\n" for i in range(1, 31)), BENCH: BENCH_SRC})
+    head = commit(r, {"src/a.py": "".join(f"l{i}\n" for i in range(1, 31)).replace("l5\n", "l5\nsys.argv\n").replace("l25\n", "os._exit\nl25\n")})
+    with pytest.raises(Err) as info:
+        bg.token_tripwire(r, base, head, BENCH)
+    assert [(h["token"], h["line_number"]) for h in info.value.hits] == [("sys.argv", 6), ("os._exit", 26)]
+
+
+def test_a_long_path_does_not_hide_the_token_in_the_detail(repo):
+    path = "src/" + "very_long_directory_name/" * 6 + "module_file.py"
+    error = refused(bg.token_tripwire, repo, {path: "x = sys.argv\n"}, "BENCHMARK_AWARE_CODE")
+    assert error.detail.split("first 1: ")[1].startswith("sys.argv in ")
+
+
+def test_one_hit_per_path_and_token_but_every_distinct_pair(repo):
+    error = refused(bg.token_tripwire, repo, {"src/a.py": "sys.argv\nsys.argv\nos._exit\n", "src/b.py": "sys.argv\n"}, "BENCHMARK_AWARE_CODE")
+    assert [(h["path"], h["token"], h["line_number"]) for h in error.hits] == [("src/a.py", "sys.argv", 1), ("src/a.py", "os._exit", 3),
+                                                                              ("src/b.py", "sys.argv", 1)]
+
+
+def test_a_hostile_line_is_escaped_in_the_hits(repo):
+    error = refused(bg.token_tripwire, repo, {"src/a.py": "x = sys.argv  `rm -rf`\x1b[31m\n"}, "BENCHMARK_AWARE_CODE")
+    line = error.hits[0]["line"]
+    assert "`" not in line and "\x1b" not in line and "\n" not in line
+
+
+def test_diff_checks_passes_a_clean_change(repo):
+    check(bg.diff_checks, repo, {"src/app/__init__.py": "x = 2\n"})
+
+
+def test_diff_checks_reports_a_protected_path_alone(repo):
+    error = refused(bg.diff_checks, repo, {"conftest.py": "x\n"}, "PROTECTED_PATH_CHANGED")
+    assert [hit["path"] for hit in error.hits] == ["conftest.py"]
+
+
+def test_diff_checks_reports_the_tripwire_alone(repo):
+    refused(bg.diff_checks, repo, {"src/a.py": "sys.argv\n"}, "BENCHMARK_AWARE_CODE")
+
+
+def test_diff_checks_puts_the_human_only_code_before_the_fixable_one(repo):
+    error = refused(bg.diff_checks, repo, {"conftest.py": "x\n", "src/a.py": "sys.argv\n"}, "BENCHMARK_AWARE_CODE")
+    assert [hit["path"] for hit in error.hits] == ["src/a.py"]
+
+
+def test_diff_checks_uses_one_private_git(repo, monkeypatch):
+    r, base = repo
+    head = commit(r, {"README.md": "again\n"})
+    entered = []
+    real_enter = bg._PrivateGit.__enter__
+
+    def counting(self):
+        entered.append(1)
+        return real_enter(self)
+
+    monkeypatch.setattr(bg._PrivateGit, "__enter__", counting)
+    bg.diff_checks(r, base, head, BENCH)
+    assert len(entered) == 1
+
+
+def test_diff_checks_validates_its_arguments_like_the_others(repo):
+    r, base = repo
+    head = commit(r, {"README.md": "again\n"})
+    for args, code in [((r, "x" * 40, head, BENCH), "COMMIT_INVALID"), ((r, base, head, "src/app.py"), "OVERLAY_PATH_REJECTED"),
+                       ((r, base, "0" * 40, BENCH), "COMMIT_NOT_FOUND"), ((r / "nowhere", base, head, BENCH), "REPO_UNREADABLE")]:
+        with pytest.raises(Err) as info:
+            bg.diff_checks(*args)
+        assert info.value.code == code
+
+
+def test_is_ancestor_answers_for_a_line_of_history(tmp_path):
+    r = make_repo(tmp_path)
+    one = commit(r, {"a": "1\n"})
+    two = commit(r, {"a": "2\n"})
+    assert bg.is_ancestor(r, one, two) is True
+    assert bg.is_ancestor(r, one, one) is True
+    assert bg.is_ancestor(r, two, one) is False
+
+
+def test_is_ancestor_is_false_for_a_sibling_branch_and_true_through_a_merge(tmp_path):
+    r = make_repo(tmp_path)
+    root = commit(r, {"a": "1\n"})
+    git(r, "checkout", "-q", "-b", "side")
+    side = commit(r, {"b": "1\n"})
+    git(r, "checkout", "-q", "main")
+    main = commit(r, {"c": "1\n"})
+    assert bg.is_ancestor(r, side, main) is False
+    git(r, "merge", "-q", "--no-edit", "side")
+    merged = git(r, "rev-parse", "HEAD")
+    assert bg.is_ancestor(r, side, merged) is True and bg.is_ancestor(r, root, merged) is True
+
+
+def test_is_ancestor_works_in_a_sha256_repository(tmp_path):
+    r = make_repo(tmp_path, fmt="sha256")
+    one = commit(r, {"a": "1\n"})
+    two = commit(r, {"a": "2\n"})
+    assert bg.is_ancestor(r, one, two) is True and bg.is_ancestor(r, two, one) is False
+
+
+def test_is_ancestor_validates_and_never_leaks_a_bare_exception(repo, monkeypatch):
+    r, base = repo
+    with pytest.raises(Err) as info:
+        bg.is_ancestor(r, base, "z" * 40)
+    assert info.value.code == "COMMIT_INVALID"
+    with pytest.raises(Err) as info:
+        bg.is_ancestor(r, base, "0" * 40)
+    assert info.value.code == "COMMIT_NOT_FOUND"
+    real = bg._PrivateGit._run_raw
+    monkeypatch.setattr(bg._PrivateGit, "_run_raw",
+                        staticmethod(lambda args, *rest: (128, b"fatal: boom") if args[0] == "merge-base" else real(args, *rest)))
+    with pytest.raises(Err) as info:
+        bg.is_ancestor(r, base, base)
+    assert info.value.code == "GIT_FAILED"
