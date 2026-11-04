@@ -853,3 +853,43 @@ def test_current_pytest_config_and_non_py_startup_hooks_are_refused(repo, path):
 @pytest.mark.parametrize("path", ["sitecustomize.txt", "docs/usercustomizer.md"])
 def test_startup_hook_near_misses_are_not_protected(repo, path):
     check(bg.protected_path_diff, repo, {path: "x\n"})
+
+
+def _with_symlinks(tmp_path, links):
+    r = make_repo(tmp_path)
+    base = commit(r, {BENCH: BENCH_SRC, "evil/__init__.py": "x = 1\n", "evil2/json/__init__.py": "x = 1\n"})
+    for name, target in links.items():
+        os.makedirs(os.path.dirname(r / name) or r, exist_ok=True)
+        os.symlink(target, r / name)
+        git(r, "add", name)
+    git(r, "commit", "-q", "-m", "links")
+    return r, base, git(r, "rev-parse", "HEAD")
+
+
+@pytest.mark.parametrize("name, target", [("json", "evil"), ("src", "evil2"), ("src/json", "../evil"), ("harmless", "evil")])
+def test_a_symlink_at_an_import_root_is_refused(tmp_path, name, target):
+    if os.name != "posix":
+        pytest.skip("symlinks")
+    r, base, head = _with_symlinks(tmp_path, {name: target})
+    with pytest.raises(Err) as info:
+        bg.protected_path_diff(r, base, head, BENCH)
+    assert info.value.code == "PROTECTED_PATH_CHANGED"
+
+
+def test_a_symlink_below_an_ordinary_package_is_not_an_import_root_link(tmp_path):
+    if os.name != "posix":
+        pytest.skip("symlinks")
+    r = make_repo(tmp_path)
+    base = commit(r, {BENCH: BENCH_SRC, "docs/a.md": "x\n"})
+    os.symlink("a.md", r / "docs" / "b.md")
+    git(r, "add", "docs/b.md"); git(r, "commit", "-q", "-m", "l")
+    bg.protected_path_diff(r, base, git(r, "rev-parse", "HEAD"), BENCH)
+
+
+def test_removing_a_symlink_at_an_import_root_is_refused(tmp_path):
+    if os.name != "posix":
+        pytest.skip("symlinks")
+    r, base, head = _with_symlinks(tmp_path, {"json": "evil"})
+    with pytest.raises(Err) as info:
+        bg.protected_path_diff(r, head, base, BENCH)
+    assert info.value.code == "PROTECTED_PATH_CHANGED"

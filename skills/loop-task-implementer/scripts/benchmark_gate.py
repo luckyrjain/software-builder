@@ -2665,7 +2665,7 @@ def _diff_arguments(commits: tuple[object, object], benchmark_path: object) -> i
     return length
 
 
-def _protected_reason(path: str, benchmark_path: str) -> str | None:
+def _protected_reason(path: str, benchmark_path: str, linked: bool = False) -> str | None:
     """Why `path` (repo-relative, `/`-separated) may not differ between the two commits, or None."""
     parts = path.split("/")
     folded = [_fold_component(part) for part in parts]
@@ -2687,12 +2687,14 @@ def _protected_reason(path: str, benchmark_path: str) -> str | None:
     importable = module[1] if module else top[0] if len(top) > 1 else ""
     if importable in _STDLIB_FOLDED:
         return "module that shadows the standard library"
+    if linked and len(top) == 1:  # a symlink or submodule at an import root is imported as whatever it points at, whatever its name
+        return "symbolic link or submodule at an import root"
     if folded[:-1] == [_fold_component(part) for part in benchmark_path.split("/")[:-1]] and path != benchmark_path:
         return "file beside the benchmark (it is imported with the benchmark)"
     return None
 
 
-def _changed_paths(git: "_PrivateGit", base_commit: str, head_commit: str) -> list[str]:
+def _changed_paths(git: "_PrivateGit", base_commit: str, head_commit: str) -> list[tuple[str, bool]]:
     """Every path whose entry differs between the two commits (added, changed, removed, type change), sorted, no rename detection."""
     raw = git.run("diff-tree", "-r", "-z", "--raw", "--no-renames", "--no-abbrev", base_commit, head_commit)
     records = raw.split(b"\0")
@@ -2702,7 +2704,8 @@ def _changed_paths(git: "_PrivateGit", base_commit: str, head_commit: str) -> li
     for meta, raw_path in zip(records[0::2], records[1::2]):
         if not meta.startswith(b":") or not raw_path:
             raise BenchmarkGateError("GIT_FAILED", "unparseable diff-tree record")
-        paths.append(os.fsdecode(raw_path))
+        modes = meta[1:].split(b" ")[:2]
+        paths.append((os.fsdecode(raw_path), any(mode in (b"120000", b"160000") for mode in modes)))
     if len(paths) > _MAX_TREE_ENTRIES:
         raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_TREE_ENTRIES} changed paths")
     return paths
@@ -2725,8 +2728,8 @@ def _diff_findings(repo, base_commit, head_commit, benchmark_path, *, protected:
             paths = _changed_paths(git, base_commit, head_commit) if protected else []
             patch = (git.run("diff", "-U0", "--no-renames", "--no-textconv", "--no-ext-diff", "--no-color", "--text",
                              "--src-prefix=a/", "--dst-prefix=b/", base_commit, head_commit, cap=_GIT_OUTPUT_CAP) if aware else b"")
-        protected_hits = [{"path": escape_diagnostic(path, 200), "reason": reason} for path in paths if path != benchmark_path
-                          for reason in [_protected_reason(path, benchmark_path)] if reason]
+        protected_hits = [{"path": escape_diagnostic(path, 200), "reason": reason} for path, linked in paths if path != benchmark_path
+                          for reason in [_protected_reason(path, benchmark_path, linked)] if reason]
         aware_hits: dict[tuple[str, bytes], dict] = {}
         for path, number, line in _added_lines(patch):
             if path != benchmark_path:
