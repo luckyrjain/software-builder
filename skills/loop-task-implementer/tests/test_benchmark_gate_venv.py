@@ -499,15 +499,6 @@ def test_a_real_lib64_directory_is_scanned_as_well_as_lib(world):
     assert [h["path"] for h in rejected(world).hits] == ["lib/python3.12/site-packages/a.pth", "lib64/python3.12/site-packages/b.pth"]
 
 
-def test_relative_pth_lines_resolve_against_their_own_site_directory(world):
-    site64 = world[0] / "lib64" / "python3.12" / "site-packages"
-    site64.mkdir(parents=True)
-    os.symlink(world[3], world[0] / "lib64" / "python3.12" / "linkdir")  # only lib64's python3.12 has it
-    snapshot(world)
-    (site64 / "x.pth").write_text("../linkdir\n")
-    check(world)
-
-
 def test_entry_keys_name_the_lib_path_whichever_way_lib64_is_listed(world, monkeypatch):
     os.symlink("lib", world[0] / "lib64")
     (world[2] / "a.pth").write_text("# x\n")
@@ -711,7 +702,7 @@ def test_check_failures_other_than_hooks_are_tree_unreadable(world):
     snapshot(world)
     with pytest.raises(Err) as info:
         bg.check_venv(str(world[1]), str(world[4]), None, ())
-    assert info.value.code == "TREE_UNREADABLE"
+    assert info.value.code == "DEST_REJECTED"
     if os.geteuid() != 0:
         os.chmod(world[2], 0)
         try:
@@ -728,3 +719,38 @@ def test_reasons_name_the_nul_and_the_offending_line(world):
     (world[2] / "b.pth").write_text("/usr/lib/python3\n")
     reasons = {h["path"].rsplit("/", 1)[1]: h["reason"] for h in rejected(world).hits}
     assert reasons == {"a.pth": "a .pth file with a NUL", "b.pth": "path outside the export: /usr/lib/python3"}
+
+
+def test_a_path_line_that_is_inside_the_export_only_by_resolving_a_symlink_is_refused(world, tmp_path):
+    """CPython puts the LEXICAL path on sys.path: `<export>/a/lnk/../../..` collapses to a directory outside the export."""
+    snapshot(world)
+    deep = world[3] / "b" / "c" / "d"
+    deep.mkdir(parents=True)
+    os.symlink(deep, world[3] / "lnk")
+    rel = os.path.relpath(world[3] / "lnk", world[2]) + "/../../.."
+    assert os.path.realpath(os.path.join(world[2], rel)).startswith(str(world[3].resolve()))   # inside by realpath ...
+    assert not os.path.abspath(os.path.join(world[2], rel)).startswith(str(world[3]))            # ... outside lexically
+    (world[2] / "x.pth").write_text(rel + "\n")
+    assert "path outside the export" in rejected(world).hits[0]["reason"]
+
+
+def test_a_pyvenv_cfg_in_bin_is_not_isolated(world):
+    (world[1] / "pyvenv.cfg").write_text("include-system-site-packages = true\n")
+    with pytest.raises(Err) as info:
+        snapshot(world)
+    assert info.value.code == "VENV_NOT_ISOLATED"
+
+
+def test_a_pyvenv_cfg_dropped_into_bin_by_the_install_is_refused(world):
+    snapshot(world)
+    (world[1] / "pyvenv.cfg").write_text("include-system-site-packages = true\n")
+    rejected(world, "VENV_NOT_ISOLATED")
+
+
+@pytest.mark.parametrize("export, others", [(None, ()), (b"/x", ()), ("OK", (None,)), ("OK", (3,))])
+def test_bad_root_arguments_are_caller_errors(world, export, others):
+    snapshot(world)
+    export = str(world[3]) if export == "OK" else export
+    with pytest.raises(Err) as info:
+        bg.check_venv(str(world[1]), str(world[4]), export, others)
+    assert info.value.code == "DEST_REJECTED"

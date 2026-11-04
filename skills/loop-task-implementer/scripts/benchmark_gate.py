@@ -2957,6 +2957,8 @@ def _venv_layout(bin_dir: object) -> tuple[str, list[str]]:
     if not is_dir:
         raise BenchmarkGateError("VENV_NOT_ISOLATED", "bin is a symlink or not a directory")
     root = os.path.dirname(bin_path)
+    if os.path.lexists(os.path.join(bin_path, "pyvenv.cfg")):  # `site.venv` reads the interpreter's own directory first: a wheel's scripts could drop one
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "bin contains a pyvenv.cfg")
     cfg = os.path.join(root, "pyvenv.cfg")
     try:
         text = _read_bounded(cfg, 64 << 10, nofollow=True).decode("utf-8", "replace")
@@ -3066,8 +3068,10 @@ def _pth_problem(site: str, data: bytes, export_root: str) -> str | None:
             if not any(pattern.fullmatch(line) for pattern in _EDITABLE_LINE_RES):
                 return f"import line: {escape_diagnostic(line, 60)}"
             continue
-        target = os.path.realpath(os.path.join(site, line.rstrip()))
-        if not _inside(target, export_root):
+        joined = os.path.join(site, line.rstrip())
+        # BOTH: CPython puts the lexical `abspath` (`..` collapsed without resolving symlinks) on `sys.path`, and the directory it
+        # names may itself reach elsewhere through a link; a symlink inside the export plus `..` makes the two differ
+        if not (_inside(os.path.abspath(joined), export_root) and _inside(os.path.realpath(joined), export_root)):
             return f"path outside the export: {escape_diagnostic(line, 60)}"
     return None
 
@@ -3084,10 +3088,12 @@ def check_venv(bin_dir: str | os.PathLike, snapshot_path: str | os.PathLike, exp
     try:
         root, sites = _venv_layout(_fs(bin_dir))
         real_root = os.path.realpath(root)
-        export = os.path.realpath(os.fspath(export_root))
+        if type(_fs(export_root)) is not str or any(type(_fs(r)) is not str for r in other_roots):
+            raise BenchmarkGateError("DEST_REJECTED", "export_root and other_roots must be paths")
+        export = os.path.realpath(_fs(export_root))
         if not os.path.isdir(export):
             raise BenchmarkGateError("DEST_REJECTED", "export_root is not a directory")  # a caller error, not a verdict on the venv
-        for other in (export, *(os.path.realpath(os.fspath(r)) for r in other_roots)):
+        for other in (export, *(os.path.realpath(_fs(r)) for r in other_roots)):
             if _inside(real_root, other) or _inside(other, real_root):
                 raise BenchmarkGateError("VENV_NOT_ISOLATED", "the venv and an export root contain each other")
         before = _load_venv_snapshot(snapshot_path, real_root)
