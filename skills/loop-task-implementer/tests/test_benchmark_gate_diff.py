@@ -582,3 +582,261 @@ def test_is_ancestor_validates_and_never_leaks_a_bare_exception(repo, monkeypatc
     with pytest.raises(Err) as info:
         bg.is_ancestor(r, base, base)
     assert info.value.code == "GIT_FAILED"
+
+
+
+@pytest.mark.parametrize("path", [
+    "environment.yaml", "ENVIRONMENT.YAML", "pkg/__pycache__/notes.txt", "pkg/__PyCache__/notes.txt", "__pycache__",
+    "cProfile.py", "cprofile.py", "src/cProfile.py",
+    "conftest.py.", "conftest.py ", "con​ftest.py", "conftest‍.py", "sitecustomize.py.",   # trailing dot/space (NTFS), zero-width (HFS+)
+    "requirements/x.txt", "a/b/requirements/c/d.txt",
+    ".pth", "x/.pth",
+])
+def test_more_protected_paths_are_refused(repo, path):
+    refused(bg.protected_path_diff, repo, {path: "x\n"}, "PROTECTED_PATH_CHANGED")
+
+
+@pytest.mark.parametrize("path", [
+    "constraint.txt", "pipfil", "pipfilx.txt", "requirements.py", "lib/json.py", "docs/requirements/x.py", "requirements/x.py",
+    "json.txt", "src/json.txt", "json.py/data.txt", "pkg/requirements.txt.bak", "benchmarks/sub/__init__.py",
+])
+def test_near_misses_are_not_protected(repo, path):
+    check(bg.protected_path_diff, repo, {path: "x\n"})
+
+
+def test_a_file_named_like_a_stdlib_module_without_an_extension_or_a_bare_src_file_is_fine(tmp_path):
+    r = make_repo(tmp_path)
+    base = commit(r, {BENCH: BENCH_SRC})
+    head = commit(r, {"json": "x\n", "src": "x\n", "os": "x\n"})
+    bg.protected_path_diff(r, base, head, BENCH)
+
+
+def test_the_detail_lists_the_first_five_in_order_and_truncates_long_names(repo):
+    files = {f"p{i}/conftest.py": "x\n" for i in range(8)}
+    files["q" * 60 + "/conftest.py"] = "x\n"
+    error = refused(bg.protected_path_diff, repo, files, "PROTECTED_PATH_CHANGED")
+    assert error.detail.startswith("protected paths differ, 9, first 5: p0/conftest.py, p1/conftest.py, p2/conftest.py, p3/conftest.py, p4/conftest.py")
+
+
+def test_a_long_path_is_cut_to_40_characters_in_the_detail(repo):
+    error = refused(bg.protected_path_diff, repo, {"d" * 60 + "/conftest.py": "x\n"}, "PROTECTED_PATH_CHANGED")
+    assert "d" * 40 in error.detail and "d" * 41 not in error.detail
+
+
+def test_too_many_changed_paths_is_its_own_code(repo, monkeypatch):
+    monkeypatch.setattr(bg, "_MAX_TREE_ENTRIES", 2)
+    r, base = repo
+    ok = commit(r, {"docs/a.md": "1\n", "docs/b.md": "1\n"})            # exactly the limit: allowed
+    bg.protected_path_diff(r, base, ok, BENCH)
+    over = commit(r, {"docs/c.md": "1\n"})                                # three changed paths against base
+    with pytest.raises(Err) as info:
+        bg.protected_path_diff(r, base, over, BENCH)
+    assert info.value.code == "TREE_TOO_LARGE"
+
+
+def test_an_empty_path_record_is_a_git_failure(repo, monkeypatch):
+    r, base = repo
+    head = commit(r, {"README.md": "again\n"})
+    monkeypatch.setattr(bg._PrivateGit, "run", lambda self, *a, **k: b":100644 100644 a b M\0\0")
+    with pytest.raises(Err) as info:
+        bg.protected_path_diff(r, base, head, BENCH)
+    assert info.value.code == "GIT_FAILED"
+
+
+def test_a_path_that_is_not_utf8_is_still_checked(tmp_path):
+    if os.name != "posix":
+        pytest.skip("POSIX file names")
+    r = make_repo(tmp_path)
+    base = commit(r, {BENCH: BENCH_SRC})
+    blob = git(r, "hash-object", "-w", "--stdin", inp=b"x\n")
+    git(r, "update-index", "--add", "--cacheinfo", f"100644,{blob},conftest.py")
+    git(r, "update-index", "--add", "--cacheinfo", f"100644,{blob},sub/{os.fsdecode(b'bad-\xff-name')}/conftest.py")
+    tree = git(r, "write-tree")
+    head = git(r, "commit-tree", tree, "-p", base, "-m", "x")
+    with pytest.raises(Err) as info:
+        bg.protected_path_diff(r, base, head, BENCH)
+    assert info.value.code == "PROTECTED_PATH_CHANGED" and "2, first 2" in info.value.detail
+
+
+# --- token_tripwire ---
+
+def test_a_header_without_hunks_does_not_hide_the_next_files_additions(repo):
+    # A mode-only change on the benchmark (no hunks) sorts before src/z.py; the token must be charged to src/z.py, not to the benchmark.
+    r, base = repo
+    os.chmod(r / BENCH, 0o755)
+    head = commit(r, {"src/z.py": "x = sys.argv\n"})
+    with pytest.raises(Err) as info:
+        bg.token_tripwire(r, base, head, BENCH)
+    assert info.value.code == "BENCHMARK_AWARE_CODE" and "sys.argv in src/z.py" in info.value.detail
+
+
+def test_a_no_newline_marker_between_removed_and_added_lines_is_skipped(tmp_path):
+    r = make_repo(tmp_path)
+    base = commit(r, {"src/a.py": b"x = 1", BENCH: BENCH_SRC})                      # no final newline
+    head = commit(r, {"src/a.py": b"x = 1\ny = sys.argv\n"})
+    with pytest.raises(Err) as info:
+        bg.token_tripwire(r, base, head, BENCH)
+    assert info.value.code == "BENCHMARK_AWARE_CODE"
+
+
+def test_the_marker_in_the_middle_of_a_hunk_on_its_own():
+    patch = (b"diff --git a/f.py b/f.py\n--- a/f.py\n+++ b/f.py\n@@ -1 +1,2 @@\n-x = 1\n\\ No newline at end of file\n+x = 1\n+y\n")
+    assert list(bg._added_lines(patch)) == [("f.py", 1, b"x = 1"), ("f.py", 2, b"y")]
+
+
+def test_a_renamed_file_is_an_added_file(tmp_path):
+    r = make_repo(tmp_path)
+    base = commit(r, {"src/old.py": "import sys\nA = sys.argv\n", BENCH: BENCH_SRC})
+    git(r, "mv", "src/old.py", "src/new.py")
+    git(r, "commit", "-q", "-m", "mv")
+    head = git(r, "rev-parse", "HEAD")
+    with pytest.raises(Err) as info:
+        bg.token_tripwire(r, base, head, BENCH)
+    assert info.value.code == "BENCHMARK_AWARE_CODE" and "sys.argv in src/new.py" in info.value.detail
+
+
+def test_a_file_name_ending_in_a_backslash_and_a_one_character_name(repo):
+    if os.name != "posix":
+        pytest.skip("POSIX file names")
+    error = refused(bg.token_tripwire, repo, {"src/ends\\": "x = sys.argv\n"}, "BENCHMARK_AWARE_CODE")
+    assert "src/ends" in error.detail and error.detail.count("sys.argv") == 1
+    error = refused(bg.token_tripwire, repo, {"x": "x = sys.argv\n"}, "BENCHMARK_AWARE_CODE")
+    assert "sys.argv in x" in error.detail
+
+
+def test_the_same_token_twice_in_one_file_is_one_hit(repo):
+    error = refused(bg.token_tripwire, repo, {"src/a.py": "sys.argv\nz = sys.argv\n"}, "BENCHMARK_AWARE_CODE")
+    assert error.detail.startswith("benchmark-aware patterns added outside the benchmark, 1, first 1:")
+
+
+def test_header_edge_cases():
+    with pytest.raises(Err) as info:
+        bg._header_path(b'diff --git "a/" "b/"')
+    assert info.value.code == "GIT_FAILED"
+    with pytest.raises(Err) as info:
+        bg._header_path(b"diff --git a/ b/")
+    assert info.value.code == "GIT_FAILED"
+    assert bg._header_path(b"diff --git a/x b/x") == "x"
+    assert bg._header_path(b'diff --git "a/s\\\\" "b/s\\\\"') == "s\\"          # name ends in an escaped backslash
+
+
+def test_an_octal_escape_above_377_is_a_git_failure_not_a_value_error():
+    with pytest.raises(Err) as info:
+        bg._header_path(b'diff --git "a/\\400" "b/\\400"')
+    assert info.value.code == "GIT_FAILED"
+
+
+def test_a_truncated_hunk_says_so():
+    with pytest.raises(Err) as info:
+        list(bg._added_lines(b"diff --git a/f.py b/f.py\n@@ -1 +1 @@\n-a"))   # no final newline: the hunk promises a line that is not there
+    assert info.value.detail == "truncated hunk"
+
+
+@pytest.mark.parametrize("content", [b"x = 1\r\ny = sys.argv\r\n", b"x = 1\ry = sys.argv\n", b"x = 1\x0c\x0b\x1c\nz = sys.argv\n"], ids=["crlf", "lone-cr", "ff-vt-fs"])
+def test_carriage_returns_and_other_control_characters_in_added_lines_are_scanned(repo, content):
+    # one case per test: the `repo` fixture accumulates commits, so a second `refused` in the same test would pass on the first case's leftovers
+    refused(bg.token_tripwire, repo, {"src/ctl.py": content}, "BENCHMARK_AWARE_CODE")
+
+
+def test_a_token_after_many_added_lines_is_found(repo):
+    refused(bg.token_tripwire, repo, {"src/long.py": "x = 1\n" * 300 + "y = sys.argv\n"}, "BENCHMARK_AWARE_CODE")
+
+
+def test_two_tokens_on_one_line_are_two_hits_and_the_order_follows_the_patch(repo):
+    error = refused(bg.token_tripwire, repo, {"src/a.py": "sys.argv; os._exit(0)\n", "src/b.py": "sys.argv\n"}, "BENCHMARK_AWARE_CODE")
+    assert error.detail == ("benchmark-aware patterns added outside the benchmark, 3, first 3: "
+                            "os._exit in src/a.py, sys.argv in src/a.py, sys.argv in src/b.py")
+    assert error.detail.index("src/a.py") < error.detail.index("src/b.py")
+
+
+def test_only_protected_paths_are_counted_and_named(repo):
+    error = refused(bg.protected_path_diff, repo, {"README.md": "x\n", "docs/a.md": "x\n", "conftest.py": "x\n"}, "PROTECTED_PATH_CHANGED")
+    assert error.detail == "protected paths differ, 1, first 1: conftest.py"
+
+
+def test_a_benchmark_in_a_stdlib_named_directory_may_differ(tmp_path):
+    bench = "json/bench/bench_orders.py"      # top-level `json/` would shadow the stdlib for any OTHER file, but not for the benchmark itself
+    r = make_repo(tmp_path)
+    base = commit(r, {bench: BENCH_SRC})
+    head = commit(r, {bench: BENCH_SRC + b"# more\n"})
+    bg.protected_path_diff(r, base, head, bench)
+
+
+def test_the_beside_the_benchmark_rule_is_casefolded(tmp_path):
+    # Built with plumbing: on a case-insensitive filesystem `Benchmarks/helper.py` lands in the existing `benchmarks/` directory, and Python
+    # imports it with the benchmark there, but git records it under a different spelling.
+    r = make_repo(tmp_path)
+    git(r, "config", "core.ignorecase", "false")
+    base = commit(r, {BENCH: BENCH_SRC})
+    blob = git(r, "hash-object", "-w", "--stdin", inp=b"x\n")
+    git(r, "update-index", "--add", "--cacheinfo", f"100644,{blob},Benchmarks/helper.py")
+    head = git(r, "commit-tree", git(r, "write-tree"), "-p", base, "-m", "x")
+    with pytest.raises(Err) as info:
+        bg.protected_path_diff(r, base, head, BENCH)
+    assert info.value.code == "PROTECTED_PATH_CHANGED"
+
+
+def test_a_patch_between_the_cap_and_twice_the_cap_is_too_large(repo, monkeypatch):
+    monkeypatch.setattr(bg, "_GIT_OUTPUT_CAP", 400)
+    r, base = repo
+    head = commit(r, {"src/big.py": "x = 1\n" * 50})        # a ~380-byte hunk plus ~110 bytes of headers: > 400 and < 800
+    with pytest.raises(Err) as info:
+        bg.token_tripwire(r, base, head, BENCH)
+    assert info.value.code == "GIT_OUTPUT_TOO_LARGE"
+
+
+def test_an_unterminated_quoted_header_is_a_git_failure():
+    with pytest.raises(Err) as info:
+        bg._header_path(b'diff --git "a/x.py')
+    assert info.value.code == "GIT_FAILED"
+
+
+@pytest.mark.parametrize("name, shown", [
+    ("bell\a.py", "bell?.py"), ("back\bspace.py", "back?space.py"), ("form\ffeed.py", "form?feed.py"),
+    ("car\rriage.py", "car riage.py"), ("vert\vtab.py", "vert?tab.py"), ("new\nline.py", "new line.py"),
+])
+def test_every_c_escape_git_writes_is_decoded_to_the_right_byte(repo, name, shown):
+    if os.name != "posix":
+        pytest.skip("POSIX file names")
+    error = refused(bg.token_tripwire, repo, {f"src/{name}": "x = sys.argv\n"}, "BENCHMARK_AWARE_CODE")
+    assert error.detail.endswith(f"first 1: sys.argv in src/{shown}")
+
+
+def test_a_non_utf8_path_is_charged_to_its_own_name_in_the_tripwire(tmp_path):
+    if os.name != "posix":
+        pytest.skip("POSIX file names")
+    r = make_repo(tmp_path)
+    base = commit(r, {BENCH: BENCH_SRC})
+    blob = git(r, "hash-object", "-w", "--stdin", inp=b"x = sys.argv\n")
+    git(r, "update-index", "--add", "--cacheinfo", f"100644,{blob},src/{os.fsdecode(b'bad-' + bytes([255]) + b'.py')}")
+    head = git(r, "commit-tree", git(r, "write-tree"), "-p", base, "-m", "x")
+    with pytest.raises(Err) as info:
+        bg.token_tripwire(r, base, head, BENCH)
+    assert info.value.code == "BENCHMARK_AWARE_CODE"
+
+
+def test_a_top_level_src_with_other_case_still_counts_as_the_src_directory(tmp_path):
+    r = make_repo(tmp_path)                                  # no `src/` directory on disk, so the spelling is kept
+    base = commit(r, {BENCH: BENCH_SRC})
+    head = commit(r, {"SRC/json.py": "x\n"})
+    with pytest.raises(Err) as info:
+        bg.protected_path_diff(r, base, head, BENCH)
+    assert info.value.code == "PROTECTED_PATH_CHANGED"
+
+
+def test_more_header_shapes_that_are_not_a_path():
+    for header in (b'diff --git "c/x" "c/x"', b"diff --git a/ab b/abc", b"diff --git c/x c/x", b'diff --git "a/x.py',
+                   b'diff --git "a/x\\qy" "b/x\\qy"', b'diff --git "a/\\12" "b/\\12"', b'diff --git "a/\\389" "b/\\389"'):
+        with pytest.raises(Err) as info:
+            bg._header_path(header)
+        assert info.value.code == "GIT_FAILED", header
+
+
+def test_a_context_line_inside_a_u0_hunk_is_refused_even_when_the_counts_still_add_up():
+    with pytest.raises(Err) as info:
+        list(bg._added_lines(b"diff --git a/f.py b/f.py\n@@ -1 +1 @@\n-a\n x\n+b\n"))
+    assert info.value.code == "GIT_FAILED"
+
+
+def test_the_file_stem_alone_is_not_a_token(repo):
+    check(bg.token_tripwire, repo, {"README.md": "see bench_orders for the numbers\n"})
