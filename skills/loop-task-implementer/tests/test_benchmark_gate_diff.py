@@ -899,3 +899,126 @@ def test_removing_a_symlink_at_an_import_root_is_refused(tmp_path):
     with pytest.raises(Err) as info:
         bg.protected_path_diff(r, head, base, BENCH)
     assert info.value.code == "PROTECTED_PATH_CHANGED"
+
+
+def _plumb(r, base, entries):
+    """Commit-tree on top of `base` with `entries` [(mode, path)] added through the index (no working-tree side effects)."""
+    blob = git(r, "hash-object", "-w", "--stdin", inp=b"x\n")
+    for mode, path in entries:
+        sha = base if mode == "160000" else blob
+        git(r, "update-index", "--add", "--cacheinfo", f"{mode},{sha},{path}")
+    return git(r, "commit-tree", git(r, "write-tree"), "-p", base, "-m", "x")
+
+
+@pytest.mark.parametrize("path", ["usercustomize_extra.py", "lib/usercustomize_extra.py"])
+def test_usercustomize_prefixed_modules_are_refused_like_sitecustomize_ones(repo, path):
+    refused(bg.protected_path_diff, repo, {path: "x\n"}, "PROTECTED_PATH_CHANGED")
+
+
+@pytest.mark.parametrize("path", ["sitecustomize/pkg/x.txt", "a/usercustomize/b/c.txt"])
+def test_any_ancestor_directory_named_like_a_startup_module_protects_the_file(repo, path):
+    refused(bg.protected_path_diff, repo, {path: "x\n"}, "PROTECTED_PATH_CHANGED")
+
+
+@pytest.mark.parametrize("path", ["SITECUSTOMIZE.abi3.so", "lib/SiteCustomize.cpython-312-darwin.so", "usercustomize​.pyd"])
+def test_compiled_startup_modules_are_matched_casefolded_and_without_zero_width_characters(repo, path):
+    refused(bg.protected_path_diff, repo, {path: b"x"}, "PROTECTED_PATH_CHANGED")
+
+
+@pytest.mark.parametrize("path", ["__pycache__/a/b.txt", "x/__pycache__/a/b/c.txt"])
+def test_any_ancestor_pycache_directory_protects_the_file(repo, path):
+    refused(bg.protected_path_diff, repo, {path: "x\n"}, "PROTECTED_PATH_CHANGED")
+
+
+def test_a_symlink_named_like_a_module_at_an_import_root_is_refused(tmp_path):
+    if os.name != "posix":
+        pytest.skip("symlinks")
+    r, base, head = _with_symlinks(tmp_path, {"harmless.py": "evil/__init__.py"})
+    with pytest.raises(Err) as info:
+        bg.protected_path_diff(r, base, head, BENCH)
+    assert info.value.code == "PROTECTED_PATH_CHANGED" and "symbolic link" in info.value.hits[0]["reason"]
+
+
+@pytest.mark.parametrize("path", ["harmless", "src/harmless", "src/json"])
+def test_a_submodule_at_an_import_root_is_refused(tmp_path, path):
+    r = make_repo(tmp_path)
+    base = commit(r, {BENCH: BENCH_SRC})
+    head = _plumb(r, base, [("160000", path)])
+    with pytest.raises(Err) as info:
+        bg.protected_path_diff(r, base, head, BENCH)
+    assert info.value.code == "PROTECTED_PATH_CHANGED"
+
+
+def test_removing_a_submodule_at_an_import_root_is_refused(tmp_path):
+    r = make_repo(tmp_path)
+    base0 = commit(r, {BENCH: BENCH_SRC})
+    with_sub = _plumb(r, base0, [("160000", "harmless")])
+    with pytest.raises(Err) as info:
+        bg.protected_path_diff(r, with_sub, base0, BENCH)
+    assert info.value.code == "PROTECTED_PATH_CHANGED"
+
+
+def test_an_executable_script_at_the_top_level_is_not_a_link(tmp_path):
+    r = make_repo(tmp_path)
+    base = commit(r, {BENCH: BENCH_SRC})
+    head = _plumb(r, base, [("100755", "build.sh")])
+    bg.protected_path_diff(r, base, head, BENCH)
+
+
+def test_the_directory_rule_compares_the_benchmarks_directory_casefolded(tmp_path):
+    bench = "Perf/benchmarks/bench_orders.py"
+    r = make_repo(tmp_path)
+    git(r, "config", "core.ignorecase", "false")
+    base = commit(r, {bench: BENCH_SRC})
+    head = _plumb(r, base, [("100644", "perf/benchmarks/helper.py")])
+    with pytest.raises(Err) as info:
+        bg.protected_path_diff(r, base, head, bench)
+    assert info.value.code == "PROTECTED_PATH_CHANGED"
+
+
+def test_the_tripwire_does_not_enumerate_changed_paths(repo, monkeypatch):
+    monkeypatch.setattr(bg, "_MAX_TREE_ENTRIES", 1)
+    check(bg.token_tripwire, repo, {"docs/a.md": "1\n", "docs/b.md": "1\n"})
+
+
+def test_the_protected_path_check_does_not_read_the_patch(repo, monkeypatch):
+    monkeypatch.setattr(bg, "_GIT_OUTPUT_CAP", 200)
+    check(bg.protected_path_diff, repo, {"src/big.py": "x = 1\n" * 100})
+
+
+def test_a_hit_path_is_cut_at_200_characters_not_before_or_after(repo):
+    mid = "src/" + "d" * 150 + "/run.py"
+    long = "src/" + ("e" * 50 + "/") * 5 + "run.py"
+    assert 100 < len(mid) < 200 < len(long)
+    error = refused(bg.token_tripwire, repo, {mid: "x = sys.argv\n", long: "y = sys.argv\n"}, "BENCHMARK_AWARE_CODE")
+    assert sorted(len(hit["path"]) for hit in error.hits) == [len(mid), 200]
+
+
+def test_a_protected_hit_path_is_cut_at_200_characters_not_before_or_after(repo):
+    mid = "d" * 150 + "/conftest.py"
+    long = ("e" * 50 + "/") * 5 + "conftest.py"
+    assert 100 < len(mid) < 200 < len(long)
+    error = refused(bg.protected_path_diff, repo, {mid: "x\n", long: "x\n"}, "PROTECTED_PATH_CHANGED")
+    assert sorted(len(hit["path"]) for hit in error.hits) == [len(mid), 200]
+
+
+def test_a_hit_line_is_cut_at_200_characters_not_before_or_after(repo):
+    error = refused(bg.token_tripwire, repo, {"src/a.py": "x = sys.argv  " + "y" * 150 + "\n", "src/b.py": "x = sys.argv  " + "y" * 300 + "\n"},
+                    "BENCHMARK_AWARE_CODE")
+    assert [len(hit["line"]) for hit in error.hits] == [14 + 150, 200]
+
+
+@pytest.mark.parametrize("raw", [b"x = sys.argv \xff\n", b"x = sys.argv \xe2\x82\n"])
+def test_a_non_utf8_line_with_a_token_is_still_a_benchmark_aware_hit(repo, raw):
+    error = refused(bg.token_tripwire, repo, {"src/a.py": raw}, "BENCHMARK_AWARE_CODE")
+    assert error.hits[0]["line"] == "x = sys.argv ?"
+
+
+@pytest.mark.parametrize("patch", [
+    b"diff --git a/f.py b/f.py\n@@ -0,0 +1 @@\n-extra\n+b\n",     # a removed line beyond the hunk's counts
+    b"diff --git a/f.py b/f.py\n@@ -1,2 +0,0 @@\n-a\n+b\n",      # an added line beyond the hunk's counts
+])
+def test_a_hunk_line_beyond_the_header_counts_is_refused_before_it_is_yielded(patch):
+    with pytest.raises(Err) as info:
+        next(bg._added_lines(patch))
+    assert info.value.code == "GIT_FAILED"
