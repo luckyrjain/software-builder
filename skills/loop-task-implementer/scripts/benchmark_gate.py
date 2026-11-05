@@ -3169,6 +3169,107 @@ _EMPTY_INI = "[pytest]\n"
 _TRACE_MODULE = "bench_trace_plugin"  # the one pytest plugin the gate may load (C4d-2): `-p bench_trace_plugin`, found through PYTHONPATH
 _TRACE_TIMEOUT_FACTOR = 3  # the traced run may take this many times the per-run timeout
 
+# The trace plugin, written fresh into a harness-owned directory per side (spec D1, D2). It must stay ASCII, annotation-free and importable
+# on CPython 3.8: it runs inside the side's own venv, whose interpreter may be older than this one. Raw string: no escape is interpreted.
+TRACE_PLUGIN_SOURCE = r"""import os
+import sys
+import threading
+
+
+class _State(object):
+    def __init__(self):
+        self.traced_ids = set()  # id() of the code objects to count; membership is by identity, code objects compare by value
+        self.keep = []  # holds those code objects alive so an id is never reused
+        self.thread = None
+        self.count = 0
+        self.failed = False
+        self.unavailable = None
+        self.claimed = False
+        self.out = None
+        self.nonce = None
+        self.root_real = None
+        self.target_real = None
+
+
+STATE = _State()
+
+
+def _claim_tool(sys_module):
+    # None when tool id 4 is ours; otherwise a token. Never raises: the import of this module must not fail.
+    try:
+        monitoring = getattr(sys_module, "monitoring", None)
+        if monitoring is None:
+            return "no_monitoring"
+        monitoring.use_tool_id(4, "bench_trace_plugin")
+    except ValueError:
+        return "tool_in_use"
+    except Exception:
+        return "error"
+    return None
+
+
+def _release_tool(sys_module):
+    # 3.12 has no clear_tool_id and a callback survives free_tool_id there, so unregister both events by hand first.
+    monitoring = sys_module.monitoring
+    if hasattr(monitoring, "clear_tool_id"):
+        monitoring.clear_tool_id(4)
+    else:
+        monitoring.register_callback(4, monitoring.events.LINE, None)
+        monitoring.register_callback(4, monitoring.events.JUMP, None)
+    monitoring.free_tool_id(4)
+
+
+def on_event(code, arg1, arg2=None):
+    # LINE calls (code, line), JUMP calls (code, instruction_offset, destination_offset).
+    try:
+        if id(code) not in STATE.traced_ids:
+            return sys.monitoring.DISABLE
+        if threading.get_ident() == STATE.thread:
+            STATE.count += 1
+    except BaseException:
+        STATE.failed = True
+    return None
+
+
+def _init(environ, sys_module):
+    # Pop with defaults so a missing variable cannot leave the others behind.
+    target = environ.pop("BENCH_TRACE_FILE", None)
+    STATE.out = environ.pop("BENCH_TRACE_OUT", None)
+    STATE.nonce = environ.pop("BENCH_TRACE_NONCE", None)
+    if target is None or STATE.out is None or STATE.nonce is None:
+        STATE.failed = True
+    else:
+        # Captured once, so a benchmark that later chdirs (even to /) cannot move them.
+        try:
+            STATE.root_real = os.path.realpath(os.getcwd())
+            STATE.target_real = os.path.realpath(os.path.join(STATE.root_real, target))
+            if not os.path.isfile(STATE.target_real) or not STATE.target_real.startswith(STATE.root_real.rstrip(os.sep) + os.sep):
+                STATE.failed = True
+        except Exception:
+            STATE.failed = True
+    # Hygiene, not an integrity control: sys.modules still holds this module.
+    own_dir = os.path.dirname(__file__)
+    while own_dir in sys.path:
+        sys.path.remove(own_dir)
+    if "PYTHONPATH" in environ:
+        kept = [p for p in environ["PYTHONPATH"].split(os.pathsep) if p != own_dir]
+        if kept:
+            environ["PYTHONPATH"] = os.pathsep.join(kept)
+        else:
+            del environ["PYTHONPATH"]
+    if not STATE.failed:
+        token = _claim_tool(sys_module)
+        if token is None:
+            STATE.claimed = True
+        elif token == "error":
+            STATE.failed = True
+        else:
+            STATE.unavailable = token
+
+
+_init(os.environ, sys)
+"""
+
 
 def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int, repeats: int) -> list[str]:
     """The round order: exactly ``repeats / 2`` rounds are ``"head_first"``, the rest ``"base_first"``, shuffled by a PRNG seeded from
