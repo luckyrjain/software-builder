@@ -51,10 +51,9 @@ def test_run_order_depends_on_every_seed_input():
 
 def test_run_order_is_not_strict_alternation_for_any_commit_pair():
     alternating = [["head_first", "base_first"] * 4, ["base_first", "head_first"] * 4]
-    for i in range(40):
-        assert bg.run_order(f"{i:040x}", HEAD, BENCH, 1, 8) not in alternating or i > 0 or True
-    orders = {tuple(bg.run_order(f"{i:040x}", HEAD, BENCH, 1, 8)) for i in range(40)}
-    assert len(orders) > 5
+    orders = [bg.run_order(f"{i:040x}", HEAD, BENCH, 1, 8) for i in range(40)]
+    assert len({tuple(o) for o in orders}) > 5
+    assert sum(o in alternating for o in orders) < 10  # 2 of 70 balanced orders alternate; a fixed alternation would make all 40 do
 
 
 @pytest.mark.parametrize("args", [
@@ -123,8 +122,8 @@ def measure(tmp_path, script, **overrides):
     kwargs = dict(repeats=4, timeout_seconds=30, base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH,
                   min_base_ns=0, argv_builder=builder(script))
     kwargs.update(overrides)
-    return bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::test_bench",
-                             **kwargs)
+    target = kwargs.pop("target", "bench.py::test_bench")
+    return bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), target, **kwargs)
 
 
 def refusal(tmp_path, script, **overrides):
@@ -244,7 +243,7 @@ def test_a_run_over_the_timeout_is_killed_and_reported(tmp_path):
     """
     started = time.monotonic()
     err = refusal(tmp_path, script, timeout_seconds=1)
-    assert err.code == "RUN_TIMEOUT"
+    assert err.code == "BASE_TIMEOUT"
     assert time.monotonic() - started < 20
 
 
@@ -255,7 +254,7 @@ def test_a_slow_exit_after_the_timeout_is_not_a_success(tmp_path):
         print("BENCH_RESULT_DIGEST: {DIGEST}", flush=True)
         time.sleep(2)
     """
-    assert refusal(tmp_path, script, timeout_seconds=0.5).code == "RUN_TIMEOUT"
+    assert refusal(tmp_path, script, timeout_seconds=0.5).code == "BASE_TIMEOUT"
 
 
 @posix_only
@@ -296,7 +295,7 @@ def test_a_missing_digest_fails_after_the_first_warmup_round(tmp_path):
     """
     err = refusal(tmp_path, script)
     assert err.code == "DIGEST_MISSING"
-    assert marker.read_text() == "x"  # only the first warmup run happened
+    assert marker.read_text() == "xx"  # only the first warmup round happened (both sides)
 
 
 @posix_only
@@ -315,21 +314,6 @@ def test_the_last_digest_in_the_output_wins_and_pytest_progress_may_share_the_li
         print(".BENCH_RESULT_DIGEST: {DIGEST}")
     """
     assert measure(tmp_path, script)["digest"] == DIGEST
-
-
-@posix_only
-def test_a_digest_that_changes_between_runs_is_unstable(tmp_path):
-    counter = tmp_path / "counter"
-    script = f"""
-        import os, sys
-        path = {str(counter)!r}
-        n = int(open(path).read()) if os.path.exists(path) else 0
-        if sys.argv[1] == "head":
-            open(path, "w").write(str(n + 1))
-        print("BENCH_RESULT_DIGEST: " + ("{DIGEST[:-1]}" + ("0" if n < 1 else "1" if n % 2 else "2")))
-    """
-    err = refusal(tmp_path, script)
-    assert err.code in ("DIGEST_UNSTABLE", "DIGEST_MISMATCH")
 
 
 @posix_only
@@ -356,6 +340,134 @@ def test_sides_that_print_different_digests_mismatch_in_the_first_warmup_round(t
     """
     assert refusal(tmp_path, script).code == "DIGEST_MISMATCH"
     assert marker.read_text() == "xx"
+
+
+def counting_child(tmp_path, digest_expr):
+    """A child that knows its side and how many times that side ran before (n), printing ``digest_expr`` (a Python expression)."""
+    return f"""
+        import os, sys
+        path = {str(tmp_path / "count")!r} + sys.argv[1]
+        n = int(open(path).read()) if os.path.exists(path) else 0
+        open(path, "w").write(str(n + 1))
+        side = sys.argv[1]
+        value = {digest_expr}
+        if value is not None:
+            print("BENCH_RESULT_DIGEST: " + value)
+    """
+
+
+OTHER = "0" * 64
+
+
+@posix_only
+@pytest.mark.parametrize("silent_side", ["base", "head"])
+def test_a_digest_printed_by_only_one_side_is_a_mismatch_not_a_missing_digest(tmp_path, silent_side):
+    script = counting_child(tmp_path, f"None if side == {silent_side!r} else {DIGEST!r}")
+    err = refusal(tmp_path, script)
+    assert err.code == "DIGEST_MISMATCH" and err.phase == "warmup"
+
+
+@posix_only
+def test_neither_side_printing_a_digest_is_missing_after_both_ran_once(tmp_path):
+    err = refusal(tmp_path, counting_child(tmp_path, "None"))
+    assert err.code == "DIGEST_MISSING" and err.phase == "warmup" and err.side is None
+    assert (tmp_path / "countbase").read_text() == "1" and (tmp_path / "counthead").read_text() == "1"
+
+
+@posix_only
+@pytest.mark.parametrize("side_name", ["base", "head"])
+def test_a_digest_that_changes_in_a_timed_round_is_unstable(tmp_path, side_name):
+    script = counting_child(tmp_path, f"{OTHER!r} if (side == {side_name!r} and n >= 2) else {DIGEST!r}")
+    err = refusal(tmp_path, script)
+    assert err.code == "DIGEST_UNSTABLE" and err.side == side_name and err.phase == "timed"
+
+
+@posix_only
+def test_a_digest_that_disappears_after_the_first_round_is_unstable(tmp_path):
+    script = counting_child(tmp_path, f"None if (side == 'head' and n >= 1) else {DIGEST!r}")
+    err = refusal(tmp_path, script)
+    assert err.code == "DIGEST_UNSTABLE" and err.side == "head"
+
+
+@posix_only
+def test_a_digest_that_changes_between_warmup_rounds_is_unstable(tmp_path):
+    script = counting_child(tmp_path, f"{OTHER!r} if (side == 'base' and n == 1) else {DIGEST!r}")
+    err = refusal(tmp_path, script, warmup=2)
+    assert err.code == "DIGEST_UNSTABLE" and err.phase == "warmup"
+
+
+@posix_only
+def test_a_digest_followed_by_more_hex_is_not_a_digest(tmp_path):
+    script = f'print("BENCH_RESULT_DIGEST: {DIGEST}ff")'
+    assert refusal(tmp_path, script).code == "DIGEST_MISSING"
+
+
+@posix_only
+def test_only_the_head_timing_out_is_a_head_timeout(tmp_path):
+    script = f"""
+        import sys, time
+        print("BENCH_RESULT_DIGEST: {DIGEST}", flush=True)
+        if sys.argv[1] == "head":
+            time.sleep(30)
+    """
+    err = refusal(tmp_path, script, timeout_seconds=1)
+    assert err.code == "HEAD_TIMEOUT" and err.side == "head" and err.phase == "warmup"
+
+
+@posix_only
+def test_a_missing_python_in_the_bin_directory_is_a_coded_nonzero_exit(tmp_path):
+    roots, bins = fake_sides(tmp_path)
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "t", repeats=4, timeout_seconds=30,
+                          base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0)
+    assert info.value.code == "BASE_NONZERO_EXIT" and info.value.side == "base"
+    assert "could not start" in info.value.detail
+
+
+@posix_only
+def test_a_failure_after_timing_began_carries_the_partial_data(tmp_path):
+    script = counting_child(tmp_path, f"{DIGEST!r}") + "\n        sys.exit(3 if (side == 'head' and n >= 3) else 0)\n"
+    err = refusal(tmp_path, script)
+    assert err.code == "HEAD_NONZERO_EXIT" and err.phase == "timed"
+    assert err.partial["order"] == bg.run_order(BASE, HEAD, BENCH, 1, 4)
+    assert 0 < len(err.partial["base_ns"]) < 4 and len(err.partial["head_ns"]) == len(err.partial["base_ns"])
+
+
+@posix_only
+def test_too_short_a_workload_names_the_measured_median_and_keeps_the_timings(tmp_path):
+    err = refusal(tmp_path, OK_CHILD, min_base_ns=10 ** 12)
+    assert re.search(r"base median \d+ ns is under 1000000000000 ns", err.detail)
+    assert len(err.partial["base_ns"]) == len(err.partial["head_ns"]) == 4
+
+
+@posix_only
+def test_the_result_echoes_the_argv_of_each_side(tmp_path):
+    result = measure(tmp_path, OK_CHILD)
+    assert set(result["argv"]) == {"base", "head"}
+    assert result["argv"]["base"][-3] == "base" and result["argv"]["head"][-3] == "head"
+
+
+@posix_only
+def test_the_default_argv_uses_a_caller_owned_ini_when_given(tmp_path):
+    roots, bins = fake_sides(tmp_path)
+    ini = tmp_path / "mine.ini"
+    ini.write_text("[pytest]\n")
+    for side in ("base", "head"):
+        (bins[side] / "python").symlink_to(sys.executable)
+    with pytest.raises(bg.BenchmarkGateError) as info:  # the child is not pytest: it fails, but the argv was built
+        bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "t", repeats=4, timeout_seconds=30,
+                          base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0, ini_path=str(ini))
+    assert info.value.code in ("BASE_NONZERO_EXIT", "DIGEST_MISSING")
+
+
+@posix_only
+def test_children_get_no_stdin(tmp_path):
+    script = f"""
+        import sys
+        assert sys.stdin.read() == ""
+        print("BENCH_RESULT_DIGEST: {DIGEST}")
+    """
+    assert measure(tmp_path, script)["digest"] == DIGEST
 
 
 @posix_only
@@ -413,7 +525,7 @@ def test_stderr_tail_in_a_refusal_is_escaped(tmp_path):
 @pytest.mark.parametrize("override", [
     {"repeats": 5}, {"repeats": True}, {"warmup": 0}, {"warmup": 4}, {"warmup": True}, {"timeout_seconds": 0}, {"timeout_seconds": -1},
     {"timeout_seconds": float("nan")}, {"timeout_seconds": True}, {"timeout_seconds": "5"}, {"timeout_seconds": 3601},
-    {"min_base_ns": -1}, {"min_base_ns": 1.5}, {"attempt": 3}, {"base_commit": "x"}, {"benchmark_sha256": "x"},
+    {"target": "-pfoo"}, {"target": ""}, {"target": "a\0b"}, {"ini_path": "relative.ini"}, {"ini_path": 5}, {"min_base_ns": -1}, {"min_base_ns": 1.5}, {"attempt": 3}, {"base_commit": "x"}, {"benchmark_sha256": "x"},
 ])
 def test_bad_arguments_are_a_caller_error_before_anything_runs(tmp_path, override):
     marker = tmp_path / "marker"
@@ -437,6 +549,17 @@ def test_roots_and_bins_must_be_distinct_existing_absolute_directories(tmp_path)
         with pytest.raises(bg.BenchmarkGateError) as info:
             bg.measure_paired(*args, "t", **common)
         assert info.value.code == "MEASURE_ARGS_INVALID", args
+
+
+@posix_only
+def test_nested_roots_are_rejected(tmp_path):
+    roots, bins = fake_sides(tmp_path)
+    inner = roots["base"] / "inner"
+    inner.mkdir()
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        bg.measure_paired(str(roots["base"]), str(inner), str(bins["base"]), str(bins["head"]), "t", repeats=4, timeout_seconds=30,
+                          base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0, argv_builder=builder(OK_CHILD))
+    assert info.value.code == "MEASURE_ARGS_INVALID"
 
 
 @posix_only

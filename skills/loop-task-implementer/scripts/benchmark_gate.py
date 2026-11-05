@@ -3143,11 +3143,12 @@ MEASURE_REFUSAL_CODES = (
     "UNSUPPORTED_PLATFORM",     # not POSIX: no process groups, no rlimits
     "BASE_NONZERO_EXIT",        # the benchmark exited non-zero (or was killed) on the base side
     "HEAD_NONZERO_EXIT",        # ... on the head side
-    "RUN_TIMEOUT",              # a run exceeded the per-run timeout
+    "BASE_TIMEOUT",             # a base run exceeded the per-run timeout (compare: INCONCLUSIVE)
+    "HEAD_TIMEOUT",             # a head run exceeded it (compare: NOT_IMPROVED, the Builder can fix it)
     "OUTPUT_TOO_LARGE",         # a run wrote 1 MiB to stdout or stderr (RLIMIT_FSIZE reached)
-    "DIGEST_MISSING",           # a run printed no `BENCH_RESULT_DIGEST: <64 hex>` line (checked after the first warmup round)
-    "DIGEST_UNSTABLE",          # one side printed different digests in different runs
-    "DIGEST_MISMATCH",          # the sides disagree, or only one side printed a digest
+    "DIGEST_MISSING",           # NEITHER side printed a `BENCH_RESULT_DIGEST: <64 hex>` line in the first warmup round
+    "DIGEST_UNSTABLE",          # one side printed different digests in different runs (or stopped printing one)
+    "DIGEST_MISMATCH",          # the sides disagree, or only ONE side printed a digest
     "WORKLOAD_TOO_SHORT",       # the base median is under the minimum: timing noise would dominate
 )
 ERROR_CODES += MEASURE_REFUSAL_CODES + ("MEASURE_ARGS_INVALID",)
@@ -3155,7 +3156,7 @@ ERROR_CODES += MEASURE_REFUSAL_CODES + ("MEASURE_ARGS_INVALID",)
 _RUN_FSIZE_LIMIT = 1 << 20
 _STDERR_TAIL = 2048
 _MIN_BASE_NS = 2_000_000_000
-_DIGEST_RE = re.compile(rb"BENCH_RESULT_DIGEST: ([0-9a-f]{64})")
+_DIGEST_RE = re.compile(rb"BENCH_RESULT_DIGEST: ([0-9a-f]{64})(?![0-9a-f])")
 _EMPTY_INI = "[pytest]\n"
 
 
@@ -3211,12 +3212,6 @@ def pytest_argv(bin_dir: str, root: str, target: str, ini: str) -> list[str]:
     ]
 
 
-def _fsize_limit() -> None:  # runs in the child between fork and exec; touches nothing but `resource`
-    import resource
-
-    resource.setrlimit(resource.RLIMIT_FSIZE, (_RUN_FSIZE_LIMIT, _RUN_FSIZE_LIMIT))
-
-
 def _kill_group(pgid: int) -> None:
     import signal
 
@@ -3231,11 +3226,16 @@ def _run_once(argv: list[str], cwd: str, env: dict[str, str], timeout: float) ->
     A blocking ``wait`` with a watchdog ``Timer`` (cancelled and joined after the wait, so a late fire cannot ``killpg`` a reused pgid),
     and a group kill after EVERY run. ``RLIMIT_FSIZE`` kills nothing in Python (CPython ignores SIGXFSZ), so oversize is detected by a
     file whose size equals the limit."""
+    import resource  # imported here, in the parent, not between fork and exec
+
+    def fsize_limit() -> None:  # runs in the child between fork and exec; touches nothing but `resource`
+        resource.setrlimit(resource.RLIMIT_FSIZE, (_RUN_FSIZE_LIMIT, _RUN_FSIZE_LIMIT))
+
     timed_out = threading.Event()
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         started = time.perf_counter_ns()
         proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=err, close_fds=True,
-                                start_new_session=True, preexec_fn=_fsize_limit)  # preexec_fn is thread-unsafe: the harness is single-threaded here
+                                start_new_session=True, preexec_fn=fsize_limit)  # preexec_fn is thread-unsafe: the harness is single-threaded here
 
         def fire() -> None:
             timed_out.set()
@@ -3266,17 +3266,29 @@ def _digest_of(stdout: bytes) -> str | None:
     return found[-1].decode("ascii") if found else None
 
 
+def _tail_detail(tail: bytes) -> str:
+    """The END of the child's stderr (a traceback's useful line is last), for the exception detail, which keeps the first 200 characters."""
+    return tail.decode("ascii", "replace")[-150:]
+
+
 def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, target: str, *, repeats: int, timeout_seconds: float,
                    base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int = 1, warmup: int = 1,
-                   min_base_ns: int = _MIN_BASE_NS, argv_builder=None) -> dict:
-    """Run the benchmark ``warmup`` untimed rounds, then ``repeats`` timed rounds, each round running both sides once in the order
-    ``run_order`` gives. Returns ``{"order", "base_ns", "head_ns", "digest"}``: ``base_ns[i]`` and ``head_ns[i]`` are the wall nanoseconds
-    of round ``i`` (positive ints, ready for ``evaluate_paired_samples``), ``digest`` the digest both sides printed in every run.
+                   min_base_ns: int = _MIN_BASE_NS, argv_builder=None, ini_path: str | None = None) -> dict:
+    """Run ``warmup`` untimed rounds, then ``repeats`` timed rounds; every round runs both sides once, base first in warmup and in the
+    order ``run_order`` gives afterwards. Returns ``{"order", "base_ns", "head_ns", "digest", "argv"}``: ``base_ns[i]`` and ``head_ns[i]``
+    are the wall nanoseconds of timed round ``i`` (positive ints, ready for ``evaluate_paired_samples``), ``digest`` the one digest every
+    run of both sides printed, ``argv`` the ``{"base": ..., "head": ...}`` command lines (so a human can rerun them; with the default
+    builder the ini is ``ini_path`` when given, else a temporary file that is gone when this returns).
 
-    Raises ``BenchmarkGateError`` with a ``MEASURE_REFUSAL_CODES`` code (the escaped tail of the child's stderr in ``detail``), or
-    ``MEASURE_ARGS_INVALID``. The digest is checked after the FIRST warmup round, so a benchmark that prints none fails in seconds; the
-    ``WORKLOAD_TOO_SHORT`` check needs the timed rounds. ``argv_builder(side, bin_dir, root, target) -> argv`` is the test seam; the
-    default is ``pytest_argv``. A trace run is not part of this function (C4d-2)."""
+    Raises ``BenchmarkGateError`` with a ``MEASURE_REFUSAL_CODES`` code, or ``MEASURE_ARGS_INVALID`` (a caller error). The exception
+    carries ``side`` (``"base"``, ``"head"`` or ``None``), ``phase`` (``"warmup"``, ``"timed"`` or ``None``) and, for a failure after
+    timing began, ``partial`` (``{"order", "base_ns", "head_ns"}`` so far). A spawn failure (no ``<bin>/python``: a venv that was not
+    provisioned) is ``<SIDE>_NONZERO_EXIT``. Digest rules: after the FIRST warmup round both sides have run, so a digest printed by
+    neither is ``DIGEST_MISSING``, by one is ``DIGEST_MISMATCH``, by both but different is ``DIGEST_MISMATCH`` (a benchmark that is
+    nondeterministic on both sides is therefore reported as a mismatch there); from then on a run without a digest or with another one is
+    ``DIGEST_UNSTABLE``; the digests of ALL runs (warmup included) must be one value at the end. ``WORKLOAD_TOO_SHORT`` needs the timed
+    rounds and names the measured median. ``argv_builder(side, bin_dir, root, target) -> argv`` is the test seam; the default is
+    ``pytest_argv``. A trace run is not part of this function (C4d-2)."""
     if os.name != "posix":
         raise BenchmarkGateError("UNSUPPORTED_PLATFORM", "the harness needs POSIX process groups")
     order = run_order(base_commit, head_commit, benchmark_sha256, attempt, repeats)
@@ -3293,21 +3305,34 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
             if not isinstance(path, str) or not path or "\0" in path or not os.path.isabs(path) or not os.path.isdir(path):
                 raise BenchmarkGateError("MEASURE_ARGS_INVALID", f"{name} {label} must be an existing absolute directory")
         sides[name] = (os.path.realpath(root), os.path.realpath(bin_dir))
-    if sides["base"][0] == sides["head"][0] or sides["base"][1] == sides["head"][1]:
-        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "the two sides must not share a root or a bin directory")
-    if not isinstance(target, str) or not target or "\0" in target:
-        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "target must be a non-empty string")
+    for index in (0, 1):  # root, bin: the same directory under two names (a symlink, or a case-folding file system) is one directory
+        if os.path.samefile(sides["base"][index], sides["head"][index]):
+            raise BenchmarkGateError("MEASURE_ARGS_INVALID", "the two sides must not share a root or a bin directory")
+    if _inside(sides["base"][0], sides["head"][0]) or _inside(sides["head"][0], sides["base"][0]):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "neither root may contain the other")
+    if not isinstance(target, str) or not target or "\0" in target or target.startswith("-"):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "target must be a non-empty string that does not start with '-'")
+    if ini_path is not None and (not isinstance(ini_path, str) or not os.path.isabs(ini_path) or not os.path.isfile(ini_path)):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "ini_path must be an existing absolute file")
+
+    def fail(code: str, detail: str, side: str | None, phase: str | None, partial: dict | None = None) -> BenchmarkGateError:
+        error = BenchmarkGateError(code, detail)
+        error.side, error.phase, error.partial = side, phase, partial
+        return error
 
     with tempfile.TemporaryDirectory(prefix="bench-measure-") as work:
-        ini = os.path.join(work, "empty.ini")
-        with open(ini, "w", encoding="ascii") as handle:
-            handle.write(_EMPTY_INI)
+        ini = ini_path
+        if ini is None:
+            ini = os.path.join(work, "empty.ini")
+            with open(ini, "w", encoding="ascii") as handle:
+                handle.write(_EMPTY_INI)
         base_ns: list[int] = []
         head_ns: list[int] = []
         digests: dict[str, set[str]] = {"base": set(), "head": set()}
+        argvs: dict[str, list[str]] = {}
         counter = 0
 
-        def run(side: str, timed: bool) -> int:
+        def run(side: str, phase: str) -> tuple[int, str | None]:
             nonlocal counter
             counter += 1
             root, bin_dir = sides[side]
@@ -3316,39 +3341,53 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
             env = side_env(bin_dir, scratch)
             env["PYTHONPYCACHEPREFIX"] = os.path.join(work, f"pycache-{side}")  # per side, shared by its runs (a warm cache is part of the warmup)
             argv = argv_builder(side, bin_dir, root, target) if argv_builder else pytest_argv(bin_dir, root, target, ini)
-            code, elapsed, stdout, tail, oversize = _run_once(argv, root, env, float(timeout_seconds))
-            shutil.rmtree(scratch, ignore_errors=True)
+            argvs.setdefault(side, argv)
+            partial = {"order": order, "base_ns": list(base_ns), "head_ns": list(head_ns)} if base_ns else None
+            try:
+                code, elapsed, stdout, tail, oversize = _run_once(argv, root, env, float(timeout_seconds))
+            except (OSError, subprocess.SubprocessError) as exc:  # no <bin>/python, not executable, a failed fork
+                raise fail(f"{side.upper()}_NONZERO_EXIT", f"could not start the run: {exc}", side, phase, partial) from exc
+            finally:
+                shutil.rmtree(scratch, ignore_errors=True)
             if oversize:
-                raise BenchmarkGateError("OUTPUT_TOO_LARGE", f"{side} run wrote {_RUN_FSIZE_LIMIT} bytes")
+                raise fail("OUTPUT_TOO_LARGE", f"{side} run wrote {_RUN_FSIZE_LIMIT} bytes", side, phase, partial)
             if code is None:
-                raise BenchmarkGateError("RUN_TIMEOUT", f"{side} run exceeded {timeout_seconds} s")
+                raise fail(f"{side.upper()}_TIMEOUT", f"run exceeded {timeout_seconds} s", side, phase, partial)
             if code != 0:
-                raise BenchmarkGateError(f"{side.upper()}_NONZERO_EXIT", f"exit {code}: {tail.decode('ascii', 'replace')}")
-            digest = _digest_of(stdout)
+                raise fail(f"{side.upper()}_NONZERO_EXIT", f"exit {code}: {_tail_detail(tail)}", side, phase, partial)
+            return elapsed, _digest_of(stdout)
+
+        def record(side: str, phase: str, digest: str | None, first_round: bool) -> None:
             if digest is None:
-                raise BenchmarkGateError("DIGEST_MISSING", f"{side} run printed no digest: {tail.decode('ascii', 'replace')}")
+                if not first_round:
+                    raise fail("DIGEST_UNSTABLE", f"{side} printed no digest after the first round", side, phase)
+                return
             digests[side].add(digest)
-            return elapsed
+            if len(digests[side]) > 1:
+                raise fail("DIGEST_UNSTABLE", f"{side} printed {len(digests[side])} different digests", side, phase)
 
         for index in range(warmup):
             for side in ("base", "head"):
-                run(side, timed=False)
-            if index == 0 and digests["base"] != digests["head"]:
-                raise BenchmarkGateError("DIGEST_MISMATCH", "the sides printed different digests in the first warmup round")
-        digests = {"base": set(), "head": set()}  # the verdict compares the timed rounds only
+                record(side, "warmup", run(side, "warmup")[1], index == 0)
+            if index == 0:
+                if not digests["base"] and not digests["head"]:
+                    raise fail("DIGEST_MISSING", "neither side printed a digest in the first warmup round", None, "warmup")
+                if digests["base"] != digests["head"]:
+                    raise fail("DIGEST_MISMATCH", "the sides printed different digests (or only one printed one) in the first warmup round",
+                               None, "warmup")
         for position in order:
             pair = ("head", "base") if position == "head_first" else ("base", "head")
-            took = {side: run(side, timed=True) for side in pair}
+            took = {}
+            for side in pair:
+                took[side], digest = run(side, "timed")
+                record(side, "timed", digest, False)
             base_ns.append(max(took["base"], 1))
             head_ns.append(max(took["head"], 1))
-    for side in ("base", "head"):
-        if len(digests[side]) != 1:
-            raise BenchmarkGateError("DIGEST_UNSTABLE", f"{side} printed {len(digests[side])} different digests")
-    if digests["base"] != digests["head"]:
-        raise BenchmarkGateError("DIGEST_MISMATCH", "the sides printed different digests")
-    if _median([Fraction(v) for v in base_ns]) < min_base_ns:
-        raise BenchmarkGateError("WORKLOAD_TOO_SHORT", f"base median under {min_base_ns} ns")
-    return {"order": order, "base_ns": base_ns, "head_ns": head_ns, "digest": next(iter(digests["base"]))}
+        partial = {"order": order, "base_ns": base_ns, "head_ns": head_ns}
+        median = _median([Fraction(v) for v in base_ns])
+        if median < min_base_ns:
+            raise fail("WORKLOAD_TOO_SHORT", f"base median {int(median)} ns is under {min_base_ns} ns", "base", "timed", partial)
+        return {"order": order, "base_ns": base_ns, "head_ns": head_ns, "digest": next(iter(digests["base"])), "argv": argvs}
 
 
 # ---------------------------------------------------------------------------
