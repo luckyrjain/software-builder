@@ -3310,6 +3310,47 @@ def _execute(side: str, argv: list[str], root: str, scratch: str, env: dict, tim
     return elapsed, stdout
 
 
+def _benchmark_file_of(target: object) -> str:
+    """The file part of a pytest target (before the first ``::``), checked: a relative ``.py`` path with no empty, ``.`` or ``..``
+    component, no NUL or backslash, no leading ``-``."""
+    if not isinstance(target, str):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", _TARGET_MESSAGE)
+    file_part = target.split("::", 1)[0]
+    if (not file_part or "\0" in target or "\\" in target or file_part.startswith(("/", "-")) or not file_part.endswith(".py")
+            or any(part in ("", ".", "..") for part in file_part.split("/"))):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", _TARGET_MESSAGE)
+    return file_part
+
+
+def _check_timeout(timeout_seconds: object) -> None:
+    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)) or not 0 < timeout_seconds <= 3600 \
+            or timeout_seconds != timeout_seconds:
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "timeout_seconds must be a number in (0, 3600]")
+
+
+def _check_sides(base_root: object, head_root: object, base_bin: object, head_bin: object, target: object,
+                 ini_path: object) -> tuple[dict, str]:
+    """Validate the two sides, the target and the ini; returns ``({name: (realpath root, realpath bin)}, benchmark_file)``."""
+    sides = {}
+    for name, root, bin_dir in (("base", base_root, base_bin), ("head", head_root, head_bin)):
+        for label, path in (("root", root), ("bin", bin_dir)):
+            if not isinstance(path, str) or not path or "\0" in path or not os.path.isabs(path) or not os.path.isdir(path):
+                raise BenchmarkGateError("MEASURE_ARGS_INVALID", f"{name} {label} must be an existing absolute directory")
+        sides[name] = (os.path.realpath(root), os.path.realpath(bin_dir))
+    for index in (0, 1):  # root, bin: the same directory under two names (a symlink, or a case-folding file system) is one directory
+        if os.path.samefile(sides["base"][index], sides["head"][index]):
+            raise BenchmarkGateError("MEASURE_ARGS_INVALID", "the two sides must not share a root or a bin directory")
+    if _inside(sides["base"][0], sides["head"][0]) or _inside(sides["head"][0], sides["base"][0]):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "neither root may contain the other")
+    benchmark_file = _benchmark_file_of(target)
+    if ini_path is not None and (not isinstance(ini_path, str) or not os.path.isabs(ini_path) or not os.path.isfile(ini_path)):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "ini_path must be an existing absolute file")
+    return sides, benchmark_file
+
+
+_TARGET_MESSAGE = "target must be a .py path under the root, without '..' or a leading '-'"
+
+
 def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, target: str, *, repeats: int, timeout_seconds: float,
                    base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int = 1, warmup: int = 1,
                    min_base_ns: int = _MIN_BASE_NS, argv_builder=None, ini_path: str | None = None) -> dict:
@@ -3333,26 +3374,10 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
     order = run_order(base_commit, head_commit, benchmark_sha256, attempt, repeats)
     if not _is_real_int(warmup) or not 1 <= warmup <= 3:
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "warmup must be 1 to 3")
-    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)) or not 0 < timeout_seconds <= 3600 \
-            or timeout_seconds != timeout_seconds:
-        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "timeout_seconds must be a number in (0, 3600]")
+    _check_timeout(timeout_seconds)
     if not _is_real_int(min_base_ns) or min_base_ns < 0:
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "min_base_ns must be a non-negative int")
-    sides = {}
-    for name, root, bin_dir in (("base", base_root, base_bin), ("head", head_root, head_bin)):
-        for label, path in (("root", root), ("bin", bin_dir)):
-            if not isinstance(path, str) or not path or "\0" in path or not os.path.isabs(path) or not os.path.isdir(path):
-                raise BenchmarkGateError("MEASURE_ARGS_INVALID", f"{name} {label} must be an existing absolute directory")
-        sides[name] = (os.path.realpath(root), os.path.realpath(bin_dir))
-    for index in (0, 1):  # root, bin: the same directory under two names (a symlink, or a case-folding file system) is one directory
-        if os.path.samefile(sides["base"][index], sides["head"][index]):
-            raise BenchmarkGateError("MEASURE_ARGS_INVALID", "the two sides must not share a root or a bin directory")
-    if _inside(sides["base"][0], sides["head"][0]) or _inside(sides["head"][0], sides["base"][0]):
-        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "neither root may contain the other")
-    if not isinstance(target, str) or not target or "\0" in target or target.startswith("-"):
-        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "target must be a non-empty string that does not start with '-'")
-    if ini_path is not None and (not isinstance(ini_path, str) or not os.path.isabs(ini_path) or not os.path.isfile(ini_path)):
-        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "ini_path must be an existing absolute file")
+    sides, _benchmark_file = _check_sides(base_root, head_root, base_bin, head_bin, target, ini_path)
 
     base_ns: list[int] = []
     head_ns: list[int] = []
