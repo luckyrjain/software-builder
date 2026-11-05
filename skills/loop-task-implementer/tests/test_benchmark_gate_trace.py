@@ -16,6 +16,7 @@ import re
 import sys
 import textwrap
 import threading
+import tempfile
 import tokenize
 import types
 from pathlib import Path
@@ -758,3 +759,548 @@ def test_write_plugin_makes_one_read_only_file_and_verify_plugin_rejects_a_tampe
         bg._write_plugin(str(colon_dir))
     assert info.value.code == "MEASURE_FAILED"
     assert os.listdir(colon_dir) == []
+
+
+# --- T4b: trace_paired with a fake child --------------------------------------------------------------------------------------
+# The fake replaces ``bg._run_once``: it gets the real environment (so it reads BENCH_TRACE_OUT and BENCH_TRACE_NONCE from it, as the
+# plugin would) and writes the marker file it wants. No real pytest is launched here (T4c does that).
+
+class OsProxy:
+    """Stands in for ``bg.os`` so ``os.name`` or ``os.getuid`` can be changed for the module under test only."""
+
+    def __init__(self, **overrides):
+        self._overrides = overrides
+
+    def __getattr__(self, name):
+        return self._overrides[name] if name in self._overrides else getattr(os, name)
+
+
+def put(call, content):
+    data = content.encode("ascii") if isinstance(content, str) else content
+    with open(call.out, "wb") as handle:
+        handle.write(data)
+
+
+def good(count=5, version="3.12.1", impl="cpython"):
+    def behave(call):
+        put(call, f"BENCH_TRACE_LINES: {count} {version} {impl} {call.nonce}\n")
+    return behave
+
+
+def unavailable(token="no_monitoring", version="3.12.1", impl="cpython"):
+    def behave(call):
+        put(call, f"BENCH_TRACE_UNAVAILABLE: {token} {version} {impl} {call.nonce}\n")
+    return behave
+
+
+def valid_text(nonce, count=5):
+    return f"BENCH_TRACE_LINES: {count} 3.12.1 cpython {nonce}\n"
+
+
+class TraceFake:
+    """The fake ``bg._run_once``: records each call, then runs the side's behaviour (which may write the marker and return a run tuple)."""
+
+    def __init__(self, monkeypatch, roots, behaviors):
+        self.calls = []
+        self.sides = {os.path.realpath(str(path)): side for side, path in roots.items()}
+        self.behaviors = behaviors
+        monkeypatch.setattr(bg, "_run_once", self)
+
+    def __call__(self, argv, cwd, env, timeout):
+        side = self.sides[cwd]
+        call = types.SimpleNamespace(side=side, argv=argv, env=env, timeout=timeout, out=env["BENCH_TRACE_OUT"],
+                                     nonce=env["BENCH_TRACE_NONCE"], stdout=b"")
+        self.calls.append(call)
+        outcome = self.behaviors[side](call)
+        return outcome if outcome is not None else (0, 1, call.stdout, b"", False)
+
+
+def subdir(tmp_path, name):
+    path = tmp_path / name
+    path.mkdir()
+    return path
+
+
+def trace_setup(tmp_path, monkeypatch, base=None, head=None):
+    roots, bins = fake_sides(tmp_path)
+    fake = TraceFake(monkeypatch, roots, {"base": base or good(), "head": head or good()})
+
+    def run(**overrides):
+        kwargs = {"target": "bench.py::test_x", "timeout_seconds": 10, **overrides}
+        return bg.trace_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), **kwargs)
+
+    return fake, run, roots, bins
+
+
+def trace_error(run, **overrides):
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        run(**overrides)
+    return info.value
+
+
+def run_with_deadline(run, **overrides):
+    """Run ``run`` in a daemon thread and fail (instead of hanging the suite) when it does not finish within five seconds."""
+    box = {}
+
+    def target():
+        try:
+            box["result"] = run(**overrides)
+        except BaseException as exc:  # noqa: BLE001 - handed back to the test
+            box["error"] = exc
+
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    thread.join(5)
+    assert not thread.is_alive(), "trace_paired hung"
+    if "error" in box:
+        raise box["error"]
+    return box["result"]
+
+
+@posix_only
+def test_result_file_is_read_from_out_dir_after_scratch_is_removed(tmp_path, monkeypatch):
+    outs = []
+
+    def straight_base(call):
+        outs.append(call.out)
+        # rewrite the benchmark while the base child runs: the control-flow flag was fixed before the first run
+        (tmp_path / "base-root" / "bench.py").write_text("def test_x():\n    for i in range(3):\n        pass\n")
+        good(7)(call)
+
+    fake, run, roots, bins = trace_setup(tmp_path, monkeypatch, base=straight_base, head=good(7))
+    (roots["base"] / "bench.py").write_text("def test_x():\n    x = 1\n")
+    ini = tmp_path / "given.ini"
+    ini.write_text("[pytest]\n")
+    result = run(ini_path=str(ini))
+    assert result["base"] == 7 and result["head"] == 7
+    assert result["interpreter"] == "3.12.1 cpython"
+    assert result["body_has_control_flow"] is False
+    assert [c.side for c in fake.calls] == ["base", "head"]
+    assert fake.calls[0].nonce != fake.calls[1].nonce
+    for side, call in zip(("base", "head"), fake.calls):
+        assert result["argv"][side] == call.argv
+        assert result["argv"][side] == bg.pytest_argv(os.path.realpath(str(bins[side])), os.path.realpath(str(roots[side])),
+                                                      "bench.py::test_x", str(ini), plugins=(bg._TRACE_MODULE,))
+        scratch = os.path.dirname(call.env["HOME"])
+        assert not call.out.startswith(scratch + os.sep) and os.path.dirname(call.out) != scratch
+        assert os.path.basename(call.out) == "trace.out"
+        assert re.fullmatch(r"[0-9a-f]{32}", call.nonce)
+        assert not os.path.exists(os.path.dirname(call.out))  # the whole per-side work directory is gone
+        assert os.path.basename(call.env["PYTHONPATH"]).startswith("plugin-")
+    # the default ini lives in the side's work directory
+    fake2, run2, _, _ = trace_setup(subdir(tmp_path, "second"), monkeypatch)
+    result2 = run2()
+    argv = result2["argv"]["base"]
+    assert argv[argv.index("-c") + 1].endswith(os.sep + "empty.ini")
+    assert argv[argv.index("-p", argv.index("no:cacheprovider")) + 1] == bg._TRACE_MODULE
+    assert [c.side for c in fake2.calls] == ["base", "head"]
+
+
+@posix_only
+def test_a_looping_benchmark_reports_control_flow(tmp_path, monkeypatch):
+    _, run, roots, _ = trace_setup(tmp_path, monkeypatch)
+    (roots["base"] / "bench.py").write_text("def test_x():\n    for i in range(3):\n        pass\n")
+    assert run()["body_has_control_flow"] is True
+
+
+def valid_variants():
+    return {
+        "trailing text": lambda n: valid_text(n) + "extra\n",
+        "no newline": lambda n: valid_text(n)[:-1],
+        "hex count": lambda n: f"BENCH_TRACE_LINES: 12ab 3.12.1 cpython {n}\n",
+        "float count": lambda n: f"BENCH_TRACE_LINES: 5.5 3.12.1 cpython {n}\n",
+        "19 digits": lambda n: f"BENCH_TRACE_LINES: {10 ** 18} 3.12.1 cpython {n}\n",
+        "zero count": lambda n: valid_text(n, 0),
+        "wrong nonce": lambda n: valid_text("f" * 32),
+        "empty": lambda n: "",
+        "257 bytes": lambda n: valid_text(n) + "x" * (257 - len(valid_text(n))),
+        "unknown line": lambda n: f"BENCH_TRACE_OTHER: 5 3.12.1 cpython {n}\n",
+    }
+
+
+@posix_only
+@pytest.mark.parametrize("name", sorted(valid_variants()))
+def test_the_result_validation_matrix_content(tmp_path, monkeypatch, name):
+    make = valid_variants()[name]
+    _, run, _, _ = trace_setup(tmp_path, monkeypatch, base=lambda call: put(call, make(call.nonce)))
+    error = trace_error(run)
+    assert (error.code, error.side, error.phase, error.partial) == ("TRACE_MISMATCH", "base", "trace", None)
+    assert error.detail == "no trace result"
+
+
+@posix_only
+def test_a_valid_result_is_accepted_up_to_the_size_cap(tmp_path, monkeypatch):
+    _, run, _, _ = trace_setup(tmp_path, monkeypatch, base=lambda call: put(call, valid_text(call.nonce, 10 ** 17)),
+                               head=lambda call: put(call, valid_text(call.nonce, 10 ** 17)))
+    assert run()["base"] == 10 ** 17
+
+
+def structural_rows():
+    def symlink(call):
+        real = Path(call.out).parent.parent / "elsewhere"
+        real.write_text(valid_text(call.nonce))
+        os.symlink(real, call.out)
+
+    def hardlink(call):
+        put(call, valid_text(call.nonce))
+        os.link(call.out, call.out + ".twin")
+
+    def failed_marker(call):
+        good()(call)
+        put(SimpleCall(call.out + ".failed"), "failed\n")
+
+    def dangling_failed(call):
+        good()(call)
+        os.symlink("/nonexistent-bench-trace-target", call.out + ".failed")
+
+    def only_failed(call):
+        put(SimpleCall(call.out + ".failed"), "failed\n")
+
+    return {
+        "symlink": (symlink, "no trace result"),
+        "hardlink": (hardlink, "no trace result"),
+        "failed marker": (failed_marker, "plugin reported failure"),
+        "dangling failed symlink": (dangling_failed, "plugin reported failure"),
+        "only failed": (only_failed, "plugin reported failure"),
+        "absent": (lambda call: None, "no trace result"),
+    }
+
+
+class SimpleCall:
+    def __init__(self, out):
+        self.out = out
+
+
+@posix_only
+@pytest.mark.parametrize("name", sorted(structural_rows()))
+def test_the_result_validation_matrix_structure(tmp_path, monkeypatch, name):
+    behave, detail = structural_rows()[name]
+    _, run, _, _ = trace_setup(tmp_path, monkeypatch, base=behave)
+    error = trace_error(run)
+    assert (error.code, error.side, error.phase, error.partial) == ("TRACE_MISMATCH", "base", "trace", None)
+    assert error.detail == detail
+
+
+@posix_only
+def test_the_result_validation_matrix_wrong_uid(tmp_path, monkeypatch):
+    _, run, _, _ = trace_setup(tmp_path, monkeypatch)
+    monkeypatch.setattr(bg, "os", OsProxy(getuid=lambda: os.getuid() + 1))
+    error = trace_error(run)
+    assert (error.code, error.side, error.detail) == ("TRACE_MISMATCH", "base", "no trace result")
+
+
+@posix_only
+def test_a_fifo_at_the_out_path_is_rejected_without_hanging(tmp_path, monkeypatch):
+    paths = []
+
+    def fifo(call):
+        os.mkfifo(call.out)
+        paths.append(call.out)
+
+    _, run, _, _ = trace_setup(tmp_path, monkeypatch, base=fifo)
+    try:
+        with pytest.raises(bg.BenchmarkGateError) as info:
+            run_with_deadline(run)
+    finally:
+        for path in paths:  # unblock a reader that is stuck in open(), if the implementation hangs
+            try:
+                os.close(os.open(path, os.O_NONBLOCK | os.O_WRONLY))
+            except OSError:
+                pass
+    assert (info.value.code, info.value.side, info.value.detail) == ("TRACE_MISMATCH", "base", "no trace result")
+
+
+@posix_only
+def test_a_directory_at_the_out_path_is_rejected_without_hanging(tmp_path, monkeypatch):
+    _, run, _, _ = trace_setup(tmp_path, monkeypatch, base=lambda call: os.mkdir(call.out))
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        run_with_deadline(run)
+    assert (info.value.code, info.value.side, info.value.detail) == ("TRACE_MISMATCH", "base", "no trace result")
+
+
+@posix_only
+@pytest.mark.parametrize("base,head,code,side,needle", [
+    (unavailable("no_monitoring"), good(), "TRACE_MISMATCH", "base", "unavailable on one side only"),
+    (good(), unavailable("no_monitoring"), "TRACE_MISMATCH", "head", "unavailable on one side only"),
+    (unavailable("no_monitoring"), unavailable("tool_in_use"), "TRACE_MISMATCH", None, "no_monitoring"),
+    (unavailable("tool_in_use"), unavailable("tool_in_use"), "TRACE_UNAVAILABLE", None, "tool_in_use"),
+    (unavailable("no_monitoring"), unavailable("no_monitoring"), "TRACE_UNAVAILABLE", None, "no_monitoring"),
+    (unavailable("tool_in_use", "3.12.1"), unavailable("tool_in_use", "3.12.2"), "TRACE_MISMATCH", None, "3.12.2"),
+    (good(5, "3.12.1"), good(5, "3.13.0"), "TRACE_MISMATCH", None, "3.13.0"),
+    (good(5), good(6), "TRACE_MISMATCH", None, "5"),
+])
+def test_the_unavailable_decision_table(tmp_path, monkeypatch, base, head, code, side, needle):
+    _, run, _, _ = trace_setup(tmp_path, monkeypatch, base=base, head=head)
+    error = trace_error(run)
+    assert (error.code, error.side, error.phase, error.partial) == (code, side, "trace", None)
+    assert needle in error.detail
+
+
+@posix_only
+def test_the_decision_table_details_name_both_values(tmp_path, monkeypatch):
+    _, run, _, _ = trace_setup(tmp_path, monkeypatch, base=good(5, "3.12.1"), head=good(5, "3.13.0", "pypy"))
+    detail = trace_error(run).detail
+    assert "3.12.1 cpython" in detail and "3.13.0 pypy" in detail
+    _, run, _, _ = trace_setup(subdir(tmp_path, "b"), monkeypatch, base=good(5), head=good(6))
+    detail = trace_error(run).detail
+    assert "5" in detail and "6" in detail
+
+
+@posix_only
+def test_a_base_unavailable_result_is_overridden_by_a_head_hard_failure(tmp_path, monkeypatch):
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch, base=unavailable(), head=lambda call: (3, 1, b"", b"boom", False))
+    error = trace_error(run)
+    assert (error.code, error.side, error.phase, error.partial) == ("TRACE_MISMATCH", "head", "trace", None)
+    assert error.detail.startswith("nonzero:")
+    assert [c.side for c in fake.calls] == ["base", "head"]
+
+
+@posix_only
+def test_a_hard_failure_stops_before_the_second_side_and_names_the_side(tmp_path, monkeypatch):
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch, base=lambda call: (1, 1, b"", b"", False))
+    error = trace_error(run)
+    assert (error.code, error.side, error.phase) == ("TRACE_MISMATCH", "base", "trace")
+    assert [c.side for c in fake.calls] == ["base"]
+    fake, run, _, _ = trace_setup(subdir(tmp_path, "h"), monkeypatch, head=lambda call: (1, 1, b"", b"", False))
+    error = trace_error(run)
+    assert (error.code, error.side) == ("TRACE_MISMATCH", "head")
+    assert [c.side for c in fake.calls] == ["base", "head"]
+
+
+def spawn_failure(call):
+    raise bg._SpawnFailed("no python")
+
+
+@posix_only
+@pytest.mark.parametrize("side", ["base", "head"])
+@pytest.mark.parametrize("kind,outcome", [
+    ("timeout", lambda call: (None, 1, b"", b"", False)),
+    ("nonzero", lambda call: (2, 1, b"", b"it broke", False)),
+    ("nonzero", lambda call: (-9, 1, b"", b"", False)),
+    ("oversize", lambda call: (0, 1, b"", b"", True)),
+    ("spawn", spawn_failure),
+])
+def test_each_trace_failure_kind_is_trace_mismatch_with_the_kind_prefix(tmp_path, monkeypatch, side, kind, outcome):
+    behaviors = {"base": good(), "head": good()}
+    behaviors[side] = outcome
+    _, run, _, _ = trace_setup(tmp_path, monkeypatch, **behaviors)
+    error = trace_error(run, timeout_seconds=4)
+    assert (error.code, error.side, error.phase, error.partial) == ("TRACE_MISMATCH", side, "trace", None)
+    assert error.detail.startswith(kind + ":")
+    if kind == "timeout":
+        assert error.detail.endswith(" (3x the per-run timeout)")
+        assert "12 s" in error.detail
+
+
+@posix_only
+@pytest.mark.parametrize("timeout_seconds", [7, 2.5, 1])
+def test_trace_timeout_argument_is_three_times_timeout_seconds(tmp_path, monkeypatch, timeout_seconds):
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch)
+    run(timeout_seconds=timeout_seconds)
+    assert [c.timeout for c in fake.calls] == [3 * timeout_seconds, 3 * timeout_seconds]
+
+
+@posix_only
+def test_validation_precedence_platform_then_timeout_then_sides_and_phase_none_for_them(tmp_path, monkeypatch):
+    fake, run, roots, bins = trace_setup(tmp_path, monkeypatch)
+    good_args = (str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]))
+
+    def attempt(args=good_args, target="bench.py::t", timeout=10, **kw):
+        with pytest.raises(bg.BenchmarkGateError) as info:
+            bg.trace_paired(*args, target, timeout_seconds=timeout, **kw)
+        error = info.value
+        assert (error.side, error.phase, error.partial) == (None, None, None)
+        return error
+
+    bad_args = ("relative", *good_args[1:])
+    with monkeypatch.context() as patch:
+        patch.setattr(bg, "os", OsProxy(name="nt"))
+        assert attempt(args=bad_args, timeout=0).code == "UNSUPPORTED_PLATFORM"
+    timeout_error = attempt(args=bad_args, timeout=0)
+    assert timeout_error.code == "MEASURE_ARGS_INVALID" and "timeout_seconds" in timeout_error.detail
+    assert attempt(args=bad_args, target="/abs.py").detail == "base root must be an existing absolute directory"
+    assert attempt(target="/abs.py").detail == bg._TARGET_MESSAGE
+    assert "ini_path" in attempt(ini_path="relative.ini").detail
+    assert fake.calls == []
+
+
+@posix_only
+def test_every_error_after_validation_carries_phase_trace(tmp_path, monkeypatch):
+    _, run, _, _ = trace_setup(tmp_path, monkeypatch, base=unavailable("tool_in_use"), head=unavailable("tool_in_use"))
+    error = trace_error(run)
+    assert (error.code, error.side, error.phase, error.partial) == ("TRACE_UNAVAILABLE", None, "trace", None)
+    _, run, _, _ = trace_setup(subdir(tmp_path, "m"), monkeypatch, head=good(9))
+    error = trace_error(run)
+    assert (error.code, error.side, error.phase, error.partial) == ("TRACE_MISMATCH", None, "trace", None)
+    _, run, _, _ = trace_setup(subdir(tmp_path, "f"), monkeypatch)
+
+    def refuse(plugin_dir):
+        raise bg.BenchmarkGateError("MEASURE_FAILED", "plugin write failed: nope")
+
+    monkeypatch.setattr(bg, "_write_plugin", refuse)
+    error = trace_error(run)
+    assert (error.code, error.side, error.phase, error.partial) == ("MEASURE_FAILED", None, "trace", None)
+    assert error.detail == "plugin write failed: nope"
+
+
+def assert_harness_fault(error, needle=None):
+    assert (error.code, error.side, error.phase, error.partial) == ("MEASURE_FAILED", None, "trace", None)
+    if needle:
+        assert needle in error.detail
+
+
+@posix_only
+def test_harness_faults_are_measure_failed_with_phase_trace_no_side_and_no_partial(tmp_path, monkeypatch):
+    real_mkdtemp = tempfile.mkdtemp
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch)
+
+    # a failing mkdtemp for the out directory
+    with monkeypatch.context() as patch:
+        def mkdtemp(suffix=None, prefix=None, dir=None):
+            if prefix == "out-":
+                raise OSError("no space")
+            return real_mkdtemp(suffix, prefix, dir)
+
+        patch.setattr(tempfile, "mkdtemp", mkdtemp)
+        assert_harness_fault(trace_error(run), "OSError: no space")
+
+    # an OSError out of _write_plugin
+    with monkeypatch.context() as patch:
+        def write_plugin(plugin_dir):
+            raise OSError("read-only file system")
+
+        patch.setattr(bg, "_write_plugin", write_plugin)
+        assert_harness_fault(trace_error(run), "read-only file system")
+
+    # a failing per-side work directory: the first side, then (after one good side) the second
+    for fail_on in (1, 2):
+        with monkeypatch.context() as patch:
+            seen = []
+
+            def mkdtemp_work(suffix=None, prefix=None, dir=None):
+                if prefix == "bench-trace-":
+                    seen.append(prefix)
+                    if len(seen) == fail_on:
+                        raise OSError("no space for work")
+                return real_mkdtemp(suffix, prefix, dir)
+
+            patch.setattr(tempfile, "mkdtemp", mkdtemp_work)
+            assert_harness_fault(trace_error(run), "no space for work")
+    assert [c.side for c in fake.calls] == ["base"]  # only the fail_on == 2 round got as far as a child run
+
+    # a path separator in the temp directory name
+    unique = tmp_path / "a:b"
+    unique.mkdir()
+    before = len(fake.calls)
+    with monkeypatch.context() as patch:
+        patch.setattr(tempfile, "tempdir", str(unique))
+        assert_harness_fault(trace_error(run), "path separator")
+    assert len(fake.calls) == before
+
+
+@posix_only
+def test_a_tampered_plugin_is_caught_after_the_argv_builder_runs(tmp_path, monkeypatch):
+    import glob
+
+    unique = tmp_path / "unique-temp"
+    unique.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(unique))
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch)
+    rewritten = []
+
+    def build(side, bin_dir, root, target):
+        for path in glob.glob(str(unique / "bench-trace-*" / "plugin-*" / "bench_trace_plugin.py")):
+            os.chmod(path, 0o600)
+            Path(path).write_text("# tampered\n")
+            rewritten.append(path)
+        return [sys.executable, "-c", "pass"]
+
+    error = trace_error(run, argv_builder=build)
+    assert_harness_fault(error, "plugin file hash mismatch")
+    assert len(rewritten) == 1
+    assert fake.calls == []
+
+
+@posix_only
+def test_interpreters_must_match_across_sides(tmp_path, monkeypatch):
+    for index, (base, head) in enumerate([(("3.12.1", "cpython"), ("3.12.2", "cpython")), (("3.12.1", "cpython"), ("3.12.1", "pypy"))]):
+        _, run, _, _ = trace_setup(subdir(tmp_path, str(index)), monkeypatch, base=good(5, *base), head=good(5, *head))
+        error = trace_error(run)
+        assert (error.code, error.side) == ("TRACE_MISMATCH", None)
+        assert " ".join(base) in error.detail and " ".join(head) in error.detail
+
+
+@posix_only
+def test_the_digest_is_not_checked_and_stdout_is_not_parsed(tmp_path, monkeypatch):
+    def noisy(call):
+        call.stdout = b"BENCH_RESULT_DIGEST: not-a-digest\nBENCH_TRACE_LINES: 999 3.12.1 cpython " + call.nonce.encode() + b"\n"
+        good(4)(call)
+
+    _, run, _, _ = trace_setup(tmp_path, monkeypatch, base=noisy, head=noisy)
+    result = run()
+    assert (result["base"], result["head"]) == (4, 4)
+
+    def forged_only(call):
+        call.stdout = b"BENCH_TRACE_LINES: 999 3.12.1 cpython " + call.nonce.encode() + b"\n"
+
+    _, run, _, _ = trace_setup(subdir(tmp_path, "f"), monkeypatch, base=forged_only)
+    assert trace_error(run).detail == "no trace result"
+
+
+def control_flow_cases():
+    nested_only = "def test_x():\n    f = lambda: [i for i in range(3)]\n    def g():\n        for i in f():\n            pass\n    return g\n"
+    cases = {
+        "straight": ("def test_x():\n    x = 1\n    assert x\n", "bench.py::test_x", False),
+        "for": ("def test_x():\n    for i in range(3):\n        pass\n", "bench.py::test_x", True),
+        "async for": ("async def test_x():\n    async for i in y:\n        pass\n", "bench.py::test_x", True),
+        "while": ("def test_x():\n    while False:\n        pass\n", "bench.py::test_x", True),
+        "if": ("def test_x():\n    if 1:\n        pass\n", "bench.py::test_x", True),
+        "ifexp": ("def test_x():\n    x = 1 if 2 else 3\n", "bench.py::test_x", True),
+        "try": ("def test_x():\n    try:\n        pass\n    except Exception:\n        pass\n", "bench.py::test_x", True),
+        "boolop": ("def test_x(a, b):\n    x = a or b\n", "bench.py::test_x", True),
+        "listcomp": ("def test_x():\n    x = [i for i in range(3)]\n", "bench.py::test_x", True),
+        "setcomp": ("def test_x():\n    x = {i for i in range(3)}\n", "bench.py::test_x", True),
+        "dictcomp": ("def test_x():\n    x = {i: i for i in range(3)}\n", "bench.py::test_x", True),
+        "match": ("def test_x(a):\n    match a:\n        case 1:\n            pass\n", "bench.py::test_x", True),
+        "nested lambda and def only": (nested_only, "bench.py::test_x", False),
+        "generator expression only": ("def test_x():\n    x = sum(i for i in range(3))\n", "bench.py::test_x", False),
+        "nested async def only": ("def test_x():\n    async def g():\n        for i in y:\n            pass\n", "bench.py::test_x", False),
+        "no test function": ("def helper():\n    for i in range(3):\n        pass\n", "bench.py", False),
+        "no target name picks the first test": ("def helper():\n    pass\n\ndef test_a():\n    for i in range(3):\n        pass\n", "bench.py", True),
+        "name picks the straight one": ("def test_a():\n    for i in range(3):\n        pass\n\ndef test_b():\n    pass\n", "bench.py::test_b", False),
+        "name picks the looping one": ("def test_a():\n    pass\n\ndef test_b():\n    for i in range(3):\n        pass\n", "bench.py::test_b", True),
+        "no name takes the first": ("def test_a():\n    pass\n\ndef test_b():\n    for i in range(3):\n        pass\n", "bench.py", False),
+        "absent name falls back": ("def test_a():\n    for i in range(3):\n        pass\n", "bench.py::test_missing", True),
+        "method target falls back": ("def test_a():\n    pass\n\nclass TestC:\n    def test_m(self):\n        for i in range(3):\n            pass\n",
+                                     "bench.py::TestC::test_m", False),
+        "class target falls back": ("def test_a():\n    pass\n\nclass TestC:\n    def test_m(self):\n        for i in range(3):\n            pass\n",
+                                    "bench.py::TestC", False),
+        "syntax error": ("def test_x(:\n", "bench.py::test_x", False),
+        "NUL bytes": (b"def test_x():\n    for i in range(3):\n        pass\n\x00\n", "bench.py::test_x", False),
+        "over 16 KiB": ("def test_x():\n    for i in range(3):\n        pass\n" + "#" * 17000 + "\n", "bench.py::test_x", False),
+        "deeply nested": ("def test_x():\n    x = " + "(" * 400 + "1" + ")" * 400 + "\n    for i in x:\n        pass\n", "bench.py::test_x", False),
+    }
+    return cases
+
+
+@posix_only
+@pytest.mark.parametrize("name", sorted(control_flow_cases()))
+def test_body_has_control_flow(tmp_path, monkeypatch, name):
+    source, target, expected = control_flow_cases()[name]
+    _, run, roots, _ = trace_setup(tmp_path, monkeypatch)
+    path = roots["base"] / "bench.py"
+    path.write_bytes(source if isinstance(source, bytes) else source.encode("ascii"))
+    assert run(target=target)["body_has_control_flow"] is expected
+
+
+@posix_only
+def test_body_has_control_flow_is_false_for_a_missing_file_a_symlink_and_a_fifo(tmp_path, monkeypatch):
+    _, run, roots, _ = trace_setup(tmp_path, monkeypatch)
+    assert run()["body_has_control_flow"] is False  # missing
+    real = tmp_path / "real.py"
+    real.write_text("def test_x():\n    for i in range(3):\n        pass\n")
+    os.symlink(real, roots["base"] / "bench.py")
+    assert run()["body_has_control_flow"] is False  # O_NOFOLLOW
+    os.unlink(roots["base"] / "bench.py")
+    os.mkfifo(roots["base"] / "bench.py")
+    assert run_with_deadline(run)["body_has_control_flow"] is False

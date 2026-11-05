@@ -3727,6 +3727,179 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
         raise error from exc
 
 
+_TRACE_LINES_RE = re.compile(r"\ABENCH_TRACE_LINES: ([0-9]{1,18}) ([0-9]+\.[0-9]+\.[0-9]+) ([a-z]+) ([0-9a-f]{32})\n\Z")
+_TRACE_UNAVAILABLE_RE = re.compile(
+    r"\ABENCH_TRACE_UNAVAILABLE: (no_monitoring|tool_in_use) ([0-9]+\.[0-9]+\.[0-9]+) ([a-z]+) ([0-9a-f]{32})\n\Z")
+_TRACE_RESULT_MAX = 256  # a result line is about 60 bytes
+_BODY_SOURCE_MAX = 16 * 1024
+_CONTROL_FLOW_NODES = tuple(getattr(ast, name) for name in (
+    "For", "AsyncFor", "While", "If", "IfExp", "Try", "TryStar", "Match", "BoolOp", "ListComp", "SetComp", "DictComp") if hasattr(ast, name))
+_NOT_ENTERED_NODES = (ast.Lambda, ast.FunctionDef, ast.AsyncFunctionDef, ast.GeneratorExp)  # the trace cannot see into these
+
+
+def _read_regular_file(path: str, limit: int, owner_only: bool) -> bytes | None:
+    """At most ``limit`` bytes of the regular file at ``path`` (never followed through a symlink, never blocking on a FIFO), or ``None``
+    when it is absent, not a regular file, longer than ``limit`` or unreadable. ``owner_only`` also needs a single link and our uid.
+    The checks are made on the open descriptor, so a swap after the ``open`` cannot change what was checked."""
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    if owner_only:
+        flags |= os.O_NOCTTY | os.O_CLOEXEC
+    try:
+        fd = os.open(path, flags)
+    except OSError:
+        return None
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > limit or (owner_only and (info.st_nlink != 1 or info.st_uid != os.getuid())):
+            return None
+        chunks: list[bytes] = []
+        total = 0
+        while total <= limit:
+            chunk = os.read(fd, limit + 1 - total)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+        data = b"".join(chunks)
+        return data if len(data) <= limit else None
+    except OSError:
+        return None
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+
+
+def _body_has_control_flow(root: str, benchmark_file: str, target: str) -> bool:
+    """Advisory: does the benchmark's test body loop or branch (what the trace can discriminate)? Reads the base root's benchmark file,
+    picks the function the target names (else the first module-level ``test*`` function) and walks it without entering nested lambdas,
+    functions or generator expressions. Every failure to read or parse is ``False``."""
+    try:
+        data = _read_regular_file(os.path.join(root, benchmark_file), _BODY_SOURCE_MAX, False)
+        if data is None:
+            return False
+        functions = [node for node in ast.parse(data).body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        parts = target.split("::")
+        chosen = [f for f in functions if len(parts) == 2 and f.name == parts[1]] or [f for f in functions if f.name.startswith("test")]
+        if not chosen:
+            return False
+        stack: list[ast.AST] = list(chosen[0].body)
+        while stack:
+            node = stack.pop()
+            if isinstance(node, _NOT_ENTERED_NODES):
+                continue
+            if isinstance(node, _CONTROL_FLOW_NODES):
+                return True
+            stack.extend(ast.iter_child_nodes(node))
+        return False
+    except Exception:  # noqa: BLE001 - SyntaxError, ValueError, RecursionError, MemoryError, OSError: advisory only
+        return False
+
+
+def _trace_result(raw: bytes | None, nonce: str) -> tuple[str, str, str] | None:
+    """``(kind, value, "<version> <impl>")`` for a well-formed result of THIS run (``kind`` is ``lines`` with the count, or ``unavailable``
+    with the token), else ``None``."""
+    if raw is None:
+        return None
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError:
+        return None
+    found = _TRACE_LINES_RE.match(text)
+    if found:
+        if int(found.group(1)) == 0 or found.group(4) != nonce:
+            return None
+        return "lines", found.group(1), f"{found.group(2)} {found.group(3)}"
+    found = _TRACE_UNAVAILABLE_RE.match(text)
+    if found and found.group(4) == nonce:
+        return "unavailable", found.group(1), f"{found.group(2)} {found.group(3)}"
+    return None
+
+
+def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, target: str, *, timeout_seconds: float,
+                 argv_builder=None, ini_path: str | None = None) -> dict:
+    """One untimed, traced run per side (base, then head) and a comparison of what the harness-owned plugin counted in the test body.
+    Returns ``{"base": int, "head": int, "interpreter": "<version> <impl>", "argv": {"base": [...], "head": [...]},
+    "body_has_control_flow": bool}`` (the last is advisory: computed from the base root's benchmark file before the first run).
+
+    Validation is C4d-1's (``UNSUPPORTED_PLATFORM``, then the timeout, then the sides, target and ini: ``MEASURE_ARGS_INVALID``), with
+    ``phase`` ``None``. After it every error has ``phase == "trace"`` and ``partial`` ``None``. One rule: a fault of the harness's own
+    machinery (a temp directory, the plugin file, its hash, a path separator in the directory) is ``MEASURE_FAILED`` (``side`` ``None``);
+    what the child did (a failed run, a missing or malformed result, ``.failed``, differing counts or interpreters) is
+    ``TRACE_MISMATCH``, or ``TRACE_UNAVAILABLE`` when both sides report the same unavailability. A hard failure on either side raises at
+    once. The run's timeout is ``_TRACE_TIMEOUT_FACTOR * timeout_seconds``. The digest is not checked and stdout is not parsed.
+    ``argv_builder(side, bin_dir, root, target) -> argv`` is the test seam."""
+    if os.name != "posix":
+        raise BenchmarkGateError("UNSUPPORTED_PLATFORM", "the harness needs POSIX process groups")
+    _check_timeout(timeout_seconds)
+    sides, benchmark_file = _check_sides(base_root, head_root, base_bin, head_bin, target, ini_path)
+
+    def fail(code: str, detail: str, side: str | None = None) -> BenchmarkGateError:
+        error = BenchmarkGateError(code, detail)
+        error.side, error.phase, error.partial = side, "trace", None
+        return error
+
+    def run_side(side: str) -> tuple[tuple[str, str, str], list[str]]:
+        root, bin_dir = sides[side]
+        with tempfile.TemporaryDirectory(prefix="bench-trace-") as work:
+            ini = ini_path
+            if ini is None:
+                ini = os.path.join(work, "empty.ini")
+                with open(ini, "w", encoding="ascii") as handle:
+                    handle.write(_EMPTY_INI)
+            scratch, env = _prepare_run(side, bin_dir, work, 1)
+            plugin_dir = tempfile.mkdtemp(dir=work, prefix="plugin-")
+            out_dir = tempfile.mkdtemp(dir=work, prefix="out-")  # a sibling of scratch: _execute removes scratch before the result is read
+            out_path = os.path.join(out_dir, "trace.out")
+            nonce = os.urandom(16).hex()
+            plugin_path = _write_plugin(plugin_dir)
+            argv = argv_builder(side, bin_dir, root, target) if argv_builder else pytest_argv(bin_dir, root, target, ini, plugins=(_TRACE_MODULE,))
+            env = trace_env(env, plugin_dir, benchmark_file, out_path, nonce)
+            _verify_plugin(plugin_path)  # last, right before the child starts: nothing the argv builder did can slip past it
+
+            def adapt(kind: str, detail: str) -> BenchmarkGateError:
+                if kind == "timeout":
+                    detail += f" ({_TRACE_TIMEOUT_FACTOR}x the per-run timeout)"
+                return fail("TRACE_MISMATCH", f"{kind}: {detail}", side)
+
+            _execute(side, argv, root, scratch, env, _TRACE_TIMEOUT_FACTOR * timeout_seconds, adapt)
+            if os.path.lexists(out_path + ".failed"):
+                raise fail("TRACE_MISMATCH", "plugin reported failure", side)
+            result = _trace_result(_read_regular_file(out_path, _TRACE_RESULT_MAX, True), nonce)
+            if result is None:
+                raise fail("TRACE_MISMATCH", "no trace result", side)
+            return result, argv
+
+    has_control_flow = _body_has_control_flow(sides["base"][0], benchmark_file, target)
+    results: dict[str, tuple[str, str, str]] = {}
+    argvs: dict[str, list[str]] = {}
+    try:
+        for side in ("base", "head"):
+            results[side], argvs[side] = run_side(side)
+    except BenchmarkGateError as exc:  # raised by _write_plugin / _verify_plugin, or by `fail`
+        if exc.phase is None:
+            exc.side, exc.phase, exc.partial = None, "trace", None
+        raise
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:  # the harness's own machinery, outside the child
+        raise fail("MEASURE_FAILED", f"{type(exc).__name__}: {exc}") from exc
+
+    (base_kind, base_value, base_interp), (head_kind, head_value, head_interp) = results["base"], results["head"]
+    if (base_kind == "unavailable") != (head_kind == "unavailable"):
+        raise fail("TRACE_MISMATCH", "unavailable on one side only", "base" if base_kind == "unavailable" else "head")
+    if base_kind == "unavailable":
+        if base_value != head_value:
+            raise fail("TRACE_MISMATCH", f"unavailable for different reasons: base {base_value}, head {head_value}")
+        if base_interp != head_interp:
+            raise fail("TRACE_MISMATCH", f"{base_value} on different interpreters: base {base_interp}, head {head_interp}")
+        raise fail("TRACE_UNAVAILABLE", f"{base_value} ({base_interp})")
+    if base_interp != head_interp:
+        raise fail("TRACE_MISMATCH", f"different interpreters: base {base_interp}, head {head_interp}")
+    if int(base_value) != int(head_value):
+        raise fail("TRACE_MISMATCH", f"line counts differ: base {int(base_value)}, head {int(head_value)}")
+    return {"base": int(base_value), "head": int(head_value), "interpreter": base_interp, "argv": argvs, "body_has_control_flow": has_control_flow}
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
