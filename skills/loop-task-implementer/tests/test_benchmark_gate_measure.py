@@ -98,6 +98,28 @@ def test_pytest_argv_is_the_designed_argv():
                     "-c", "/w/empty.ini", "--rootdir", "/r", "-p", "no:cacheprovider", "benchmarks/test_b.py::test_b"]
 
 
+def test_trace_env_is_a_copy_with_four_keys():
+    env = {"PATH": "/x", "HOME": "/h"}
+    out = bg.trace_env(env, "/plug", "benchmarks/b.py", "/out/trace.json", "n0nce")
+    assert out is not env and env == {"PATH": "/x", "HOME": "/h"}
+    assert out == {**env, "PYTHONPATH": "/plug", "BENCH_TRACE_FILE": "benchmarks/b.py", "BENCH_TRACE_OUT": "/out/trace.json",
+                   "BENCH_TRACE_NONCE": "n0nce"}
+
+
+def test_pytest_argv_plugins_keyword_only_validated_and_placed_before_the_target():
+    base = bg.pytest_argv("/v/bin", "/r", "t.py::t", "/w/e.ini")
+    for plugins in (("bench_trace_plugin",), ["bench_trace_plugin"]):
+        argv = bg.pytest_argv("/v/bin", "/r", "t.py::t", "/w/e.ini", plugins=plugins)
+        assert argv[-5:] == ["-p", "no:cacheprovider", "-p", "bench_trace_plugin", "t.py::t"]
+        assert argv[:-3] == base[:-1]
+    assert bg.pytest_argv("/v/bin", "/r", "t.py::t", "/w/e.ini", plugins=()) == base
+    with pytest.raises(TypeError):
+        bg.pytest_argv("/v/bin", "/r", "t.py::t", "/w/e.ini", ("bench_trace_plugin",))
+    for bad in ("abc", "bench_trace_plugin", ("os",), ["x;y"], ("bench_trace_plugin", "os"), 5, None):
+        with pytest.raises(ValueError):
+            bg.pytest_argv("/v/bin", "/r", "t.py::t", "/w/e.ini", plugins=bad)
+
+
 # --- measure_paired with injected children --------------------------------------------------------------------------------
 
 def fake_sides(tmp_path):

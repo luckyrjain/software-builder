@@ -2655,7 +2655,9 @@ _PROTECTED_PREFIXES_SUFFIXES = (  # (prefix, suffix) of the casefolded basename
 )
 _STARTUP_MODULES = frozenset({"sitecustomize", "usercustomize"})
 _STDLIB_FOLDED = frozenset(name.casefold() for name in sys.stdlib_module_names)
-_TRIPWIRE_TOKENS = (b"PYTEST_CURRENT_TEST", b"BENCH_RESULT_DIGEST", b"BENCH_TRACE_LINES", b"os._exit", b"sys.argv")  # + the benchmark's path
+_TRIPWIRE_TOKENS = (b"PYTEST_CURRENT_TEST", b"BENCH_RESULT_DIGEST", b"BENCH_TRACE_LINES", b"os._exit", b"sys.argv",
+                    b"BENCH_TRACE_", b"bench_trace_plugin", b"sys.monitoring", b"import monitoring", b"orig_argv",
+                    b"/proc/self/cmdline", b"/proc/self/environ")  # + the benchmark's path
 _MODULE_FILE_RE = re.compile(r"([^.]+)(?:\.[^.]+)?\.(?:py|pyc|so|pyd)")  # `json.py`, a sourceless `json.pyc` (imported straight from the directory), `json.so`, `json.cpython-312-darwin.so`, `json.abi3.so`
 _GIT_ESCAPES = {b"a": b"\a", b"b": b"\b", b"t": b"\t", b"n": b"\n", b"v": b"\v", b"f": b"\f", b"r": b"\r", b'"': b'"', b"\\": b"\\"}
 _HUNK_RE = re.compile(rb"@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
@@ -2865,7 +2867,9 @@ def _added_lines(patch: bytes):
 
 def token_tripwire(repo: str | os.PathLike, base_commit: str, head_commit: str, benchmark_path: str) -> None:
     """Raise `BENCHMARK_AWARE_CODE` if a line ADDED between the commits, in any file other than the benchmark, contains one of
-    `PYTEST_CURRENT_TEST`, `BENCH_RESULT_DIGEST`, `BENCH_TRACE_LINES`, `os._exit`, `sys.argv` or the benchmark's full path:
+    `PYTEST_CURRENT_TEST`, `BENCH_RESULT_DIGEST`, `BENCH_TRACE_LINES`, `os._exit`, `sys.argv`, `BENCH_TRACE_` (the trace
+    plugin's environment prefix), `bench_trace_plugin`, `sys.monitoring`, `import monitoring`, `orig_argv`, `/proc/self/cmdline`,
+    `/proc/self/environ` or the benchmark's full path:
     what a fix needs to behave differently when it is being measured, or to forge the harness's output. Added lines come from
     a zero-context patch of the two trees (binary files are read as text, no rename detection, no textconv or external diff). A TRIPWIRE: a
     token built at run time passes, and a line that moved is still an added line. The detail counts the `token in path` pairs and names the
@@ -3162,6 +3166,8 @@ _STDERR_TAIL = 2048
 _MIN_BASE_NS = 2_000_000_000
 _DIGEST_RE = re.compile(rb"BENCH_RESULT_DIGEST: ([0-9a-f]{64})(?![0-9a-f])")
 _EMPTY_INI = "[pytest]\n"
+_TRACE_MODULE = "bench_trace_plugin"  # the one pytest plugin the gate may load (C4d-2): `-p bench_trace_plugin`, found through PYTHONPATH
+_TRACE_TIMEOUT_FACTOR = 3  # the traced run may take this many times the per-run timeout
 
 
 def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int, repeats: int) -> list[str]:
@@ -3206,13 +3212,24 @@ def side_env(bin_dir: str, scratch: str) -> dict[str, str]:
     }
 
 
-def pytest_argv(bin_dir: str, root: str, target: str, ini: str) -> list[str]:
+def trace_env(env: dict[str, str], plugin_dir: str, benchmark_file: str, out_path: str, nonce: str) -> dict[str, str]:
+    """A COPY of ``env`` plus the four keys the trace plugin reads: ``PYTHONPATH`` (``plugin_dir``), ``BENCH_TRACE_FILE``,
+    ``BENCH_TRACE_OUT`` and ``BENCH_TRACE_NONCE``. ``env`` is not changed."""
+    return {**env, "PYTHONPATH": plugin_dir, "BENCH_TRACE_FILE": benchmark_file, "BENCH_TRACE_OUT": out_path, "BENCH_TRACE_NONCE": nonce}
+
+
+def pytest_argv(bin_dir: str, root: str, target: str, ini: str, *, plugins: tuple[str, ...] | list[str] = ()) -> list[str]:
     """The harness argv, built from the gate and never from the command string. ``-P`` drops the cwd entry from ``sys.path`` so a head-added
     ``pytest.py``, ``hashlib.py`` or ``statistics.py`` cannot shadow (the code under test must therefore be INSTALLED into the side's venv);
-    ``-s`` lets the digest through; an empty harness-owned ini and ``--noconftest`` keep the tree's configuration out."""
+    ``-s`` lets the digest through; an empty harness-owned ini and ``--noconftest`` keep the tree's configuration out.
+    ``plugins`` (keyword-only) is a tuple or list whose every element is exactly the trace module; each becomes ``-p <name>`` after
+    ``-p no:cacheprovider`` and before the target. Anything else (a string, another name) is a ``ValueError``."""
+    if not isinstance(plugins, (tuple, list)) or any(not isinstance(p, str) or p != _TRACE_MODULE for p in plugins):
+        raise ValueError("plugins must be a tuple or list of the trace module name only")
     return [
         os.path.join(bin_dir, "python"), "-P", "-m", "pytest", "-q", "--no-header", "-s", "--noconftest",
-        "--import-mode=importlib", "-c", ini, "--rootdir", root, "-p", "no:cacheprovider", target,
+        "--import-mode=importlib", "-c", ini, "--rootdir", root, "-p", "no:cacheprovider",
+        *(arg for name in plugins for arg in ("-p", name)), target,
     ]
 
 
