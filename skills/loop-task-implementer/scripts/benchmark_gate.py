@@ -56,10 +56,9 @@ import tokenize
 import types
 import unicodedata
 import warnings
-from collections.abc import Callable
 from fractions import Fraction
 from pathlib import Path
-from typing import Literal, NamedTuple
+from typing import Callable, Literal, NamedTuple
 
 # ---------------------------------------------------------------------------
 # benchmark_symbol_from_location

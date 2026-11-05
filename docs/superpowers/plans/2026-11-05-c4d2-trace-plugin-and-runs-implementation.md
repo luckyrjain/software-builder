@@ -157,7 +157,7 @@ Fail-closed behaviour of every `trace_paired` path; no un-coded exception from t
   validation precedence and `phase`; `MEASURE_FAILED` rows (failing `mkdtemp`, `_write_plugin` `OSError`, tamper via `argv_builder`
   glob under a `tempfile.tempdir` patch, `:` in the directory, failing `work` creation); interpreters must match; digest/stdout not
   parsed; `test_body_has_control_flow`.
-- **Implement (spec D3, D4, D5):** `trace_paired(...)` with the per-side `with TemporaryDirectory(prefix="bench-trace-")`, `_prepare_run`,
+- **Implement (spec D3, D4, D5):** `trace_paired(...)` with the per-side `with TemporaryDirectory(prefix="bench-run-")`, `_prepare_run`,
   `plugin-`/`out-` directories, nonce, write plugin -> build argv -> `trace_env` -> `_verify_plugin` -> `_execute` (3x timeout) -> steps 1
   to 3 (lexists `.failed`, `O_NONBLOCK` read + `fstat` checks, anchored regex, count >= 1, nonce), the decision table, `phase="trace"`
   after validation, `MEASURE_FAILED` for harness faults, and `body_has_control_flow` (advisory; computed before the first run; spec D3).

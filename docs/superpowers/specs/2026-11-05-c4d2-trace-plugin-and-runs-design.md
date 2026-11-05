@@ -71,6 +71,11 @@ interpreters without `sys.monitoring` were blamed on the Builder.
 - The `/proc/self` token is common in ordinary fd/memory code (a false positive costs a manual merge) and the D9 grep claim was false. **Fixed**: `/proc/self/cmdline` and `/proc/self/environ` only; claim corrected (D9).
 - `_claim_tool` had no consistent contract; `pytest_sessionfinish` did not say what a raising release writes; D3 and D5 disagreed on the detail format; `dir=work` was a `TypeError` (a `TemporaryDirectory` object); the T3c smoke launch could not be built (no helper, no plugin file before T4a); `body_has_control_flow` was thin; `_check_sides` mixed value types; several MUSTs lacked rows. **Fixed** (D2 to D5, sections 4 and 6).
 
+**Branch review** (implementation, after the code was written; rev 8): round 1 (four reviewers) and round 2 (four fresh reviewers, all `CLEAN`). Round 1
+found test gaps (a vacuous assertion, a wrong-nonce UNAVAILABLE row, other-file wrapper exclusion, token order), a cheap trace-run discriminator
+(different temp-dir prefixes), un-hardened targets (lone surrogate), and that `compare` needs a structured `kind` and `trace` data on trace
+errors; all fixed in `7ffddec2` and recorded as deviations 6 to 11 in section 1. Round 2 found only Low items (applied in the tidy commit).
+
 ## 1. Premise check (read against `77859929`)
 
 | Claim | Evidence |
@@ -239,7 +244,7 @@ with `O_RDONLY|O_NOFOLLOW|O_NONBLOCK`, a regular-file `fstat` and a 16 KiB cap (
 the target's `::name` (when the target has no `::name`, or names a method or something absent, the first module-level `test*` function;
 none found is `False`); the walk does not descend into nested `Lambda`, `FunctionDef` or `GeneratorExp` (the trace cannot see them) and
 looks for `For`, `AsyncFor`, `While`, `If`, `IfExp`, `Try`, `Match`, `BoolOp`, `ListComp`, `SetComp` or `DictComp`; every parse or read
-exception (`SyntaxError`, `ValueError`, `RecursionError`, `MemoryError`, `OSError`) is `False`; function is `False`; it lets `compare` tell a human "the trace has no discriminating power for this benchmark"). Validation (exactly C4d-1's
+exception (`SyntaxError`, `ValueError`, `RecursionError`, `MemoryError`, `OSError`) is `False`; it lets `compare` tell a human "the trace has no discriminating power for this benchmark"). Validation (exactly C4d-1's
 messages, same order): `os.name == "posix"` (`UNSUPPORTED_PLATFORM`), `_check_timeout(timeout_seconds)`, `_check_sides(...)` (D4; it returns the tuple `(sides, benchmark_file)` where `sides` keeps `measure_paired`'s existing `{name: (realpath root, realpath bin)}`
 shape, and `trace_paired` passes the full `target` to `pytest_argv` and `benchmark_file` to `trace_env`).
 Per side, **base then head**, one untimed run in its own `work` directory (`TemporaryDirectory`) with an empty ini (or `ini_path`):
@@ -297,7 +302,7 @@ or startup file would let one Builder-controlled effect hit both sides): C4d-3 r
 **D4. Shared validation.** `_benchmark_file_of(target) -> str`: `isinstance(target, str)` (kept), the part before the first `::`; non-empty, no NUL, no backslash, not
 absolute, no `.`, `..` or empty component (a trailing slash is rejected), does not start with `-`, ends in `.py`; else
 `MEASURE_ARGS_INVALID` (message "target must be a .py path under the root, without '..' or a leading '-'"). It is a second path grammar next to the gate's own (`_benchmark_path_ok`); it is deliberately lower level (it validates a pytest target
-string for the harness, not a gate field) and is not shared with it. It rejects traversal by name; an in-tree symlink pointing outside the root is refused by the export step and by the
+string for the harness, not a gate field) and is not shared with it. It also requires the whole target to be ASCII without NUL, rejects a control character (below 0x20 or 0x7f) or a backslash in the FILE part (a backslash in the id after `::` is accepted, as in C4d-1) and so keeps a lone surrogate from reaching `Popen`. It rejects traversal by name; an in-tree symlink pointing outside the root is refused by the export step and by the
 plugin's "regular file inside `realpath(cwd)`" check. `_check_timeout(t)`: a number (not `bool`, not NaN) in `(0, 3600]`, else
 `MEASURE_ARGS_INVALID`. `_check_sides(base_root, head_root, base_bin, head_bin, target, ini_path) -> (sides, benchmark_file)`: the roots/bins checks, the
 `samefile` and nested-root checks, `_benchmark_file_of`, and the `ini_path` check, moved unchanged out of `measure_paired` and called at the
@@ -369,7 +374,8 @@ Two further classes sit outside the trace and are not detected by it: (1) code e
 is observably different from the timed runs** (`sys.orig_argv`, `/proc/self/cmdline`, `sys.modules`, `sys.monitoring.get_tool(4)`,
 slowdown), so head code that branches on the difference passes the trace and shortcuts the timed runs: benchmark-aware code of the same
 class as `PYTEST_CURRENT_TEST`, caught only by the textual tokens and human review. A suppressed or missing result is fail-closed and not a
-bypass; only a forged matching result is. A structural fix (load the plugin, inert, in the timed runs too, removing the argv and
+bypass; only a forged matching result is. The trace run also differs from a timed run in the CONTENTS of its per-side work directory (extra
+`plugin-*` and `out-*` entries) and of the pycache prefix tree, in `config.invocation_params` and `getoption("plugins")` (not tokenised), and in a cold pycache; none of these can be tokenised, and the structural fix is the deferred option of loading the plugin, inert, in the timed runs too. A structural fix (load the plugin, inert, in the timed runs too, removing the argv and
 `sys.modules` differentiators at equal cost on both sides) is deferred to the C4d-3 design pass (section 8).
 
 ## 3. Acceptance
@@ -455,11 +461,11 @@ filtering by the `<side>-<n>` basename, one call per failing run); `test_spawn_f
 | `test_validation_precedence_platform_then_timeout_then_sides_and_phase_none_for_them`; `test_every_error_after_validation_carries_phase_trace` (`TRACE_MISMATCH`, `TRACE_UNAVAILABLE`, `MEASURE_FAILED`) | T4b | attribute defaults |
 | `test_the_digest_is_not_checked_and_stdout_is_not_parsed` (a fake run printing a malformed digest and a forged `BENCH_TRACE_LINES` on stdout) | T4b | parsing stdout |
 | `test_body_has_control_flow` (straight-line, `for`, `while`, `if`, `try`, `BoolOp`, comprehension, nested lambda only, no test function, two test functions with `::name`, parse failure, NUL bytes, a FIFO at the benchmark path) | T4b | wrong function; hang; exceptions |
-| `test_harness_faults_are_measure_failed_with_phase_trace_no_side_and_no_partial` (a failing `mkdtemp(out)`, `_write_plugin` `OSError`, the tamper via an `argv_builder` that globs `bench-trace-*/plugin-*/bench_trace_plugin.py` under a `tempfile.tempdir` set by `monkeypatch.setattr` and rewrites the file, a `:` in that directory, a failing per-side `work` creation) | T4b | wrong code or phase; silent `PYTHONPATH` split; `_verify_plugin` placed too early |
+| `test_harness_faults_are_measure_failed_with_phase_trace_no_side_and_no_partial` (a failing `mkdtemp(out)`, `_write_plugin` `OSError`, the tamper via an `argv_builder` that globs `bench-run-*/plugin-*/bench_trace_plugin.py` under a `tempfile.tempdir` set by `monkeypatch.setattr` and rewrites the file, a `:` in that directory, a failing per-side `work` creation) | T4b | wrong code or phase; silent `PYTHONPATH` split; `_verify_plugin` placed too early |
 | `test_interpreters_must_match_across_sides` | T4b | missing check |
 | Real pytest, venvs (each ~2 launches), in `test_benchmark_gate_trace.py`: `test_batching_with_a_helper_below_the_callback_has_equal_counts`; `test_python_and_c_level_entries_count_the_same`; `test_a_different_loop_count_differs_including_one_line_loops`; `test_early_return_and_a_caught_exception_abandoning_the_loop_differ` (the exception is caught inside the body); `test_an_honest_fixed_count_benchmark_matches_itself` (only meaningful beside the loop-count rows); `test_wraps_traced_plain_wrapper_and_decoy_fail_closed`; `test_two_tests_async_and_plugin_failure_are_trace_mismatch`; `test_forged_results_are_not_accepted` (library prints the token; precreates the out path in an honest run, in a failing run via a two-test file, and via `getattr(os, "_e"+"xit")(0)`; a FIFO at the out path with `os._exit`; an `atexit` rewrite with a wrong or missing nonce; asserts the exact outcome and that `999` never appears; it deliberately does **not** assert that a nonce-aware rewrite is rejected); `test_a_real_launch_with_tool_id_4_taken_by_a_venv_pth_reports_tool_in_use` (both sides; one side only); `test_release_and_reclaim_work_on_the_ci_interpreter`; `test_an_outside_pointing_symlink_is_rejected_by_the_plugin` (`evil/bench.py` where `evil` links to `../outside`; the init-`failed` path is distinguishable from the exit-code path); a benchmark that `chdir`s at import, also to `/`, still matches | T4c | the trace's purpose and each forged path |
 
-Runtime: about 25 real pytest launches plus a few waits: expect 20 to 40 s for the new file; no assertion depends on a duration; real-pytest
+Runtime: about 47 real pytest launches (29 `real_sides` calls, two pip-less venvs each; `venv.create` itself is about 0.01 s, the time is the pytest children): roughly 45 to 70 s on a quiet machine and several minutes on a loaded one; no assertion depends on a duration; real-pytest
 tests use 120 s child timeouts.
 
 ## 5. Docs
