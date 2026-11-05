@@ -121,7 +121,8 @@ def refused(function, repo, files, code, path=BENCH):
 
 def test_the_diff_codes_are_part_of_the_error_vocabulary():
     assert bg.DIFF_REFUSAL_CODES == ("PROTECTED_PATH_CHANGED", "BENCHMARK_AWARE_CODE")
-    assert bg.ERROR_CODES[-2:] == bg.DIFF_REFUSAL_CODES
+    codes = list(bg.ERROR_CODES)
+    assert codes[codes.index("PROTECTED_PATH_CHANGED"):][:2] == list(bg.DIFF_REFUSAL_CODES)
     assert len(set(bg.ERROR_CODES)) == len(bg.ERROR_CODES)
 
 
