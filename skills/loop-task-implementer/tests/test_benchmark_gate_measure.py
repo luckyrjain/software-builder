@@ -471,6 +471,103 @@ def test_children_get_no_stdin(tmp_path):
 
 
 @posix_only
+def test_a_failure_in_the_first_timed_round_still_carries_partial(tmp_path):
+    script = counting_child(tmp_path, f"{DIGEST!r}") + "\n        sys.exit(3 if (side == 'head' and n >= 1) else 0)\n"
+    err = refusal(tmp_path, script)
+    assert err.phase == "timed" and err.code == "HEAD_NONZERO_EXIT"
+    assert err.partial == {"order": bg.run_order(BASE, HEAD, BENCH, 1, 4), "base_ns": [], "head_ns": []}
+
+
+@posix_only
+def test_an_unstable_digest_in_a_timed_round_carries_partial(tmp_path):
+    err = refusal(tmp_path, counting_child(tmp_path, f"{OTHER!r} if (side == 'base' and n >= 2) else {DIGEST!r}"))
+    assert err.code == "DIGEST_UNSTABLE" and set(err.partial) == {"order", "base_ns", "head_ns"}
+
+
+@posix_only
+def test_a_warmup_failure_has_no_partial(tmp_path):
+    assert refusal(tmp_path, counting_child(tmp_path, "None")).partial is None
+
+
+@posix_only
+def test_a_missing_digest_in_a_later_warmup_round_is_unstable(tmp_path):
+    err = refusal(tmp_path, counting_child(tmp_path, f"None if (side == 'head' and n == 1) else {DIGEST!r}"), warmup=2)
+    assert err.code == "DIGEST_UNSTABLE" and err.phase == "warmup"
+
+
+@posix_only
+def test_the_end_of_stderr_is_kept_in_the_detail(tmp_path):
+    script = """
+        import sys
+        sys.stderr.write("x" * 3000 + "LASTLINE")
+        sys.exit(1)
+    """
+    assert "LASTLINE" in refusal(tmp_path, script).detail
+
+
+@posix_only
+def test_the_file_size_limit_is_applied_to_the_child(tmp_path):
+    marker = tmp_path / "limit"
+    script = f"""
+        import resource
+        open({str(marker)!r}, "a").write(repr(resource.getrlimit(resource.RLIMIT_FSIZE)) + "\\n")
+        print("BENCH_RESULT_DIGEST: {DIGEST}")
+    """
+    measure(tmp_path, script)
+    assert set(marker.read_text().split("\n")) - {""} == {f"({1 << 20}, {1 << 20})"}
+
+
+@posix_only
+def test_the_pycache_prefix_is_per_side_and_shared_across_that_sides_runs(tmp_path):
+    marker = tmp_path / "prefix"
+    script = f"""
+        import os, sys
+        open({str(marker)!r}, "a").write(sys.argv[1] + " " + os.environ["PYTHONPYCACHEPREFIX"] + "\\n")
+        print("BENCH_RESULT_DIGEST: {DIGEST}")
+    """
+    measure(tmp_path, script)
+    rows = [line.split() for line in marker.read_text().splitlines()]
+    by_side = {side: {prefix for s, prefix in rows if s == side} for side in ("base", "head")}
+    assert len(by_side["base"]) == 1 and len(by_side["head"]) == 1 and by_side["base"] != by_side["head"]
+
+
+@posix_only
+def test_a_harness_fault_while_preparing_a_run_is_a_coded_measure_failure(tmp_path, monkeypatch):
+    def full_disk(*args, **kwargs):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(bg.os, "makedirs", full_disk)
+    err = refusal(tmp_path, OK_CHILD)
+    assert err.code == "MEASURE_FAILED" and "No space" in err.detail
+
+
+@posix_only
+def test_a_watchdog_that_cannot_start_kills_the_child_and_is_a_coded_failure(tmp_path, monkeypatch):
+    pidfile = tmp_path / "pid"
+    script = f"""
+        import os, time
+        open({str(pidfile)!r}, "w").write(str(os.getpid()))
+        time.sleep(60)
+    """
+
+    def no_thread(self):
+        raise RuntimeError("can't start new thread")
+    monkeypatch.setattr(bg.threading.Timer, "start", no_thread)
+    err = refusal(tmp_path, script)
+    assert err.code == "MEASURE_FAILED"
+    pid = int(pidfile.read_text()) if pidfile.exists() else None
+    deadline = time.monotonic() + 10
+    while pid is not None and time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    else:
+        if pid is not None:
+            pytest.fail("the child survived")
+
+
+@posix_only
 def test_a_workload_under_the_minimum_is_too_short(tmp_path):
     assert refusal(tmp_path, OK_CHILD, min_base_ns=10 ** 12).code == "WORKLOAD_TOO_SHORT"
 
