@@ -3283,6 +3283,33 @@ def _tail_detail(tail: bytes) -> str:
     return tail.decode("ascii", "replace")[-150:]
 
 
+def _prepare_run(side: str, bin_dir: str, work: str, counter: int) -> tuple[str, dict]:
+    """Make the run's scratch directory and build its environment (``side_env`` makes the home and tmp directories)."""
+    scratch = os.path.join(work, f"{side}-{counter}")
+    os.makedirs(scratch)
+    env = side_env(bin_dir, scratch)
+    env["PYTHONPYCACHEPREFIX"] = os.path.join(work, f"pycache-{side}")  # per side, shared by its runs (a warm cache is part of the warmup)
+    return scratch, env
+
+
+def _execute(side: str, argv: list[str], root: str, scratch: str, env: dict, timeout_seconds: float, fail) -> tuple[int, bytes]:
+    """Run once, always remove ``scratch``, and raise ``fail(kind, detail)`` for a spawn failure, oversize output, timeout or nonzero exit
+    (kinds ``spawn``, ``oversize``, ``timeout``, ``nonzero``, checked in that order). Returns ``(elapsed_ns, stdout)``."""
+    try:
+        code, elapsed, stdout, tail, oversize = _run_once(argv, root, env, float(timeout_seconds))
+    except _SpawnFailed as exc:  # no <bin>/python, not executable, a failed fork: the side was not provisioned
+        raise fail("spawn", f"could not start the run: {exc}") from exc
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    if oversize:
+        raise fail("oversize", f"{side} run wrote {_RUN_FSIZE_LIMIT} bytes")
+    if code is None:
+        raise fail("timeout", f"run exceeded {timeout_seconds} s")
+    if code != 0:
+        raise fail("nonzero", f"exit {code}: {_tail_detail(tail)}")
+    return elapsed, stdout
+
+
 def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, target: str, *, repeats: int, timeout_seconds: float,
                    base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int = 1, warmup: int = 1,
                    min_base_ns: int = _MIN_BASE_NS, argv_builder=None, ini_path: str | None = None) -> dict:
@@ -3353,24 +3380,15 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
                 counter += 1
                 phase_now[0] = phase
                 root, bin_dir = sides[side]
-                scratch = os.path.join(work, f"{side}-{counter}")
-                os.makedirs(scratch)
-                env = side_env(bin_dir, scratch)
-                env["PYTHONPYCACHEPREFIX"] = os.path.join(work, f"pycache-{side}")  # per side, shared by its runs (a warm cache is part of the warmup)
+                scratch, env = _prepare_run(side, bin_dir, work, counter)
                 argv = argv_builder(side, bin_dir, root, target) if argv_builder else pytest_argv(bin_dir, root, target, ini)
                 argvs.setdefault(side, argv)
-                try:
-                    code, elapsed, stdout, tail, oversize = _run_once(argv, root, env, float(timeout_seconds))
-                except _SpawnFailed as exc:  # no <bin>/python, not executable, a failed fork: the side was not provisioned
-                    raise fail(f"{side.upper()}_NONZERO_EXIT", f"could not start the run: {exc}", side, phase) from exc
-                finally:
-                    shutil.rmtree(scratch, ignore_errors=True)
-                if oversize:
-                    raise fail("OUTPUT_TOO_LARGE", f"{side} run wrote {_RUN_FSIZE_LIMIT} bytes", side, phase)
-                if code is None:
-                    raise fail(f"{side.upper()}_TIMEOUT", f"run exceeded {timeout_seconds} s", side, phase)
-                if code != 0:
-                    raise fail(f"{side.upper()}_NONZERO_EXIT", f"exit {code}: {_tail_detail(tail)}", side, phase)
+
+                def adapt(kind: str, detail: str) -> BenchmarkGateError:
+                    code = {"oversize": "OUTPUT_TOO_LARGE", "timeout": f"{side.upper()}_TIMEOUT"}.get(kind, f"{side.upper()}_NONZERO_EXIT")
+                    return fail(code, detail, side, phase)
+
+                elapsed, stdout = _execute(side, argv, root, scratch, env, timeout_seconds, adapt)
                 return elapsed, _digest_of(stdout)
 
             def record(side: str, phase: str, digest: str | None, first_round: bool) -> None:
