@@ -56,9 +56,10 @@ import tokenize
 import types
 import unicodedata
 import warnings
+from collections.abc import Callable
 from fractions import Fraction
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NamedTuple
 
 # ---------------------------------------------------------------------------
 # benchmark_symbol_from_location
@@ -908,6 +909,12 @@ class BenchmarkGateError(Exception):
         self.side: str | None = None  # measure_paired and trace_paired: which side failed ("base" or "head"), None if neither or both
         self.phase: str | None = None  # measure_paired: "warmup" or "timed"; trace_paired: "trace" (None for an argument error)
         self.partial: dict | None = None  # measure_paired only: {"order", "base_ns", "head_ns"} of the completed rounds when phase == "timed" (None for trace_paired)
+        self.kind: str | None = None  # trace_paired only: why it failed, one of TRACE_FAILURE_KINDS (None for every other error)
+        # trace_paired only, and only for an error raised AFTER both sides produced a result (the kinds unavailable_one_side,
+        # unavailable_tokens_differ, unavailable_interpreters_differ, interpreters_differ, counts_differ, unavailable): {"base": {"kind":
+        # "lines"|"unavailable", "value": int count | str token, "interpreter": "<ver> <impl>"}, "head": {...}, "argv": {"base": [...],
+        # "head": [...]}, "body_has_control_flow": bool}. None for an error raised during a side's run and for every other error.
+        self.trace: dict | None = None
         self.hits: list[dict] = []  # the diff checks put what they found here (already escaped), for the evidence a human is shown
 
     def __str__(self) -> str:  # a traceback or log line shows the reason, not only the code
@@ -3167,6 +3174,12 @@ ERROR_CODES += MEASURE_REFUSAL_CODES + ("MEASURE_ARGS_INVALID", "MEASURE_FAILED"
 # `trace_paired` only, with phase "trace"; a harness fault there is `MEASURE_FAILED`, not one of these.
 TRACE_REFUSAL_CODES = ("TRACE_MISMATCH", "TRACE_UNAVAILABLE")
 ERROR_CODES += TRACE_REFUSAL_CODES
+# The closed vocabulary of ``BenchmarkGateError.kind`` that ``trace_paired`` sets on EVERY error it raises after validation: the four ``_execute``
+# kinds, then plugin_failed ("plugin reported failure"), no_result ("no trace result"), the four post-result unavailable/interpreter
+# kinds, counts_differ (TRACE_MISMATCH), unavailable (TRACE_UNAVAILABLE) and harness (MEASURE_FAILED).
+TRACE_FAILURE_KINDS = ("spawn", "oversize", "timeout", "nonzero", "plugin_failed", "no_result", "unavailable_one_side",
+                       "unavailable_tokens_differ", "unavailable_interpreters_differ", "interpreters_differ", "counts_differ", "unavailable",
+                       "harness")
 
 _RUN_FSIZE_LIMIT = 1 << 20
 _STDERR_TAIL = 2048
@@ -3174,7 +3187,7 @@ _MIN_BASE_NS = 2_000_000_000
 _DIGEST_RE = re.compile(rb"BENCH_RESULT_DIGEST: ([0-9a-f]{64})(?![0-9a-f])")
 _EMPTY_INI = "[pytest]\n"
 _TRACE_MODULE = "bench_trace_plugin"  # the one pytest plugin the gate may load (C4d-2): `-p bench_trace_plugin`, found through PYTHONPATH
-_TRACE_TIMEOUT_FACTOR = 3  # the traced run may take this many times the per-run timeout
+_TRACE_TIMEOUT_FACTOR = 3  # the traced run may take this many times the per-run timeout; per_run_timeout_seconds must leave room for a traced run (about 7x the benchmark time for a tight loop); the gate budget cap hardcodes this factor 3
 
 # The trace plugin, written fresh into a harness-owned directory per side (spec D1, D2). It must stay ASCII, annotation-free and importable
 # on CPython 3.8: it runs inside the side's own venv, whose interpreter may be older than this one. Raw string: no escape is interpreted.
@@ -3313,6 +3326,8 @@ def _write_marker(path, content):
         os.close(fd)
 
 
+# Precedence of the one terminal marker: failed first, then unavailable, then a zero count (a failure), then the success line. It also runs when
+# the tool was not claimed (STATE.unavailable is then set, so the marker is UNAVAILABLE, or STATE.failed is, so it is the failed marker).
 def _write_terminal_marker():
     if STATE.out is None:
         pytest.exit("trace out path missing", returncode=3)
@@ -3569,7 +3584,8 @@ def _prepare_run(side: str, bin_dir: str, work: str, counter: int) -> tuple[str,
     return scratch, env
 
 
-def _execute(side: str, argv: list[str], root: str, scratch: str, env: dict, timeout_seconds: float, fail) -> tuple[int, bytes]:
+def _execute(side: str, argv: list[str], root: str, scratch: str, env: dict[str, str], timeout_seconds: float,
+             fail: Callable[[str, str], BenchmarkGateError]) -> tuple[int, bytes]:
     """Run once, always remove ``scratch``, and raise ``fail(kind, detail)`` for a spawn failure, oversize output, timeout or nonzero exit
     (kinds ``spawn``, ``oversize``, ``timeout``, ``nonzero``, checked in that order). Returns ``(elapsed_ns, stdout)``."""
     try:
@@ -3587,19 +3603,24 @@ def _execute(side: str, argv: list[str], root: str, scratch: str, env: dict, tim
     return elapsed, stdout
 
 
+_TARGET_MESSAGE = "target must be a .py path under the root, without '..' or a leading '-'"
+
+
 def _benchmark_file_of(target: object) -> str:
-    """The file part of a pytest target (before the first ``::``), checked: a relative ``.py`` path with no empty, ``.`` or ``..``
-    component, no NUL or backslash, no leading ``-``."""
-    if not isinstance(target, str):
+    """The file part of a pytest target (before the first ``::``), checked: the target is ASCII with no NUL; the file part is a relative
+    ``.py`` path with no empty, ``.`` or ``..`` component, no control character (below 0x20 or 0x7f), no backslash and no leading ``-``.
+    The id part after ``::`` may hold a backslash (a parametrize id such as ``t[a\\b]``)."""
+    if not isinstance(target, str) or not target.isascii() or "\0" in target:
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", _TARGET_MESSAGE)
     file_part = target.split("::", 1)[0]
-    if (not file_part or "\0" in target or "\\" in target or file_part.startswith(("/", "-")) or not file_part.endswith(".py")
-            or any(part in ("", ".", "..") for part in file_part.split("/"))):
+    if (not file_part or "\\" in file_part or any(ord(c) < 0x20 or ord(c) == 0x7F for c in file_part)
+            or file_part.startswith(("/", "-")) or not file_part.endswith(".py") or any(part in ("", ".", "..") for part in file_part.split("/"))):
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", _TARGET_MESSAGE)
     return file_part
 
 
 def _check_timeout(timeout_seconds: object) -> None:
+    """Raise ``MEASURE_ARGS_INVALID`` unless ``timeout_seconds`` is a real number (not a bool, not NaN) in (0, 3600]."""
     if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)) or not 0 < timeout_seconds <= 3600 \
             or timeout_seconds != timeout_seconds:
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "timeout_seconds must be a number in (0, 3600]")
@@ -3623,9 +3644,6 @@ def _check_sides(base_root: object, head_root: object, base_bin: object, head_bi
     if ini_path is not None and (not isinstance(ini_path, str) or not os.path.isabs(ini_path) or not os.path.isfile(ini_path)):
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "ini_path must be an existing absolute file")
     return sides, benchmark_file
-
-
-_TARGET_MESSAGE = "target must be a .py path under the root, without '..' or a leading '-'"
 
 
 def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, target: str, *, repeats: int, timeout_seconds: float,
@@ -3654,7 +3672,7 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
     _check_timeout(timeout_seconds)
     if not _is_real_int(min_base_ns) or min_base_ns < 0:
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "min_base_ns must be a non-negative int")
-    sides, _benchmark_file = _check_sides(base_root, head_root, base_bin, head_bin, target, ini_path)
+    sides, _ = _check_sides(base_root, head_root, base_bin, head_bin, target, ini_path)
 
     base_ns: list[int] = []
     head_ns: list[int] = []
@@ -3667,7 +3685,7 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
         return error
 
     try:
-        with tempfile.TemporaryDirectory(prefix="bench-measure-") as work:
+        with tempfile.TemporaryDirectory(prefix="bench-run-") as work:
             ini = ini_path
             if ini is None:
                 ini = os.path.join(work, "empty.ini")
@@ -3687,8 +3705,11 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
                 argvs.setdefault(side, argv)
 
                 def adapt(kind: str, detail: str) -> BenchmarkGateError:
-                    code = {"oversize": "OUTPUT_TOO_LARGE", "timeout": f"{side.upper()}_TIMEOUT"}.get(kind, f"{side.upper()}_NONZERO_EXIT")
-                    return fail(code, detail, side, phase)
+                    codes = {"oversize": "OUTPUT_TOO_LARGE", "timeout": f"{side.upper()}_TIMEOUT", "nonzero": f"{side.upper()}_NONZERO_EXIT",
+                             "spawn": f"{side.upper()}_NONZERO_EXIT"}  # a spawn failure (a venv that was not provisioned) is a nonzero exit
+                    if kind not in codes:
+                        raise AssertionError(f"unknown _execute failure kind {kind!r}")
+                    return fail(codes[kind], detail, side, phase)
 
                 elapsed, stdout = _execute(side, argv, root, scratch, env, timeout_seconds, adapt)
                 return elapsed, _digest_of(stdout)
@@ -3735,8 +3756,8 @@ _TRACE_UNAVAILABLE_RE = re.compile(
     r"\ABENCH_TRACE_UNAVAILABLE: (no_monitoring|tool_in_use) ([0-9]+\.[0-9]+\.[0-9]+) ([a-z]+) ([0-9a-f]{32})\n\Z")
 _TRACE_RESULT_MAX = 256  # a result line is about 60 bytes
 _BODY_SOURCE_MAX = 16 * 1024
-_CONTROL_FLOW_NODES = tuple(getattr(ast, name) for name in (
-    "For", "AsyncFor", "While", "If", "IfExp", "Try", "TryStar", "Match", "BoolOp", "ListComp", "SetComp", "DictComp") if hasattr(ast, name))
+_CONTROL_FLOW_NODES = (ast.For, ast.AsyncFor, ast.While, ast.If, ast.IfExp, ast.Try, ast.TryStar, ast.Match, ast.BoolOp, ast.ListComp,
+                       ast.SetComp, ast.DictComp)
 _NOT_ENTERED_NODES = (ast.Lambda, ast.FunctionDef, ast.AsyncFunctionDef, ast.GeneratorExp)  # the trace cannot see into these
 
 
@@ -3776,18 +3797,21 @@ def _read_regular_file(path: str, limit: int, owner_only: bool) -> bytes | None:
 
 def _body_has_control_flow(root: str, benchmark_file: str, target: str) -> bool:
     """Advisory: does the benchmark's test body loop or branch (what the trace can discriminate)? Reads the base root's benchmark file,
-    picks the function the target names (else the first module-level ``test*`` function) and walks it without entering nested lambdas,
-    functions or generator expressions. Every failure to read or parse is ``False``."""
+    picks the module-level function the target names (the LAST one when a name is defined twice: Python runs the last), else the first
+    module-level ``test*`` function, and walks it without entering nested lambdas, functions or generator expressions. A class-method or
+    parametrized target (``file::Class::method``) names no module-level function, so it falls back to the first module-level test function
+    (advisory only). Every failure to read or parse is ``False``."""
     try:
         data = _read_regular_file(os.path.join(root, benchmark_file), _BODY_SOURCE_MAX, False)
         if data is None:
             return False
         functions = [node for node in ast.parse(data).body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
         parts = target.split("::")
-        chosen = [f for f in functions if len(parts) == 2 and f.name == parts[1]] or [f for f in functions if f.name.startswith("test")]
-        if not chosen:
+        named = [f for f in functions if len(parts) == 2 and f.name == parts[1]]
+        chosen = named[-1] if named else next((f for f in functions if f.name.startswith("test")), None)
+        if chosen is None:
             return False
-        stack: list[ast.AST] = list(chosen[0].body)
+        stack: list[ast.AST] = list(chosen.body)
         while stack:
             node = stack.pop()
             if isinstance(node, _NOT_ENTERED_NODES):
@@ -3800,9 +3824,15 @@ def _body_has_control_flow(root: str, benchmark_file: str, target: str) -> bool:
         return False
 
 
-def _trace_result(raw: bytes | None, nonce: str) -> tuple[str, str, str] | None:
-    """``(kind, value, "<version> <impl>")`` for a well-formed result of THIS run (``kind`` is ``lines`` with the count, or ``unavailable``
-    with the token), else ``None``."""
+class _TraceResult(NamedTuple):
+    kind: str  # "lines" or "unavailable"
+    value: int | str  # the executed-line count, or the unavailability token
+    interpreter: str  # "<version> <impl>"
+
+
+def _trace_result(raw: bytes | None, nonce: str) -> _TraceResult | None:
+    """A ``_TraceResult`` for a well-formed result of THIS run (``kind`` ``lines`` with the int count, or ``unavailable`` with the token),
+    else ``None``."""
     if raw is None:
         return None
     try:
@@ -3813,10 +3843,10 @@ def _trace_result(raw: bytes | None, nonce: str) -> tuple[str, str, str] | None:
     if found:
         if int(found.group(1)) == 0 or found.group(4) != nonce:
             return None
-        return "lines", found.group(1), f"{found.group(2)} {found.group(3)}"
+        return _TraceResult("lines", int(found.group(1)), f"{found.group(2)} {found.group(3)}")
     found = _TRACE_UNAVAILABLE_RE.match(text)
     if found and found.group(4) == nonce:
-        return "unavailable", found.group(1), f"{found.group(2)} {found.group(3)}"
+        return _TraceResult("unavailable", found.group(1), f"{found.group(2)} {found.group(3)}")
     return None
 
 
@@ -3831,21 +3861,25 @@ def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, t
     machinery (a temp directory, the plugin file, its hash, a path separator in the directory) is ``MEASURE_FAILED`` (``side`` ``None``);
     what the child did (a failed run, a missing or malformed result, ``.failed``, differing counts or interpreters) is
     ``TRACE_MISMATCH``, or ``TRACE_UNAVAILABLE`` when both sides report the same unavailability. A hard failure on either side raises at
-    once. The run's timeout is ``_TRACE_TIMEOUT_FACTOR * timeout_seconds``. The digest is not checked and stdout is not parsed.
+    once. Every error carries ``kind``, one of ``TRACE_FAILURE_KINDS`` (the ``_execute`` kinds are the first four). An error raised after
+    BOTH sides produced a result (the kinds ``unavailable_one_side``, ``unavailable_tokens_differ``, ``unavailable_interpreters_differ``,
+    ``interpreters_differ``, ``counts_differ``, ``unavailable``) also carries ``trace``: ``{"base": {"kind": "lines"|"unavailable", "value":
+    int count | str token, "interpreter": "<ver> <impl>"}, "head": {...}, "argv": {"base": [...], "head": [...]}, "body_has_control_flow":
+    bool}``; ``trace`` is ``None`` for an error raised during a side's run. The run's timeout is ``_TRACE_TIMEOUT_FACTOR * timeout_seconds``. The digest is not checked and stdout is not parsed.
     ``argv_builder(side, bin_dir, root, target) -> argv`` is the test seam."""
     if os.name != "posix":
         raise BenchmarkGateError("UNSUPPORTED_PLATFORM", "the harness needs POSIX process groups")
     _check_timeout(timeout_seconds)
     sides, benchmark_file = _check_sides(base_root, head_root, base_bin, head_bin, target, ini_path)
 
-    def fail(code: str, detail: str, side: str | None = None) -> BenchmarkGateError:
+    def fail(code: str, detail: str, kind: str, side: str | None = None, trace: dict | None = None) -> BenchmarkGateError:
         error = BenchmarkGateError(code, detail)
-        error.side, error.phase, error.partial = side, "trace", None
+        error.side, error.phase, error.partial, error.kind, error.trace = side, "trace", None, kind, trace
         return error
 
-    def run_side(side: str) -> tuple[tuple[str, str, str], list[str]]:
+    def run_side(side: str) -> tuple[_TraceResult, list[str]]:
         root, bin_dir = sides[side]
-        with tempfile.TemporaryDirectory(prefix="bench-trace-") as work:
+        with tempfile.TemporaryDirectory(prefix="bench-run-") as work:
             ini = ini_path
             if ini is None:
                 ini = os.path.join(work, "empty.ini")
@@ -3864,43 +3898,49 @@ def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, t
             def adapt(kind: str, detail: str) -> BenchmarkGateError:
                 if kind == "timeout":
                     detail += f" ({_TRACE_TIMEOUT_FACTOR}x the per-run timeout)"
-                return fail("TRACE_MISMATCH", f"{kind}: {detail}", side)
+                return fail("TRACE_MISMATCH", f"{kind}: {detail}", kind, side)
 
             _execute(side, argv, root, scratch, env, _TRACE_TIMEOUT_FACTOR * timeout_seconds, adapt)
             if os.path.lexists(out_path + ".failed"):
-                raise fail("TRACE_MISMATCH", "plugin reported failure", side)
+                raise fail("TRACE_MISMATCH", "plugin reported failure", "plugin_failed", side)
             result = _trace_result(_read_regular_file(out_path, _TRACE_RESULT_MAX, True), nonce)
             if result is None:
-                raise fail("TRACE_MISMATCH", "no trace result", side)
+                raise fail("TRACE_MISMATCH", "no trace result", "no_result", side)
             return result, argv
 
     has_control_flow = _body_has_control_flow(sides["base"][0], benchmark_file, target)
-    results: dict[str, tuple[str, str, str]] = {}
+    results: dict[str, _TraceResult] = {}
     argvs: dict[str, list[str]] = {}
     try:
         for side in ("base", "head"):
             results[side], argvs[side] = run_side(side)
     except BenchmarkGateError as exc:  # raised by _write_plugin / _verify_plugin, or by `fail`
         if exc.phase is None:
-            exc.side, exc.phase, exc.partial = None, "trace", None
+            exc.side, exc.phase, exc.partial, exc.kind = None, "trace", None, "harness"
         raise
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:  # the harness's own machinery, outside the child
-        raise fail("MEASURE_FAILED", f"{type(exc).__name__}: {exc}") from exc
+        raise fail("MEASURE_FAILED", f"{type(exc).__name__}: {exc}", "harness") from exc
 
-    (base_kind, base_value, base_interp), (head_kind, head_value, head_interp) = results["base"], results["head"]
-    if (base_kind == "unavailable") != (head_kind == "unavailable"):
-        raise fail("TRACE_MISMATCH", "unavailable on one side only", "base" if base_kind == "unavailable" else "head")
-    if base_kind == "unavailable":
-        if base_value != head_value:
-            raise fail("TRACE_MISMATCH", f"unavailable for different reasons: base {base_value}, head {head_value}")
-        if base_interp != head_interp:
-            raise fail("TRACE_MISMATCH", f"{base_value} on different interpreters: base {base_interp}, head {head_interp}")
-        raise fail("TRACE_UNAVAILABLE", f"{base_value} ({base_interp})")
-    if base_interp != head_interp:
-        raise fail("TRACE_MISMATCH", f"different interpreters: base {base_interp}, head {head_interp}")
-    if int(base_value) != int(head_value):
-        raise fail("TRACE_MISMATCH", f"line counts differ: base {int(base_value)}, head {int(head_value)}")
-    return {"base": int(base_value), "head": int(head_value), "interpreter": base_interp, "argv": argvs, "body_has_control_flow": has_control_flow}
+    base, head = results["base"], results["head"]
+    seen = {"base": base._asdict(), "head": head._asdict(), "argv": argvs, "body_has_control_flow": has_control_flow}
+
+    def after(code: str, detail: str, kind: str, side: str | None = None) -> BenchmarkGateError:
+        return fail(code, detail, kind, side, seen)
+
+    if (base.kind == "unavailable") != (head.kind == "unavailable"):
+        raise after("TRACE_MISMATCH", "unavailable on one side only", "unavailable_one_side", "base" if base.kind == "unavailable" else "head")
+    if base.kind == "unavailable":
+        if base.value != head.value:
+            raise after("TRACE_MISMATCH", f"unavailable for different reasons: base {base.value}, head {head.value}", "unavailable_tokens_differ")
+        if base.interpreter != head.interpreter:
+            raise after("TRACE_MISMATCH", f"{base.value} on different interpreters: base {base.interpreter}, head {head.interpreter}",
+                        "unavailable_interpreters_differ")
+        raise after("TRACE_UNAVAILABLE", f"{base.value} ({base.interpreter})", "unavailable")
+    if base.interpreter != head.interpreter:
+        raise after("TRACE_MISMATCH", f"different interpreters: base {base.interpreter}, head {head.interpreter}", "interpreters_differ")
+    if base.value != head.value:
+        raise after("TRACE_MISMATCH", f"line counts differ: base {base.value}, head {head.value}", "counts_differ")
+    return {"base": base.value, "head": head.value, "interpreter": base.interpreter, "argv": argvs, "body_has_control_flow": has_control_flow}
 
 
 # ---------------------------------------------------------------------------

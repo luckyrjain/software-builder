@@ -789,12 +789,13 @@ def test_nested_roots_are_rejected(tmp_path):
     assert info.value.code == "MEASURE_ARGS_INVALID"
 
 
-GOOD_TARGETS = (("bench.py::t", "bench.py"), ("a/b/test_x.py", "a/b/test_x.py"), ("x.py::T::m", "x.py"))
+GOOD_TARGETS = (("bench.py::t", "bench.py"), ("a/b/test_x.py", "a/b/test_x.py"), ("x.py::T::m", "x.py"), ("bench.py::t[a\\b]", "bench.py"))
 BAD_TARGETS = (5, None, b"x.py", "", "a\0.py", "a\\b.py", "/abs/x.py", "./x.py", "a/./x.py", "../x.py", "a/../x.py", "a//x.py", "a/", "-x.py",
-               "x.txt", "x.py2", "dir")
+               "x.txt", "x.py2", "dir", "b\ud800.py::t", "b\u00e9.py", "bench.py::\ud800", "\nbench.py", "a\tb.py", "a\x7fb.py", "a\x1fb.py::t",
+               "bench.py::t\0")
 
 
-def test_benchmark_file_of_and_check_timeout_reject_the_bad_inputs(tmp_path):
+def test_benchmark_file_of_accepts_and_rejects_targets():
     for target, expected in GOOD_TARGETS:
         assert bg._benchmark_file_of(target) == expected
     for target in BAD_TARGETS:
@@ -802,25 +803,31 @@ def test_benchmark_file_of_and_check_timeout_reject_the_bad_inputs(tmp_path):
             bg._benchmark_file_of(target)
         assert info.value.code == "MEASURE_ARGS_INVALID", target
         assert info.value.detail == "target must be a .py path under the root, without '..' or a leading '-'", target
+
+
+def test_check_timeout_accepts_and_rejects_values():
     for good in (1, 0.5, 30, 3600, 3600.0):
         bg._check_timeout(good)
     for bad in (True, False, float("nan"), 0, 0.0, -1, 3601, "30", None):
         with pytest.raises(bg.BenchmarkGateError) as info:
             bg._check_timeout(bad)
         assert info.value.code == "MEASURE_ARGS_INVALID", bad
-    if os.name == "posix":
-        roots, bins = fake_sides(tmp_path)
-        common = dict(repeats=4, timeout_seconds=30, base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0,
-                      argv_builder=builder(OK_CHILD))
-        for target in BAD_TARGETS:
-            with pytest.raises(bg.BenchmarkGateError) as info:
-                bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), target, **common)
-            assert info.value.code == "MEASURE_ARGS_INVALID", target
-        for bad in (True, float("nan"), 0, 3601, "30", None):
-            with pytest.raises(bg.BenchmarkGateError) as info:
-                bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t",
-                                  **{**common, "timeout_seconds": bad})
-            assert info.value.code == "MEASURE_ARGS_INVALID", bad
+
+
+@posix_only
+def test_measure_paired_rejects_bad_targets_and_timeouts(tmp_path):
+    roots, bins = fake_sides(tmp_path)
+    common = dict(repeats=4, timeout_seconds=30, base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0,
+                  argv_builder=builder(OK_CHILD))
+    for target in BAD_TARGETS:
+        with pytest.raises(bg.BenchmarkGateError) as info:
+            bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), target, **common)
+        assert info.value.code == "MEASURE_ARGS_INVALID", target
+    for bad in (True, float("nan"), 0, 3601, "30", None):
+        with pytest.raises(bg.BenchmarkGateError) as info:
+            bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t",
+                              **{**common, "timeout_seconds": bad})
+        assert info.value.code == "MEASURE_ARGS_INVALID", bad
 
 
 @posix_only

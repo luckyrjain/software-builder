@@ -323,6 +323,12 @@ def test_token_tripwire_flags_the_new_tokens(repo, sample, expected_token):
     assert expected_token in [hit["token"] for hit in error.hits]
 
 
+def test_the_token_list_order_is_pinned():
+    assert bg._TRIPWIRE_TOKENS[:5] == (b"PYTEST_CURRENT_TEST", b"BENCH_RESULT_DIGEST", b"BENCH_TRACE_LINES", b"os._exit", b"sys.argv")
+    assert bg._TRIPWIRE_TOKENS[5:] == (b"BENCH_TRACE_", b"bench_trace_plugin", b"sys.monitoring", b"import monitoring", b"orig_argv",
+                                       b"/proc/self/cmdline", b"/proc/self/environ")
+
+
 def test_token_tripwire_does_not_flag_near_misses_of_the_new_tokens(repo):
     check(bg.token_tripwire, repo, {"src/app/run.py": 'p = "/proc/self/fd"\nmonitoring_service = 1\n'})
 

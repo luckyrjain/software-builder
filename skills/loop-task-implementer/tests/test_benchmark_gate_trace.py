@@ -17,6 +17,7 @@ import importlib.util
 import io
 import os
 import re
+import subprocess
 import sys
 import textwrap
 import threading
@@ -39,7 +40,7 @@ needs_monitoring = pytest.mark.skipif(not hasattr(sys, "monitoring"), reason="sy
 NONCE = "0123456789abcdef" * 2
 
 
-# --- helpers copied from test_benchmark_gate_measure.py (pytest_venv extended with per-side libraries) ------------------------
+# --- helpers copied from test_benchmark_gate_measure.py (fake_sides, pytest_venv extended with per-side libraries) ------------------------
 
 def fake_sides(tmp_path):
     roots, bins = {}, {}
@@ -49,13 +50,6 @@ def fake_sides(tmp_path):
         roots[side].mkdir()
         bins[side].mkdir(parents=True)
     return roots, bins
-
-
-def builder(script: str, *extra: str):
-    """argv_builder running ``python -c script <side> <root> <extra...>``."""
-    def build(side, bin_dir, root, target):
-        return [sys.executable, "-c", textwrap.dedent(script), side, root, target, *extra]
-    return build
 
 
 def pytest_venv(path: Path, libs=None) -> Path:
@@ -242,7 +236,6 @@ def test_init_pops_with_defaults_captures_root_and_target_once_and_removes_only_
 
     assert plugin_dir not in sys.path
     assert os.environ["PYTHONPATH"] == other
-    assert any(p for p in sys.path)  # the other entries survive
 
 
 @posix_only
@@ -301,10 +294,10 @@ def test_claim_tool_reports_tool_in_use_no_monitoring_and_error_and_never_raises
     if real_monitoring is None:
         return
     real_sys = types.SimpleNamespace(monitoring=real_monitoring)
+    first = claim(real_sys)
+    if first is not None:
+        pytest.skip("tool id 4 is already taken in this process")  # not claimed by this test: nothing to release
     try:
-        first = claim(real_sys)
-        if first is not None:
-            pytest.skip("tool id 4 is already taken in this process")
         assert claim(real_sys) == "tool_in_use"
     finally:
         namespace["_release_tool"](real_sys)
@@ -484,6 +477,11 @@ def test_traced_set_rules(tmp_path, monkeypatch):
     assert traced_set(wrap_in(target, plain, use_wraps=False), "test_x") is None  # no wraps: the wrapper is innermost and named differently
     assert traced_set(make_function("/unique/elsewhere.py", "test_x"), "test_x") is None  # innermost in another file
     assert traced_set(wrap_in(target, make_function("/unique/elsewhere.py", "test_x")), "test_x") is None
+
+    # an outer wrapper compiled for another file wraps an inner function in the target file: only the inner code is traced
+    inner = make_function(target, "test_x")
+    outer = wrap_in("/unique/elsewhere.py", inner)
+    assert traced_set(outer, "test_x") == (inner.__code__,)
 
 
 @posix_only
@@ -738,7 +736,7 @@ def test_write_plugin_makes_one_read_only_file_and_verify_plugin_rejects_a_tampe
     assert os.listdir(plugin_dir) == [bg._TRACE_MODULE + ".py"]
     assert Path(path).read_bytes() == bg.TRACE_PLUGIN_SOURCE.encode("ascii")
     assert os.stat(path).st_mode & 0o777 == 0o400
-    with pytest.raises((OSError, bg.BenchmarkGateError)):
+    with pytest.raises(bg.BenchmarkGateError):
         bg._write_plugin(str(plugin_dir))
     assert bg._verify_plugin(path) is None
 
@@ -907,7 +905,7 @@ def test_a_looping_benchmark_reports_control_flow(tmp_path, monkeypatch):
     assert run()["body_has_control_flow"] is True
 
 
-def valid_variants():
+def malformed_results():
     return {
         "trailing text": lambda n: valid_text(n) + "extra\n",
         "no newline": lambda n: valid_text(n)[:-1],
@@ -919,17 +917,21 @@ def valid_variants():
         "empty": lambda n: "",
         "257 bytes": lambda n: valid_text(n) + "x" * (257 - len(valid_text(n))),
         "unknown line": lambda n: f"BENCH_TRACE_OTHER: 5 3.12.1 cpython {n}\n",
+        "unavailable with a wrong nonce": lambda n: f"BENCH_TRACE_UNAVAILABLE: no_monitoring 3.12.1 cpython {'f' * 32}\n",
+        "unavailable with a bad token": lambda n: f"BENCH_TRACE_UNAVAILABLE: bogus 3.12.1 cpython {n}\n",
+        "unavailable with trailing text": lambda n: f"BENCH_TRACE_UNAVAILABLE: tool_in_use 3.12.1 cpython {n}\nextra\n",
+        "unavailable with the error token": lambda n: f"BENCH_TRACE_UNAVAILABLE: error 3.12.1 cpython {n}\n",
     }
 
 
 @posix_only
-@pytest.mark.parametrize("name", sorted(valid_variants()))
+@pytest.mark.parametrize("name", sorted(malformed_results()))
 def test_the_result_validation_matrix_content(tmp_path, monkeypatch, name):
-    make = valid_variants()[name]
+    make = malformed_results()[name]
     _, run, _, _ = trace_setup(tmp_path, monkeypatch, base=lambda call: put(call, make(call.nonce)))
     error = trace_error(run)
     assert (error.code, error.side, error.phase, error.partial) == ("TRACE_MISMATCH", "base", "trace", None)
-    assert error.detail == "no trace result"
+    assert error.detail == "no trace result" and error.kind == "no_result"
 
 
 @posix_only
@@ -1149,6 +1151,7 @@ def test_every_error_after_validation_carries_phase_trace(tmp_path, monkeypatch)
 
 def assert_harness_fault(error, needle=None):
     assert (error.code, error.side, error.phase, error.partial) == ("MEASURE_FAILED", None, "trace", None)
+    assert error.kind == "harness" and error.trace is None
     if needle:
         assert needle in error.detail
 
@@ -1182,7 +1185,7 @@ def test_harness_faults_are_measure_failed_with_phase_trace_no_side_and_no_parti
             seen = []
 
             def mkdtemp_work(suffix=None, prefix=None, dir=None):
-                if prefix == "bench-trace-":
+                if prefix == "bench-run-":
                     seen.append(prefix)
                     if len(seen) == fail_on:
                         raise OSError("no space for work")
@@ -1213,7 +1216,7 @@ def test_a_tampered_plugin_is_caught_after_the_argv_builder_runs(tmp_path, monke
     rewritten = []
 
     def build(side, bin_dir, root, target):
-        for path in glob.glob(str(unique / "bench-trace-*" / "plugin-*" / "bench_trace_plugin.py")):
+        for path in glob.glob(str(unique / "bench-run-*" / "plugin-*" / "bench_trace_plugin.py")):
             os.chmod(path, 0o600)
             Path(path).write_text("# tampered\n")
             rewritten.append(path)
@@ -1267,7 +1270,12 @@ def control_flow_cases():
         "dictcomp": ("def test_x():\n    x = {i: i for i in range(3)}\n", "bench.py::test_x", True),
         "match": ("def test_x(a):\n    match a:\n        case 1:\n            pass\n", "bench.py::test_x", True),
         "nested lambda and def only": (nested_only, "bench.py::test_x", False),
-        "generator expression only": ("def test_x():\n    x = sum(i for i in range(3))\n", "bench.py::test_x", False),
+        "generator expression with a branch inside": ("def test_x(data):\n    x = sum(1 if i else 2 for i in data)\n", "bench.py::test_x", False),
+        "generator expression with a filter inside": ("def test_x(data):\n    x = sum(i for i in data if i and i > 1)\n", "bench.py::test_x", False),
+        "duplicate definition: the last wins": ("def test_x():\n    for i in range(3):\n        pass\n\ndef test_x():\n    pass\n",
+                                                 "bench.py::test_x", False),
+        "duplicate definition: the last wins (looping)": ("def test_x():\n    pass\n\ndef test_x():\n    for i in range(3):\n        pass\n",
+                                                          "bench.py::test_x", True),
         "nested async def only": ("def test_x():\n    async def g():\n        for i in y:\n            pass\n", "bench.py::test_x", False),
         "no test function": ("def helper():\n    for i in range(3):\n        pass\n", "bench.py", False),
         "no target name picks the first test": ("def helper():\n    pass\n\ndef test_a():\n    for i in range(3):\n        pass\n", "bench.py", True),
@@ -1368,6 +1376,17 @@ def test_batching_with_a_helper_below_the_callback_has_equal_counts(tmp_path):
     head = {"lib.py": "def go(cb):\n    cb(7)\n"}
     result = launch(tmp_path, bench, base_libs=base, head_libs=head)
     assert result["base"] == result["head"] >= 1
+
+
+@posix_only
+@needs_monitoring
+def test_a_straight_line_body_with_a_differing_library_has_equal_counts_and_no_control_flow(tmp_path):
+    bench = "import lib\n\n\ndef test_bench():\n    lib.go()\n    a = 1\n"
+    base = {"lib.py": "def go():\n    return 1\n"}
+    head = {"lib.py": "def go():\n    total = 0\n    for i in range(100):\n        total += i\n    return total\n"}
+    result = launch(tmp_path, bench, base_libs=base, head_libs=head)
+    assert result["base"] == result["head"] >= 1
+    assert result["body_has_control_flow"] is False
 
 
 @posix_only
@@ -1539,11 +1558,12 @@ def test_forged_results_are_not_accepted(tmp_path):
     # (a) 999 lines on stdout, at import time and at exit: stdout is never parsed
     result = case(FORGE_BENCH, "print('BENCH_TRACE_LINES: 999 3.12.0 cpython ' + 'f' * 32, flush=True)\n"
                                "atexit.register(print, 'BENCH_TRACE_LINES: 999 3.12.0 cpython ' + STATE.nonce)\n")
-    assert "999" not in (result["base"], result["head"]) and result["base"] == result["head"] >= 1
+    assert 999 not in (result["base"], result["head"]) and result["base"] == result["head"] and result["base"] < 999
 
     # (b) the out path created early in an honest run, with the right nonce: the plugin's O_EXCL fails -> .failed
     error = case_error(FORGE_BENCH, "with open(OUT, 'w') as handle:\n    handle.write(FORGED)\n")
     assert error.code == "TRACE_MISMATCH" and error.detail == "plugin reported failure" and error.side == "base"
+    assert error.kind == "plugin_failed"
 
     # (c) the same in a failing run (two tests)
     error = case_error(FORGE_TWO_TESTS, "with open(OUT, 'w') as handle:\n    handle.write(FORGED)\n")
@@ -1558,6 +1578,12 @@ def test_forged_results_are_not_accepted(tmp_path):
                                     "getattr(os, '_e' + 'xit')(0)\n")
     assert error.code == "TRACE_MISMATCH" and error.side == "base" and error.detail == "no trace result"
 
+    # (d3) the same with an UNAVAILABLE line carrying a wrong nonce
+    error = case_error(FORGE_BENCH, "with open(OUT, 'w') as handle:\n"
+                                    "    handle.write('BENCH_TRACE_UNAVAILABLE: no_monitoring %d.%d.%d cpython ' % sys.version_info[:3] + '0' * 32 + '\\n')\n"
+                                    "getattr(os, '_e' + 'xit')(0)\n")
+    assert error.code == "TRACE_MISMATCH" and error.side == "base" and error.detail == "no trace result" and error.kind == "no_result"
+
     # (e) a FIFO at the out path, then os._exit: rejected without hanging
     error = case_error(FORGE_BENCH, "os.mkfifo(OUT)\ngetattr(os, '_e' + 'xit')(0)\n")
     assert error.code == "TRACE_MISMATCH" and error.side == "base" and error.detail == "no trace result"
@@ -1571,7 +1597,7 @@ def test_forged_results_are_not_accepted(tmp_path):
             "        handle.write(text)\n\n\n"
             "atexit.register(rewrite)\n") % rewritten)
         assert error.code == "TRACE_MISMATCH" and error.side == "base" and error.detail == "no trace result"
-        assert "999" not in error.detail
+        assert error.kind == "no_result"
 
 
 @posix_only
@@ -1648,3 +1674,138 @@ def test_a_benchmark_that_chdirs_at_import_still_matches(tmp_path, destination):
     library = {"lib.py": "import os\n\nos.chdir(%s)\n" % destination}
     result = launch(tmp_path, bench, base_libs=library)
     assert result["base"] == result["head"] >= 2
+
+
+# --- review round 1: structured kind/trace, shared temp prefix, target hardening, harness excepts ---------------------------------
+
+VOCABULARY = ("spawn", "oversize", "timeout", "nonzero", "plugin_failed", "no_result", "unavailable_one_side", "unavailable_tokens_differ",
+              "unavailable_interpreters_differ", "interpreters_differ", "counts_differ", "unavailable", "harness")
+
+
+def test_the_failure_vocabulary_is_closed_and_exported():
+    assert bg.TRACE_FAILURE_KINDS == VOCABULARY
+
+
+@posix_only
+@pytest.mark.parametrize("side", ["base", "head"])
+@pytest.mark.parametrize("kind,outcome", [
+    ("timeout", lambda call: (None, 1, b"", b"", False)),
+    ("nonzero", lambda call: (2, 1, b"", b"it broke", False)),
+    ("oversize", lambda call: (0, 1, b"", b"", True)),
+    ("spawn", spawn_failure),
+])
+def test_a_run_time_failure_sets_its_kind_and_leaves_trace_none(tmp_path, monkeypatch, side, kind, outcome):
+    behaviors = {"base": good(), "head": good()}
+    behaviors[side] = outcome
+    _, run, _, _ = trace_setup(tmp_path, monkeypatch, **behaviors)
+    error = trace_error(run)
+    assert error.kind == kind and error.kind in bg.TRACE_FAILURE_KINDS
+    assert error.detail.startswith(kind + ":")
+    assert error.trace is None
+
+
+@posix_only
+@pytest.mark.parametrize("name,kind", [("failed marker", "plugin_failed"), ("only failed", "plugin_failed"), ("absent", "no_result"),
+                                       ("symlink", "no_result"), ("hardlink", "no_result")])
+def test_a_missing_or_failed_result_sets_its_kind_and_leaves_trace_none(tmp_path, monkeypatch, name, kind):
+    behave, _ = structural_rows()[name]
+    _, run, _, _ = trace_setup(tmp_path, monkeypatch, base=behave)
+    error = trace_error(run)
+    assert error.kind == kind and error.kind in bg.TRACE_FAILURE_KINDS and error.trace is None
+
+
+def seen(kind, value, interpreter="3.12.1 cpython"):
+    return {"kind": kind, "value": value, "interpreter": interpreter}
+
+
+@posix_only
+@pytest.mark.parametrize("base,head,kind,base_seen,head_seen", [
+    (unavailable("no_monitoring"), good(), "unavailable_one_side", seen("unavailable", "no_monitoring"), seen("lines", 5)),
+    (good(), unavailable("no_monitoring"), "unavailable_one_side", seen("lines", 5), seen("unavailable", "no_monitoring")),
+    (unavailable("no_monitoring"), unavailable("tool_in_use"), "unavailable_tokens_differ",
+     seen("unavailable", "no_monitoring"), seen("unavailable", "tool_in_use")),
+    (unavailable("tool_in_use", "3.12.1"), unavailable("tool_in_use", "3.12.2"), "unavailable_interpreters_differ",
+     seen("unavailable", "tool_in_use", "3.12.1 cpython"), seen("unavailable", "tool_in_use", "3.12.2 cpython")),
+    (good(5, "3.12.1"), good(5, "3.13.0", "pypy"), "interpreters_differ", seen("lines", 5, "3.12.1 cpython"), seen("lines", 5, "3.13.0 pypy")),
+    (good(5), good(6), "counts_differ", seen("lines", 5), seen("lines", 6)),
+    (unavailable("tool_in_use"), unavailable("tool_in_use"), "unavailable", seen("unavailable", "tool_in_use"),
+     seen("unavailable", "tool_in_use")),
+])
+def test_an_error_after_both_results_carries_the_kind_and_what_each_side_saw(tmp_path, monkeypatch, base, head, kind, base_seen, head_seen):
+    fake, run, roots, _ = trace_setup(tmp_path, monkeypatch, base=base, head=head)
+    (roots["base"] / "bench.py").write_text("def test_x():\n    for i in range(3):\n        pass\n")
+    error = trace_error(run)
+    assert error.kind == kind and error.kind in bg.TRACE_FAILURE_KINDS
+    assert isinstance(error.trace["base"]["value"], (int, str))
+    assert error.trace == {"base": base_seen, "head": head_seen, "argv": {c.side: c.argv for c in fake.calls}, "body_has_control_flow": True}
+    assert isinstance(error.trace["base"]["value"], str if base_seen["kind"] == "unavailable" else int)
+
+
+@posix_only
+def test_the_trace_records_a_straight_line_body_as_false(tmp_path, monkeypatch):
+    _, run, roots, _ = trace_setup(tmp_path, monkeypatch, head=good(6))
+    (roots["base"] / "bench.py").write_text("def test_x():\n    x = 1\n")
+    assert trace_error(run).trace["body_has_control_flow"] is False
+
+
+@posix_only
+def test_harness_except_branches_set_measure_failed_kind_harness(tmp_path, monkeypatch):
+    _, run, _, _ = trace_setup(tmp_path, monkeypatch)
+    with monkeypatch.context() as patch:
+        def mkdtemp(suffix=None, prefix=None, dir=None):
+            raise RuntimeError("no thread")
+
+        patch.setattr(tempfile, "mkdtemp", mkdtemp)
+        error = trace_error(run)
+        assert_harness_fault(error, "RuntimeError: no thread")
+
+    def broken(call):
+        raise subprocess.SubprocessError("child lost")
+
+    _, run, _, _ = trace_setup(subdir(tmp_path, "sub"), monkeypatch, base=broken)
+    assert_harness_fault(trace_error(run), "SubprocessError: child lost")
+
+
+@posix_only
+@pytest.mark.parametrize("target", ["b\ud800.py::t", "b\u00e9.py", "\nbench.py", "a\tb.py", "a\x7fb.py", "a\\b.py::t", "bench.py::t\0", "bench.py::\ud800"])
+def test_a_hostile_target_is_measure_args_invalid_for_trace_paired(tmp_path, monkeypatch, target):
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch)
+    error = trace_error(run, target=target)
+    assert (error.code, error.phase, error.side) == ("MEASURE_ARGS_INVALID", None, None)
+    assert fake.calls == []
+
+
+@posix_only
+def test_a_backslash_in_the_id_part_is_accepted_by_trace_paired(tmp_path, monkeypatch):
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch)
+    assert run(target="bench.py::t[a\\b]")["base"] == 5
+    assert len(fake.calls) == 2
+
+
+@posix_only
+def test_trace_paired_and_measure_paired_use_the_same_temporary_directory_prefix(tmp_path, monkeypatch):
+    prefixes, homes = [], []
+    real = tempfile.TemporaryDirectory
+
+    def spy(*args, **kwargs):
+        prefixes.append(kwargs.get("prefix", args[1] if len(args) > 1 else None))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(tempfile, "TemporaryDirectory", spy)
+    fake, run, roots, bins = trace_setup(tmp_path, monkeypatch)
+    run()
+    homes += [os.path.basename(os.path.dirname(c.env["HOME"])) for c in fake.calls]
+    trace_prefixes, prefixes[:] = list(prefixes), []
+
+    digest = "a" * 64
+
+    def measure_child(argv, cwd, env, timeout):
+        homes.append(os.path.basename(os.path.dirname(env["HOME"])))
+        return 0, 3_000_000_000, ("BENCH_RESULT_DIGEST: " + digest + "\n").encode(), b"", False
+
+    monkeypatch.setattr(bg, "_run_once", measure_child)
+    homes[:] = homes[:2]
+    bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t", repeats=4, timeout_seconds=30,
+                      base_commit="1" * 40, head_commit="2" * 40, benchmark_sha256="3" * 64, min_base_ns=0)
+    assert trace_prefixes == ["bench-run-", "bench-run-"] and prefixes == ["bench-run-"]
+    assert all(re.fullmatch(r"(base|head)-\d+", name) for name in homes)
