@@ -213,7 +213,6 @@ def test_plugin_source_is_ascii_has_no_annotations_and_passes_the_static_3_8_rul
 def test_the_plugin_constant_lives_in_the_digested_file_and_the_literals_agree():
     text = Path(bg.__file__).read_bytes().decode("utf-8")
     assert bg.TRACE_PLUGIN_SOURCE in text
-    # T3c adds the `get_tool` check; until then only the `use_tool_id` literal exists.
     assert re.search(r"use_tool_id\(\s*4\s*,\s*(['\"])" + re.escape(bg._TRACE_MODULE) + r"\1\s*\)", bg.TRACE_PLUGIN_SOURCE)
 
 
@@ -407,3 +406,317 @@ def test_membership_is_by_identity_an_equal_code_object_from_another_file_is_not
     assert state.count == 0
     assert namespace["on_event"](ours, 2) is None
     assert state.count == 1
+
+
+# --- T3c: _traced_set, hooks and the terminal markers -----------------------------------------------------------------------
+
+def make_function(filename, name, body="    return 1\n"):
+    """A plain function whose code object reports ``filename`` and ``name``."""
+    namespace = {}
+    exec(compile(f"def {name}():\n{body}", filename, "exec"), namespace)
+    return namespace[name]
+
+
+def wrap_in(filename, inner, name="wrapper", use_wraps=True):
+    """A decorator-style wrapper compiled for ``filename`` around ``inner`` (``functools.wraps`` unless told otherwise)."""
+    import functools
+
+    namespace = {"inner": inner, "wraps": functools.wraps}
+    decorator = "@wraps(inner)\n" if use_wraps else ""
+    exec(compile(f"{decorator}def {name}(*a, **k):\n    return inner(*a, **k)\n", filename, "exec"), namespace)
+    return namespace[name]
+
+
+def armed(tmp_path, monkeypatch, fake="default", **fields):
+    """Exec the plugin, then give it a fresh STATE that is claimed, with ``out`` in a real directory. Returns (namespace, state, out)."""
+    plugin_path, cwd = plugin_env(tmp_path, monkeypatch)
+    if fake == "default":
+        fake = FakeMonitoring()
+    namespace = exec_plugin(plugin_path, monkeypatch, fake=fake)
+    state = fresh_state(namespace)
+    (tmp_path / "out").mkdir(exist_ok=True)
+    state.out = str(tmp_path / "out" / "trace.out")
+    state.nonce = NONCE
+    state.root_real = os.path.realpath(cwd)
+    state.target_real = os.path.realpath(cwd / "bench.py")
+    state.claimed = True
+    for key, value in fields.items():
+        setattr(state, key, value)
+    return namespace, state, state.out
+
+
+@posix_only
+def test_traced_set_rules(tmp_path, monkeypatch):
+    namespace, state, _ = armed(tmp_path, monkeypatch)
+    traced_set, target = namespace["_traced_set"], state.target_real
+
+    plain = make_function(target, "test_x")
+    assert traced_set(plain, "test_x") == (plain.__code__,)
+
+    wrapper = wrap_in(target, plain)
+    assert traced_set(wrapper, "test_x") == (wrapper.__code__, plain.__code__)  # the wrapper is counted too
+
+    def chain(hops):
+        link = plain
+        for _ in range(hops):
+            link = wrap_in(target, link)
+        return link
+
+    assert len(traced_set(chain(8), "test_x")) == 9  # obj plus exactly 8 hops
+    assert traced_set(chain(9), "test_x") is None
+
+    cyclic = make_function(target, "test_x")
+    other = make_function(target, "test_x")
+    cyclic.__wrapped__, other.__wrapped__ = other, cyclic
+    assert traced_set(cyclic, "test_x") is None
+
+    import functools
+    assert traced_set(functools.partial(plain), "test_x") is None  # no __code__
+    assert traced_set(wrap_in(target, functools.partial(plain)), "test_x") is None  # a link without __code__ inside the chain
+
+    assert traced_set(make_function(target, "decoy"), "test_x") is None  # innermost name differs
+    assert traced_set(wrap_in(target, make_function(target, "decoy")), "test_x") is None
+    assert traced_set(wrap_in(target, plain, use_wraps=False), "test_x") is None  # no wraps: the wrapper is innermost and named differently
+    assert traced_set(make_function("/unique/elsewhere.py", "test_x"), "test_x") is None  # innermost in another file
+    assert traced_set(wrap_in(target, make_function("/unique/elsewhere.py", "test_x")), "test_x") is None
+
+
+@posix_only
+@pytest.mark.parametrize("count,failed", [(0, True), (1, False), (2, True)])
+def test_collection_of_other_than_one_item_marks_failed(tmp_path, monkeypatch, count, failed):
+    namespace, state, _ = armed(tmp_path, monkeypatch)
+    namespace["pytest_collection_modifyitems"](None, None, [object() for _ in range(count)])
+    assert state.failed is failed
+
+
+@posix_only
+def test_hooks_enable_line_and_jump_record_the_thread_disable_after_the_yield(tmp_path, monkeypatch):
+    fake = FakeMonitoring()
+    namespace, state, _ = armed(tmp_path, monkeypatch, fake=fake)
+    func = wrap_in(state.target_real, make_function(state.target_real, "test_x"))
+    item = types.SimpleNamespace(obj=func, originalname="test_x")
+    fake.calls.clear()
+
+    generator = namespace["pytest_pyfunc_call"](item)
+    next(generator)
+    assert fake.calls == [("register_callback", 4, 2, namespace["on_event"]), ("register_callback", 4, 4, namespace["on_event"]),
+                          ("set_events", 4, 6)]
+    assert state.thread == threading.get_ident()
+    assert state.traced_ids == {id(func.__code__), id(func.__wrapped__.__code__)}
+    assert {id(c) for c in state.keep} == state.traced_ids and len(state.keep) == 2
+    with pytest.raises(StopIteration):
+        next(generator)
+    assert fake.calls[-1] == ("set_events", 4, 0)
+    assert state.failed is False
+
+    # a raising test body still ends the tracing (the wrapper is thrown into)
+    fake.calls.clear()
+    generator = namespace["pytest_pyfunc_call"](item)
+    next(generator)
+    with pytest.raises(RuntimeError):
+        generator.throw(RuntimeError("boom"))
+    assert fake.calls[-1] == ("set_events", 4, 0)
+
+    # a decoy marks failed and drives nothing
+    fake.calls.clear()
+    state.failed = False
+    decoy = types.SimpleNamespace(obj=make_function(state.target_real, "decoy"), originalname="test_x")
+    generator = namespace["pytest_pyfunc_call"](decoy)
+    next(generator)
+    with pytest.raises(StopIteration):
+        next(generator)
+    assert state.failed is True
+    assert fake.calls == []
+
+
+class ForeignMonitoring(FakeMonitoring):
+    """Another tool owns id 4: any claim fails and get_tool names someone else."""
+
+    def get_tool(self, tool):
+        self.calls.append(("get_tool", tool))
+        return "somebody_else"
+
+
+@posix_only
+@pytest.mark.parametrize("mode", ["failed", "unavailable"])
+def test_hooks_and_sessionfinish_make_no_monitoring_calls_when_not_claimed(tmp_path, monkeypatch, mode):
+    fake = ForeignMonitoring()
+    namespace, state, out = armed(tmp_path, monkeypatch, fake=fake)
+    state.claimed = False
+    if mode == "failed":
+        state.failed = True
+    else:
+        state.unavailable = "tool_in_use"
+    fake.calls.clear()
+    item = types.SimpleNamespace(obj=make_function(state.target_real, "test_x"), originalname="test_x")
+
+    generator = namespace["pytest_pyfunc_call"](item)
+    next(generator)
+    with pytest.raises(StopIteration):
+        next(generator)
+    namespace["pytest_sessionfinish"](None, 0)
+    forbidden = ("set_events", "register_callback", "free_tool_id", "clear_tool_id")
+    assert not [c for c in fake.calls if c[0] in forbidden]
+    assert state.traced_ids == set() and state.thread is None
+    if mode == "failed":
+        assert Path(out + ".failed").read_text() == "failed\n" and not os.path.exists(out)
+    else:
+        assert Path(out).read_text().startswith("BENCH_TRACE_UNAVAILABLE: tool_in_use ")
+
+
+def version_text():
+    return "%d.%d.%d" % sys.version_info[:3]
+
+
+def finish(namespace):
+    namespace["pytest_sessionfinish"](None, 0)
+
+
+def markers(out):
+    return {suffix: Path(out + suffix).read_text() for suffix in ("", ".failed") if os.path.exists(out + suffix)}
+
+
+@posix_only
+def test_sessionfinish_writes_exactly_one_marker_with_the_documented_content_and_precedence(tmp_path, monkeypatch):
+    impl = sys.implementation.name
+    success = f"BENCH_TRACE_LINES: 7 {version_text()} {impl} {NONCE}\n"
+
+    def fresh(name, **fields):
+        sub = tmp_path / name
+        sub.mkdir()
+        return armed(sub, monkeypatch, **fields)
+
+    # success
+    namespace, state, out = fresh("success", count=7)
+    finish(namespace)
+    assert markers(out) == {"": success}
+    assert os.stat(out).st_mode & 0o777 == 0o600
+
+    # failed beats unavailable and a count; the marker is the .failed file
+    namespace, state, out = fresh("failed", count=7, failed=True, unavailable="tool_in_use")
+    finish(namespace)
+    assert markers(out) == {".failed": "failed\n"}
+    assert os.stat(out + ".failed").st_mode & 0o777 == 0o600
+
+    # unavailable beats a zero count
+    namespace, state, out = fresh("unavailable", claimed=False, unavailable="no_monitoring")
+    finish(namespace)
+    assert markers(out) == {"": f"BENCH_TRACE_UNAVAILABLE: no_monitoring {version_text()} {impl} {NONCE}\n"}
+
+    # a zero count when not unavailable is a failure
+    namespace, state, out = fresh("zero", count=0)
+    finish(namespace)
+    assert markers(out) == {".failed": "failed\n"}
+
+    # two collected tests after a successful claim
+    namespace, state, out = fresh("two", count=7)
+    namespace["pytest_collection_modifyitems"](None, None, [object(), object()])
+    finish(namespace)
+    assert markers(out) == {".failed": "failed\n"}
+
+    # a get_tool answer naming another tool
+    namespace, state, out = fresh("othertool", count=7)
+    monkeypatch.setattr(sys, "monitoring", ForeignMonitoring(), raising=False)
+    finish(namespace)
+    assert markers(out) == {".failed": "failed\n"}
+
+    # a raising release is swallowed and yields .failed
+    class RaisingRelease(FakeMonitoring):
+        def free_tool_id(self, tool):
+            raise RuntimeError("cannot free")
+
+    namespace, state, out = fresh("release", count=7)
+    monkeypatch.setattr(sys, "monitoring", RaisingRelease(), raising=False)
+    finish(namespace)
+    assert markers(out) == {".failed": "failed\n"}
+
+    # a normal claimed finish: events off first, then the check, then the release
+    fake = FakeMonitoring()
+    namespace, state, out = fresh("sequence", count=7, fake=fake)
+    fake.calls.clear()
+    finish(namespace)
+    assert fake.calls == [("set_events", 4, 0), ("get_tool", 4), ("register_callback", 4, 2, None), ("register_callback", 4, 4, None),
+                          ("free_tool_id", 4)]
+
+
+@posix_only
+def test_sessionfinish_exits_with_status_3_when_no_marker_can_be_written(tmp_path, monkeypatch):
+    for name, fields, pre in (("both", {"count": 3}, ("", ".failed")), ("failedonly", {"failed": True}, (".failed",)),
+                              ("noout", {"count": 3, "out": None}, ())):
+        sub = tmp_path / name
+        sub.mkdir()
+        namespace, state, out = armed(sub, monkeypatch, **fields)
+        for suffix in pre:
+            Path(out + suffix).write_text("pre-existing\n")
+        with pytest.raises(pytest.exit.Exception) as caught:
+            finish(namespace)
+        assert caught.value.returncode == 3, name
+        if pre:
+            assert all(Path(out + suffix).read_text() == "pre-existing\n" for suffix in pre)  # nothing overwritten
+
+    # only the primary marker exists: the success write loses O_EXCL, falls back to .failed
+    sub = tmp_path / "primary"
+    sub.mkdir()
+    namespace, state, out = armed(sub, monkeypatch, count=3)
+    Path(out).write_text("pre-existing\n")
+    finish(namespace)
+    assert markers(out) == {"": "pre-existing\n", ".failed": "failed\n"}
+
+
+@posix_only
+def test_a_one_byte_at_a_time_os_write_still_yields_the_whole_marker(tmp_path, monkeypatch):
+    namespace, state, out = armed(tmp_path, monkeypatch, count=11)
+    real_open, real_write = os.open, os.write
+    marker_fds = set()
+
+    def spy_open(path, flags, *args, **kwargs):
+        fd = real_open(path, flags, *args, **kwargs)
+        if str(path).startswith(str(tmp_path / "out")):
+            marker_fds.add(fd)
+        return fd
+
+    def one_byte(fd, data):
+        return real_write(fd, bytes(data)[:1]) if fd in marker_fds else real_write(fd, data)
+
+    monkeypatch.setattr(os, "open", spy_open)
+    monkeypatch.setattr(os, "write", one_byte)
+    try:
+        finish(namespace)
+    finally:
+        monkeypatch.undo()  # restores os.open and os.write (and the other patches; the test is over)
+    assert markers(out) == {"": f"BENCH_TRACE_LINES: 11 {version_text()} {sys.implementation.name} {NONCE}\n"}
+    assert os.write is real_write
+
+
+def test_the_plugin_source_never_names_restart_events():
+    tree = ast.parse(bg.TRACE_PLUGIN_SOURCE)
+    for node in ast.walk(tree):
+        assert not (isinstance(node, ast.Attribute) and node.attr == "restart_events")
+        assert not (isinstance(node, ast.Name) and node.id == "restart_events")
+    assert "get_tool" in bg.TRACE_PLUGIN_SOURCE and re.search(r"get_tool\(\s*4\s*\)\s*!=\s*['\"]" + re.escape(bg._TRACE_MODULE) + "['\"]",
+                                                              bg.TRACE_PLUGIN_SOURCE)
+
+
+@posix_only
+@needs_monitoring
+def test_a_real_smoke_launch_writes_a_success_marker(tmp_path):
+    plugin_dir, out_dir, root, scratch = (tmp_path / name for name in ("plug", "outdir", "root", "scratch"))
+    for directory in (plugin_dir, out_dir, root, scratch):
+        directory.mkdir()
+    (plugin_dir / "bench_trace_plugin.py").write_text(bg.TRACE_PLUGIN_SOURCE)
+    (root / "test_x.py").write_text("def test_x():\n    total = 0\n    for i in range(50):\n        total += i\n")
+    ini = tmp_path / "harness.ini"
+    ini.write_text("[pytest]\n")
+    bin_dir = str(pytest_venv(tmp_path / "venv"))
+    out_path = str(out_dir / "trace.out")
+    nonce = "f" * 32
+
+    argv = bg.pytest_argv(bin_dir, str(root), "test_x.py::test_x", str(ini), plugins=(bg._TRACE_MODULE,))
+    env = bg.trace_env(bg.side_env(bin_dir, str(scratch)), str(plugin_dir), "test_x.py", out_path, nonce)
+    code, _elapsed, stdout, tail, _oversize = bg._run_once(argv, str(root), env, 120)
+
+    assert code == 0, (stdout[-500:], tail)
+    assert not os.path.exists(out_path + ".failed")
+    match = re.search(r"^BENCH_TRACE_LINES: ([0-9]+) ([0-9.]+) ([a-z]+) " + nonce + r"$", Path(out_path).read_text(), re.M)
+    assert match, Path(out_path).read_text()
+    assert int(match.group(1)) >= 50

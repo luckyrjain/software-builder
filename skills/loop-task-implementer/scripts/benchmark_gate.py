@@ -3175,6 +3175,8 @@ TRACE_PLUGIN_SOURCE = r"""import os
 import sys
 import threading
 
+import pytest
+
 
 class _State(object):
     def __init__(self):
@@ -3229,6 +3231,115 @@ def on_event(code, arg1, arg2=None):
     except BaseException:
         STATE.failed = True
     return None
+
+
+def _traced_set(obj, originalname):
+    # The code objects to count, or None. obj plus at most 8 __wrapped__ hops; a cycle, a longer chain, a link without __code__, or an
+    # innermost code that is not in the target file under the test's own name -> None. Never calls os.getcwd().
+    codes = []
+    seen = set()
+    link = obj
+    hops = 0
+    while True:
+        if id(link) in seen:
+            return None
+        seen.add(id(link))
+        code = getattr(link, "__code__", None)
+        if code is None:
+            return None
+        codes.append(code)
+        following = getattr(link, "__wrapped__", None)
+        if following is None:
+            break
+        hops += 1
+        if hops > 8:
+            return None
+        link = following
+    innermost = codes[-1]
+    if innermost.co_name != originalname or os.path.realpath(innermost.co_filename) != STATE.target_real:
+        return None
+    return tuple(c for c in codes if os.path.realpath(c.co_filename) == STATE.target_real)
+
+
+def pytest_collection_modifyitems(session, config, items):
+    if len(items) != 1:
+        STATE.failed = True
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_pyfunc_call(pyfuncitem):
+    enabled = False
+    if STATE.claimed and not STATE.failed:
+        try:
+            traced = _traced_set(pyfuncitem.obj, pyfuncitem.originalname)
+            if traced is None:
+                STATE.failed = True
+            else:
+                STATE.traced_ids = set(id(c) for c in traced)
+                STATE.keep = list(traced)
+                STATE.thread = threading.get_ident()
+                monitoring = sys.monitoring
+                monitoring.register_callback(4, monitoring.events.LINE, on_event)
+                monitoring.register_callback(4, monitoring.events.JUMP, on_event)
+                enabled = True
+                monitoring.set_events(4, monitoring.events.LINE | monitoring.events.JUMP)
+        except BaseException:
+            STATE.failed = True
+    try:
+        yield
+    finally:
+        if enabled:
+            try:
+                sys.monitoring.set_events(4, 0)
+            except BaseException:
+                STATE.failed = True
+
+
+def _write_marker(path, content):
+    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+    try:
+        data = content.encode("ascii")
+        while data:
+            written = os.write(fd, data)
+            data = data[written:]
+    finally:
+        os.close(fd)
+
+
+def _write_terminal_marker():
+    if STATE.out is None:
+        pytest.exit("trace out path missing", returncode=3)
+    version = "%d.%d.%d" % sys.version_info[:3]
+    failed_path = STATE.out + ".failed"
+    if STATE.failed or (STATE.unavailable is None and STATE.count == 0):
+        primary = None
+    elif STATE.unavailable is not None:
+        primary = "BENCH_TRACE_UNAVAILABLE: %s %s %s %s\n" % (STATE.unavailable, version, sys.implementation.name, STATE.nonce)
+    else:
+        primary = "BENCH_TRACE_LINES: %d %s %s %s\n" % (STATE.count, version, sys.implementation.name, STATE.nonce)
+    if primary is not None:
+        try:
+            _write_marker(STATE.out, primary)
+            return
+        except Exception:
+            pass
+    try:
+        _write_marker(failed_path, "failed\n")
+    except Exception:
+        pytest.exit("trace marker not writable", returncode=3)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    try:
+        if STATE.claimed:
+            sys.monitoring.set_events(4, 0)
+            if sys.monitoring.get_tool(4) != "bench_trace_plugin":
+                STATE.failed = True
+            _release_tool(sys)
+    except BaseException:
+        STATE.failed = True
+    finally:
+        _write_terminal_marker()
 
 
 def _init(environ, sys_module):
