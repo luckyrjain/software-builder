@@ -720,3 +720,41 @@ def test_a_real_smoke_launch_writes_a_success_marker(tmp_path):
     match = re.search(r"^BENCH_TRACE_LINES: ([0-9]+) ([0-9.]+) ([a-z]+) " + nonce + r"$", Path(out_path).read_text(), re.M)
     assert match, Path(out_path).read_text()
     assert int(match.group(1)) >= 50
+
+
+# --- T4a: the plugin file helpers ----------------------------------------------------------------------------------------------
+
+@posix_only
+def test_write_plugin_makes_one_read_only_file_and_verify_plugin_rejects_a_tampered_one(tmp_path):
+    plugin_dir = tmp_path / "plug"
+    plugin_dir.mkdir()
+    path = bg._write_plugin(str(plugin_dir))
+    assert path == str(plugin_dir / (bg._TRACE_MODULE + ".py"))
+    assert os.listdir(plugin_dir) == [bg._TRACE_MODULE + ".py"]
+    assert Path(path).read_bytes() == bg.TRACE_PLUGIN_SOURCE.encode("ascii")
+    assert os.stat(path).st_mode & 0o777 == 0o400
+    with pytest.raises((OSError, bg.BenchmarkGateError)):
+        bg._write_plugin(str(plugin_dir))
+    assert bg._verify_plugin(path) is None
+
+    def refused():
+        with pytest.raises(bg.BenchmarkGateError) as info:
+            bg._verify_plugin(path)
+        assert info.value.code == "MEASURE_FAILED"
+        assert "plugin file hash mismatch" in info.value.detail
+
+    os.chmod(path, 0o600)
+    Path(path).write_bytes(b"# other\n")
+    refused()
+    os.unlink(path)
+    Path(path).write_bytes(b"# recreated\n")
+    refused()
+    os.unlink(path)
+    refused()
+
+    colon_dir = tmp_path / "a:b"
+    os.mkdir(colon_dir)
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        bg._write_plugin(str(colon_dir))
+    assert info.value.code == "MEASURE_FAILED"
+    assert os.listdir(colon_dir) == []

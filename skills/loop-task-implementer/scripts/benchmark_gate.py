@@ -3160,6 +3160,10 @@ MEASURE_REFUSAL_CODES = (
 )
 # MEASURE_ARGS_INVALID: a caller error. MEASURE_FAILED: a harness fault (no disk space, no thread, a failed temp file): not the Builder's.
 ERROR_CODES += MEASURE_REFUSAL_CODES + ("MEASURE_ARGS_INVALID", "MEASURE_FAILED")
+# C4d-2: the paired trace run's refusals. TRACE_MISMATCH: the sides' executed-line traces disagree (or a side's trace is not as the plugin must
+# have produced it); TRACE_UNAVAILABLE: no trustworthy trace could be taken (a harness limit, not the Builder's fault).
+TRACE_REFUSAL_CODES = ("TRACE_MISMATCH", "TRACE_UNAVAILABLE")
+ERROR_CODES += TRACE_REFUSAL_CODES
 
 _RUN_FSIZE_LIMIT = 1 << 20
 _STDERR_TAIL = 2048
@@ -3380,6 +3384,47 @@ def _init(environ, sys_module):
 
 _init(os.environ, sys)
 """
+
+
+def _write_plugin(plugin_dir: str) -> str:
+    """Write ``TRACE_PLUGIN_SOURCE`` as the one read-only file ``<plugin_dir>/bench_trace_plugin.py`` (O_EXCL, no symlink follow); return its path."""
+    if os.pathsep in plugin_dir:
+        raise BenchmarkGateError("MEASURE_FAILED", "plugin directory path contains the path separator")
+    path = os.path.join(plugin_dir, _TRACE_MODULE + ".py")
+    data = TRACE_PLUGIN_SOURCE.encode("ascii")
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o400)
+        try:
+            view = memoryview(data)
+            while view:
+                view = view[os.write(fd, view):]
+        finally:
+            os.close(fd)
+    except OSError as exc:
+        raise BenchmarkGateError("MEASURE_FAILED", f"plugin write failed: {type(exc).__name__}: {exc}") from exc
+    return path
+
+
+def _verify_plugin(path: str) -> None:
+    """Raise ``MEASURE_FAILED`` unless the file at ``path`` still holds exactly ``TRACE_PLUGIN_SOURCE``."""
+    want = hashlib.sha256(TRACE_PLUGIN_SOURCE.encode("ascii")).digest()
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            chunks = []
+            while True:
+                chunk = os.read(fd, 1 << 16)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+        finally:
+            os.close(fd)
+        got = hashlib.sha256(b"".join(chunks)).digest()
+    except OSError:
+        got = b""
+    if got != want:
+        raise BenchmarkGateError("MEASURE_FAILED", "plugin file hash mismatch")
+
 
 
 def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int, repeats: int) -> list[str]:
