@@ -461,13 +461,49 @@ def test_the_default_argv_uses_a_caller_owned_ini_when_given(tmp_path):
 
 
 @posix_only
-def test_children_get_no_stdin(tmp_path):
+def test_children_get_devnull_as_stdin_even_when_the_parent_has_a_pipe(tmp_path):
     script = f"""
-        import sys
-        assert sys.stdin.read() == ""
+        import os
+        assert os.path.samestat(os.fstat(0), os.stat("/dev/null")), "stdin is not /dev/null"
         print("BENCH_RESULT_DIGEST: {DIGEST}")
     """
-    assert measure(tmp_path, script)["digest"] == DIGEST
+    read_end, write_end = os.pipe()
+    saved = os.dup(0)
+    os.dup2(read_end, 0)
+    try:
+        assert measure(tmp_path, script)["digest"] == DIGEST
+    finally:
+        os.dup2(saved, 0)
+        for fd in (saved, read_end, write_end):
+            os.close(fd)
+
+
+@posix_only
+def test_every_refusal_carries_side_phase_and_partial_attributes(tmp_path, monkeypatch):
+    for index, override in enumerate(({"repeats": 5}, {"target": "-x"})):
+        (tmp_path / str(index)).mkdir()
+        err = refusal(tmp_path / str(index), OK_CHILD, **override)
+        assert (err.side, err.phase, err.partial) == (None, None, None)
+    (tmp_path / "nt").mkdir()
+    monkeypatch.setattr(bg.os, "name", "nt")
+    err = refusal(tmp_path / "nt", OK_CHILD)
+    assert (err.side, err.phase, err.partial) == (None, None, None)
+
+
+@posix_only
+def test_a_harness_fault_in_a_timed_round_keeps_the_phase_and_the_finished_rounds(tmp_path, monkeypatch):
+    real = bg.os.makedirs
+    calls = {"n": 0}
+
+    def flaky(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] > 12:  # a few runs in: the second timed round
+            raise OSError(28, "No space left on device")
+        return real(*args, **kwargs)
+    monkeypatch.setattr(bg.os, "makedirs", flaky)
+    err = refusal(tmp_path, OK_CHILD)
+    assert err.code == "MEASURE_FAILED" and err.phase == "timed"
+    assert set(err.partial) == {"order", "base_ns", "head_ns"} and len(err.partial["base_ns"]) >= 1
 
 
 @posix_only

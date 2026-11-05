@@ -905,6 +905,9 @@ class BenchmarkGateError(Exception):
         super().__init__(code)
         self.code = code
         self.detail = escape_diagnostic(detail, 200)
+        self.side: str | None = None  # measure_paired: which side failed ("base" or "head"), None if neither or both
+        self.phase: str | None = None  # measure_paired: "warmup" or "timed"
+        self.partial: dict | None = None  # measure_paired: {"order", "base_ns", "head_ns"} of the completed rounds when phase == "timed"
         self.hits: list[dict] = []  # the diff checks put what they found here (already escaped), for the evidence a human is shown
 
     def __str__(self) -> str:  # a traceback or log line shows the reason, not only the code
@@ -3290,7 +3293,7 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
     builder the ini is ``ini_path`` when given, else a temporary file that is gone when this returns).
 
     Raises ``BenchmarkGateError`` with a ``MEASURE_REFUSAL_CODES`` code, or ``MEASURE_ARGS_INVALID`` (a caller error) or ``MEASURE_FAILED`` (a harness fault: no disk space, no thread; not the Builder's). The exception
-    carries ``side`` (``"base"``, ``"head"`` or ``None``), ``phase`` (``"warmup"``, ``"timed"`` or ``None``) and, for a failure after
+    carries (always, ``None`` when not applicable) ``side`` (``"base"``, ``"head"`` or ``None``), ``phase`` (``"warmup"``, ``"timed"`` or ``None``) and, for a failure after
     timing began (``phase == "timed"``), ``partial`` (``{"order", "base_ns", "head_ns"}`` of the completed rounds). A spawn failure (no ``<bin>/python``: a venv that was not
     provisioned) is ``<SIDE>_NONZERO_EXIT``. Digest rules: after the FIRST warmup round both sides have run, so a digest printed by
     neither is ``DIGEST_MISSING``, by one is ``DIGEST_MISMATCH``, by both but different is ``DIGEST_MISMATCH`` (a benchmark that is
@@ -3324,6 +3327,10 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
     if ini_path is not None and (not isinstance(ini_path, str) or not os.path.isabs(ini_path) or not os.path.isfile(ini_path)):
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "ini_path must be an existing absolute file")
 
+    base_ns: list[int] = []
+    head_ns: list[int] = []
+    phase_now: list[str | None] = [None]
+
     def fail(code: str, detail: str, side: str | None, phase: str | None) -> BenchmarkGateError:
         error = BenchmarkGateError(code, detail)
         error.side, error.phase = side, phase
@@ -3337,8 +3344,6 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
                 ini = os.path.join(work, "empty.ini")
                 with open(ini, "w", encoding="ascii") as handle:
                     handle.write(_EMPTY_INI)
-            base_ns: list[int] = []
-            head_ns: list[int] = []
             digests: dict[str, set[str]] = {"base": set(), "head": set()}
             argvs: dict[str, list[str]] = {}
             counter = 0
@@ -3346,6 +3351,7 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
             def run(side: str, phase: str) -> tuple[int, str | None]:
                 nonlocal counter
                 counter += 1
+                phase_now[0] = phase
                 root, bin_dir = sides[side]
                 scratch = os.path.join(work, f"{side}-{counter}")
                 os.makedirs(scratch)
@@ -3398,7 +3404,10 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
                 raise fail("WORKLOAD_TOO_SHORT", f"base median {int(median)} ns is under {min_base_ns} ns", "base", "timed")
             return {"order": order, "base_ns": base_ns, "head_ns": head_ns, "digest": next(iter(digests["base"])), "argv": argvs}
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:  # no disk space, no thread, a failed temp file: a harness fault
-        raise BenchmarkGateError("MEASURE_FAILED", f"{type(exc).__name__}: {exc}") from exc
+        error = BenchmarkGateError("MEASURE_FAILED", f"{type(exc).__name__}: {exc}")
+        error.phase = phase_now[0]
+        error.partial = {"order": order, "base_ns": list(base_ns), "head_ns": list(head_ns)} if phase_now[0] == "timed" else None
+        raise error from exc
 
 
 # ---------------------------------------------------------------------------
