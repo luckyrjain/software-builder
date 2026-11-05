@@ -265,7 +265,11 @@ def test_init_fails_for_a_target_outside_the_root_or_not_a_regular_file(tmp_path
     (tmp_path / "outside.py").write_text("x = 1\n")
     (cwd / "link.py").symlink_to(tmp_path / "outside.py")
     (cwd / "adir").mkdir()
-    for target in ("link.py", "../outside.py", "adir", "missing.py"):
+    evil = tmp_path / (cwd.name + "-evil")  # a sibling whose name shares the root's prefix: only the trailing separator rejects it
+    evil.mkdir()
+    (evil / "b.py").write_text("x = 1\n")
+    (cwd / "sibling.py").symlink_to(evil / "b.py")
+    for target in ("link.py", "../outside.py", "adir", "missing.py", "sibling.py"):
         plugin_env_vars(tmp_path, monkeypatch, target)
         namespace = exec_plugin(plugin_path, monkeypatch)
         assert namespace["STATE"].failed is True, target
@@ -533,7 +537,7 @@ def test_hooks_enable_line_and_jump_record_the_thread_disable_after_the_yield(tm
 
 
 class ForeignMonitoring(FakeMonitoring):
-    """Another tool owns id 4: any claim fails and get_tool names someone else."""
+    """Another tool is reported as the owner of id 4: only get_tool is overridden (use_tool_id does not raise)."""
 
     def get_tool(self, tool):
         self.calls.append(("get_tool", tool))
@@ -935,7 +939,7 @@ def test_the_result_validation_matrix_content(tmp_path, monkeypatch, name):
 
 
 @posix_only
-def test_a_valid_result_is_accepted_up_to_the_size_cap(tmp_path, monkeypatch):
+def test_an_eighteen_digit_count_is_accepted(tmp_path, monkeypatch):
     _, run, _, _ = trace_setup(tmp_path, monkeypatch, base=lambda call: put(call, valid_text(call.nonce, 10 ** 17)),
                                head=lambda call: put(call, valid_text(call.nonce, 10 ** 17)))
     assert run()["base"] == 10 ** 17
@@ -1627,8 +1631,8 @@ def test_release_and_reclaim_work_on_the_ci_interpreter(tmp_path, monkeypatch):
         assert namespace["_claim_tool"](sys) is None  # claimed again, for real
         assert monitoring.get_tool(4) == bg._TRACE_MODULE
     finally:
-        if monitoring.get_tool(4) == bg._TRACE_MODULE:
-            (namespace or {"_release_tool": None})["_release_tool"](sys)
+        if namespace is not None and monitoring.get_tool(4) == bg._TRACE_MODULE:
+            namespace["_release_tool"](sys)
         monitoring.restart_events()
     assert monitoring.get_tool(4) is None
 
@@ -1742,6 +1746,14 @@ def test_an_error_after_both_results_carries_the_kind_and_what_each_side_saw(tmp
 
 
 @posix_only
+def test_the_trace_argv_is_a_plain_copy_of_what_each_side_ran(tmp_path, monkeypatch):
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch, head=good(6))
+    trace_argv = trace_error(run).trace["argv"]
+    assert type(trace_argv) is dict and trace_argv == {c.side: c.argv for c in fake.calls}
+    trace_argv.clear()  # a caller may mutate it freely
+
+
+@posix_only
 def test_the_trace_records_a_straight_line_body_as_false(tmp_path, monkeypatch):
     _, run, roots, _ = trace_setup(tmp_path, monkeypatch, head=good(6))
     (roots["base"] / "bench.py").write_text("def test_x():\n    x = 1\n")
@@ -1804,7 +1816,6 @@ def test_trace_paired_and_measure_paired_use_the_same_temporary_directory_prefix
         return 0, 3_000_000_000, ("BENCH_RESULT_DIGEST: " + digest + "\n").encode(), b"", False
 
     monkeypatch.setattr(bg, "_run_once", measure_child)
-    homes[:] = homes[:2]
     bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t", repeats=4, timeout_seconds=30,
                       base_commit="1" * 40, head_commit="2" * 40, benchmark_sha256="3" * 64, min_base_ns=0)
     assert trace_prefixes == ["bench-run-", "bench-run-"] and prefixes == ["bench-run-"]

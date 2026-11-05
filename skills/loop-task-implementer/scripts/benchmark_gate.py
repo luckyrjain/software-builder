@@ -14,7 +14,7 @@ marker pid defaults to the exporting process, so pass ``--owner-pid`` when ``cle
 ``repo_top_levels(base)`` (BEFORE the install: afterwards ``build/``, ``dist/`` and ``venv/`` would join the lint's allowlist), venv and
 ``check_venv`` x2 (after each install), ``overlay_benchmark_file(..., head_ref_commit=...)``, ``seal_export`` x2, ``read_benchmark`` on BOTH roots (required equal) and
 the lint, ``hash_export`` x2, ``trace_paired`` (C4d-2; after the pairing set-up, before the timed measurement), measure, ``hash_export`` x2; ``harness_sha256`` at any point (both parts are fixed at import and at the
-first load of the validator, whose module body it therefore runs); C4d is delivered in parts: C4d-1 (#366) adds the measurement harness (``run_order``, ``side_env``, ``pytest_argv``, ``measure_paired``: seeded balanced order, one child per run in its own process group, digest and exit checks, raw wall times); C4d-2 adds the trace (``TRACE_PLUGIN_SOURCE``, ``trace_env``, ``trace_paired``, and the helpers shared with ``measure_paired``: ``_prepare_run``, ``_execute``, ``_check_timeout``, ``_check_sides``, ``_benchmark_file_of``); ``compare`` and ``run-once`` are still to come (C4d-3). Limits of the trace: it is a narrow tripwire, not a proof of equal work. For the typical benchmark, which makes one library call and prints a digest, the executed-line count is a small constant on both sides, so equality proves nothing; the trace discriminates only when the test body loops or branches on library behaviour. Blind spots: helpers and callbacks, generator expressions, lambdas, ``map``, ``exec``/``eval``, ``asyncio.run(main())``, a same-named decoy, and branches inside one line. In-process tampering by code running in the child, and detection of the trace run itself, are not detected. A suppressed or missing result is fail-closed; only a forged, matching result is a bypass. C4e
+first load of the validator, whose module body it therefore runs); C4d is delivered in parts: C4d-1 (#366) adds the measurement harness (``run_order``, ``side_env``, ``pytest_argv``, ``measure_paired``: seeded balanced order, one child per run in its own process group, digest and exit checks, raw wall times); C4d-2 adds the trace (``TRACE_PLUGIN_SOURCE``, ``trace_env``, ``trace_paired``, and the helpers shared with ``measure_paired``: ``_prepare_run``, ``_execute``, ``_check_timeout``, ``_check_sides``, ``_benchmark_file_of``); ``compare`` and ``run-once`` are still to come (C4d-3). Limits of the trace: it is a narrow tripwire, not a proof of equal work. For the typical benchmark, which makes one library call and prints a digest, the executed-line count is a small constant on both sides, so equality proves nothing; the trace discriminates only when the test body loops or branches on library behaviour. Blind spots: helpers and callbacks, generator expressions, lambdas, ``map``, ``exec``/``eval``, ``asyncio.run(main())``, a same-named decoy, and branches inside one line. In-process tampering by code running in the child, and detection of the trace run itself, are not detected. The trace run also differs from a timed run in the contents of its per-side work directory (extra ``plugin-`` and ``out-`` entries) and the pycache prefix tree, in ``config.invocation_params`` and ``getoption('plugins')`` (not tokenised), and in a cold pycache. A suppressed or missing result is fail-closed; only a forged, matching result is a bypass. C4e
 the classifier and docs, C4f the workflow wiring. Specification (revision 5, the converged result of four review
 rounds): ``docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md`` (APIs table,
 Data model, Capacity, Threat model). This docstring states each function's own contract and the reason each
@@ -389,7 +389,7 @@ def validate_benchmark_gate(gate: object) -> tuple[dict | None, str]:
         and Fraction("0.02") <= fractions["max_noise"] <= Fraction("0.30")
     ):
         return None, "BOUNDS_REJECTED"
-    if (values["warmup_runs"] + values["repeats"] + 3) * 2 * values["per_run_timeout_seconds"] > _BUDGET_CAP_SECONDS:
+    if (values["warmup_runs"] + values["repeats"] + _TRACE_TIMEOUT_FACTOR) * 2 * values["per_run_timeout_seconds"] > _BUDGET_CAP_SECONDS:
         return None, "BUDGET_REJECTED"
 
     normalized = {
@@ -3186,7 +3186,7 @@ _MIN_BASE_NS = 2_000_000_000
 _DIGEST_RE = re.compile(rb"BENCH_RESULT_DIGEST: ([0-9a-f]{64})(?![0-9a-f])")
 _EMPTY_INI = "[pytest]\n"
 _TRACE_MODULE = "bench_trace_plugin"  # the one pytest plugin the gate may load (C4d-2): `-p bench_trace_plugin`, found through PYTHONPATH
-_TRACE_TIMEOUT_FACTOR = 3  # the traced run may take this many times the per-run timeout; per_run_timeout_seconds must leave room for a traced run (about 7x the benchmark time for a tight loop); the gate budget cap hardcodes this factor 3
+_TRACE_TIMEOUT_FACTOR = 3  # the traced run may take this many times the per-run timeout; per_run_timeout_seconds must leave room for a traced run (about 7x the benchmark time for a tight loop); the gate budget cap uses this factor
 
 # The trace plugin, written fresh into a harness-owned directory per side (spec D1, D2). It must stay ASCII, annotation-free and importable
 # on CPython 3.8: it runs inside the side's own venv, whose interpreter may be older than this one. Raw string: no escape is interpreted.
@@ -3921,7 +3921,7 @@ def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, t
         raise fail("MEASURE_FAILED", f"{type(exc).__name__}: {exc}", "harness") from exc
 
     base, head = results["base"], results["head"]
-    seen = {"base": base._asdict(), "head": head._asdict(), "argv": argvs, "body_has_control_flow": has_control_flow}
+    seen = {"base": base._asdict(), "head": head._asdict(), "argv": dict(argvs), "body_has_control_flow": has_control_flow}
 
     def after(code: str, detail: str, kind: str, side: str | None = None) -> BenchmarkGateError:
         return fail(code, detail, kind, side, seen)

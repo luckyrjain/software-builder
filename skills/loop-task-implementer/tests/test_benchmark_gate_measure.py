@@ -236,6 +236,16 @@ def test_scratch_directories_are_removed(tmp_path, monkeypatch):
 
 
 @posix_only
+def test_an_unknown_execute_failure_kind_is_an_assertion_error(tmp_path, monkeypatch):
+    def execute(side, argv, root, scratch, env, timeout, fail):
+        raise fail("mystery", "x")
+
+    monkeypatch.setattr(bg, "_execute", execute)
+    with pytest.raises(AssertionError, match="unknown _execute failure kind"):
+        measure(tmp_path, OK_CHILD)
+
+
+@posix_only
 def test_a_nonzero_exit_on_each_side_has_its_own_code(tmp_path):
     for side in ("base", "head"):
         script = f"""
