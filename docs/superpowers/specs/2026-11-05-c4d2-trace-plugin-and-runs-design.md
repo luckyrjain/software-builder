@@ -1,4 +1,4 @@
-# C4d-2: the trace plugin and the per-side trace runs (rev 7, review rounds 1 to 6 applied)
+# C4d-2: the trace plugin and the per-side trace runs (rev 8, spec rounds 1 to 6 and branch review round 1 applied)
 
 **Readiness: Approved for planning.** Six review rounds were used (the maximum); the round-6 multi-persona reviewer returned CLEAN and the attacker and test-author findings were applied in this revision without a seventh round. Gap-backlog ticket C4, part C4d-2 of C4d. Library only: nothing here is wired until C4f,
 and `compare` (C4d-3) is the only caller. Parent design (binding except where section 1 lists a revision):
@@ -95,7 +95,27 @@ checkout and is not edited here):
    frames whose caller is a benchmark-file frame".
 3. **Result channel**: a harness-owned file under an `out_dir`, with a per-run nonce, not a stdout line.
 4. `TRACE_UNAVAILABLE`, returned only when **both** sides report the same unavailability.
-5. `BENCH_TRACE_*` and `bench_trace_plugin` join the token tripwire.
+5. `BENCH_TRACE_*`, `bench_trace_plugin`, `sys.monitoring`, `import monitoring`, `orig_argv`, `/proc/self/cmdline` and `/proc/self/environ` join the token
+   tripwire (twelve tokens in all, not the parent's six).
+
+**Further deviations found by the whole-branch review (implementation round 1) to be written back before C4d-3:**
+
+6. `measure_paired` now rejects a target that is not an ASCII, relative `.py` path (no `..`, no empty/`.` component, no control character or
+   backslash in the file part, no leading `-`); a C4d-1 tightening (D4).
+7. A spawn failure and an oversize output of the trace run fold into `TRACE_MISMATCH` (the parent names only timed-out, failed and silent
+   runs). Every error carries a structured `kind` (closed vocabulary `TRACE_FAILURE_KINDS`) so `compare` need not parse the detail;
+   errors raised after both sides produced a result also carry `trace` (both sides' values, interpreters, argv,
+   `body_has_control_flow`); `partial` stays `None`.
+8. `TRACE_UNAVAILABLE` has no row in the parent outcome table; C4d-3 must define its result, finding and retry semantics (no timed run has
+   happened, so it behaves like `HOST_BUSY_START`).
+9. `trace_paired` runs before the timed runs and does not check the digest: a head with wrong output and different control flow reports
+   `TRACE_MISMATCH` (non-blocking for a PRE_EXISTING benchmark) rather than the blocking `DIGEST_MISMATCH`; C4d-3 should order the checks
+   or run the digest check first.
+10. The trace budget: `validate_benchmark_gate`'s cap `(warmup + repeats + 3) * 2 * T <= 1800` hardcodes the factor 3 of
+    `_TRACE_TIMEOUT_FACTOR`; there is no base median before the trace runs, so the "10x median" advice of rev 7 is replaced by: the gate's
+    `per_run_timeout_seconds` must leave room for a traced run (about 7x the benchmark's time for a tight loop), and a
+    `BUILDER_AUTHORED` benchmark that cannot be traced in `3 * T` is rejected with that text.
+11. The shipped trace `argv` is not rerunnable by a human (the ini and plugin directory are temporary): `compare` must label it harness-only.
 
 **Prototype numbers** (macOS, CPython 3.14.7, pytest 9.1.1; simulations of the D2 plugin, not the shipped one; real tests assert
 relations and lower bounds, never literals, because event counts differ across CPython versions): a library calling a benchmark-file
@@ -106,10 +126,10 @@ counted it is 10 and 1000.
 
 ## 2. Design
 
-**D1. The plugin is a raw-string constant, written fresh per side.** `TRACE_PLUGIN_SOURCE: str` (a raw `r"""` string, ASCII, 130 to 180
-lines) lives in `benchmark_gate.py`. For each side `trace_paired` runs inside `with tempfile.TemporaryDirectory(prefix="bench-trace-") as work:` (`work` is the path string; the
+**D1. The plugin is a raw-string constant, written fresh per side.** `TRACE_PLUGIN_SOURCE: str` (a raw `r"""` string, ASCII, about 210
+lines) lives in `benchmark_gate.py`. For each side `trace_paired` runs inside `with tempfile.TemporaryDirectory(prefix="bench-run-") as work:` (`work` is the path string; the
 `with` encloses the run and the result steps of D3, so the result is read before the directory goes, and each side's directory is gone
-before the next side starts; the empty ini is `work/empty.ini`) and creates `plugin_dir = tempfile.mkdtemp(dir=work, prefix="plugin-")`
+before the next side starts; the empty ini is `work/empty.ini`; `measure_paired` uses the same `bench-run-` prefix and the same per-run names, so a trace run is not recognisable from its `HOME`, `TMPDIR`, pycache or ini paths) and creates `plugin_dir = tempfile.mkdtemp(dir=work, prefix="plugin-")`
 (mode `0o700` by construction), writes `bench_trace_plugin.py` into it with `O_CREAT|O_EXCL|O_WRONLY|O_NOFOLLOW` mode `0o400` through
 `_write_plugin(plugin_dir) -> str`, and, **after the argv and environment are built and immediately before `_execute`**, calls `_verify_plugin(path)`, which re-reads the file and compares
 its SHA-256 with that of `TRACE_PLUGIN_SOURCE.encode("ascii")`; a mismatch is `MEASURE_FAILED`. A path containing `os.pathsep` is
@@ -233,8 +253,9 @@ longer than about `3T/7`, roughly 43% of `timeout_seconds`, becomes a `TRACE_MIS
 the Builder authored the only thing that differs on the base side and the head trace was never run (otherwise a benchmark that is slow only
 under tracing would turn a blocking rejection into an `INCONCLUSIVE`); when `PRE_EXISTING`, `INCONCLUSIVE`. For `side="head"` after a
 completed base trace: REJECTED. No trace outcome other than a normal return may lead to `IMPROVED`, and a trace timeout never counts as the
-per-task re-measure. Because the traced slowdown is at least 7x and unbounded for tight loops, `compare` should choose `timeout_seconds` of at
-least 10 times the base median for a benchmark with control flow (or raise `_TRACE_TIMEOUT_FACTOR`).
+per-task re-measure. Because the traced slowdown is at least 7x and unbounded for tight loops, the gate's `per_run_timeout_seconds` must leave room for a
+traced run (there is no base median yet when the trace runs; see deviation 10); raising `_TRACE_TIMEOUT_FACTOR` would break the gate's
+budget cap, which hardcodes the factor 3.
 After `_execute` returns, in this order:
 
 1. `os.path.lexists(out_path + ".failed")` -> `TRACE_MISMATCH` ("plugin reported failure").
@@ -278,7 +299,7 @@ absolute, no `.`, `..` or empty component (a trailing slash is rejected), does n
 `MEASURE_ARGS_INVALID` (message "target must be a .py path under the root, without '..' or a leading '-'"). It is a second path grammar next to the gate's own (`_benchmark_path_ok`); it is deliberately lower level (it validates a pytest target
 string for the harness, not a gate field) and is not shared with it. It rejects traversal by name; an in-tree symlink pointing outside the root is refused by the export step and by the
 plugin's "regular file inside `realpath(cwd)`" check. `_check_timeout(t)`: a number (not `bool`, not NaN) in `(0, 3600]`, else
-`MEASURE_ARGS_INVALID`. `_check_sides(base_root, head_root, base_bin, head_bin, target, ini_path) -> dict`: the roots/bins checks, the
+`MEASURE_ARGS_INVALID`. `_check_sides(base_root, head_root, base_bin, head_bin, target, ini_path) -> (sides, benchmark_file)`: the roots/bins checks, the
 `samefile` and nested-root checks, `_benchmark_file_of`, and the `ini_path` check, moved unchanged out of `measure_paired` and called at the
 same position (`_check_timeout` before the `min_base_ns` check, `_check_sides` after it), so error precedence is unchanged. `measure_paired` now applies `_benchmark_file_of` too; the six existing tests that pass
 `"t"` (lines 421, 458, 615, which reach the run, and 683, 693, 704, which expect the sides errors and would be masked by the new target
@@ -474,7 +495,7 @@ tests use 120 s child timeouts.
 | T6 `[CONTROLLER]` full gate suite, `make lint-static`, `graphify update .`, review rounds, PR | | | T0 to T5 |
 
 All code tasks edit one file: sequential. Each task's tests run green at its own commit (T4c is the first place every hook runs under
-real pluggy against `trace_paired`; a defect it finds is fixed in that commit). The plugin constant is 130 to 180 lines.
+real pluggy against `trace_paired`; a defect it finds is fixed in that commit). The plugin constant is about 210 lines.
 
 ## 7. Rollout and rollback
 
@@ -483,5 +504,5 @@ Library only; nothing calls it until C4f. Rollback is `git revert` of the squash
 ## 8. Open questions
 
 None blocking. For C4d-3's design pass: the order of the trace pair against `HOST_BUSY_START`; the `TRACE_UNAVAILABLE` mapping and the
-trace-timeout verdict rule (D3); folding the five revisions in section 1 into the parent design file; the deferred structural option of
+trace-timeout verdict rule (D3); folding the revisions and deviations of section 1 into the parent design file; the deferred structural option of
 loading the plugin, inert, in the timed runs too (removes the argv and `sys.modules` differentiators).
