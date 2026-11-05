@@ -1304,3 +1304,343 @@ def test_body_has_control_flow_is_false_for_a_missing_file_a_symlink_and_a_fifo(
     os.unlink(roots["base"] / "bench.py")
     os.mkfifo(roots["base"] / "bench.py")
     assert run_with_deadline(run)["body_has_control_flow"] is False
+
+
+# --- T4c: real-pytest rows (the real argv, plugin, markers and harness reading; relations and lower bounds only) ------------------
+
+TARGET = "test_bench.py::test_bench"
+
+
+def claiming_pth():
+    """A venv ``.pth`` whose line takes sys.monitoring tool id 4 at interpreter start (before the plugin is imported)."""
+    return {"zz_claim.pth": "import sys; sys.monitoring.use_tool_id(4, 'x')\n"}
+
+
+def real_sides(tmp_path, bench, head_bench=None, base_libs=None, head_libs=None, extra_base=None, extra_head=None):
+    """Two real sides: a root holding ``test_bench.py`` (plus ``extra_*`` files) and a pip-less venv with that side's library modules
+    installed. Returns ``(base_root, head_root, base_bin, head_bin)`` as strings."""
+    if head_libs is None:
+        head_libs = base_libs
+    roots, bins = [], []
+    for side, source, libs, extra in (("base", bench, base_libs, extra_base), ("head", head_bench or bench, head_libs, extra_head)):
+        root = tmp_path / f"{side}-root"
+        root.mkdir()
+        (root / "test_bench.py").write_text(textwrap.dedent(source))
+        for name, content in (extra or {}).items():
+            (root / name).write_text(textwrap.dedent(content))
+        roots.append(str(root))
+        bins.append(str(pytest_venv(tmp_path / f"{side}-venv", libs={k: textwrap.dedent(v) for k, v in (libs or {}).items()})))
+    return roots[0], roots[1], bins[0], bins[1]
+
+
+def launch(tmp_path, bench, target=TARGET, **kwargs):
+    """The real ``trace_paired`` (no argv_builder). Returns the result dict."""
+    base_root, head_root, base_bin, head_bin = real_sides(tmp_path, bench, **kwargs)
+    return bg.trace_paired(base_root, head_root, base_bin, head_bin, target, timeout_seconds=120)
+
+
+def launch_error(tmp_path, bench, target=TARGET, **kwargs):
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        launch(tmp_path, bench, target=target, **kwargs)
+    return info.value
+
+
+@posix_only
+@needs_monitoring
+def test_batching_with_a_helper_below_the_callback_has_equal_counts(tmp_path):
+    bench = """
+        import lib
+
+        def helper():
+            return 1
+
+        def callback(n=1):
+            return helper()
+
+        def test_bench():
+            lib.go(callback)
+    """
+    base = {"lib.py": "def go(cb):\n    for _ in range(7):\n        cb()\n"}
+    head = {"lib.py": "def go(cb):\n    cb(7)\n"}
+    result = launch(tmp_path, bench, base_libs=base, head_libs=head)
+    assert result["base"] == result["head"] >= 1
+
+
+@posix_only
+@needs_monitoring
+def test_python_and_c_level_entries_count_the_same(tmp_path):
+    bench = """
+        import lib
+
+        def callback(i):
+            return i
+
+        def test_bench():
+            lib.entry(callback)
+    """
+    base = {"lib.py": "def entry(cb):\n    return [cb(i) for i in range(5)]\n"}
+    head = {"lib.py": "def entry(cb):\n    return list(map(cb, range(5)))\n"}
+    result = launch(tmp_path, bench, base_libs=base, head_libs=head)
+    assert result["base"] == result["head"] >= 1
+
+
+@posix_only
+@needs_monitoring
+@pytest.mark.parametrize("name,body", [
+    ("while", "    total = 0\n    while lib.more():\n        total += 1\n"),
+    ("one-line while", "    total = 0\n    while lib.more(): total += 1\n"),
+    ("one-line for", "    total = 0\n    for x in lib.items(): total += x\n"),
+])
+def test_a_different_loop_count_differs_including_one_line_loops(tmp_path, name, body):
+    bench = "import lib\n\n\ndef test_bench():\n" + body
+    library = ("_left = [%d]\n\n\ndef more():\n    _left[0] -= 1\n    return _left[0] >= 0\n\n\n"
+               "def items():\n    return range(%d)\n")
+    error = launch_error(tmp_path, bench, base_libs={"lib.py": library % (3, 3)}, head_libs={"lib.py": library % (9, 9)})
+    assert error.code == "TRACE_MISMATCH" and error.side is None and error.phase == "trace"
+    match = re.fullmatch(r"line counts differ: base ([0-9]+), head ([0-9]+)", error.detail)
+    assert match, error.detail
+    assert 1 <= int(match.group(1)) < int(match.group(2))
+
+
+@posix_only
+@needs_monitoring
+@pytest.mark.parametrize("name,body,base_lib,head_lib", [
+    ("early return",
+     "    for i in lib.items():\n        if i == lib.STOP:\n            return\n        lib.use(i)\n",
+     "STOP = 99\n\n\ndef items():\n    return range(6)\n\n\ndef use(i):\n    return i\n",
+     "STOP = 2\n\n\ndef items():\n    return range(6)\n\n\ndef use(i):\n    return i\n"),
+    ("caught exception",
+     "    try:\n        for i in lib.items():\n            lib.use(i)\n    except ValueError:\n        pass\n",
+     "def items():\n    return range(6)\n\n\ndef use(i):\n    return i\n",
+     "def items():\n    return range(6)\n\n\ndef use(i):\n    if i == 2:\n        raise ValueError(i)\n    return i\n"),
+])
+def test_early_return_and_a_caught_exception_abandoning_the_loop_differ(tmp_path, name, body, base_lib, head_lib):
+    bench = "import lib\n\n\ndef test_bench():\n" + body
+    error = launch_error(tmp_path, bench, base_libs={"lib.py": base_lib}, head_libs={"lib.py": head_lib})
+    assert error.code == "TRACE_MISMATCH" and error.side is None
+    assert error.detail.startswith("line counts differ: base "), error.detail
+
+
+@posix_only
+@needs_monitoring
+def test_an_honest_fixed_count_benchmark_matches_itself(tmp_path):
+    bench = "import lib\n\n\ndef test_bench():\n    a = lib.one()\n    b = lib.one()\n    assert a == b\n"
+    library = {"lib.py": "def one():\n    return 1\n"}
+    result = launch(tmp_path, bench, base_libs=library)
+    assert result["base"] == result["head"] >= 3
+    assert result["body_has_control_flow"] is False
+
+
+@posix_only
+@needs_monitoring
+def test_wraps_traced_plain_wrapper_and_decoy_fail_closed(tmp_path):
+    wrapped = """
+        import functools
+
+
+        def deco(f):
+            @functools.wraps(f)
+            def wrapper():
+                return f()
+            return wrapper
+
+
+        @deco
+        def test_bench():
+            a = 1
+            b = 2
+    """
+    result = launch(tmp_path, wrapped)
+    assert result["base"] == result["head"] >= 2
+
+    plain = """
+        def deco(f):
+            def wrapper():
+                return f()
+            return wrapper
+
+
+        @deco
+        def test_bench():
+            a = 1
+    """
+    decoy = """
+        def decoy():
+            return 1
+
+
+        def deco(f):
+            def wrapper():
+                return f()
+            wrapper.__wrapped__ = decoy
+            return wrapper
+
+
+        @deco
+        def test_bench():
+            a = 1
+    """
+    for index, source in enumerate((plain, decoy)):
+        error = launch_error(subdir(tmp_path, f"case{index}"), source)
+        assert error.code == "TRACE_MISMATCH" and error.detail == "plugin reported failure" and error.side == "base"
+
+
+@posix_only
+@needs_monitoring
+def test_two_tests_async_and_plugin_failure_are_trace_mismatch(tmp_path):
+    two = """
+        import pytest
+
+
+        @pytest.mark.parametrize("n", [1, 2])
+        def test_bench(n):
+            a = n
+    """
+    error = launch_error(tmp_path, two)
+    assert error.code == "TRACE_MISMATCH" and error.detail == "plugin reported failure" and error.side == "base"
+
+    error = launch_error(subdir(tmp_path, "async"), "async def test_bench():\n    a = 1\n")
+    assert error.code == "TRACE_MISMATCH"
+
+
+def forged_library(action):
+    """A library whose ``go()`` runs ``action`` (child code) with ``STATE``, ``OUT`` and ``FORGED`` (a 999 line with the right nonce) in scope."""
+    return {"lib.py": (
+        "import atexit\nimport os\nimport sys\n\n\n"
+        "def go():\n"
+        "    STATE = sys.modules['bench_trace_plugin'].STATE\n"
+        "    OUT = STATE.out\n"
+        "    FORGED = 'BENCH_TRACE_LINES: 999 %d.%d.%d cpython ' % sys.version_info[:3] + STATE.nonce + '\\n'\n"
+        + textwrap.indent(textwrap.dedent(action), "    ") + "\n"
+    )}
+
+
+FORGE_BENCH = "import lib\n\n\ndef test_bench():\n    lib.go()\n    a = 1\n"
+FORGE_TWO_TESTS = ("import lib\nimport pytest\n\n\n@pytest.mark.parametrize('n', [1, 2])\ndef test_bench(n):\n    lib.go()\n    a = n\n")
+
+
+@posix_only
+@needs_monitoring
+def test_forged_results_are_not_accepted(tmp_path):
+    counter = iter(range(100))
+
+    def case(bench, action):
+        library = forged_library(action)
+        return launch(subdir(tmp_path, f"case{next(counter)}"), bench, base_libs=library)
+
+    def case_error(bench, action):
+        library = forged_library(action)
+        return launch_error(subdir(tmp_path, f"case{next(counter)}"), bench, base_libs=library)
+
+    # (a) 999 lines on stdout, at import time and at exit: stdout is never parsed
+    result = case(FORGE_BENCH, "print('BENCH_TRACE_LINES: 999 3.12.0 cpython ' + 'f' * 32, flush=True)\n"
+                               "atexit.register(print, 'BENCH_TRACE_LINES: 999 3.12.0 cpython ' + STATE.nonce)\n")
+    assert "999" not in (result["base"], result["head"]) and result["base"] == result["head"] >= 1
+
+    # (b) the out path created early in an honest run, with the right nonce: the plugin's O_EXCL fails -> .failed
+    error = case_error(FORGE_BENCH, "with open(OUT, 'w') as handle:\n    handle.write(FORGED)\n")
+    assert error.code == "TRACE_MISMATCH" and error.detail == "plugin reported failure" and error.side == "base"
+
+    # (c) the same in a failing run (two tests)
+    error = case_error(FORGE_TWO_TESTS, "with open(OUT, 'w') as handle:\n    handle.write(FORGED)\n")
+    assert error.code == "TRACE_MISMATCH" and error.detail == "plugin reported failure"
+
+    # (d) pre-create the file (wrong nonce) and leave through os._exit, so the plugin never runs its sessionfinish
+    error = case_error(FORGE_BENCH, "with open(OUT, 'w') as handle:\n    handle.write(FORGED.replace(STATE.nonce, '0' * 32))\n"
+                                    "getattr(os, '_e' + 'xit')(0)\n")
+    assert error.code == "TRACE_MISMATCH" and error.side == "base" and error.detail == "no trace result"
+    # ... and with no nonce at all
+    error = case_error(FORGE_BENCH, "with open(OUT, 'w') as handle:\n    handle.write('BENCH_TRACE_LINES: 999 3.12.0 cpython\\n')\n"
+                                    "getattr(os, '_e' + 'xit')(0)\n")
+    assert error.code == "TRACE_MISMATCH" and error.side == "base" and error.detail == "no trace result"
+
+    # (e) a FIFO at the out path, then os._exit: rejected without hanging
+    error = case_error(FORGE_BENCH, "os.mkfifo(OUT)\ngetattr(os, '_e' + 'xit')(0)\n")
+    assert error.code == "TRACE_MISMATCH" and error.side == "base" and error.detail == "no trace result"
+
+    # (f) an atexit rewrite of the honest result with a wrong nonce, and one with no nonce
+    for rewritten in ("FORGED.replace(STATE.nonce, '1' * 32)", "'BENCH_TRACE_LINES: 999 3.12.0 cpython\\n'"):
+        error = case_error(FORGE_BENCH, (
+            "def rewrite(path=OUT, text=%s):\n"
+            "    os.unlink(path)\n"
+            "    with open(path, 'w') as handle:\n"
+            "        handle.write(text)\n\n\n"
+            "atexit.register(rewrite)\n") % rewritten)
+        assert error.code == "TRACE_MISMATCH" and error.side == "base" and error.detail == "no trace result"
+        assert "999" not in error.detail
+
+
+@posix_only
+@needs_monitoring
+def test_a_real_launch_with_tool_id_4_taken_by_a_venv_pth_reports_tool_in_use(tmp_path):
+    bench = "def test_bench():\n    a = 1\n"
+    error = launch_error(subdir(tmp_path, "both"), bench, base_libs=claiming_pth(), head_libs=claiming_pth())
+    assert error.code == "TRACE_UNAVAILABLE" and "tool_in_use" in error.detail and error.phase == "trace"
+
+    error = launch_error(subdir(tmp_path, "base"), bench, base_libs=claiming_pth(), head_libs={})
+    assert error.code == "TRACE_MISMATCH" and error.side == "base"
+    error = launch_error(subdir(tmp_path, "head"), bench, base_libs={}, head_libs=claiming_pth())
+    assert error.code == "TRACE_MISMATCH" and error.side == "head"
+
+
+@posix_only
+@needs_monitoring
+def test_release_and_reclaim_work_on_the_ci_interpreter(tmp_path, monkeypatch):
+    plugin_path, _cwd = plugin_env(tmp_path, monkeypatch)
+    monitoring = sys.monitoring
+    namespace = None
+    try:
+        namespace = exec_plugin(plugin_path, monkeypatch, fake=None)
+        assert namespace["STATE"].claimed and monitoring.get_tool(4) == bg._TRACE_MODULE
+        namespace["_release_tool"](sys)
+        assert monitoring.get_tool(4) is None
+        assert namespace["_claim_tool"](sys) is None  # claimed again, for real
+        assert monitoring.get_tool(4) == bg._TRACE_MODULE
+    finally:
+        if monitoring.get_tool(4) == bg._TRACE_MODULE:
+            (namespace or {"_release_tool": None})["_release_tool"](sys)
+        monitoring.restart_events()
+    assert monitoring.get_tool(4) is None
+
+
+@posix_only
+@needs_monitoring
+def test_an_outside_pointing_symlink_is_rejected_by_the_plugin(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "bench.py").write_text("def test_bench():\n    a = 1\n")
+    base_root, head_root, base_bin, head_bin = real_sides(tmp_path, "def test_bench():\n    a = 1\n")
+    for root in (base_root, head_root):
+        os.symlink(outside, os.path.join(root, "evil"))
+    target = "evil/bench.py::test_bench"
+
+    error = None
+    try:
+        bg.trace_paired(base_root, head_root, base_bin, head_bin, target, timeout_seconds=120)
+    except bg.BenchmarkGateError as exc:
+        error = exc
+    assert error is not None and error.code == "TRACE_MISMATCH" and error.detail == "plugin reported failure" and error.side == "base"
+
+    # the same launch by hand: pytest itself is happy (exit 0), so the failure came from the plugin's init, not from the exit code
+    plugin_dir, out_dir, scratch = (tmp_path / name for name in ("plug", "outdir", "scratch"))
+    for directory in (plugin_dir, out_dir, scratch):
+        directory.mkdir()
+    bg._write_plugin(str(plugin_dir))
+    ini = tmp_path / "harness.ini"
+    ini.write_text("[pytest]\n")
+    out_path = str(out_dir / "trace.out")
+    argv = bg.pytest_argv(base_bin, base_root, target, str(ini), plugins=(bg._TRACE_MODULE,))
+    env = bg.trace_env(bg.side_env(base_bin, str(scratch)), str(plugin_dir), target.split("::")[0], out_path, "e" * 32)
+    code, _elapsed, stdout, tail, _oversize = bg._run_once(argv, base_root, env, 120)
+    assert code == 0, (stdout[-500:], tail)
+    assert os.path.lexists(out_path + ".failed") and not os.path.exists(out_path)
+
+
+@posix_only
+@needs_monitoring
+@pytest.mark.parametrize("destination", ["'/'", "__import__('tempfile').gettempdir()"])
+def test_a_benchmark_that_chdirs_at_import_still_matches(tmp_path, destination):
+    bench = "import lib\n\n\ndef test_bench():\n    a = 1\n    b = 2\n"
+    library = {"lib.py": "import os\n\nos.chdir(%s)\n" % destination}
+    result = launch(tmp_path, bench, base_libs=library)
+    assert result["base"] == result["head"] >= 2
