@@ -1,4 +1,8 @@
-"""C4d-2: the trace plugin (``TRACE_PLUGIN_SOURCE``) and, in later tasks, ``trace_paired``.
+"""C4d-2: the trace plugin (``TRACE_PLUGIN_SOURCE``), ``trace_env`` and ``trace_paired``.
+
+Covers: the plugin-source rules (ASCII, no annotations, the static 3.8 rules); unit tests of the plugin's exec contract (``_init``, tool claim and
+release, ``on_event``, hooks, the terminal markers); the plugin file helpers; ``trace_paired`` with fake children (result validation, decision
+table, error phase and side); and real-pytest rows that check relations and lower bounds only.
 
 The plugin is a raw-string constant that is written into a side's harness-owned directory and loaded with ``-p``. These tests ``exec`` its
 source in a scratch namespace (the module ends with ``_init(os.environ, sys)``, which runs on the real process objects, so each test sets the

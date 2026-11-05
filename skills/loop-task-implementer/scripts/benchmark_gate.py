@@ -13,8 +13,8 @@ read only the repository and the two commits, no export, so they can run before 
 marker pid defaults to the exporting process, so pass ``--owner-pid`` when ``cleanup`` will run from another process),
 ``repo_top_levels(base)`` (BEFORE the install: afterwards ``build/``, ``dist/`` and ``venv/`` would join the lint's allowlist), venv and
 ``check_venv`` x2 (after each install), ``overlay_benchmark_file(..., head_ref_commit=...)``, ``seal_export`` x2, ``read_benchmark`` on BOTH roots (required equal) and
-the lint, ``hash_export`` x2, measure, ``hash_export`` x2; ``harness_sha256`` at any point (both parts are fixed at import and at the
-first load of the validator, whose module body it therefore runs); C4d is delivered in parts: C4d-1 adds the measurement harness (``run_order``, ``side_env``, ``pytest_argv``, ``measure_paired``: seeded balanced order, one child per run in its own process group, digest and exit checks, raw wall times), then the trace and ``compare`` with ``run-once``; C4e
+the lint, ``hash_export`` x2, ``trace_paired`` (C4d-2; after the pairing set-up, before the timed measurement), measure, ``hash_export`` x2; ``harness_sha256`` at any point (both parts are fixed at import and at the
+first load of the validator, whose module body it therefore runs); C4d is delivered in parts: C4d-1 (#366) adds the measurement harness (``run_order``, ``side_env``, ``pytest_argv``, ``measure_paired``: seeded balanced order, one child per run in its own process group, digest and exit checks, raw wall times); C4d-2 adds the trace (``TRACE_PLUGIN_SOURCE``, ``trace_env``, ``trace_paired``, and the helpers shared with ``measure_paired``: ``_prepare_run``, ``_execute``, ``_check_timeout``, ``_check_sides``, ``_benchmark_file_of``); ``compare`` and ``run-once`` are still to come (C4d-3). Limits of the trace: it is a narrow tripwire, not a proof of equal work. For the typical benchmark, which makes one library call and prints a digest, the executed-line count is a small constant on both sides, so equality proves nothing; the trace discriminates only when the test body loops or branches on library behaviour. Blind spots: helpers and callbacks, generator expressions, lambdas, ``map``, ``exec``/``eval``, ``asyncio.run(main())``, a same-named decoy, and branches inside one line. In-process tampering by code running in the child, and detection of the trace run itself, are not detected. A suppressed or missing result is fail-closed; only a forged, matching result is a bypass. C4e
 the classifier and docs, C4f the workflow wiring. Specification (revision 5, the converged result of four review
 rounds): ``docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md`` (APIs table,
 Data model, Capacity, Threat model). This docstring states each function's own contract and the reason each
@@ -905,9 +905,9 @@ class BenchmarkGateError(Exception):
         super().__init__(code)
         self.code = code
         self.detail = escape_diagnostic(detail, 200)
-        self.side: str | None = None  # measure_paired: which side failed ("base" or "head"), None if neither or both
-        self.phase: str | None = None  # measure_paired: "warmup" or "timed"
-        self.partial: dict | None = None  # measure_paired: {"order", "base_ns", "head_ns"} of the completed rounds when phase == "timed"
+        self.side: str | None = None  # measure_paired and trace_paired: which side failed ("base" or "head"), None if neither or both
+        self.phase: str | None = None  # measure_paired: "warmup" or "timed"; trace_paired: "trace" (None for an argument error)
+        self.partial: dict | None = None  # measure_paired only: {"order", "base_ns", "head_ns"} of the completed rounds when phase == "timed" (None for trace_paired)
         self.hits: list[dict] = []  # the diff checks put what they found here (already escaped), for the evidence a human is shown
 
     def __str__(self) -> str:  # a traceback or log line shows the reason, not only the code
@@ -2170,7 +2170,7 @@ def harness_sha256() -> str:
     the loaded `validate_task_target.py` (length-prefixed, domain `software-builder-bench-harness-v1`). Both name the code this
     process has been using (up to the stale-`.pyc` residual of `_digest_own_file`): this file is digested when it is imported, the
     validator when it is loaded (and cached until
-    `_reset_task_target_cache()`). C4d adds the trace plugin and any new harness file to this definition and bumps the domain string.
+    `_reset_task_target_cache()`). The trace plugin is a constant inside this file, so the own-file digest covers it; the domain string stays ``-v1``.
     `HARNESS_UNREADABLE` if either part cannot be read."""
     try:
         if not _SELF_DIGEST:
@@ -2657,7 +2657,7 @@ _STARTUP_MODULES = frozenset({"sitecustomize", "usercustomize"})
 _STDLIB_FOLDED = frozenset(name.casefold() for name in sys.stdlib_module_names)
 _TRIPWIRE_TOKENS = (b"PYTEST_CURRENT_TEST", b"BENCH_RESULT_DIGEST", b"BENCH_TRACE_LINES", b"os._exit", b"sys.argv",
                     b"BENCH_TRACE_", b"bench_trace_plugin", b"sys.monitoring", b"import monitoring", b"orig_argv",
-                    b"/proc/self/cmdline", b"/proc/self/environ")  # + the benchmark's path
+                    b"/proc/self/cmdline", b"/proc/self/environ")  # + the benchmark's path; textual only (no bare `/proc/self` or `monitoring`); orig_argv and cmdline because the trace run's argv differs from a timed run's
 _MODULE_FILE_RE = re.compile(r"([^.]+)(?:\.[^.]+)?\.(?:py|pyc|so|pyd)")  # `json.py`, a sourceless `json.pyc` (imported straight from the directory), `json.so`, `json.cpython-312-darwin.so`, `json.abi3.so`
 _GIT_ESCAPES = {b"a": b"\a", b"b": b"\b", b"t": b"\t", b"n": b"\n", b"v": b"\v", b"f": b"\f", b"r": b"\r", b'"': b'"', b"\\": b"\\"}
 _HUNK_RE = re.compile(rb"@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
@@ -2869,7 +2869,8 @@ def token_tripwire(repo: str | os.PathLike, base_commit: str, head_commit: str, 
     """Raise `BENCHMARK_AWARE_CODE` if a line ADDED between the commits, in any file other than the benchmark, contains one of
     `PYTEST_CURRENT_TEST`, `BENCH_RESULT_DIGEST`, `BENCH_TRACE_LINES`, `os._exit`, `sys.argv`, `BENCH_TRACE_` (the trace
     plugin's environment prefix), `bench_trace_plugin`, `sys.monitoring`, `import monitoring`, `orig_argv`, `/proc/self/cmdline`,
-    `/proc/self/environ` or the benchmark's full path:
+    `/proc/self/environ` or the benchmark's full path (the tokens are textual only; a bare `/proc/self` and a bare `monitoring` are deliberately
+    not tokens, and `sys.orig_argv` and `/proc/self/cmdline` are included because the trace run's argv differs from a timed run's):
     what a fix needs to behave differently when it is being measured, or to forge the harness's output. Added lines come from
     a zero-context patch of the two trees (binary files are read as text, no rename detection, no textconv or external diff). A TRIPWIRE: a
     token built at run time passes, and a line that moved is still an added line. The detail counts the `token in path` pairs and names the
@@ -3137,7 +3138,7 @@ def check_venv(bin_dir: str | os.PathLike, snapshot_path: str | os.PathLike, exp
 
 
 # ---------------------------------------------------------------------------
-# C4d-1 the measurement harness (`measure_paired`)
+# C4d-1 the measurement harness (`measure_paired`); the block also holds the C4d-2 trace (`TRACE_PLUGIN_SOURCE`, `trace_env`, `trace_paired`)
 #
 # Runs the benchmark as a child process of each side, alternating sides in a seeded balanced order, and returns raw wall times.
 # It decides nothing: the verdict is `evaluate_paired_samples` over the lists, called by `compare` (C4d-3). POSIX only.
@@ -3158,10 +3159,12 @@ MEASURE_REFUSAL_CODES = (
     "DIGEST_MISMATCH",          # the sides disagree, or only ONE side printed a digest
     "WORKLOAD_TOO_SHORT",       # the base median is under the minimum: timing noise would dominate
 )
-# MEASURE_ARGS_INVALID: a caller error. MEASURE_FAILED: a harness fault (no disk space, no thread, a failed temp file): not the Builder's.
+# MEASURE_ARGS_INVALID: a caller error. MEASURE_FAILED: a harness fault (no disk space, no thread, a failed temp file, a bad plugin file): not the
+# Builder's; `measure_paired` and `trace_paired` both raise it (the trace with phase "trace").
 ERROR_CODES += MEASURE_REFUSAL_CODES + ("MEASURE_ARGS_INVALID", "MEASURE_FAILED")
 # C4d-2: the paired trace run's refusals. TRACE_MISMATCH: the sides' executed-line traces disagree (or a side's trace is not as the plugin must
-# have produced it); TRACE_UNAVAILABLE: no trustworthy trace could be taken (a harness limit, not the Builder's fault).
+# have produced it); TRACE_UNAVAILABLE: no trustworthy trace could be taken (a harness limit, not the Builder's fault). Both are raised by
+# `trace_paired` only, with phase "trace"; a harness fault there is `MEASURE_FAILED`, not one of these.
 TRACE_REFUSAL_CODES = ("TRACE_MISMATCH", "TRACE_UNAVAILABLE")
 ERROR_CODES += TRACE_REFUSAL_CODES
 
@@ -3426,7 +3429,6 @@ def _verify_plugin(path: str) -> None:
         raise BenchmarkGateError("MEASURE_FAILED", "plugin file hash mismatch")
 
 
-
 def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int, repeats: int) -> list[str]:
     """The round order: exactly ``repeats / 2`` rounds are ``"head_first"``, the rest ``"base_first"``, shuffled by a PRNG seeded from
     ``sha256(base_commit || head_commit || benchmark_sha256 || attempt)``. Strict alternation phase-locks onto a period-4 disturbance
@@ -3451,7 +3453,8 @@ def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt
 def side_env(bin_dir: str, scratch: str) -> dict[str, str]:
     """The child's environment: an allowlist, not a sandbox. The side's venv ``bin`` first on ``PATH``, no user site, a fixed hash seed, a
     per-side ``PYTHONPYCACHEPREFIX`` under ``scratch``, fresh ``HOME`` and ``TMPDIR`` under ``scratch``, plugin autoload off. No
-    ``PYTHONPATH``, no SCM, cloud or API token."""
+    ``PYTHONPATH``, no SCM, cloud or API token. The trace's environment is ``trace_env``, which adds ``PYTHONPATH`` and the three ``BENCH_TRACE_*``
+    keys (file, out, nonce) for the trace run only."""
     home = os.path.join(scratch, "home")
     tmp = os.path.join(scratch, "tmp")
     for directory in (home, tmp):
@@ -3642,7 +3645,7 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
     nondeterministic on both sides is therefore reported as a mismatch there); from then on a run without a digest or with another one is
     ``DIGEST_UNSTABLE``; the digests of ALL runs (warmup included) must be one value at the end. ``WORKLOAD_TOO_SHORT`` needs the timed
     rounds and names the measured median. ``argv_builder(side, bin_dir, root, target) -> argv`` is the test seam; the default is
-    ``pytest_argv``. A trace run is not part of this function (C4d-2)."""
+    ``pytest_argv``. ``phase`` here is only ``"warmup"`` or ``"timed"``; the paired trace run is ``trace_paired``, a separate function."""
     if os.name != "posix":
         raise BenchmarkGateError("UNSUPPORTED_PLATFORM", "the harness needs POSIX process groups")
     order = run_order(base_commit, head_commit, benchmark_sha256, attempt, repeats)

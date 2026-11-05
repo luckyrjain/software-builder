@@ -1,5 +1,5 @@
-"""Tests for the C4c-1 filesystem and git pieces of `benchmark_gate.py`: `export_tree`, tree hash and seal,
-`cleanup_root`, and the `export` / `cleanup` CLIs.
+"""Tests for the filesystem and git pieces of `benchmark_gate.py` (`export_tree`, tree hash and seal, `cleanup_root`, and the `export` / `cleanup`
+CLIs) and for its exported surface: the error-code vocabularies, including the C4d pins (`MEASURE_*`, `TRACE_REFUSAL_CODES`).
 
 Everything git-related runs against real temporary repositories (no network, hooks or signing); hostile trees (`.git`
 entries, `..`, case collisions, escaping symlinks) are built with `git mktree`, since `git add` refuses them.

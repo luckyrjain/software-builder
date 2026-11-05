@@ -2,7 +2,8 @@
 
 Children are ``python -c`` processes injected through the ``argv_builder`` seam (a real ``python -m pytest`` costs 0.4 s median and up to
 3 s under load); one test runs real pytest to prove the digest is read with ``-P --import-mode=importlib`` and that a head-added
-``hashlib.py`` cannot shadow. No assertion depends on a measured duration.
+``hashlib.py`` cannot shadow (that is the only real-pytest test in this file; the trace's real-pytest rows are in test_benchmark_gate_trace.py).
+No assertion depends on a measured duration.
 """
 
 from __future__ import annotations

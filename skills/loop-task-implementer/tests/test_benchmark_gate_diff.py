@@ -307,6 +307,8 @@ def test_each_token_added_outside_the_benchmark_is_refused(repo, token):
     assert "src/app/run.py" in error.detail and token in error.detail
 
 
+# Each row is (sample, expected_token): `sample` is one added line in a file other than the benchmark, and the tripwire reports that line through
+# the token it matched, which is `expected_token` (so a row such as `BENCH_TRACE_OUT` is reported as `BENCH_TRACE_`, not as itself).
 @pytest.mark.parametrize("sample, expected_token", [
     ("if BENCH_TRACE_OUT:", "BENCH_TRACE_"),
     ("import bench_trace_plugin", "bench_trace_plugin"),
