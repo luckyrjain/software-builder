@@ -3193,6 +3193,9 @@ ERROR_CODES += MEASURE_REFUSAL_CODES + ("MEASURE_ARGS_INVALID", "MEASURE_FAILED"
 # `trace_paired` only, with phase "trace"; a harness fault there is `MEASURE_FAILED`, not one of these.
 TRACE_REFUSAL_CODES = ("TRACE_MISMATCH", "TRACE_UNAVAILABLE")
 ERROR_CODES += TRACE_REFUSAL_CODES
+# C4d-3: `compare` raises this when the base commit is not an ancestor of the head commit (a caller error: the pair is not a PR's
+# before and after). It is never a result reason or detail.
+ERROR_CODES += ("BASE_NOT_ANCESTOR",)
 # The closed vocabulary of ``BenchmarkGateError.kind`` that ``trace_paired`` sets on EVERY error it raises after validation: the four ``_execute``
 # kinds, then plugin_failed ("plugin reported failure"), no_result ("no trace result"), the four post-result unavailable/interpreter
 # kinds, counts_differ (TRACE_MISMATCH), unavailable (TRACE_UNAVAILABLE) and harness (MEASURE_FAILED).
@@ -4048,6 +4051,201 @@ def run_benchmark_once(root: str, bin_dir: str, target: str, *, timeout_seconds:
     if digest is None:
         raise fail("DIGEST_MISSING", "the run printed no digest", None)
     return {"digest": digest, "argv": argv}
+
+
+# ---------------------------------------------------------------------------
+# C4d-3 compare: vocabularies, `Side`, the internal verdict, result assembly and the result writer
+# ---------------------------------------------------------------------------
+
+class Side(NamedTuple):
+    """One side of a comparison: its export root and commit, its venv's ``bin`` directory, and the snapshot of that venv with the
+    sha256 pins the Orchestrator minted (``snapshot-venv``) before any install."""
+    root: str
+    commit: str
+    bin_dir: str
+    snapshot: str
+    snapshot_sha256: str
+    interpreter_sha256: str
+
+
+# Every reason a `compare` result can carry, and the result it belongs to. Pinned by an exact-contents test.
+COMPARE_RESULT_OF_REASON = {
+    **dict.fromkeys(("GATE_REJECTED", "ISOLATION_REJECTED", "PROTECTED_PATH_CHANGED", "BENCHMARK_AWARE_CODE", "DIFF_UNCHECKABLE",
+                     "EXPORT_REJECTED", "OVERLAY_REJECTED", "BENCHMARK_MODIFIED", "LINT_REJECTED", "TRACE_MISMATCH", "BASE_NONZERO_EXIT",
+                     "DIGEST_MISSING", "DIGEST_UNSTABLE", "WORKLOAD_TOO_SHORT"), "REJECTED"),
+    **dict.fromkeys(("HEAD_NONZERO_EXIT", "HEAD_TIMEOUT", "HEAD_OUTPUT_TOO_LARGE", "DIGEST_MISMATCH", "BELOW_HALF_THRESHOLD"), "NOT_IMPROVED"),
+    **dict.fromkeys(("UNSUPPORTED_PLATFORM", "HOST_BUSY_START", "HOST_BUSY_END", "TRACE_UNAVAILABLE", "BASE_TIMEOUT", "BASE_OUTPUT_TOO_LARGE",
+                     "NOISY", "INCONSISTENT", "BORDERLINE", "INVALID_INPUT"), "INCONCLUSIVE"),
+    "IMPROVED_CLEAR": "IMPROVED",
+}
+COMPARE_RESULTS = frozenset({"IMPROVED", "NOT_IMPROVED", "INCONCLUSIVE", "REJECTED"})
+COMPARE_STAGES = ("pre_overlay", "overlaid", "ran")
+# The `detail` of an ISOLATION_REJECTED result.
+ISOLATION_DETAILS = (
+    "ROOT_HAS_GIT", "BIN_NOT_ISOLATED", "NOT_PROVISIONED", "INTERPRETER_DIFFERS", "INTERPRETER_WRITABLE", "HARNESS_FILE_UNDER_ROOT",
+    "TRACKED_FILE_DIFFERS", "UNTRACKED_PYTHON_FILE", "DEPENDENCY_PARITY", "BENCHMARK_BYTES_DIFFER", "VENV_NOT_ISOLATED", "VENV_HOOK_REJECTED",
+    "SNAPSHOT_CHANGED", "INTERPRETER_CHANGED", "EXPORT_CHANGED", "VENV_CHANGED", "HASH_UNREADABLE", "FINGERPRINT_FAILED",
+)
+# The closed set a result's `detail` starts with (then only integers). Several sources share a token (`spawn`, `VENV_NOT_ISOLATED`, ...): the
+# union is de-duplicated, order of first appearance.
+COMPARE_DETAIL_TOKENS = tuple(dict.fromkeys(
+    ("GATE_MISSING", "KEY_MISSING", "KEY_UNKNOWN", "TYPE_REJECTED", "PATH_REJECTED", "SYMBOL_REJECTED", "COMMAND_REJECTED", "BOUNDS_REJECTED",
+     "BUDGET_REJECTED")
+    + ISOLATION_DETAILS + VIOLATION_CODES + OVERLAY_REFUSAL_CODES + DIFF_REFUSAL_CODES
+    + ("COMMIT_INVALID", "COMMIT_NOT_FOUND", "REPO_UNREADABLE", "DEST_REJECTED", "GIT_FAILED", "GIT_TOO_OLD", "GIT_TIMEOUT",
+       "GIT_OUTPUT_TOO_LARGE", "TREE_UNREADABLE", "TREE_TOO_LARGE", "SEAL_FAILED")
+    + EXPORT_REFUSAL_CODES + TRACE_FAILURE_KINDS + MEASURE_REFUSAL_CODES + tuple(COMPARE_RESULT_OF_REASON)
+))
+
+COMPARE_SCHEMA = "software-builder-bench-compare-v1"
+COMPARE_RESULT_KEYS = (
+    "schema", "result", "reason", "detail", "kind", "stage", "trace_mismatch_seen", "trace_fault", "untrusted_text", "benchmark_origin",
+    "improvement", "ratios", "mad_over_median", "n", "repeats", "min_improvement", "max_noise", "base_median_ns", "head_median_ns", "base_ns",
+    "head_ns", "order", "order_salt", "digest", "base_commit", "head_commit", "benchmark_sha256", "gate_sha256", "harness_sha256", "argv",
+    "trace", "python", "interpreter_home", "interpreter_writable", "loadavg", "cpu_count", "host_check", "attempt", "side", "phase", "partial",
+)
+_VERDICT_OWNED_KEYS = frozenset({"schema", "result", "reason", "detail", "kind", "stage"})
+_UNTRUSTED_TEXT_MAX_ENTRIES = 20
+_UNTRUSTED_TEXT_MAX_CHARS = 200
+
+
+class _Verdict(Exception):
+    """The internal end of a `compare` step: a result, not an error. Raised through the pipeline and caught by ``_compare_impl``, which adds
+    the common fields. Subclasses ``Exception`` only, so a ``BaseException`` (a signal) is never mistaken for a verdict. ``extra`` carries
+    result keys the step knows (``untrusted_text``, ``benchmark_origin``, ``ratios``, ...)."""
+
+    def __init__(self, result: str, reason: str, detail: str = "", *, kind: str | None = None, stage: str,
+                 extra: dict | None = None) -> None:
+        super().__init__(reason)
+        self.result, self.reason, self.detail, self.kind, self.stage = result, reason, detail, kind, stage
+        self.extra = dict(extra) if extra else {}
+
+
+def _jsonable(value):
+    """Plain JSON data for a result value: Fractions become floats, tuples lists; anything else unexpected is a harness bug."""
+    if isinstance(value, Fraction):
+        return float(value)
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, dict) and all(isinstance(key, str) for key in value):
+        return {key: _jsonable(item) for key, item in value.items()}
+    raise ValueError(f"not a JSON value: {type(value).__name__}")
+
+
+def _result_dict(verdict: _Verdict, common: dict) -> dict:
+    """The 2.8 result: every key present, ``None`` for not applicable. ``common`` holds the fields every result has (commits, hashes,
+    attempt, ...); the verdict's ``extra`` overrides it. Attacker-influenced strings are escaped HERE, once: ``untrusted_text`` entries
+    (at most 20, each capped), ``detail``, ``python`` and ``interpreter_home``. Raises ``ValueError`` for an inconsistent verdict or an
+    unknown key (a harness bug, never PR content)."""
+    if COMPARE_RESULT_OF_REASON.get(verdict.reason) != verdict.result:
+        raise ValueError("verdict result does not belong to its reason")
+    if verdict.stage not in COMPARE_STAGES:
+        raise ValueError("verdict stage unknown")
+    fields: dict = {}
+    for source in (common, verdict.extra):
+        if any(key not in COMPARE_RESULT_KEYS or key in _VERDICT_OWNED_KEYS for key in source):
+            raise ValueError("unknown or verdict-owned result key")
+        fields.update(source)
+    texts = fields.pop("untrusted_text", None) or []
+    result = dict.fromkeys(COMPARE_RESULT_KEYS)
+    result.update(fields)
+    result.update(schema=COMPARE_SCHEMA, result=verdict.result, reason=verdict.reason, kind=verdict.kind, stage=verdict.stage,
+                  detail=escape_diagnostic(verdict.detail, _UNTRUSTED_TEXT_MAX_CHARS))
+    result["untrusted_text"] = [escape_diagnostic(text, _UNTRUSTED_TEXT_MAX_CHARS) for text in list(texts)[:_UNTRUSTED_TEXT_MAX_ENTRIES]]
+    for key in ("python", "interpreter_home"):
+        if result[key] is not None:
+            result[key] = escape_diagnostic(result[key], 200)
+    return _jsonable(result)
+
+
+def _result_bytes(result: dict) -> bytes:
+    """The bytes of the result file: ASCII JSON (``ensure_ascii``), no NaN/Infinity, one trailing newline."""
+    return (json.dumps(result, ensure_ascii=True, allow_nan=False) + "\n").encode("ascii")
+
+
+_OUT_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", re.ASCII)
+
+
+def _validate_out_path(out_path: object, forbidden: object) -> tuple[tuple[int, int], str]:
+    """Step 1: ``out_path`` is an absolute, normalized path with a plain file name, in an existing real directory owned by this user and not
+    group/other writable; nothing exists at it (``lexists``); and it is not under (by ``realpath``) any ``forbidden`` path (roots, bins,
+    venvs, snapshots, the dispatch root). Returns ``((st_dev, st_ino) of the directory, file name)``. ``MEASURE_ARGS_INVALID`` otherwise."""
+    def bad(why: str) -> BenchmarkGateError:
+        return BenchmarkGateError("MEASURE_ARGS_INVALID", f"out_path: {why}")
+
+    if not isinstance(out_path, str) or not out_path or "\0" in out_path or not os.path.isabs(out_path):
+        raise bad("not an absolute path")
+    if posixpath.normpath(out_path) != out_path:
+        raise bad("not normalized")
+    directory, name = os.path.split(out_path)
+    if _OUT_NAME_RE.fullmatch(name) is None or name in (".", ".."):
+        raise bad("not a plain file name")
+    try:
+        info = os.lstat(directory)  # lstat: a symlinked directory is refused (the writer opens it with O_NOFOLLOW)
+        real_directory = os.path.realpath(directory)
+        exists = os.path.lexists(out_path)
+        real_forbidden = [os.path.realpath(path) for path in forbidden]
+    except (OSError, ValueError, TypeError) as exc:
+        raise bad(f"{type(exc).__name__}") from exc
+    if not stat.S_ISDIR(info.st_mode):
+        raise bad("directory missing or a symlink")
+    if info.st_uid != os.getuid() or info.st_mode & 0o022:
+        raise bad("directory not owned by the user or writable by others")
+    if exists:
+        raise bad("already exists")
+    target = os.path.join(real_directory, name)
+    if any(_inside(target, path) for path in real_forbidden):
+        raise bad("under a harness-owned path")
+    return (info.st_dev, info.st_ino), name
+
+
+def _write_result(out_path: str, dir_ident: tuple[int, int], name: str, data: bytes) -> str:
+    """Write ``data`` to ``out_path`` exclusively and return its sha256. The directory is opened ``O_DIRECTORY|O_NOFOLLOW`` and must be the
+    one recorded at validation; a random-named temp is written through that descriptor and hard-linked to ``name`` (``link`` fails if the
+    name exists, ``replace`` would not); the temp is unlinked in a ``finally``; the final ``lstat`` of ``out_path`` must be the written
+    inode. A child that plants the name or swaps the directory turns the verdict into an error (``MEASURE_FAILED``), never into a
+    different file."""
+    def fault(why: str) -> BenchmarkGateError:
+        return BenchmarkGateError("MEASURE_FAILED", f"result write: {why}")
+
+    directory = os.path.dirname(out_path)
+    temp = ".bench-result-" + os.urandom(8).hex() + ".tmp"
+    dir_fd = -1
+    temp_made = False
+    try:
+        dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        info = os.fstat(dir_fd)
+        if (info.st_dev, info.st_ino) != tuple(dir_ident):
+            raise fault("the directory was replaced")
+        fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=dir_fd)
+        temp_made = True
+        try:
+            written = os.fstat(fd)
+            view = memoryview(data)
+            while view:
+                view = view[os.write(fd, view):]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.link(temp, name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+        final = os.stat(out_path, follow_symlinks=False)
+        if (final.st_dev, final.st_ino) != (written.st_dev, written.st_ino):
+            raise fault("the file is not the one written")
+    except BenchmarkGateError:
+        raise
+    except OSError as exc:
+        raise fault(f"{type(exc).__name__}: {exc}") from exc
+    finally:
+        if temp_made:
+            try:
+                os.unlink(temp, dir_fd=dir_fd)
+            except OSError:
+                pass
+        if dir_fd >= 0:
+            os.close(dir_fd)
+    return hashlib.sha256(data).hexdigest()
 
 
 # ---------------------------------------------------------------------------
