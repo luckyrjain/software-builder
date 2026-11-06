@@ -1814,6 +1814,27 @@ class Case:
         self.last_out = kw["out_path"]
         return bg._compare_impl(self.gate if gate is NO_GATE else gate, str(self.world.repo), base or self.base, head or self.head, **kw)
 
+    def prepare(self, mutate=None, at9=None, gate=NO_GATE, **over):
+        """Steps 1 to 6 and then 7 to 9. `mutate`, if given, runs between 6 and 7 (the exports are still writable); `at9` runs at the
+        start of step 9, after the seal and the hash."""
+        if at9 is not None:
+            real_snapshots = bg._check_snapshots
+
+            def hooked(base, head, stage):
+                if stage == "overlaid":
+                    self.mp.setattr(bg, "_check_snapshots", real_snapshots)
+                    at9(self)
+                return real_snapshots(base, head, stage)
+            self.mp.setattr(bg, "_check_snapshots", hooked)
+        run = bg._Run()
+        self.common = run.common
+        kw = self.kwargs(**over)
+        gate = self.gate if gate is NO_GATE else gate
+        checked = bg._compare_checks(gate, str(self.world.repo), self.base, self.head, run=run, **kw)
+        if mutate is not None:
+            mutate(self)
+        return bg._compare_prepare(str(self.world.repo), self.base, self.head, checked, interpreter_of=kw["interpreter_of"], run=run)
+
     def spies(self, *names):
         for name in names:
             real = getattr(bg, name)
@@ -2246,8 +2267,8 @@ def test_host_busy_start_leaves_nothing_sealed_and_a_retry_succeeds_on_the_same_
     case.probe = QUIET
     checked = case.checks()  # a new out_path, the same exports: past step 6
     assert checked.load == (0.1, 4) and case.common["host_check"] == "start_only"
-    with pytest.raises(NotImplementedError):  # the declared scaffold: steps 7 to 13 are T3b and later
-        case.impl()
+    # this world's head has no benchmark file: step 7 refuses it, and a refusal leaves the exports unsealed
+    _ends(case.impl(), "OVERLAY_REJECTED", "OVERLAY_PATH_REJECTED", stage="pre_overlay")
     assert "seal_export" not in case.spy and "_run_once" not in case.spy
 
 
@@ -2295,3 +2316,330 @@ def test_compare_is_a_thin_wrapper_over_the_default_seams(world, tmp_path, monke
     assert seen == {"attempt": 2, "out_path": out, "allow_writable_interpreter": True}  # no seam is passed: the defaults apply
     with pytest.raises(TypeError):
         bg.compare(case.gate, str(world.repo), case.base, case.head, out_path=out, load_probe=QUIET)
+
+
+# --- T3b: steps 7 to 9 (_compare_prepare) ---
+
+BENCH_OK = (b"import hashlib\n\nfrom app.core import f as build\n\n\ndef test_bench():\n    out = build()\n"
+            b"    print('BENCH_RESULT_DIGEST: ' + hashlib.sha256(str(out).encode()).hexdigest())\n")
+BENCH_BAD = b"class Bad:\n    pass\n"
+
+
+_ORIGINAL_BUILD_REPO = build_repo
+
+
+def _bench_repo(mode: str, body: bytes):
+    """``new``: the benchmark is added by the head (overlay-origin). ``pre``: the base already has it."""
+    def build(tmp_path: Path):
+        repo, base, head = _ORIGINAL_BUILD_REPO(tmp_path)
+        (repo / "benchmarks").mkdir()
+        (repo / BENCH).write_bytes(body)
+        git(repo, "add", "-f", "--", BENCH)
+        git(repo, "commit", "-q", "-m", "bench")
+        with_bench = git(repo, "rev-parse", "HEAD")
+        if mode == "new":
+            return repo, head, with_bench
+        make_commit(repo, {"src/app/core.py": "def f():\n    return 3\n"}, "head3")
+        git(repo, "commit", "-q", "-m", "head3")
+        return repo, with_bench, git(repo, "rev-parse", "HEAD")
+    return build
+
+
+def _bench_case(tmp_path, monkeypatch, mode="new", body=BENCH_OK):
+    monkeypatch.setitem(globals(), "build_repo", _bench_repo(mode, body))
+    return Case(build_world(tmp_path, monkeypatch), tmp_path, monkeypatch)
+
+
+@pytest.fixture
+def bcase(tmp_path, monkeypatch):
+    return _bench_case(tmp_path, monkeypatch)
+
+
+@pytest.fixture
+def pcase(tmp_path, monkeypatch):
+    return _bench_case(tmp_path, monkeypatch, "pre")
+
+
+def _fp_both(c):
+    return [bg.fingerprint_tree(r, limit=100_000) for r in c.roots]
+
+
+@posix_only
+def test_overlay_origin_pass_through(bcase):
+    c = bcase
+    c.spies("overlay_benchmark_file")
+    real = bg.overlay_benchmark_file
+    c.mp.setattr(bg, "overlay_benchmark_file", lambda *a, **k: (real(*a, **k), "PRE_EXISTING")[1])  # a lying return value is not trusted
+    prepared = c.prepare()
+    assert prepared.origin == "BUILDER_AUTHORED" and c.common["benchmark_origin"] == "BUILDER_AUTHORED"
+    assert prepared.benchmark == BENCH and prepared.target == bg.benchmark_target(prepared.gate) and prepared.roots == c.roots
+    assert prepared.benchmark_sha256 == hashlib.sha256(BENCH_OK).hexdigest() == c.common["benchmark_sha256"]
+    assert prepared.h0 == (bg.hash_export(c.roots[0]), bg.hash_export(c.roots[1]))
+    assert prepared.harness_sha256 == c.common["harness_sha256"] and prepared.gate_sha256 == c.common["gate_sha256"]
+    base_bench = Path(c.roots[0]) / BENCH  # overlaid, and both exports are sealed
+    assert base_bench.read_bytes() == BENCH_OK and not os.stat(base_bench).st_mode & 0o222 and not os.stat(c.roots[0]).st_mode & 0o200
+    assert not os.stat(c.roots[1]).st_mode & 0o200
+
+
+@posix_only
+def test_overlay_origin_through_the_pipeline_reaches_the_scaffold(bcase):
+    with pytest.raises(NotImplementedError):  # steps 7 to 9 passed; the runs are T4
+        bcase.impl()
+
+
+@posix_only
+def test_pre_existing_origin_has_no_allowance_at_all(pcase):
+    c = pcase
+    calls = []
+    real = bg.verify_export_against_commit
+
+    def spy(repo, commit, root, **kw):
+        calls.append((commit, str(root), dict(kw.get("allow") or {})))
+        return real(repo, commit, root, **kw)
+    c.mp.setattr(bg, "verify_export_against_commit", spy)
+    prepared = c.prepare()
+    assert prepared.origin == "PRE_EXISTING" and c.common["benchmark_origin"] == "PRE_EXISTING"
+    assert calls[2:] == [(c.base.commit, c.base.root, {}), (c.head.commit, c.head.root, {})]  # the step 9 pair; the step 4 pair came first
+    assert (Path(c.roots[0]) / BENCH).read_bytes() == BENCH_OK
+
+
+@posix_only
+def test_step9_allowance_is_the_overlaid_file_on_the_base_only(bcase):
+    c = bcase
+    calls = []
+    real = bg.verify_export_against_commit
+
+    def spy(repo, commit, root, **kw):
+        calls.append((commit, str(root), dict(kw.get("allow") or {})))
+        return real(repo, commit, root, **kw)
+    c.mp.setattr(bg, "verify_export_against_commit", spy)
+    c.prepare()
+    sha = hashlib.sha256(BENCH_OK).hexdigest()
+    assert calls[2:] == [(c.base.commit, c.base.root, {BENCH: sha}), (c.head.commit, c.head.root, {})]
+
+
+@posix_only
+@pytest.mark.parametrize("code,reason", [("BENCHMARK_MODIFIED", "BENCHMARK_MODIFIED"), ("OVERLAY_PATH_REJECTED", "OVERLAY_REJECTED"),
+                                         ("OVERLAY_NOT_REGULAR", "OVERLAY_REJECTED"), ("OVERLAY_PATH_CONFLICT", "OVERLAY_REJECTED"),
+                                         ("TREE_TOO_LARGE", "EXPORT_REJECTED"), ("TREE_UNREADABLE", "EXPORT_REJECTED"),
+                                         ("SEAL_FAILED", "EXPORT_REJECTED")])
+def test_step7_refusals_map_and_leave_nothing_sealed_or_created(bcase, code, reason):
+    c = bcase
+    c.spies("seal_export")
+    before = _fp_both(c)
+
+    def refuse(*a, **k):
+        raise bg.BenchmarkGateError(code, "x\x1b[31m")
+    c.mp.setattr(bg, "overlay_benchmark_file", refuse)
+    result = c.impl()
+    _ends(result, reason, code, stage="pre_overlay")
+    assert all("\x1b" not in t for t in result["untrusted_text"])
+    assert "seal_export" not in c.spy and _fp_both(c) == before and os.stat(c.roots[0]).st_mode & stat.S_IWUSR
+    assert json.loads(Path(c.last_out).read_text()) == result
+
+
+@posix_only
+@pytest.mark.parametrize("code", ["OVERLAY_COMMIT_MISMATCH", "OVERLAY_BASE_SEALED", "OVERLAY_FAILED", "DEST_REJECTED"])
+def test_step7_caller_and_harness_faults_raise(bcase, code):
+    def refuse(*a, **k):
+        raise bg.BenchmarkGateError(code, "x")
+    bcase.mp.setattr(bg, "overlay_benchmark_file", refuse)
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        bcase.impl()
+    assert e.value.code == code
+
+
+@posix_only
+def test_step7_real_benchmark_modified_leaves_the_exports_unsealed(pcase):
+    def edit(c):  # present at base with other bytes than the head's (made between steps 6 and 7: step 4 would see it)
+        (Path(c.roots[0]) / BENCH).write_bytes(BENCH_OK + b"# edited\n")
+    with pytest.raises(bg._Verdict) as e:
+        pcase.prepare(edit)
+    assert (e.value.reason, e.value.detail, e.value.stage) == ("BENCHMARK_MODIFIED", "BENCHMARK_MODIFIED", "pre_overlay")
+    assert os.stat(pcase.roots[0]).st_mode & stat.S_IWUSR and os.stat(pcase.roots[1]).st_mode & stat.S_IWUSR
+
+
+@posix_only
+def test_step7_a_path_the_head_does_not_have_is_overlay_rejected(bcase):
+    other = "benchmarks/bench_missing.py"
+    gate = {**GATE, "command": f"pytest -q --no-header {other}", "benchmark_paths": [other]}
+    bcase.mp.setattr(bg, "diff_checks", lambda *a: None)  # step 5 would trip on the path token first; this row is about step 7
+    _ends(bcase.impl(gate=gate), "OVERLAY_REJECTED", "OVERLAY_PATH_REJECTED", stage="pre_overlay")
+
+
+@posix_only
+def test_step7_top_levels_are_taken_after_the_install_and_before_the_overlay(bcase):
+    c = bcase
+    (Path(c.roots[0]) / "build").mkdir()  # what an install leaves behind
+    seen = {}
+    c.spies("repo_top_levels", "overlay_benchmark_file")
+    real = bg.validate_benchmark_content
+
+    def spy(source, symbol, top):
+        seen["top"] = top
+        return real(source, symbol, top)
+    c.mp.setattr(bg, "validate_benchmark_content", spy)
+    c.prepare()
+    assert c.spy.index("repo_top_levels") < c.spy.index("overlay_benchmark_file")
+    assert "app" in seen["top"] and "build" in seen["top"] and "benchmarks" not in seen["top"]  # the overlay's own directory is not importable
+
+
+@posix_only
+def test_step8_unequal_benchmark_bytes(bcase):
+    c = bcase
+    real = bg.overlay_benchmark_file
+
+    def overlay_then_diverge(*a, **k):
+        out = real(*a, **k)
+        path = Path(c.roots[0]) / BENCH
+        path.chmod(0o644)
+        path.write_bytes(BENCH_OK + b"# diverged\n")
+        return out
+    c.mp.setattr(bg, "overlay_benchmark_file", overlay_then_diverge)
+    result = c.impl()
+    _ends(result, "ISOLATION_REJECTED", "BENCHMARK_BYTES_DIFFER", stage="overlaid")
+    assert result["benchmark_origin"] == "BUILDER_AUTHORED"
+
+
+@posix_only
+def test_step8_lint_rejected_detail_is_the_first_violation_and_the_list_is_untrusted_text(tmp_path, monkeypatch):
+    c = _bench_case(tmp_path, monkeypatch, body=BENCH_BAD)
+    top = frozenset({"app"})
+    expected = bg.validate_benchmark_content(BENCH_BAD, "build", top)
+    assert len(expected) > 1 and expected == sorted(expected, key=bg.VIOLATION_CODES.index)
+    result = c.impl()
+    _ends(result, "LINT_REJECTED", expected[0], stage="overlaid")
+    assert result["untrusted_text"] == expected
+    assert result["benchmark_sha256"] == hashlib.sha256(BENCH_BAD).hexdigest()
+
+
+@posix_only
+def test_step8_order_is_seal_read_hash_reread(bcase):
+    c = bcase
+    c.spies("seal_export", "read_benchmark", "validate_benchmark_content", "hash_export", "overlay_benchmark_file", "repo_top_levels")
+    c.prepare()
+    step = [n for n in c.spy if n != "interpreter_of"]
+    assert step == ["repo_top_levels", "overlay_benchmark_file", "seal_export", "seal_export", "read_benchmark", "read_benchmark",
+                    "validate_benchmark_content", "hash_export", "hash_export", "read_benchmark", "read_benchmark"]
+
+
+@posix_only
+@pytest.mark.parametrize("which", [0, 1])
+def test_step8_a_changed_reread_is_export_changed(bcase, which):
+    c = bcase
+    real = bg.read_benchmark
+    calls = []
+
+    def read(root, path):
+        calls.append(root)
+        data = real(root, path)
+        return data + b"#" if len(calls) == 3 + which else data  # one of the two re-reads after the hash
+    c.mp.setattr(bg, "read_benchmark", read)
+    _ends(c.impl(), "ISOLATION_REJECTED", "EXPORT_CHANGED", stage="overlaid")
+
+
+@posix_only
+@pytest.mark.parametrize("name,code", [("read_benchmark", "OVERLAY_NOT_REGULAR"), ("read_benchmark", "OVERLAY_PATH_REJECTED"),
+                                       ("read_benchmark", "TREE_UNREADABLE"), ("seal_export", "SEAL_FAILED"), ("seal_export", "TREE_UNREADABLE"),
+                                       ("hash_export", "TREE_UNREADABLE"), ("hash_export", "TREE_TOO_LARGE")])
+def test_step8_hostile_tree_errors_are_export_rejected(bcase, name, code):
+    def boom(*a, **k):
+        raise bg.BenchmarkGateError(code, "x")
+    bcase.mp.setattr(bg, name, boom)
+    _ends(bcase.impl(), "EXPORT_REJECTED", code, stage="overlaid")
+
+
+def _extra_head_py(c):
+    os.chmod(c.roots[1], 0o755)
+    Path(c.roots[1], "hashlib.py").write_text("x = 1\n")
+
+
+def _extra_base_py_beside(c):
+    d = Path(c.roots[0]) / "benchmarks"
+    d.chmod(0o755)
+    (d / "other.py").write_text("x = 1\n")
+
+
+def _overlaid_changed(c):
+    path = Path(c.roots[0]) / BENCH
+    Path(c.roots[0], "benchmarks").chmod(0o755)
+    path.chmod(0o644)
+    path.write_bytes(BENCH_OK + b"# late\n")
+
+
+def _snap(c):
+    c.world.sides["head"].snapshot.write_text("{}")
+
+
+def _hook9(c):
+    site = next((c.world.sides["head"].bin.parent / "lib").glob("python3*/site-packages"))
+    (site / "evil.pth").write_text("import evil_hook\n")
+
+
+def _interp9(c):
+    c.pin_mods["head"] = lambda pin: pin._replace(sha256="0" * 64)
+
+
+def _parity9(c):
+    site = next((c.world.sides["head"].bin.parent / "lib").glob("python3*/site-packages"))
+    (site / "bare_module.py").write_text("x = 1\n")
+
+
+def _tracked9(c):
+    path = Path(c.roots[1]) / "README.md"
+    path.chmod(0o644)
+    path.write_text("tampered\n")
+
+
+# in the order step 9 checks them: each earlier fault beats every later one
+FAULTS9 = [("SNAPSHOT_CHANGED", _snap), ("VENV_HOOK_REJECTED", _hook9), ("INTERPRETER_CHANGED", _interp9),
+           ("DEPENDENCY_PARITY", _parity9), ("TRACKED_FILE_DIFFERS", _tracked9)]
+
+
+@posix_only
+@pytest.mark.parametrize("detail,mutate", [("UNTRACKED_PYTHON_FILE", _extra_head_py), ("UNTRACKED_PYTHON_FILE", _extra_base_py_beside),
+                                           ("UNTRACKED_PYTHON_FILE", _overlaid_changed)] + FAULTS9,
+                         ids=["second-py-head", "second-py-beside-overlay", "overlaid-file-changed"] + [f[0] for f in FAULTS9])
+def test_step9_reruns_the_checks_and_allows_only_the_overlaid_file(bcase, detail, mutate):
+    c = bcase
+    with pytest.raises(bg._Verdict) as e:
+        c.prepare(at9=mutate)
+    assert (e.value.reason, e.value.detail, e.value.stage) == ("ISOLATION_REJECTED", detail, "overlaid")
+    assert c.common["benchmark_origin"] == "BUILDER_AUTHORED"
+
+
+@posix_only
+@pytest.mark.parametrize("later", range(1, len(FAULTS9)))
+def test_step9_an_earlier_fault_beats_the_next_one(tmp_path, monkeypatch, later):
+    c = _bench_case(tmp_path, monkeypatch)
+    with pytest.raises(bg._Verdict) as e:
+        c.prepare(at9=lambda case: (FAULTS9[later][1](case), FAULTS9[later - 1][1](case)))
+    assert e.value.detail == FAULTS9[later - 1][0]
+
+
+@posix_only
+def test_step9_check_order_and_that_it_runs_after_step_8(bcase):
+    c = bcase
+    c.spies("hash_export", "check_venv", "dependency_parity", "verify_export_against_commit")
+    c.prepare()
+    tail = c.spy[c.spy.index("hash_export", c.spy.index("hash_export") + 1) + 1:]
+    assert tail == ["check_venv", "check_venv", "interpreter_of", "interpreter_of", "dependency_parity",
+                    "verify_export_against_commit", "verify_export_against_commit"]
+
+
+@posix_only
+@pytest.mark.parametrize("code,detail", [("VENV_NOT_ISOLATED", "INTERPRETER_DIFFERS"), ("TREE_TOO_LARGE", "NOT_PROVISIONED")])
+def test_step9_pin_errors_map_with_the_stage_overlaid(bcase, code, detail):
+    c = bcase
+    calls = []
+    real = c.interp
+
+    def seam(bin_dir):
+        calls.append(bin_dir)
+        if len(calls) > 2:  # step 4 asks twice; the third call is step 9
+            raise bg.BenchmarkGateError(code, "x")
+        return real(bin_dir)
+    c.interp = seam
+    with pytest.raises(bg._Verdict) as e:
+        c.prepare()
+    assert (e.value.reason, e.value.detail, e.value.stage) == ("ISOLATION_REJECTED", detail, "overlaid")

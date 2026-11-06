@@ -5027,7 +5027,7 @@ def _check_side_argument(side: object, label: str) -> None:
             raise _arg_error(f"{label}.{name} must be 64 lowercase hex characters")
 
 
-def _pin_error(exc: BenchmarkGateError, which: str) -> _Verdict:
+def _pin_error(exc: BenchmarkGateError, which: str, stage: str = "pre_overlay") -> _Verdict:
     """The interpreter helper's errors as an ISOLATION_REJECTED verdict (spec 2.1: `VENV_NOT_ISOLATED` is `INTERPRETER_DIFFERS`, the size, stdlib
     and I/O errors are `NOT_PROVISIONED`); any other code is re-raised."""
     if exc.code == "VENV_NOT_ISOLATED":
@@ -5036,11 +5036,11 @@ def _pin_error(exc: BenchmarkGateError, which: str) -> _Verdict:
         detail = "NOT_PROVISIONED"
     else:
         raise exc
-    return _Verdict("REJECTED", "ISOLATION_REJECTED", detail, stage="pre_overlay", extra={"untrusted_text": [f"{which}: {exc.detail or exc.code}"]})
+    return _Verdict("REJECTED", "ISOLATION_REJECTED", detail, stage=stage, extra={"untrusted_text": [f"{which}: {exc.detail or exc.code}"]})
 
 
-def _isolation(detail: str, texts: list | tuple = ()) -> _Verdict:
-    return _Verdict("REJECTED", "ISOLATION_REJECTED", detail, stage="pre_overlay", extra={"untrusted_text": [str(t) for t in texts]})
+def _isolation(detail: str, texts: list | tuple = (), stage: str = "pre_overlay") -> _Verdict:
+    return _Verdict("REJECTED", "ISOLATION_REJECTED", detail, stage=stage, extra={"untrusted_text": [str(t) for t in texts]})
 
 
 def _host_load(load_probe: Callable[[], tuple]) -> tuple | None:
@@ -5054,6 +5054,65 @@ def _host_load(load_probe: Callable[[], tuple]) -> tuple | None:
     if type(cpus) is not int or cpus <= 0:
         return None
     return load1, cpus
+
+
+def _check_snapshots(base: Side, head: Side, stage: str) -> None:
+    """Each side's snapshot file must hash to its pin (`SNAPSHOT_CHANGED`); steps 4 and 9 (and 12 in T4a1) share this."""
+    for label, side in (("base", base), ("head", head)):
+        try:
+            data = _read_bounded(side.snapshot, _MAX_INPUT_BYTES * 8, nofollow=True)
+        except (OSError, ValueError) as exc:
+            raise BenchmarkGateError("VENV_SNAPSHOT_INVALID", f"{label} snapshot unreadable: {_describe(exc)}") from exc
+        if len(data) > _MAX_INPUT_BYTES * 8 or hashlib.sha256(data).hexdigest() != side.snapshot_sha256:
+            raise _isolation("SNAPSHOT_CHANGED", [label], stage)
+
+
+def _check_venvs(base: Side, head: Side, roots: tuple[str, str], stage: str) -> list:
+    """`check_venv` per side (its errors mapped) and the two venv roots distinct; returns the real venv roots."""
+    real_venvs = []
+    for label, side, root, other in (("base", base, roots[0], roots[1]), ("head", head, roots[1], roots[0])):
+        try:
+            real_venvs.append(check_venv(side.bin_dir, side.snapshot, root, (other,)))
+        except BenchmarkGateError as exc:
+            if exc.code in ("VENV_NOT_ISOLATED", "VENV_HOOK_REJECTED"):
+                detail = exc.code
+            elif exc.code in ("TREE_UNREADABLE", "DEST_REJECTED"):
+                detail = "VENV_NOT_ISOLATED"
+            else:
+                raise
+            hits = [f"{label}: {h.get('path')} ({h.get('reason')})" for h in exc.hits] or [f"{label}: {exc.detail or exc.code}"]
+            raise _isolation(detail, hits, stage) from exc
+    if real_venvs[0] == real_venvs[1]:
+        raise _isolation("VENV_NOT_ISOLATED", ["the two sides share one venv"], stage)
+    return real_venvs
+
+
+def _check_parity(base: Side, head: Side, roots: tuple[str, str], stage: str) -> None:
+    """`dependency_parity` with its errors and findings mapped."""
+    try:
+        findings = dependency_parity(base.bin_dir, head.bin_dir, roots[0], roots[1])
+    except BenchmarkGateError as exc:
+        if exc.code == "TREE_TOO_LARGE":
+            raise _isolation("NOT_PROVISIONED", [exc.detail or exc.code], stage) from exc
+        if exc.code in ("VENV_NOT_ISOLATED", "TREE_UNREADABLE"):
+            raise _isolation("VENV_NOT_ISOLATED", [exc.detail or exc.code], stage) from exc
+        raise
+    if findings:
+        raise _isolation(findings[0][0], [text for _, text in findings], stage)
+
+
+def _check_exports(repo: object, sides: tuple[Side, Side], roots: tuple[str, str], allows: tuple[dict, dict], stage: str) -> None:
+    """`verify_export_against_commit` per side (base first) with that side's allowance; hostile-tree errors are `EXPORT_REJECTED`."""
+    for label, side, root, allow in zip(("base", "head"), sides, roots, allows):
+        try:
+            found = verify_export_against_commit(repo, side.commit, root, allow=allow) if allow else verify_export_against_commit(repo, side.commit, root)
+        except BenchmarkGateError as exc:
+            if exc.code.startswith("EXPORT_") or exc.code in _HOSTILE_TREE_CODES:
+                raise _Verdict("REJECTED", "EXPORT_REJECTED", exc.code, stage=stage,
+                               extra={"untrusted_text": [f"{label}: {exc.detail or exc.code}"]}) from exc
+            raise
+        if found:
+            raise _isolation(found[0][0], [f"{label}: {rel}" for _, rel in found], stage)
 
 
 def _compare_checks(gate: object, repo: object, base: Side, head: Side, *, attempt: object, out_path: object, allow_writable_interpreter: bool,
@@ -5126,48 +5185,10 @@ def _compare_checks(gate: object, repo: object, base: Side, head: Side, *, attem
     here = os.path.realpath(__file__)
     if any(_inside(here, path) for path in map(os.path.realpath, roots)):
         raise _isolation("HARNESS_FILE_UNDER_ROOT")
-    for label, side in (("base", base), ("head", head)):
-        try:
-            data = _read_bounded(side.snapshot, _MAX_INPUT_BYTES * 8, nofollow=True)
-        except (OSError, ValueError) as exc:
-            raise BenchmarkGateError("VENV_SNAPSHOT_INVALID", f"{label} snapshot unreadable: {_describe(exc)}") from exc
-        if len(data) > _MAX_INPUT_BYTES * 8 or hashlib.sha256(data).hexdigest() != side.snapshot_sha256:
-            raise _isolation("SNAPSHOT_CHANGED", [label])
-    real_venvs = []
-    for label, side, root, other in (("base", base, roots[0], roots[1]), ("head", head, roots[1], roots[0])):
-        try:
-            real_venvs.append(check_venv(side.bin_dir, side.snapshot, root, (other,)))
-        except BenchmarkGateError as exc:
-            if exc.code in ("VENV_NOT_ISOLATED", "VENV_HOOK_REJECTED"):
-                detail = exc.code
-            elif exc.code in ("TREE_UNREADABLE", "DEST_REJECTED"):
-                detail = "VENV_NOT_ISOLATED"
-            else:
-                raise
-            hits = [f"{label}: {h.get('path')} ({h.get('reason')})" for h in exc.hits] or [f"{label}: {exc.detail or exc.code}"]
-            raise _isolation(detail, hits) from exc
-    if real_venvs[0] == real_venvs[1]:
-        raise _isolation("VENV_NOT_ISOLATED", ["the two sides share one venv"])
-    try:
-        findings = dependency_parity(base.bin_dir, head.bin_dir, roots[0], roots[1])
-    except BenchmarkGateError as exc:
-        if exc.code == "TREE_TOO_LARGE":
-            raise _isolation("NOT_PROVISIONED", [exc.detail or exc.code]) from exc
-        if exc.code in ("VENV_NOT_ISOLATED", "TREE_UNREADABLE"):
-            raise _isolation("VENV_NOT_ISOLATED", [exc.detail or exc.code]) from exc
-        raise
-    if findings:
-        raise _isolation(findings[0][0], [text for _, text in findings])
-    for label, side, root in (("base", base, roots[0]), ("head", head, roots[1])):
-        try:
-            found = verify_export_against_commit(repo, side.commit, root)
-        except BenchmarkGateError as exc:
-            if exc.code.startswith("EXPORT_") or exc.code in _HOSTILE_TREE_CODES:
-                raise _Verdict("REJECTED", "EXPORT_REJECTED", exc.code, stage="pre_overlay",
-                               extra={"untrusted_text": [f"{label}: {exc.detail or exc.code}"]}) from exc
-            raise
-        if found:
-            raise _isolation(found[0][0], [f"{label}: {rel}" for _, rel in found])
+    _check_snapshots(base, head, "pre_overlay")
+    _check_venvs(base, head, roots, "pre_overlay")
+    _check_parity(base, head, roots, "pre_overlay")
+    _check_exports(repo, (base, head), roots, ({}, {}), "pre_overlay")
     # 5: the diff checks
     try:
         diff_checks(repo, base.commit, head.commit, normalized["benchmark_paths"][0])
@@ -5189,6 +5210,99 @@ def _compare_checks(gate: object, repo: object, base: Side, head: Side, *, attem
     return _Checked(normalized, target, salt, attempt, pins[0], pins[1], writable, load)
 
 
+class _Prepared(NamedTuple):
+    """What steps 7 to 9 learned and the run steps use (T4a1 adds the baseline fingerprints)."""
+    gate: dict              # the normalized gate
+    target: str
+    benchmark: str          # the benchmark path (relative, as in the gate)
+    origin: str             # `PRE_EXISTING` or `BUILDER_AUTHORED`, derived from the base commit, not from the overlay's return value
+    benchmark_sha256: str
+    h0: tuple[str, str]     # `hash_export` of the base and the head export just after the seal
+    harness_sha256: str
+    gate_sha256: str
+    roots: tuple[str, str]
+
+
+def _benchmark_origin(repo: object, base_commit: str, path: str) -> str:
+    """`PRE_EXISTING` when the base COMMIT lists `path`, else `BUILDER_AUTHORED`: read from git, never from the exports (the overlay's own
+    return value reads the installed base export, which a build step could have written to)."""
+    length = _check_commits(base_commit)
+    with _PrivateGit(repo, length) as git:
+        git.require_commit(base_commit)
+        raw = git.run("ls-tree", "-z", "--full-tree", base_commit, "--", path)
+    return "PRE_EXISTING" if any(record.partition(b"\t")[2] == path.encode() for record in raw.split(b"\0")) else "BUILDER_AUTHORED"
+
+
+def _export_rejected(exc: BenchmarkGateError, label: str, stage: str) -> _Verdict:
+    return _Verdict("REJECTED", "EXPORT_REJECTED", exc.code, stage=stage, extra={"untrusted_text": [f"{label}: {exc.detail or exc.code}"]})
+
+
+def _compare_prepare(repo: object, base: Side, head: Side, checked: _Checked, *, interpreter_of: Callable[[str], InterpreterPin] | None,
+                     run: _Run) -> _Prepared:
+    """Steps 7 to 9. Raises `_Verdict` for a result and `BenchmarkGateError` for a caller or harness fault. Stage `pre_overlay` until the
+    overlay has succeeded, `overlaid` after. Nothing here starts a child; at the end both exports are sealed and hashed."""
+    common = run.common
+    roots = (_export_root(base.root, "base root"), _export_root(head.root, "head root"))
+    benchmark = checked.gate["benchmark_paths"][0]
+    # 7: the lint's import allowlist is read BEFORE the overlay and after the install; then the overlay itself
+    try:
+        top = repo_top_levels(roots[0])
+        overlay_benchmark_file(roots[0], roots[1], base.commit, benchmark, head_ref_commit=head.commit)
+    except BenchmarkGateError as exc:
+        if exc.code == "BENCHMARK_MODIFIED":
+            raise _Verdict("REJECTED", "BENCHMARK_MODIFIED", exc.code, stage="pre_overlay") from exc
+        if exc.code in ("OVERLAY_PATH_REJECTED", "OVERLAY_NOT_REGULAR", "OVERLAY_PATH_CONFLICT"):
+            raise _Verdict("REJECTED", "OVERLAY_REJECTED", exc.code, stage="pre_overlay", extra={"untrusted_text": [exc.detail or exc.code]}) from exc
+        if exc.code in _HOSTILE_TREE_CODES:
+            raise _export_rejected(exc, "base", "pre_overlay") from exc
+        raise
+    # the file exists in the base from here: a retry needs fresh exports
+    # the overlay's return value is not authoritative (a build step could have written the file); the base commit decides, and an
+    # installed-but-untracked file is then allowed only by its sha256 at step 9
+    origin = _benchmark_origin(repo, base.commit, benchmark)
+    common["benchmark_origin"] = origin
+    stage = "overlaid"
+    # 8: seal, read, compare, hash, lint, hash, re-read
+    try:
+        seal_export(roots[0])
+        seal_export(roots[1])
+        data = [read_benchmark(root, benchmark) for root in roots]
+    except BenchmarkGateError as exc:
+        if exc.code in _HOSTILE_TREE_CODES or exc.code in ("OVERLAY_PATH_REJECTED", "OVERLAY_NOT_REGULAR"):
+            raise _export_rejected(exc, "export", stage) from exc
+        raise
+    if data[0] != data[1]:
+        raise _isolation("BENCHMARK_BYTES_DIFFER", [benchmark], stage)
+    benchmark_sha = hashlib.sha256(data[0]).hexdigest()
+    common["benchmark_sha256"] = benchmark_sha
+    violations = validate_benchmark_content(data[0], checked.gate["benchmark_symbol"], top)
+    if violations:
+        raise _Verdict("REJECTED", "LINT_REJECTED", violations[0], stage=stage, extra={"untrusted_text": list(violations)})
+    try:
+        h0 = (hash_export(roots[0]), hash_export(roots[1]))
+        again = [hashlib.sha256(read_benchmark(root, benchmark)).hexdigest() for root in roots]
+    except BenchmarkGateError as exc:
+        if exc.code in _HOSTILE_TREE_CODES or exc.code in ("OVERLAY_PATH_REJECTED", "OVERLAY_NOT_REGULAR"):
+            raise _export_rejected(exc, "export", stage) from exc
+        raise
+    if again != [benchmark_sha, benchmark_sha]:
+        raise _isolation("EXPORT_CHANGED", [benchmark], stage)
+    # 9: immediately before the first child, the step 4 checks again, with the overlay allowance on the base only
+    _check_snapshots(base, head, stage)
+    _check_venvs(base, head, roots, stage)
+    seam = interpreter_of or (lambda bin_dir: interpreter_pin(bin_dir, outside=roots))
+    for label, side, before in (("base", base, checked.base_pin), ("head", head, checked.head_pin)):
+        try:
+            pin = seam(side.bin_dir)
+        except BenchmarkGateError as exc:
+            raise _pin_error(exc, label, stage) from exc
+        if pin.sha256 != side.interpreter_sha256 or pin.real_python != before.real_python:
+            raise _isolation("INTERPRETER_CHANGED", [label], stage)
+    _check_parity(base, head, roots, stage)
+    _check_exports(repo, (base, head), roots, ({benchmark: benchmark_sha} if origin == "BUILDER_AUTHORED" else {}, {}), stage)
+    return _Prepared(checked.gate, checked.target, benchmark, origin, benchmark_sha, h0, common["harness_sha256"], common["gate_sha256"], roots)
+
+
 def _compare_impl(gate: object, repo: object, base: Side, head: Side, *, attempt: object = 1, out_path: object,
                   allow_writable_interpreter: bool = False, argv_builder=None, load_probe=None, min_base_ns: int = _MIN_BASE_NS,
                   order_salt: object = None, interpreter_of=None) -> dict:
@@ -5196,14 +5310,15 @@ def _compare_impl(gate: object, repo: object, base: Side, head: Side, *, attempt
     A result (a `_Verdict`) is assembled, written to ``out_path`` and returned; a caller or harness fault raises `BenchmarkGateError`."""
     run = _Run()
     try:
-        _compare_checks(gate, repo, base, head, attempt=attempt, out_path=out_path, allow_writable_interpreter=allow_writable_interpreter,
-                        load_probe=load_probe, order_salt=order_salt, interpreter_of=interpreter_of, run=run)
+        checked = _compare_checks(gate, repo, base, head, attempt=attempt, out_path=out_path, allow_writable_interpreter=allow_writable_interpreter,
+                                  load_probe=load_probe, order_salt=order_salt, interpreter_of=interpreter_of, run=run)
+        _compare_prepare(repo, base, head, checked, interpreter_of=interpreter_of, run=run)
     except _Verdict as verdict:
         result = _result_dict(verdict, run.common)
         assert run.out is not None  # a verdict only exists after step 1 validated out_path
         _write_result(str(out_path), run.out[0], run.out[1], _result_bytes(result))
         return result
-    raise NotImplementedError("steps 7 to 13: T3b/T4")  # declared scaffold: removed by T4b
+    raise NotImplementedError("steps 10 to 13: T4")  # declared scaffold: removed by T4b
 
 
 def compare(gate: object, repo: object, base: Side, head: Side, *, attempt: object = 1, out_path: object,
