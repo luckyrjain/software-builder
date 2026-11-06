@@ -78,11 +78,12 @@ def test_run_order_accepts_sha256_commits():
 
 def test_side_env_is_an_allowlist(tmp_path):
     env = bg.side_env(str(tmp_path / "venv" / "bin"), str(tmp_path / "scratch"))
-    assert set(env) == {"PATH", "VIRTUAL_ENV", "PYTHONNOUSERSITE", "PYTHONHASHSEED", "PYTHONPYCACHEPREFIX",
+    assert set(env) == {"PATH", "VIRTUAL_ENV", "PYTHONNOUSERSITE", "PYTHONHASHSEED", "PYTHONDONTWRITEBYTECODE",
                         "PYTEST_DISABLE_PLUGIN_AUTOLOAD", "LANG", "HOME", "TMPDIR"}
     assert env["PATH"] == f"{tmp_path / 'venv' / 'bin'}:/usr/bin:/bin"
     assert env["VIRTUAL_ENV"] == str(tmp_path / "venv")
     assert env["PYTHONNOUSERSITE"] == "1" and env["PYTHONHASHSEED"] == "0" and env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] == "1"
+    assert env["PYTHONDONTWRITEBYTECODE"] == "1" and "PYTHONPYCACHEPREFIX" not in env and len(env) == 9
     assert "PYTHONPATH" not in env
     assert Path(env["HOME"]).is_dir() and Path(env["TMPDIR"]).is_dir()
     assert Path(env["HOME"]).parent == tmp_path / "scratch"
@@ -366,7 +367,8 @@ def test_scratch_is_removed_after_spawn_failure_timeout_and_nonzero(tmp_path, mo
     removed = []
 
     def spy(path, *args, **kwargs):
-        if re.fullmatch(r"(base|head)-\d+", os.path.basename(str(path))):
+        # the run's scratch is a mkdtemp directory directly under a bench-run-* work directory (its name is not predictable)
+        if os.path.basename(os.path.dirname(str(path))).startswith("bench-run-"):
             removed.append(os.path.basename(str(path)))
         return real(path, *args, **kwargs)
     monkeypatch.setattr(bg.shutil, "rmtree", spy)
@@ -374,12 +376,12 @@ def test_scratch_is_removed_after_spawn_failure_timeout_and_nonzero(tmp_path, mo
     with pytest.raises(bg.BenchmarkGateError):  # spawn failure
         bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t", repeats=4, timeout_seconds=30,
                           base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0)
-    assert removed == ["base-1"]
+    assert len(removed) == 1
     for name, script, overrides in (("t", "import time\ntime.sleep(30)", {"timeout_seconds": 1}), ("n", "import sys\nsys.exit(3)", {})):
         removed.clear()
         (tmp_path / name).mkdir()
         refusal(tmp_path / name, script, **overrides)
-        assert removed == ["base-1"], name
+        assert len(removed) == 1, name
 
 
 @posix_only
@@ -603,7 +605,7 @@ def test_a_harness_fault_in_a_timed_round_keeps_the_phase_and_the_finished_round
 
     def flaky(*args, **kwargs):
         calls["n"] += 1
-        if calls["n"] > 12:  # a few runs in: the second timed round
+        if calls["n"] > 8:  # side_env makes home and tmp: two calls per run; 4 runs (warmup + first timed round) use 8, so run 5 (the second timed round) fails
             raise OSError(28, "No space left on device")
         return real(*args, **kwargs)
     monkeypatch.setattr(bg.os, "makedirs", flaky)
@@ -659,18 +661,131 @@ def test_the_file_size_limit_is_applied_to_the_child(tmp_path):
     assert set(marker.read_text().split("\n")) - {""} == {f"({1 << 20}, {1 << 20})"}
 
 
+def _fake_run_once(seen):
+    """A ``_run_once`` that records ``(argv, env)`` and the state of the ini and its scratch while the run is live."""
+    def fake(argv, cwd, env, timeout):
+        ini = argv[argv.index("-c") + 1]
+        seen.append({"ini": ini, "scratch": os.path.dirname(ini), "env": env, "ini_bytes": Path(ini).read_bytes(),
+                     "home_parent": os.path.dirname(env["HOME"])})
+        return 0, 3_000_000_000, f"BENCH_RESULT_DIGEST: {DIGEST}\n".encode(), b"", False
+    return fake
+
+
+def _default_builder_measure(tmp_path, **overrides):
+    return measure(tmp_path, OK_CHILD, argv_builder=None, **overrides)
+
+
 @posix_only
-def test_the_pycache_prefix_is_per_side_and_shared_across_that_sides_runs(tmp_path):
-    marker = tmp_path / "prefix"
+def test_each_run_gets_its_own_ini_inside_a_scratch_removed_after_the_run(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(bg, "_run_once", _fake_run_once(seen))
+    _default_builder_measure(tmp_path)
+    assert len(seen) == 10  # one warmup round and four timed rounds, two runs each
+    assert len({row["ini"] for row in seen}) == len(seen)
+    for row in seen:
+        assert row["ini_bytes"] == bg._EMPTY_INI.encode("ascii")
+        assert row["scratch"] == row["home_parent"]  # the ini lives in the run's scratch, next to its home
+        assert not os.path.exists(row["scratch"]) and not os.path.exists(row["ini"])
+
+
+@posix_only
+def test_a_child_that_rewrites_its_ini_or_plants_a_file_under_work_changes_nothing_for_the_next_run(tmp_path, monkeypatch):
+    log = tmp_path / "log"
     script = f"""
         import os, sys
-        open({str(marker)!r}, "a").write(sys.argv[1] + " " + os.environ["PYTHONPYCACHEPREFIX"] + "\\n")
+        ini = sys.argv[1]
+        work = os.path.dirname(os.path.dirname(ini))
+        scratch = os.path.dirname(ini)
+        open({str(log)!r}, "a").write(repr((open(ini, "rb").read(), sorted(os.listdir(scratch)))) + "\\n")
+        open(ini, "w").write("[pytest]\\naddopts=-x\\n")
+        open(os.path.join(work, "planted"), "w").write("x")
         print("BENCH_RESULT_DIGEST: {DIGEST}")
     """
-    measure(tmp_path, script)
-    rows = [line.split() for line in marker.read_text().splitlines()]
-    by_side = {side: {prefix for s, prefix in rows if s == side} for side in ("base", "head")}
-    assert len(by_side["base"]) == 1 and len(by_side["head"]) == 1 and by_side["base"] != by_side["head"]
+    real = bg._run_once
+
+    def as_child(argv, cwd, env, timeout):  # a REAL child: the argv's ini path is handed to the script
+        return real([sys.executable, "-c", textwrap.dedent(script), argv[argv.index("-c") + 1]], cwd, env, timeout)
+    monkeypatch.setattr(bg, "_run_once", as_child)
+    _default_builder_measure(tmp_path)
+    rows = [eval(line) for line in log.read_text().splitlines()]  # noqa: S307 - our own repr of (bytes, list)
+    assert len(rows) == 10
+    # every run sees the pristine ini and a scratch holding only its own entries: neither the rewrite nor the file planted under work crosses
+    assert all(row == (bg._EMPTY_INI.encode("ascii"), ["empty.ini", "home", "tmp"]) for row in rows)
+
+
+@posix_only
+def test_a_precreated_scratch_name_does_not_fail_the_run(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(bg, "_run_once", _fake_run_once(seen))
+    real = bg._prepare_run
+
+    def with_planted_names(side, bin_dir, work, *args, **kwargs):
+        for number in range(1, 20):  # every name the old counter scheme would pick
+            os.makedirs(os.path.join(work, f"{side}-{number}"), exist_ok=True)
+        return real(side, bin_dir, work, *args, **kwargs)
+    monkeypatch.setattr(bg, "_prepare_run", with_planted_names)
+    _default_builder_measure(tmp_path)
+    assert len(seen) == 10
+
+
+def _replace_work_on_call(monkeypatch, number, moved):
+    """Wrap ``_prepare_run`` so that its ``number``-th call renames ``work`` away and recreates it (what a hostile child could do)."""
+    real = bg._prepare_run
+    calls = {"n": 0}
+
+    def wrapper(side, bin_dir, work, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == number:
+            os.rename(work, work + ".moved")
+            moved.append(work + ".moved")
+            os.mkdir(work)
+        return real(side, bin_dir, work, *args, **kwargs)
+    monkeypatch.setattr(bg, "_prepare_run", wrapper)
+
+
+@posix_only
+def test_measure_paired_raises_measure_failed_when_work_is_replaced(tmp_path, monkeypatch):
+    seen, moved = [], []
+    monkeypatch.setattr(bg, "_run_once", _fake_run_once(seen))
+    _replace_work_on_call(monkeypatch, 6, moved)  # run 6 is the second run of the second timed round
+    try:
+        err = refusal(tmp_path, OK_CHILD, argv_builder=None)
+    finally:
+        for path in moved:
+            bg.shutil.rmtree(path, ignore_errors=True)
+    assert err.code == "MEASURE_FAILED" and err.phase == "timed" and "replaced" in err.detail
+    assert set(err.partial) == {"order", "base_ns", "head_ns"}
+    assert len(seen) == 6  # the run after the replacement never started
+
+
+@posix_only
+def test_no_pycache_prefix_and_bytecode_is_not_written(tmp_path, monkeypatch):
+    env = bg.side_env(str(tmp_path / "venv" / "bin"), str(tmp_path / "scratch"))
+    assert "PYTHONPYCACHEPREFIX" not in env and env["PYTHONDONTWRITEBYTECODE"] == "1" and len(env) == 9
+    roots, bins = fake_sides(tmp_path)
+    (roots["base"] / "mod_b.py").write_text("VALUE = 1\n")
+    (roots["head"] / "mod_b.py").write_text("VALUE = 1\n")
+    log = tmp_path / "bytecode"
+    script = f"""
+        import os, sys
+        root = sys.argv[1]
+        sys.path.insert(0, root)
+        import mod_b
+        scratch = os.path.dirname(os.environ["HOME"])
+        found = [d for top in (root, scratch) for d, dirs, files in os.walk(top)
+                 if "__pycache__" in dirs or "pycache" in dirs or any(f.endswith(".pyc") for f in files)]
+        open({str(log)!r}, "a").write(repr(found) + "\\n")
+        print("BENCH_RESULT_DIGEST: {DIGEST}")
+    """
+    real = bg._run_once
+
+    def as_child(argv, cwd, env, timeout):
+        return real([sys.executable, "-c", textwrap.dedent(script), cwd], cwd, env, timeout)
+    monkeypatch.setattr(bg, "_run_once", as_child)
+    bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t", repeats=4, timeout_seconds=30,
+                      base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0)
+    assert log.read_text().split() == ["[]"] * 10
+    assert not list(roots["base"].rglob("__pycache__")) and not list(roots["head"].rglob("__pycache__"))
 
 
 @posix_only

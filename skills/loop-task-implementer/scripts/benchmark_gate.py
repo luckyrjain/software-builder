@@ -3491,7 +3491,9 @@ def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt
 
 def side_env(bin_dir: str, scratch: str) -> dict[str, str]:
     """The child's environment: an allowlist, not a sandbox. The side's venv ``bin`` first on ``PATH``, no user site, a fixed hash seed, a
-    per-side ``PYTHONPYCACHEPREFIX`` under ``scratch``, fresh ``HOME`` and ``TMPDIR`` under ``scratch``, plugin autoload off. No
+    ``PYTHONDONTWRITEBYTECODE``, fresh ``HOME`` and ``TMPDIR`` under ``scratch``, plugin autoload off. No ``PYTHONPYCACHEPREFIX``: a prefix
+    would make CPython ignore every existing ``__pycache__`` and recompile the interpreter, pytest and the benchmark's imports on every
+    run, pushing ratios toward 1 and letting compile time satisfy the workload floor; existing bytecode is read, none is written. No
     ``PYTHONPATH``, no SCM, cloud or API token. The trace's environment is ``trace_env``, which adds ``PYTHONPATH`` and the three ``BENCH_TRACE_*``
     keys (file, out, nonce) for the trace run only."""
     home = os.path.join(scratch, "home")
@@ -3503,7 +3505,7 @@ def side_env(bin_dir: str, scratch: str) -> dict[str, str]:
         "VIRTUAL_ENV": os.path.dirname(bin_dir),
         "PYTHONNOUSERSITE": "1",
         "PYTHONHASHSEED": "0",
-        "PYTHONPYCACHEPREFIX": os.path.join(scratch, "pycache"),
+        "PYTHONDONTWRITEBYTECODE": "1",
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
         "LANG": "C.UTF-8",
         "HOME": home,
@@ -3617,13 +3619,18 @@ def _tail_detail(tail: bytes) -> str:
     return tail.decode("ascii", "replace")[-150:]
 
 
-def _prepare_run(side: str, bin_dir: str, work: str, counter: int) -> tuple[str, dict]:
-    """Make the run's scratch directory and build its environment (``side_env`` makes the home and tmp directories)."""
-    scratch = os.path.join(work, f"{side}-{counter}")
-    os.makedirs(scratch)
+def _prepare_run(side: str, bin_dir: str, work: str, ini_path: str | None = None) -> tuple[str, dict, str]:
+    """Make the run's scratch directory (unpredictable name, so a planted name cannot fail the run) and build its environment (``side_env``
+    makes the home and tmp directories). Returns ``(scratch, env, ini)``: ``ini`` is ``ini_path`` when given, else a fresh ``empty.ini``
+    written inside the scratch, so a child that rewrites its ini changes nothing for the next run (no mutable harness state crosses a child)."""
+    scratch = tempfile.mkdtemp(dir=work)
     env = side_env(bin_dir, scratch)
-    env["PYTHONPYCACHEPREFIX"] = os.path.join(work, f"pycache-{side}")  # per side, shared by its runs (a warm cache is part of the warmup)
-    return scratch, env
+    ini = ini_path
+    if ini is None:
+        ini = os.path.join(scratch, "empty.ini")
+        with open(ini, "w", encoding="ascii") as handle:
+            handle.write(_EMPTY_INI)
+    return scratch, env, ini
 
 
 def _execute(side: str, argv: list[str], root: str, scratch: str, env: dict[str, str], timeout_seconds: float,
@@ -3730,21 +3737,18 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
 
     try:
         with tempfile.TemporaryDirectory(prefix="bench-run-") as work:
-            ini = ini_path
-            if ini is None:
-                ini = os.path.join(work, "empty.ini")
-                with open(ini, "w", encoding="ascii") as handle:
-                    handle.write(_EMPTY_INI)
+            work_stat = os.lstat(work)
+            work_identity = (work_stat.st_dev, work_stat.st_ino)
             digests: dict[str, set[str]] = {"base": set(), "head": set()}
             argvs: dict[str, list[str]] = {}
-            counter = 0
 
             def run(side: str, phase: str) -> tuple[int, str | None]:
-                nonlocal counter
-                counter += 1
                 phase_now[0] = phase
+                now = os.lstat(work)  # a child that replaced the work directory is a denial, not a measurement
+                if (now.st_dev, now.st_ino) != work_identity:
+                    raise fail("MEASURE_FAILED", "the work directory was replaced during the measurement", None, phase)
                 root, bin_dir = sides[side]
-                scratch, env = _prepare_run(side, bin_dir, work, counter)
+                scratch, env, ini = _prepare_run(side, bin_dir, work, ini_path)
                 argv = argv_builder(side, bin_dir, root, target) if argv_builder else pytest_argv(bin_dir, root, target, ini)
                 argvs.setdefault(side, argv)
 
@@ -3922,12 +3926,7 @@ def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, t
     def run_side(side: str) -> tuple[_TraceResult, list[str]]:
         root, bin_dir = sides[side]
         with tempfile.TemporaryDirectory(prefix="bench-run-") as work:
-            ini = ini_path
-            if ini is None:
-                ini = os.path.join(work, "empty.ini")
-                with open(ini, "w", encoding="ascii") as handle:
-                    handle.write(_EMPTY_INI)
-            scratch, env = _prepare_run(side, bin_dir, work, 1)
+            scratch, env, ini = _prepare_run(side, bin_dir, work, ini_path)
             plugin_dir = tempfile.mkdtemp(dir=work, prefix="plugin-")
             out_dir = tempfile.mkdtemp(dir=work, prefix="out-")  # a sibling of scratch: _execute removes scratch before the result is read
             out_path = os.path.join(out_dir, "trace.out")

@@ -17,6 +17,7 @@ import importlib.util
 import io
 import os
 import re
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -1795,6 +1796,25 @@ def test_a_backslash_in_the_id_part_is_accepted_by_trace_paired(tmp_path, monkey
 
 
 @posix_only
+def test_trace_paired_has_no_work_identity_check(tmp_path, monkeypatch):
+    # one run per work directory, so there is nothing to compare against: replacing work is not a failure here (documents the vacuous check)
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch)
+    real, moved = bg._prepare_run, []
+
+    def replacing(side, bin_dir, work, *args, **kwargs):
+        os.rename(work, work + ".moved")
+        moved.append(work + ".moved")
+        os.mkdir(work)
+        return real(side, bin_dir, work, *args, **kwargs)
+    monkeypatch.setattr(bg, "_prepare_run", replacing)
+    try:
+        assert run()["base"] == 5
+    finally:
+        for path in moved:
+            shutil.rmtree(path, ignore_errors=True)
+
+
+@posix_only
 def test_trace_paired_and_measure_paired_use_the_same_temporary_directory_prefix(tmp_path, monkeypatch):
     prefixes, homes = [], []
     real = tempfile.TemporaryDirectory
@@ -1806,17 +1826,17 @@ def test_trace_paired_and_measure_paired_use_the_same_temporary_directory_prefix
     monkeypatch.setattr(tempfile, "TemporaryDirectory", spy)
     fake, run, roots, bins = trace_setup(tmp_path, monkeypatch)
     run()
-    homes += [os.path.basename(os.path.dirname(c.env["HOME"])) for c in fake.calls]
+    homes += [os.path.dirname(os.path.dirname(c.env["HOME"])) for c in fake.calls]  # the scratch's parent: the side's work directory
     trace_prefixes, prefixes[:] = list(prefixes), []
 
     digest = "a" * 64
 
     def measure_child(argv, cwd, env, timeout):
-        homes.append(os.path.basename(os.path.dirname(env["HOME"])))
+        homes.append(os.path.dirname(os.path.dirname(env["HOME"])))
         return 0, 3_000_000_000, ("BENCH_RESULT_DIGEST: " + digest + "\n").encode(), b"", False
 
     monkeypatch.setattr(bg, "_run_once", measure_child)
     bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t", repeats=4, timeout_seconds=30,
                       base_commit="1" * 40, head_commit="2" * 40, benchmark_sha256="3" * 64, min_base_ns=0)
     assert trace_prefixes == ["bench-run-", "bench-run-"] and prefixes == ["bench-run-"]
-    assert all(re.fullmatch(r"(base|head)-\d+", name) for name in homes)
+    assert all(os.path.basename(work).startswith("bench-run-") for work in homes)  # each home's parent sits directly under a bench-run-* work directory
