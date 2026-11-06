@@ -928,7 +928,7 @@ class BenchmarkGateError(Exception):
         self.side: str | None = None  # measure_paired and trace_paired: which side failed ("base" or "head"), None if neither or both
         self.phase: str | None = None  # measure_paired: "warmup" or "timed"; trace_paired: "trace" (None for an argument error)
         self.partial: dict | None = None  # measure_paired only: {"order", "base_ns", "head_ns"} of the completed rounds when phase == "timed" (None for trace_paired)
-        self.kind: str | None = None  # trace_paired only: why it failed, one of TRACE_FAILURE_KINDS (None for every other error)
+        self.kind: str | None = None  # trace_paired: why it failed, one of TRACE_FAILURE_KINDS; measure_paired: the _execute kind of a run failure; else None
         # trace_paired only, and only for an error raised AFTER both sides produced a result (the kinds unavailable_one_side,
         # unavailable_tokens_differ, unavailable_interpreters_differ, interpreters_differ, counts_differ, unavailable): {"base": {"kind":
         # "lines"|"unavailable", "value": int count | str token, "interpreter": "<ver> <impl>"}, "head": {...}, "argv": {"base": [...],
@@ -3463,11 +3463,13 @@ def _verify_plugin(path: str) -> None:
         raise BenchmarkGateError("MEASURE_FAILED", "plugin file hash mismatch")
 
 
-def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int, repeats: int) -> list[str]:
+def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int, repeats: int, *, salt: str | None = None) -> list[str]:
     """The round order: exactly ``repeats / 2`` rounds are ``"head_first"``, the rest ``"base_first"``, shuffled by a PRNG seeded from
     ``sha256(base_commit || head_commit || benchmark_sha256 || attempt)``. Strict alternation phase-locks onto a period-4 disturbance
     (about 25% false IMPROVED); a seeded balanced permutation does not, and a human can reproduce it. ``attempt`` makes the one allowed
-    re-measure use a different order. Raises ``MEASURE_ARGS_INVALID`` for a bad argument."""
+    re-measure use a different order. ``salt`` (``None`` means unsalted: today's seed bytes, unchanged) is lowercase hex of 1 to 64
+    characters and is appended as a fifth ``\\0``-joined seed field, so a run's order is reproducible from the recorded salt but not
+    predictable from the public inputs. Raises ``MEASURE_ARGS_INVALID`` for a bad argument."""
     import random
 
     if not all(isinstance(c, str) and _COMMIT_RE.fullmatch(c) for c in (base_commit, head_commit)):
@@ -3478,7 +3480,10 @@ def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "attempt must be 1 or 2")
     if not _is_real_int(repeats) or repeats not in _NEED_CLEAR:
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "repeats must be 4, 6 or 8")
-    seed = hashlib.sha256("\0".join((base_commit, head_commit, benchmark_sha256, str(attempt))).encode("ascii")).digest()
+    if salt is not None and not (isinstance(salt, str) and re.fullmatch(r"[0-9a-f]{1,64}", salt, re.ASCII)):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "order_salt must be 1 to 64 lowercase hex characters")
+    fields = (base_commit, head_commit, benchmark_sha256, str(attempt)) + (() if salt is None else (salt,))
+    seed = hashlib.sha256("\0".join(fields).encode("ascii")).digest()
     order = ["head_first"] * (repeats // 2) + ["base_first"] * (repeats - repeats // 2)
     random.Random(int.from_bytes(seed, "big")).shuffle(order)
     return order
@@ -3553,7 +3558,7 @@ def _run_once(argv: list[str], cwd: str, env: dict[str, str], timeout: float) ->
             proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=err, close_fds=True,
                                     start_new_session=True, preexec_fn=fsize_limit)  # preexec_fn is thread-unsafe: single-threaded here
         except (OSError, subprocess.SubprocessError) as exc:
-            raise _SpawnFailed(str(exc)) from exc
+            raise _SpawnFailed(str(exc), exc.errno if isinstance(exc, OSError) else None) from exc  # a SubprocessError has no errno
 
         def fire() -> None:
             timed_out.set()
@@ -3580,7 +3585,25 @@ def _run_once(argv: list[str], cwd: str, env: dict[str, str], timeout: float) ->
 
 
 class _SpawnFailed(Exception):
-    """``Popen`` could not start the child (no ``<bin>/python``, not executable): a provisioning fault of that side."""
+    """``Popen`` could not start the child. ``errno`` (``None`` for a ``SubprocessError``) tells a provisioning fault of that side (no
+    ``<bin>/python``, not executable) from a host fault (no processes or memory left); ``_execute`` splits on it. The default keeps
+    callers that build one from a message alone meaning the provisioning case."""
+
+    def __init__(self, message: str, errno: int | None = errno.ENOENT) -> None:  # the default is bound here, before the parameter shadows the module
+        super().__init__(message)
+        self.errno = errno
+
+
+_SPAWN_PROVISIONING_ERRNOS = frozenset({errno.ENOENT, errno.EACCES, errno.ENOEXEC, errno.ENOTDIR})  # a missing cwd is ENOENT too
+
+
+def _run_error_code(side: str, kind: str) -> str:
+    """The ``measure_paired`` error code of an ``_execute`` failure kind; an unknown kind is a bug in this file, not an input."""
+    codes = {"oversize": "OUTPUT_TOO_LARGE", "timeout": f"{side.upper()}_TIMEOUT", "nonzero": f"{side.upper()}_NONZERO_EXIT",
+             "spawn": f"{side.upper()}_NONZERO_EXIT"}  # a spawn failure (a venv that was not provisioned) is a nonzero exit
+    if kind not in codes:
+        raise AssertionError(f"unknown _execute failure kind {kind!r}")
+    return codes[kind]
 
 
 def _digest_of(stdout: bytes) -> str | None:
@@ -3609,8 +3632,10 @@ def _execute(side: str, argv: list[str], root: str, scratch: str, env: dict[str,
     (kinds ``spawn``, ``oversize``, ``timeout``, ``nonzero``, checked in that order). Returns ``(elapsed_ns, stdout)``."""
     try:
         code, elapsed, stdout, tail, oversize = _run_once(argv, root, env, float(timeout_seconds))
-    except _SpawnFailed as exc:  # no <bin>/python, not executable, a failed fork: the side was not provisioned
-        raise fail("spawn", f"could not start the run: {exc}") from exc
+    except _SpawnFailed as exc:
+        if exc.errno in _SPAWN_PROVISIONING_ERRNOS:  # no <bin>/python, not executable, a missing cwd: the side was not provisioned
+            raise fail("spawn", f"could not start the run: {exc}") from exc
+        raise RuntimeError("host spawn fault") from exc  # EAGAIN, ENOMEM, a failed preexec_fn: the host, not the side (callers turn it into MEASURE_FAILED)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
     if oversize:
@@ -3667,7 +3692,7 @@ def _check_sides(base_root: object, head_root: object, base_bin: object, head_bi
 
 def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, target: str, *, repeats: int, timeout_seconds: float,
                    base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int = 1, warmup: int = 1,
-                   min_base_ns: int = _MIN_BASE_NS, argv_builder=None, ini_path: str | None = None) -> dict:
+                   min_base_ns: int = _MIN_BASE_NS, argv_builder=None, ini_path: str | None = None, order_salt: str | None = None) -> dict:
     """Run ``warmup`` untimed rounds, then ``repeats`` timed rounds; every round runs both sides once, base first in warmup and in the
     order ``run_order`` gives afterwards. Returns ``{"order", "base_ns", "head_ns", "digest", "argv"}``: ``base_ns[i]`` and ``head_ns[i]``
     are the wall nanoseconds of timed round ``i`` (positive ints, ready for ``evaluate_paired_samples``), ``digest`` the one digest every
@@ -3682,10 +3707,10 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
     nondeterministic on both sides is therefore reported as a mismatch there); from then on a run without a digest or with another one is
     ``DIGEST_UNSTABLE``; the digests of ALL runs (warmup included) must be one value at the end. ``WORKLOAD_TOO_SHORT`` needs the timed
     rounds and names the measured median. ``argv_builder(side, bin_dir, root, target) -> argv`` is the test seam; the default is
-    ``pytest_argv``. ``phase`` here is only ``"warmup"`` or ``"timed"``; the paired trace run is ``trace_paired``, a separate function."""
+    ``pytest_argv``. ``order_salt`` is ``run_order``'s ``salt`` (``None``: unsalted). ``phase`` here is only ``"warmup"`` or ``"timed"``; the paired trace run is ``trace_paired``, a separate function."""
     if os.name != "posix":
         raise BenchmarkGateError("UNSUPPORTED_PLATFORM", "the harness needs POSIX process groups")
-    order = run_order(base_commit, head_commit, benchmark_sha256, attempt, repeats)
+    order = run_order(base_commit, head_commit, benchmark_sha256, attempt, repeats, salt=order_salt)
     if not _is_real_int(warmup) or not 1 <= warmup <= 3:
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "warmup must be 1 to 3")
     _check_timeout(timeout_seconds)
@@ -3724,11 +3749,9 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
                 argvs.setdefault(side, argv)
 
                 def adapt(kind: str, detail: str) -> BenchmarkGateError:
-                    codes = {"oversize": "OUTPUT_TOO_LARGE", "timeout": f"{side.upper()}_TIMEOUT", "nonzero": f"{side.upper()}_NONZERO_EXIT",
-                             "spawn": f"{side.upper()}_NONZERO_EXIT"}  # a spawn failure (a venv that was not provisioned) is a nonzero exit
-                    if kind not in codes:
-                        raise AssertionError(f"unknown _execute failure kind {kind!r}")
-                    return fail(codes[kind], detail, side, phase)
+                    error = fail(_run_error_code(side, kind), detail, side, phase)
+                    error.kind = kind  # compare's verdict mapping needs the kind, not only the code (a spawn and a nonzero exit share a code)
+                    return error
 
                 elapsed, stdout = _execute(side, argv, root, scratch, env, timeout_seconds, adapt)
                 return elapsed, _digest_of(stdout)

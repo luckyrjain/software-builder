@@ -8,9 +8,11 @@ No assertion depends on a measured duration.
 
 from __future__ import annotations
 
+import errno
 import importlib.util
 import os
 import re
+import subprocess
 import sys
 import textwrap
 import time
@@ -918,3 +920,155 @@ def test_real_pytest_prints_the_digest_with_dash_s_and_a_head_added_hashlib_does
                                benchmark_sha256=BENCH, min_base_ns=0)
     assert len(result["digest"]) == 64
     assert len(result["base_ns"]) == 4
+
+
+# --- C4d-3 T0b1: error kind, spawn errno split, salted run order -----------------------------------------------------------
+
+def subdir_of(tmp_path, name):
+    path = tmp_path / name
+    path.mkdir()
+    return path
+
+
+def stub_run_once(monkeypatch, outcome):
+    """Replace ``bg._run_once`` with a fake that returns ``outcome`` or raises it when it is an exception."""
+    def fake(argv, cwd, env, timeout):
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+    monkeypatch.setattr(bg, "_run_once", fake)
+
+
+@posix_only
+@pytest.mark.parametrize("kind,outcome,code", [
+    ("spawn", bg._SpawnFailed("no python"), "BASE_NONZERO_EXIT"),
+    ("oversize", (0, 1, b"", b"", True), "OUTPUT_TOO_LARGE"),
+    ("timeout", (None, 1, b"", b"", False), "BASE_TIMEOUT"),
+    ("nonzero", (2, 1, b"", b"x", False), "BASE_NONZERO_EXIT"),
+])
+def test_measure_errors_carry_kind(tmp_path, monkeypatch, kind, outcome, code):
+    stub_run_once(monkeypatch, outcome)
+    error = refusal(tmp_path, OK_CHILD)
+    assert error.code == code
+    assert error.kind == kind
+
+
+def test_run_error_code_maps_every_kind_and_asserts_on_unknown():
+    assert bg._run_error_code("head", "oversize") == "OUTPUT_TOO_LARGE"
+    assert bg._run_error_code("head", "timeout") == "HEAD_TIMEOUT"
+    assert bg._run_error_code("base", "nonzero") == "BASE_NONZERO_EXIT"
+    assert bg._run_error_code("base", "spawn") == "BASE_NONZERO_EXIT"
+    with pytest.raises(AssertionError, match="unknown _execute failure kind"):
+        bg._run_error_code("base", "mystery")
+
+
+@posix_only
+@pytest.mark.parametrize("number", [errno.ENOENT, errno.EACCES, errno.ENOEXEC, errno.ENOTDIR])
+def test_spawn_failed_errno_split_provisioning_errnos_are_a_spawn(tmp_path, monkeypatch, number):
+    stub_run_once(monkeypatch, bg._SpawnFailed("x", number))
+    error = refusal(tmp_path, OK_CHILD)
+    assert (error.code, error.kind) == ("BASE_NONZERO_EXIT", "spawn")
+
+
+@posix_only
+@pytest.mark.parametrize("number", [errno.EAGAIN, errno.ENOMEM, None])
+def test_spawn_failed_errno_split_host_faults_are_measure_failed(tmp_path, monkeypatch, number):
+    stub_run_once(monkeypatch, bg._SpawnFailed("x", number))
+    error = refusal(tmp_path, OK_CHILD)
+    assert error.code == "MEASURE_FAILED"
+    assert error.phase == "warmup" and error.partial is None
+    assert isinstance(error.__cause__, RuntimeError) and isinstance(error.__cause__.__cause__, bg._SpawnFailed)
+    # the same fault through trace_paired is a harness error
+    roots, bins = fake_sides(subdir_of(tmp_path, "trace"))
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        bg.trace_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::test_x", timeout_seconds=10)
+    assert (info.value.code, info.value.kind) == ("MEASURE_FAILED", "harness")
+
+
+@posix_only
+@pytest.mark.parametrize("number", [errno.ENOENT, errno.EAGAIN])
+def test_spawn_failed_errno_split_in_a_timed_round_keeps_partial(tmp_path, monkeypatch, number):
+    calls = []
+    real = bg._SpawnFailed
+
+    def fake(argv, cwd, env, timeout):
+        calls.append(1)
+        if len(calls) > 2:  # the warmup round (base, head) ran; the first timed run fails
+            raise real("x", number)
+        return 0, 1, f"BENCH_RESULT_DIGEST: {DIGEST}\n".encode(), b"", False
+
+    monkeypatch.setattr(bg, "_run_once", fake)
+    error = refusal(tmp_path, OK_CHILD)
+    assert error.phase == "timed" and error.partial is not None
+    assert error.code == ("MEASURE_FAILED" if number == errno.EAGAIN else error.code)
+    if number == errno.ENOENT:
+        assert error.code.endswith("_NONZERO_EXIT") and error.kind == "spawn"
+
+
+def test_spawn_failed_default_errno_is_enoent():
+    assert bg._SpawnFailed("x").errno == errno.ENOENT
+    assert bg._SpawnFailed("x", None).errno is None
+
+
+@posix_only
+def test_run_once_passes_the_errno_of_an_oserror_and_none_for_a_subprocess_error(tmp_path, monkeypatch):
+    def popen_os(*args, **kwargs):
+        raise OSError(errno.EACCES, "denied")
+
+    def popen_sub(*args, **kwargs):
+        raise subprocess.SubprocessError("preexec failed")
+
+    monkeypatch.setattr(subprocess, "Popen", popen_os)
+    with pytest.raises(bg._SpawnFailed) as info:
+        bg._run_once([sys.executable, "-c", "pass"], str(tmp_path), {}, 5.0)
+    assert info.value.errno == errno.EACCES
+    monkeypatch.setattr(subprocess, "Popen", popen_sub)
+    with pytest.raises(bg._SpawnFailed) as info:
+        bg._run_once([sys.executable, "-c", "pass"], str(tmp_path), {}, 5.0)
+    assert info.value.errno is None
+
+
+FROZEN_ORDER_1_4 = ["base_first", "base_first", "head_first", "head_first"]  # computed on the base, before T0b1
+
+
+def test_run_order_unsalted_is_todays_bytes_and_salt_changes_it():
+    assert bg.run_order(BASE, HEAD, BENCH, 1, 4) == FROZEN_ORDER_1_4
+    assert bg.run_order(BASE, HEAD, BENCH, 1, 4, salt=None) == FROZEN_ORDER_1_4
+    inputs = [(f"{i:040x}", HEAD, BENCH, 1, 8) for i in range(10)]
+    assert any(bg.run_order(*args, salt="aa") != bg.run_order(*args, salt="bb") for args in inputs)
+    assert any(bg.run_order(*args, salt="aa") != bg.run_order(*args) for args in inputs)
+    assert bg.run_order(*inputs[0], salt="aa") == bg.run_order(*inputs[0], salt="aa")
+
+
+def test_run_order_salt_is_a_fifth_nul_joined_field():
+    import hashlib
+    import random
+    seed = hashlib.sha256("\0".join((BASE, HEAD, BENCH, "1", "ab12")).encode("ascii")).digest()
+    want = ["head_first"] * 4 + ["base_first"] * 4
+    random.Random(int.from_bytes(seed, "big")).shuffle(want)
+    assert bg.run_order(BASE, HEAD, BENCH, 1, 8, salt="ab12") == want
+
+
+@pytest.mark.parametrize("salt", ["", "G", "A1", "a" * 65, 5, b"aa", True])
+def test_run_order_rejects_a_bad_salt(salt):
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        bg.run_order(BASE, HEAD, BENCH, 1, 4, salt=salt)
+    assert info.value.code == "MEASURE_ARGS_INVALID"
+
+
+def test_run_order_accepts_a_64_char_salt():
+    assert len(bg.run_order(BASE, HEAD, BENCH, 1, 4, salt="f" * 64)) == 4
+
+
+@posix_only
+def test_measure_paired_order_salt_reaches_run_order(tmp_path):
+    salt = "5a17"
+    result = measure(tmp_path, OK_CHILD, order_salt=salt)
+    assert result["order"] == bg.run_order(BASE, HEAD, BENCH, 1, 4, salt=salt)
+
+
+@posix_only
+def test_measure_paired_rejects_a_bad_order_salt_before_any_child(tmp_path, monkeypatch):
+    stub_run_once(monkeypatch, AssertionError("a child must not start"))
+    error = refusal(tmp_path, OK_CHILD, order_salt="")
+    assert error.code == "MEASURE_ARGS_INVALID"
