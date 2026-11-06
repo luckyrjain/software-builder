@@ -1745,3 +1745,553 @@ def test_error_mappings(tmp_path, monkeypatch):
     (w.export / "ev\x1b[31mil.py").write_text("x")
     findings = w.verify()
     assert len(findings) == 1 and findings[0][0] == "UNTRACKED_PYTHON_FILE" and "\x1b" not in findings[0][1]
+
+
+# --- _compare_checks: steps 1 to 6 (T3a) ---
+# ``_compare_checks`` is driven directly for passing paths (it returns the context the later steps use); ``_compare_impl`` for the paths that
+# end with a result. Until T3b, ``_compare_impl`` raises NotImplementedError after step 6 (the declared scaffold; T4b removes it).
+
+BENCH = "benchmarks/bench_x.py"
+GATE = {"command": f"pytest -q --no-header {BENCH}", "benchmark_paths": [BENCH], "benchmark_symbol": "build"}
+QUIET = lambda: (0.1, 4)  # noqa: E731
+NO_GATE = object()  # "use the case's gate" (None is a gate value the tests pass on purpose)
+
+
+class Case:
+    """One compare call over a ``world``: sides, seams and options, all adjustable before ``checks()`` / ``impl()``."""
+
+    def __init__(self, world, tmp_path, monkeypatch):
+        self.world, self.mp, self.tmp = world, monkeypatch, tmp_path
+        self.n = 0
+        self.spy: list[str] = []
+        self.allow = True
+        self.pin_mods = {}  # side name -> fn(pin) -> pin
+        self.probe = QUIET
+        self.gate = dict(GATE)
+        self.attempt = 1
+        self.salt = "ab12"
+        self.out_dir = tmp_path / "out"
+        self.out_dir.mkdir(exist_ok=True)
+        self.out_dir.chmod(0o700)
+        self.roots = (str(world.sides["base"].export), str(world.sides["head"].export))
+        for side in world.sides.values():  # the fixture's pytest .pth is not installed by any dist: give it an owner, as an honest install has
+            site = next((side.bin.parent / "lib").glob("python3*/site-packages"))
+            pth = (site / "zz_pytest.pth").read_bytes()
+            _add_dist(types.SimpleNamespace(site=site), "zzpytest", {}, rows=[["zz_pytest.pth", "sha256=" + _b64(pth), str(len(pth))]])
+        self.base = self._side("base")
+        self.head = self._side("head")
+
+    def interp(self, bin_dir):
+        self.spy.append("interpreter_of")
+        pin = bg.interpreter_pin(bin_dir, outside=self.roots, probe=_stub_probe(self.world.prefix))
+        for name, mod in self.pin_mods.items():
+            if os.path.realpath(bin_dir) == os.path.realpath(self.world.sides[name].bin):
+                pin = mod(pin)
+        return pin
+
+    def _side(self, name):
+        s = self.world.sides[name]
+        pin = bg.interpreter_pin(s.bin, outside=self.roots, probe=_stub_probe(self.world.prefix))
+        return bg.Side(str(s.export), s.commit, str(s.bin), str(s.snapshot), hashlib.sha256(s.snapshot.read_bytes()).hexdigest(), pin.sha256)
+
+    def out(self):
+        self.n += 1
+        return str(self.out_dir / f"result-{self.n}.json")
+
+    def kwargs(self, **over):
+        kw = dict(attempt=self.attempt, out_path=self.out(), allow_writable_interpreter=self.allow, load_probe=self.probe,
+                  order_salt=self.salt, interpreter_of=self.interp)
+        kw.update(over)
+        return kw
+
+    def checks(self, gate=NO_GATE, base=None, head=None, **over):
+        run = bg._Run()
+        self.common = run.common
+        return bg._compare_checks(self.gate if gate is NO_GATE else gate, str(self.world.repo), base or self.base, head or self.head, run=run, **self.kwargs(**over))
+
+    def impl(self, gate=NO_GATE, base=None, head=None, **over):
+        kw = self.kwargs(**over)
+        self.last_out = kw["out_path"]
+        return bg._compare_impl(self.gate if gate is NO_GATE else gate, str(self.world.repo), base or self.base, head or self.head, **kw)
+
+    def spies(self, *names):
+        for name in names:
+            real = getattr(bg, name)
+
+            def wrap(*a, _real=real, _name=name, **k):
+                self.spy.append(_name)
+                return _real(*a, **k)
+            self.mp.setattr(bg, name, wrap)
+
+
+@pytest.fixture
+def case(world, tmp_path, monkeypatch):
+    return Case(world, tmp_path, monkeypatch)
+
+
+def _ends(result, reason, detail=None, stage="pre_overlay"):
+    assert result["reason"] == reason and result["result"] == bg.COMPARE_RESULT_OF_REASON[reason], result
+    assert result["stage"] == stage
+    if detail is not None:
+        assert result["detail"] == detail, result
+
+
+BAD_ARGS = {
+    "side-not-a-side": lambda c: dict(base=tuple(c.base)),
+    "side-int-root": lambda c: dict(base=c.base._replace(root=5)),
+    "side-relative-root": lambda c: dict(base=c.base._replace(root="rel/dir")),
+    "side-nul-bin": lambda c: dict(head=c.head._replace(bin_dir="/a\0b")),
+    "side-empty-snapshot": lambda c: dict(head=c.head._replace(snapshot="")),
+    "snapshot-pin-short": lambda c: dict(base=c.base._replace(snapshot_sha256="ab")),
+    "snapshot-pin-upper": lambda c: dict(base=c.base._replace(snapshot_sha256="A" * 64)),
+    "interpreter-pin-int": lambda c: dict(head=c.head._replace(interpreter_sha256=7)),
+    "commit-non-str": lambda c: dict(head=c.head._replace(commit=None)),
+    "attempt-0": lambda c: dict(attempt=0),
+    "attempt-3": lambda c: dict(attempt=3),
+    "attempt-bool": lambda c: dict(attempt=True),
+    "attempt-float": lambda c: dict(attempt=1.0),
+    "salt-empty": lambda c: dict(order_salt=""),
+    "salt-upper": lambda c: dict(order_salt="AB"),
+    "salt-65": lambda c: dict(order_salt="a" * 65),
+    "salt-non-str": lambda c: dict(order_salt=12),
+    "out-relative": lambda c: dict(out_path="result.json"),
+    "out-none": lambda c: dict(out_path=None),
+    "out-exists": lambda c: dict(out_path=str(c.tmp / "exists.json")),
+}
+
+
+@posix_only
+@pytest.mark.parametrize("name", sorted(BAD_ARGS))
+def test_bad_arguments_raise_before_any_child_or_touch(case, name):
+    (case.tmp / "exists.json").write_text("x")
+    case.spies("_run_once", "seal_export", "export_commit", "validate_benchmark_gate", "is_ancestor", "interpreter_pin")
+    before = sorted(os.listdir(case.out_dir))
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        case.impl(**BAD_ARGS[name](case))
+    assert e.value.code == "MEASURE_ARGS_INVALID"
+    assert case.spy == [] and sorted(os.listdir(case.out_dir)) == before
+
+
+@posix_only
+def test_bad_or_unknown_commits(case):
+    case.spies("_run_once", "seal_export", "export_commit")
+    for commit in ("xyz", "A" * 40, "a" * 39, "a" * 64):  # a 64-hex commit next to a 40-hex one is a length mismatch
+        with pytest.raises(bg.BenchmarkGateError) as e:
+            case.impl(head=case.head._replace(commit=commit))
+        assert e.value.code == "COMMIT_INVALID"
+    with pytest.raises(bg.BenchmarkGateError) as e:  # unknown, well formed: git says so at step 3
+        case.impl(base=case.base._replace(commit="0" * 40))
+    assert e.value.code == "COMMIT_NOT_FOUND"
+    assert case.spy == []
+
+
+@posix_only
+def test_bad_arguments_still_raise_first_when_the_platform_is_unsupported(case, monkeypatch):
+    monkeypatch.setattr(os, "name", "nt")
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        case.impl(attempt=0)
+    assert e.value.code == "MEASURE_ARGS_INVALID"
+
+
+@posix_only
+def test_unsupported_platform_is_a_result_after_arguments_are_validated(case, monkeypatch):
+    case.spies("validate_benchmark_gate", "is_ancestor", "export_commit")
+    monkeypatch.setattr(os, "name", "nt")
+    result = case.impl()
+    monkeypatch.undo()
+    _ends(result, "UNSUPPORTED_PLATFORM", stage="pre_overlay")
+    assert case.spy == [] and result["order_salt"] == "ab12" and result["attempt"] == 1 and result["interpreter_writable"] is None
+    assert json.loads(Path(case.last_out).read_text()) == result  # the file is written for every ending
+
+
+@posix_only
+@pytest.mark.parametrize("change,code", [
+    (lambda g: {**g, "warmup_runs": 0}, "BOUNDS_REJECTED"),
+    (lambda g: {**g, "benchmark_paths": ["../x.py"]}, "PATH_REJECTED"),
+    (lambda g: {**g, "command": "make bench"}, "COMMAND_REJECTED"),
+    (lambda g: None, "GATE_MISSING"),
+    (lambda g: {**g, "surprise": 1}, "KEY_UNKNOWN"),
+])
+def test_gate_rejected_maps_the_gate_code(case, change, code):
+    case.spies("is_ancestor", "export_commit")
+    result = case.impl(gate=change(case.gate))
+    _ends(result, "GATE_REJECTED", code)
+    assert result["harness_sha256"] == bg.harness_sha256() and result["gate_sha256"] is None
+    assert case.spy == [] and result["base_commit"] == case.base.commit and result["head_commit"] == case.head.commit
+
+
+@posix_only
+def test_a_good_gate_fills_target_hashes_and_the_gate_fields(case):
+    checked = case.checks()
+    normalized, _ = bg.validate_benchmark_gate(case.gate)
+    assert checked.gate == normalized and checked.target == bg.benchmark_target(normalized) == BENCH
+    assert case.common["gate_sha256"] == bg.gate_sha256(normalized) and case.common["harness_sha256"] == bg.harness_sha256()
+    assert (case.common["repeats"], case.common["min_improvement"], case.common["max_noise"]) == (6, 0.1, 0.1)
+    assert case.common["order_salt"] == "ab12" and checked.order_salt == "ab12"
+
+
+@posix_only
+def test_a_missing_salt_is_generated_and_recorded(case):
+    seen = set()
+    for _ in range(3):
+        checked = case.checks(order_salt=None)
+        assert re.fullmatch("[0-9a-f]{16}", checked.order_salt) and case.common["order_salt"] == checked.order_salt
+        seen.add(checked.order_salt)
+    assert len(seen) == 3
+
+
+@posix_only
+def test_gate_validation_precedes_the_ancestry_check_and_ancestry_raises(case):
+    swapped_base, swapped_head = case.base._replace(commit=case.head.commit), case.head._replace(commit=case.base.commit)
+    case.spies("export_commit", "_export_root")
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        case.impl(base=swapped_base, head=swapped_head)
+    assert e.value.code == "BASE_NOT_ANCESTOR" and case.spy == []
+    _ends(case.impl(gate={**case.gate, "warmup_runs": 0}, base=swapped_base, head=swapped_head), "GATE_REJECTED", "BOUNDS_REJECTED")
+
+
+def _iso(result, detail, text=None):
+    _ends(result, "ISOLATION_REJECTED", detail)
+    if text is not None:
+        assert any(text in t for t in result["untrusted_text"]), result["untrusted_text"]
+
+
+@posix_only
+def test_step4_roots_must_be_distinct_siblings_of_ours(case, tmp_path):
+    for head in (case.head._replace(root=case.base.root), case.head._replace(root=case.base.root + "/src"),
+                 case.head._replace(root=str(tmp_path / "elsewhere"))):
+        with pytest.raises(bg.BenchmarkGateError) as e:
+            case.impl(head=head)
+        assert e.value.code == "DEST_REJECTED"
+    other = bg.fixed_parent() / "bench-c4d3other"
+    bg.export_tree(case.world.repo, case.world.head, other / "head")
+    with pytest.raises(bg.BenchmarkGateError) as e:  # ours, but not a sibling
+        case.impl(head=case.head._replace(root=str(other / "head")))
+    assert e.value.code == "DEST_REJECTED"
+
+
+@posix_only
+def test_step4_commit_must_match_the_export(case):
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        case.impl(base=case.base._replace(commit=case.head.commit))  # an ancestor of itself, so step 3 passes
+    assert e.value.code == "OVERLAY_COMMIT_MISMATCH"
+
+
+def _git_dir(c):
+    (c.world.sides["head"].export / ".git").mkdir()
+
+
+def _bins_shared(c):
+    c.head = c.head._replace(bin_dir=c.base.bin_dir)
+
+
+def _bin_inside_root(c):
+    inner = c.world.sides["head"].export / "bin"
+    inner.mkdir()
+    c.head = c.head._replace(bin_dir=str(inner))
+
+
+def _differs(c):
+    c.pin_mods["head"] = lambda pin: pin._replace(real_python=pin.real_python + "-other")
+
+
+def _changed(c):
+    c.base = c.base._replace(interpreter_sha256="0" * 64)
+
+
+def _writable(c):
+    c.allow = False
+
+
+def _harness_under_root(c):
+    c.mp.setattr(bg, "__file__", str(c.world.sides["base"].export / "benchmark_gate.py"))
+
+
+def _snapshot_changed(c):
+    c.head = c.head._replace(snapshot_sha256="1" * 64)
+
+
+def _hook(c):
+    site = next((c.world.sides["head"].bin.parent / "lib").glob("python3*/site-packages"))
+    (site / "evil.pth").write_text("import evil_hook\n")
+
+
+def _fault_parity(c):
+    site = next((c.world.sides["head"].bin.parent / "lib").glob("python3*/site-packages"))
+    (site / "bare_module.py").write_text("x = 1\n")
+
+
+def _tracked(c):
+    (c.world.sides["base"].export / "src/app/core.py").write_text("tampered\n")
+
+
+def _untracked(c):
+    (c.world.sides["head"].export / "hashlib.py").write_text("x = 1\n")
+
+
+# (detail, applier) in the order step 4 checks them; an earlier fault must win over any later one.
+FAULTS = [
+    ("ROOT_HAS_GIT", _git_dir), ("BIN_NOT_ISOLATED", _bins_shared), ("INTERPRETER_DIFFERS", _differs),
+    ("INTERPRETER_CHANGED", _changed), ("INTERPRETER_WRITABLE", _writable), ("HARNESS_FILE_UNDER_ROOT", _harness_under_root),
+    ("SNAPSHOT_CHANGED", _snapshot_changed), ("VENV_HOOK_REJECTED", _hook), ("DEPENDENCY_PARITY", _fault_parity),
+    ("TRACKED_FILE_DIFFERS", _tracked),
+]
+FAULT_TEXT = {"VENV_HOOK_REJECTED": "evil.pth", "DEPENDENCY_PARITY": "bare_module.py", "TRACKED_FILE_DIFFERS": "src/app/core.py"}
+
+
+@posix_only
+@pytest.mark.parametrize("detail,apply", FAULTS, ids=[f[0] for f in FAULTS])
+def test_step4_isolation_rows(case, detail, apply):
+    case.spies("diff_checks", "check_venv", "dependency_parity", "verify_export_against_commit")
+    apply(case)
+    case.spy.clear()
+    result = case.impl()
+    _iso(result, detail, FAULT_TEXT.get(detail))
+    assert result["python"] is not None or detail in ("ROOT_HAS_GIT", "BIN_NOT_ISOLATED", "INTERPRETER_DIFFERS")
+    assert "diff_checks" not in case.spy  # step 5 never ran
+    assert json.loads(Path(case.last_out).read_text()) == result
+
+
+@posix_only
+def test_untracked_python_file_is_isolation_rejected(case):
+    _untracked(case)
+    _iso(case.impl(), "UNTRACKED_PYTHON_FILE", "hashlib.py")
+
+
+@posix_only
+@pytest.mark.parametrize("later", range(1, len(FAULTS)))
+def test_step4_order_an_earlier_fault_beats_the_next_one(case, later):
+    FAULTS[later - 1][1](case)
+    FAULTS[later][1](case)
+    _iso(case.impl(), FAULTS[later - 1][0])
+
+
+@posix_only
+def test_step4_writable_interpreter_needs_the_flag_and_the_result_says_so(case):
+    case.allow = False
+    result = case.impl()
+    _iso(result, "INTERPRETER_WRITABLE")
+    assert result["interpreter_writable"] is True
+    case.pin_mods.update(base=lambda p: p._replace(writable=False), head=lambda p: p._replace(writable=False))
+    assert case.checks().writable is False  # a non-writable interpreter passes without the flag
+    case.pin_mods.clear()
+    case.allow = True
+    assert case.checks().writable is True and case.common["interpreter_writable"] is True  # the flag lets it through, and the fact is recorded
+
+
+@posix_only
+def test_step4_interpreter_cross_checks(case):
+    # different real interpreters on the sides
+    case.pin_mods["base"] = lambda p: p._replace(real_python=p.real_python + "-other")
+    _iso(case.impl(), "INTERPRETER_DIFFERS")
+    case.pin_mods.clear()
+    # a real interpreter inside a venv or an export (the seam is not trusted to say otherwise)
+    for inside in (case.world.sides["head"].bin.parent / "python3", case.world.sides["base"].export / "python3"):
+        case.pin_mods.update(base=lambda p, i=str(inside): p._replace(real_python=i), head=lambda p, i=str(inside): p._replace(real_python=i))
+        _iso(case.impl(), "INTERPRETER_DIFFERS")
+    case.pin_mods.clear()
+    # a --copies venv / a probe mismatch surface as VENV_NOT_ISOLATED from the helper; a missing stdlib or an oversized one as NOT_PROVISIONED
+    for code, detail in (("VENV_NOT_ISOLATED", "INTERPRETER_DIFFERS"), ("TREE_TOO_LARGE", "NOT_PROVISIONED"), ("DEST_REJECTED", "NOT_PROVISIONED"),
+                         ("TREE_UNREADABLE", "NOT_PROVISIONED")):
+        def boom(bin_dir, code=code):
+            raise bg.BenchmarkGateError(code, "x")
+        _iso(case.impl(interpreter_of=boom), detail)
+
+
+@posix_only
+def test_step4_a_bin_inside_a_root_is_not_isolated(case):
+    _bin_inside_root(case)
+    _iso(case.impl(), "BIN_NOT_ISOLATED")
+
+
+@posix_only
+def test_step4_no_python_is_not_provisioned(case):
+    os.unlink(case.world.sides["head"].bin / "python")
+    _iso(case.impl(), "NOT_PROVISIONED")
+
+
+@posix_only
+def test_step4_pin_is_compared_per_side(case):
+    case.head = case.head._replace(interpreter_sha256="f" * 64)
+    _iso(case.impl(), "INTERPRETER_CHANGED")
+
+
+@posix_only
+def test_step4_check_venv_errors_map(case):
+    for code, detail in (("VENV_NOT_ISOLATED", "VENV_NOT_ISOLATED"), ("VENV_HOOK_REJECTED", "VENV_HOOK_REJECTED"),
+                         ("TREE_UNREADABLE", "VENV_NOT_ISOLATED"), ("DEST_REJECTED", "VENV_NOT_ISOLATED")):
+        def boom(*a, code=code, **k):
+            error = bg.BenchmarkGateError(code, "x")
+            error.hits = [{"path": "lib/x\x1b[31m.pth", "reason": "r"}]
+            raise error
+        case.mp.setattr(bg, "check_venv", boom)
+        result = case.impl()
+        _iso(result, detail)
+        assert all("\x1b" not in t for t in result["untrusted_text"])
+    case.mp.setattr(bg, "check_venv", lambda *a, **k: (_ for _ in ()).throw(bg.BenchmarkGateError("VENV_SNAPSHOT_INVALID", "x")))
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        case.impl()
+    assert e.value.code == "VENV_SNAPSHOT_INVALID"
+    case.mp.setattr(bg, "check_venv", lambda *a, **k: "/same/venv")  # two sides, one venv root
+    _iso(case.impl(), "VENV_NOT_ISOLATED")
+
+
+@posix_only
+def test_step4_a_missing_or_unreadable_snapshot_raises(case):
+    os.unlink(case.world.sides["base"].snapshot)
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        case.impl()
+    assert e.value.code == "VENV_SNAPSHOT_INVALID"
+
+
+@posix_only
+def test_step4_dependency_parity_findings_and_errors(case):
+    case.mp.setattr(bg, "dependency_parity", lambda *a: [("NOT_PROVISIONED", "venv over budget")])
+    _iso(case.impl(), "NOT_PROVISIONED", "over budget")
+    case.mp.setattr(bg, "dependency_parity", lambda *a: [("DEPENDENCY_PARITY", "only in head (1): a.py"), ("DEPENDENCY_PARITY", "b")])
+    result = case.impl()
+    _iso(result, "DEPENDENCY_PARITY")
+    assert len(result["untrusted_text"]) == 2
+    for code, detail in (("VENV_NOT_ISOLATED", "VENV_NOT_ISOLATED"), ("TREE_TOO_LARGE", "NOT_PROVISIONED"), ("TREE_UNREADABLE", "VENV_NOT_ISOLATED")):
+        def boom(*a, code=code):
+            raise bg.BenchmarkGateError(code, "x")
+        case.mp.setattr(bg, "dependency_parity", boom)
+        _iso(case.impl(), detail)
+
+
+@posix_only
+def test_step4_hostile_tree_errors_are_export_rejected_and_host_faults_raise(case):
+    for code in ("EXPORT_TOO_LARGE", "EXPORT_PATH_REJECTED", "TREE_TOO_LARGE", "TREE_UNREADABLE", "SEAL_FAILED", "GIT_OUTPUT_TOO_LARGE"):
+        def boom(*a, code=code, **k):
+            raise bg.BenchmarkGateError(code, "x")
+        case.mp.setattr(bg, "verify_export_against_commit", boom)
+        _ends(case.impl(), "EXPORT_REJECTED", code)
+    for code in ("GIT_TIMEOUT", "GIT_FAILED", "REPO_UNREADABLE"):
+        def boom(*a, code=code, **k):
+            raise bg.BenchmarkGateError(code, "x")
+        case.mp.setattr(bg, "verify_export_against_commit", boom)
+        with pytest.raises(bg.BenchmarkGateError) as e:
+            case.impl()
+        assert e.value.code == code
+
+
+@posix_only
+def test_step4_verification_runs_per_side_with_an_empty_allowance(case):
+    calls = []
+    real = bg.verify_export_against_commit
+
+    def spy(repo, commit, root, **kw):
+        calls.append((commit, str(root), kw))
+        return real(repo, commit, root, **kw)
+    case.mp.setattr(bg, "verify_export_against_commit", spy)
+    case.checks()
+    assert [(c[0], c[1]) for c in calls] == [(case.base.commit, case.base.root), (case.head.commit, case.head.root)]
+    assert all(not (c[2].get("allow") or {}) for c in calls)
+
+
+@posix_only
+def test_step_order_on_a_passing_path(case):
+    case.spies("validate_benchmark_gate", "is_ancestor", "export_commit", "check_venv", "dependency_parity", "verify_export_against_commit",
+               "diff_checks")
+    probes = []
+    case.probe = lambda: probes.append("load_probe") or QUIET()
+    case.checks()
+    order = case.spy + probes
+    assert order == ["validate_benchmark_gate", "is_ancestor", "export_commit", "export_commit", "interpreter_of", "interpreter_of",
+                     "check_venv", "check_venv", "dependency_parity", "verify_export_against_commit", "verify_export_against_commit",
+                     "diff_checks", "load_probe"]
+
+
+@posix_only
+def test_diff_checks_results(case):
+    seen = []
+
+    def raising(code, hits=()):
+        def fn(repo, base, head, path):
+            seen.append((base, head, path))
+            error = bg.BenchmarkGateError(code, "x")
+            error.hits = list(hits)
+            raise error
+        return fn
+
+    hit = {"path": "a.py", "token": "sys.argv", "line_number": 3, "line": "x = sys.argv"}
+    for code, reason in (("PROTECTED_PATH_CHANGED", "PROTECTED_PATH_CHANGED"), ("BENCHMARK_AWARE_CODE", "BENCHMARK_AWARE_CODE"),
+                         ("GIT_OUTPUT_TOO_LARGE", "DIFF_UNCHECKABLE"), ("TREE_TOO_LARGE", "DIFF_UNCHECKABLE")):
+        case.mp.setattr(bg, "diff_checks", raising(code, [hit] if reason != "DIFF_UNCHECKABLE" else []))
+        result = case.impl()
+        _ends(result, reason, code)
+        if reason != "DIFF_UNCHECKABLE":
+            assert any("sys.argv" in t and "a.py" in t for t in result["untrusted_text"])
+        assert result["interpreter_writable"] is True  # step 4 had passed
+    assert seen[0] == (case.base.commit, case.head.commit, BENCH)
+    for code in ("GIT_TIMEOUT", "GIT_FAILED", "REPO_UNREADABLE"):
+        case.mp.setattr(bg, "diff_checks", raising(code))
+        with pytest.raises(bg.BenchmarkGateError) as e:
+            case.impl()
+        assert e.value.code == code
+
+
+@posix_only
+def test_host_busy_start_leaves_nothing_sealed_and_a_retry_succeeds_on_the_same_exports(case):
+    case.spies("seal_export", "overlay_benchmark_file", "_run_once")
+    fingerprints = [bg.fingerprint_tree(case.base.root, limit=10_000), bg.fingerprint_tree(case.head.root, limit=10_000)]
+    case.probe = lambda: (0.71, 1)
+    result = case.impl()
+    _ends(result, "HOST_BUSY_START", stage="pre_overlay")
+    assert result["host_check"] == "start_only" and result["loadavg"] == {"start": 0.71, "end": None}
+    assert result["cpu_count"] == {"start": 1, "end": None}
+    assert case.spy == ["interpreter_of", "interpreter_of"] or "seal_export" not in case.spy
+    assert [bg.fingerprint_tree(case.base.root, limit=10_000), bg.fingerprint_tree(case.head.root, limit=10_000)] == fingerprints
+    assert os.stat(case.base.root).st_mode & stat.S_IWUSR and os.stat(os.path.join(case.head.root, "README.md")).st_mode & stat.S_IWUSR
+    case.probe = QUIET
+    checked = case.checks()  # a new out_path, the same exports: past step 6
+    assert checked.load == (0.1, 4) and case.common["host_check"] == "start_only"
+    with pytest.raises(NotImplementedError):  # the declared scaffold: steps 7 to 13 are T3b and later
+        case.impl()
+    assert "seal_export" not in case.spy and "_run_once" not in case.spy
+
+
+@posix_only
+def test_host_check_edges_and_bad_probes(case):
+    case.probe = lambda: (0.70, 1)  # 0.70 * 10 > 7 * 1 is false: not busy
+    assert case.checks().load == (0.70, 1)
+    case.probe = lambda: (0.7, 2)
+    assert case.checks()
+    case.probe = lambda: (1.41, 2)
+    _ends(case.impl(), "HOST_BUSY_START")
+    case.probe = lambda: (1.4, 2)
+    assert case.checks()
+    case.probe = lambda: (7, 10)
+    assert case.checks()
+    case.probe = lambda: (8, 10)
+    _ends(case.impl(), "HOST_BUSY_START")
+    def boom():
+        raise OSError("no loadavg")
+    for probe in (boom, lambda: (True, 4), lambda: (float("nan"), 4), lambda: (float("inf"), 4), lambda: (-1.0, 4), lambda: ("1", 4),
+                  lambda: (1.0, 0), lambda: (1.0, True), lambda: (1.0, 2.5), lambda: (1.0,), lambda: None, lambda: (50.0, -1)):
+        case.probe = probe
+        checked = case.checks()  # skipped, not busy and not an error
+        assert case.common["host_check"] == "skipped_probe_failed" and checked.load is None
+    assert case.common["loadavg"] == {"start": None, "end": None}
+
+
+@posix_only
+def test_default_load_probe_returns_a_load_and_a_cpu_count():
+    load, cpus = bg._default_load_probe()
+    assert isinstance(load, float) and load >= 0 and isinstance(cpus, int) and cpus >= 1
+
+
+@posix_only
+def test_compare_is_a_thin_wrapper_over_the_default_seams(world, tmp_path, monkeypatch):
+    case = Case(world, tmp_path, monkeypatch)
+    seen = {}
+
+    def fake_impl(gate, repo, base, head, **kw):
+        seen.update(kw)
+        return {"ok": True}
+    monkeypatch.setattr(bg, "_compare_impl", fake_impl)
+    out = case.out()
+    assert bg.compare(case.gate, str(world.repo), case.base, case.head, attempt=2, out_path=out, allow_writable_interpreter=True) == {"ok": True}
+    assert seen == {"attempt": 2, "out_path": out, "allow_writable_interpreter": True}  # no seam is passed: the defaults apply
+    with pytest.raises(TypeError):
+        bg.compare(case.gate, str(world.repo), case.base, case.head, out_path=out, load_probe=QUIET)
