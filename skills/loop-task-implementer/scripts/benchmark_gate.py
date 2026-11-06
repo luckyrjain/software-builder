@@ -1844,6 +1844,26 @@ def _parse_listing(raw: bytes) -> dict[str, tuple[str, int, bool]]:
     return entries
 
 
+def _parse_listing_oids(raw: bytes) -> dict[str, str]:
+    """`git ls-tree -r -z [-l]` -> `{relpath: object id}` (40 or 64 lowercase hex). A sibling of `_parse_listing`, which keeps its tuple
+    shape: `verify_export_against_commit` parses the same bytes with both. A record that does not parse, or an id that is not hex of a
+    git hash width, is `GIT_FAILED`; path policy (`EXPORT_*`) stays `_parse_listing`'s."""
+    oids: dict[str, str] = {}
+    records = raw.split(b"\0")
+    if records.pop() != b"":
+        raise BenchmarkGateError("GIT_FAILED", "unterminated ls-tree output")
+    for record in records:
+        meta, tab, raw_path = record.partition(b"\t")
+        try:
+            fields = meta.decode("ascii").split()
+        except UnicodeDecodeError as exc:
+            raise BenchmarkGateError("GIT_FAILED", "unparseable ls-tree record") from exc
+        if not tab or len(fields) not in (3, 4) or _COMMIT_RE.fullmatch(fields[2]) is None:
+            raise BenchmarkGateError("GIT_FAILED", "unparseable ls-tree record")
+        oids[os.fsdecode(raw_path)] = fields[2]
+    return oids
+
+
 def _verify_export(dest: str, entries: dict[str, tuple[str, int, bool]]) -> list[str]:
     """Demand the written tree equal the commit's listing (nothing extra or missing, sizes and executable bits equal: this
     also catches a conversion that slipped past `GIT_ATTR_SOURCE`), no symlink resolving outside `dest`. Returns LFS pointers."""
@@ -3711,6 +3731,153 @@ def dependency_parity(base_bin: str | os.PathLike, head_bin: str | os.PathLike,
                          ("content differs", sorted(k for k in left.keys() & right.keys() if left[k] != right[k]))):
         if names:
             add("DEPENDENCY_PARITY", f"{label} ({len(names)}): " + ", ".join(escape_diagnostic(n, 60) for n in names[:_PARITY_NAMES_SHOWN]))
+    return findings
+
+
+_EXPORT_FINDINGS_MAX = 50
+_UNTRACKED_MODULE_SUFFIXES = (".py", ".pyc", ".pyd", ".so", ".pth", ".zip", ".egg", ".whl")
+_EXEMPT_TOP_DIRS = frozenset({"build", "dist", ".eggs"})  # an honest `pip install -e` / build leaves these at the root
+
+
+def _is_untracked_python_name(name: str) -> bool:
+    """A file name the interpreter or an installer would treat as code or a path hook: a module/archive suffix, a startup module name
+    (`sitecustomize*`, `usercustomize*`, any suffix). Casefolded, so `HASHLIB.PY` counts on a case-insensitive filesystem."""
+    folded = name.casefold()
+    module = _MODULE_FILE_RE.fullmatch(folded)
+    return (folded.endswith(_UNTRACKED_MODULE_SUFFIXES) or folded.startswith(tuple(_STARTUP_MODULES))
+            or (module is not None and module[1] in _STARTUP_MODULES))
+
+
+def _blob_id(length: int, size: int, chunks) -> str:
+    """The git blob id of `chunks` (an iterable of bytes totalling `size`; `blob <n>\\0` framing, NO filters), sha1 for a 40-hex commit
+    and sha256 for 64. A total other than `size` yields an id nothing matches."""
+    digest = hashlib.sha1(usedforsecurity=False) if length == 40 else hashlib.sha256()
+    digest.update(b"blob %d\0" % size)
+    seen = 0
+    for chunk in chunks:
+        seen += len(chunk)
+        if seen > size:
+            return ""
+        digest.update(chunk)
+    return digest.hexdigest() if seen == size else ""
+
+
+def _read_chunks(fd: int):
+    while chunk := os.read(fd, 1 << 20):
+        yield chunk
+
+
+def verify_export_against_commit(repo: str | os.PathLike, commit: str, export_root: str | os.PathLike, *,
+                                 allow: dict[str, str] | None = None) -> list[tuple[str, str]]:
+    """Findings `(detail, relpath)` for the export at `export_root` against `commit`'s tree; an empty list is a pass. `detail` is
+    `TRACKED_FILE_DIFFERS` (a tracked file, symlink or gitlink that is not what the commit lists: git blob id of the bytes, no filters,
+    and the executable bit; a symlink's `readlink` bytes and a target staying inside the export; a gitlink an empty directory; missing
+    entries) or `UNTRACKED_PYTHON_FILE` (an untracked symlink, socket, device or fifo; an untracked file with a module, archive or startup
+    name, or a `__pycache__` directory, except under the root-level `build/`, `dist/`, `.eggs/` and `<root>/*.egg-info`, and except the
+    `allow` entries `{relpath: sha256 of the bytes}`, which must be that exact regular file). The walk follows no link. Untracked inputs
+    that are not code (`.env`, `*.json`) are not covered. `relpath` is escaped. Raises, never returns, for `EXPORT_*` (a hostile
+    listing), `GIT_*` and `COMMIT_*` errors including `GIT_OUTPUT_TOO_LARGE`, `TREE_TOO_LARGE` (entries or depth) and `TREE_UNREADABLE`
+    (an I/O fault: a tree that cannot be read is not a finding)."""
+    length = _check_commits(commit)
+    root = _export_root(export_root, "export_root")
+    allowed = dict(allow or {})
+    with _PrivateGit(repo, length) as git:
+        git.require_commit(commit)
+        raw = git.run("ls-tree", "-r", "-l", "-z", "--full-tree", commit)  # one byte string, two parsers (shape and ids)
+    entries = _parse_listing(raw)
+    oids = _parse_listing_oids(raw)
+    if oids.keys() != entries.keys():
+        raise BenchmarkGateError("GIT_FAILED", "ls-tree listing parsed inconsistently")
+    tracked_dirs = {"/".join(rel.split("/")[:i]) for rel in entries for i in range(1, rel.count("/") + 1)}
+    findings: list[tuple[str, str]] = []
+
+    def add(detail: str, rel: str) -> None:
+        if len(findings) < _EXPORT_FINDINGS_MAX:
+            findings.append((detail, escape_diagnostic(rel, 300)))
+
+    seen: set[str] = set()
+    count = 0
+    pending: list[tuple[str, int, bool]] = [("", 0, False)]  # (relpath of a directory, depth, inside an exempt untracked directory)
+    try:
+        while pending:
+            rel_dir, depth, exempt_dir = pending.pop()
+            with os.scandir(os.path.join(root, rel_dir) if rel_dir else root) as it:
+                names = sorted(entry.name for entry in it)
+            for name in names:
+                count += 1
+                if count > _MAX_TREE_ENTRIES:
+                    raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_TREE_ENTRIES} entries")
+                rel = f"{rel_dir}/{name}" if rel_dir else name
+                path = os.path.join(root, rel)
+                st = os.lstat(path)
+                want = entries.get(rel)
+                is_dir = stat.S_ISDIR(st.st_mode)
+                if want is not None:
+                    seen.add(rel)
+                    kind = want[0]
+                    if kind == "G":
+                        if not is_dir or os.listdir(path):
+                            add("TRACKED_FILE_DIFFERS", rel)
+                    elif kind == "L":
+                        if not stat.S_ISLNK(st.st_mode):
+                            add("TRACKED_FILE_DIFFERS", rel)
+                        else:
+                            target = os.fsencode(os.readlink(path))
+                            real_root = os.path.realpath(root)
+                            real = os.path.realpath(path)
+                            inside = real == real_root or real.startswith(real_root + os.sep)
+                            if _blob_id(length, len(target), [target]) != oids[rel] or not inside:
+                                add("TRACKED_FILE_DIFFERS", rel)
+                    else:
+                        ok = stat.S_ISREG(st.st_mode) and st.st_size == want[1] and bool(st.st_mode & 0o100) == want[2]
+                        if ok:
+                            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
+                            try:
+                                fst = os.fstat(fd)
+                                ok = (stat.S_ISREG(fst.st_mode) and (fst.st_dev, fst.st_ino) == (st.st_dev, st.st_ino)
+                                      and _blob_id(length, want[1], _read_chunks(fd)) == oids[rel])
+                            finally:
+                                os.close(fd)
+                        if not ok:
+                            add("TRACKED_FILE_DIFFERS", rel)
+                    continue  # a directory where a file or link is tracked is reported above and not walked
+                if is_dir:
+                    if rel in tracked_dirs:  # an ancestor of tracked entries
+                        pending.append((rel, depth + 1, False))
+                        if depth + 1 > _MAX_HASH_DEPTH:
+                            raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_HASH_DEPTH} levels")
+                        continue
+                    exempt = exempt_dir or (rel_dir == "" and (name in _EXEMPT_TOP_DIRS or name.endswith(".egg-info")))
+                    if name == "__pycache__" and not exempt and rel not in allowed:
+                        add("UNTRACKED_PYTHON_FILE", rel)
+                    if depth + 1 > _MAX_HASH_DEPTH:
+                        raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_HASH_DEPTH} levels")
+                    pending.append((rel, depth + 1, exempt))
+                elif not stat.S_ISREG(st.st_mode):  # untracked symlink, socket, device, fifo
+                    add("UNTRACKED_PYTHON_FILE", rel)
+                elif rel in allowed:
+                    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
+                    try:
+                        fst = os.fstat(fd)
+                        digest, total = hashlib.sha256(), 0
+                        ok = stat.S_ISREG(fst.st_mode) and (fst.st_dev, fst.st_ino) == (st.st_dev, st.st_ino)
+                        while ok and (chunk := os.read(fd, 1 << 20)):
+                            total += len(chunk)
+                            if total > _MAX_BENCHMARK_FILE_BYTES:
+                                ok = False
+                            digest.update(chunk)
+                    finally:
+                        os.close(fd)
+                    if not ok or digest.hexdigest() != allowed[rel]:
+                        add("UNTRACKED_PYTHON_FILE", rel)
+                elif not exempt_dir and _is_untracked_python_name(name):
+                    add("UNTRACKED_PYTHON_FILE", rel)
+    except BenchmarkGateError:
+        raise
+    except OSError as exc:
+        raise BenchmarkGateError("TREE_UNREADABLE", _describe(exc)) from exc
+    for rel in sorted(entries.keys() - seen):
+        add("TRACKED_FILE_DIFFERS", rel)  # missing
     return findings
 
 

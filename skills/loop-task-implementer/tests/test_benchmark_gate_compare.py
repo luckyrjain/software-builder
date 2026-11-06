@@ -1346,3 +1346,347 @@ def test_parity_inventory_differences_and_bounds(tmp_path, monkeypatch):
     with pytest.raises(bg.BenchmarkGateError) as e:
         bg.dependency_parity(tmp_path / "nope" / "bin", head.bin, base.export, head.export)
     assert _code(e) == "VENV_NOT_ISOLATED"
+
+
+# --- T2b2 _parse_listing_oids and verify_export_against_commit ----------------------------------------------------------------------------
+
+def _vrepo(tmp_path: Path, fmt: str, files: dict, *, attrs: str | None = None) -> tuple[Path, str]:
+    """A repository of the given object format (``sha1``/``sha256``) with ``files`` (as ``make_commit``), a gitlink ``vendor/sub`` and one
+    commit; ``attrs`` becomes a committed ``.gitattributes``."""
+    repo = tmp_path / f"repo-{fmt}"
+    repo.mkdir()
+    git(repo, "init", "-q", f"--object-format={fmt}")
+    make_commit(repo, files, "c")
+    if attrs is not None:  # staged AFTER the files: the blobs are stored as written, so the export is what must not convert them
+        (repo / ".gitattributes").write_text(attrs)
+        git(repo, "add", "--", ".gitattributes")
+    git(repo, "update-index", "--add", "--cacheinfo", "160000," + "ab" * (20 if fmt == "sha1" else 32) + ",vendor/sub")
+    git(repo, "commit", "-q", "-m", "c")
+    return repo, git(repo, "rev-parse", "HEAD")
+
+
+BASIC = {"src/app/__init__.py": "", "src/app/core.py": "def f():\n    return 1\n", "tools/run.sh": ("exec", "#!/bin/sh\n"),
+         "link": ("link", "src/app/core.py"), "README.md": "r\n"}
+
+
+def _vexport(tmp_path, monkeypatch, fmt="sha1", files=BASIC, attrs=None):
+    temp = tmp_path / "tmp"
+    temp.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(tempfile, "tempdir", str(temp))
+    try:
+        bg._require_modern_git()
+    except bg.BenchmarkGateError as exc:
+        if exc.code != "GIT_TOO_OLD":
+            raise
+        pytest.skip(f"git >= 2.43 is needed: {exc.detail}")
+    repo, commit = _vrepo(tmp_path, fmt, files, attrs=attrs)
+    export = bg.export_tree(repo, commit, bg.fixed_parent() / DISPATCH_ROOT / "head")
+    return types.SimpleNamespace(repo=repo, commit=commit, export=export,
+                                 verify=lambda **kw: bg.verify_export_against_commit(repo, commit, export, **kw))
+
+
+def _vd(findings):
+    return sorted((d, p) for d, p in findings)
+
+
+def test_parse_listing_oids_keeps_the_id_for_both_hash_widths_and_listing_is_unchanged():
+    sha1, sha256 = "a1" * 20, "b2" * 32
+    raw = (f"100644 blob {sha1}      12\tsrc/a.py\x00100755 blob {sha256}      3\ttools/run\x00"
+           f"120000 blob {sha1}      4\tlink\x00160000 commit {sha256}       -\tvendor/sub\x00").encode()
+    assert bg._parse_listing_oids(raw) == {"src/a.py": sha1, "tools/run": sha256, "link": sha1, "vendor/sub": sha256}
+    # the same bytes through the untouched parser: the base's tuple shape
+    assert bg._parse_listing(raw) == {"src/a.py": ("F", 12, False), "tools/run": ("F", 3, True), "link": ("L", 4, False),
+                                      "vendor/sub": ("G", 0, False)}
+    assert bg._parse_listing_oids(f"100644 blob {sha1}\tplain\x00".encode()) == {"plain": sha1}  # no -l: three fields
+    assert bg._parse_listing_oids(b"") == {}
+    for bad in (f"100644 blob {'A' * 40}      1\tx\0", f"100644 blob {'a' * 41}      1\tx\0", f"100644 blob {'a' * 63}      1\tx\0",
+                "100644 blob abc      1\tx\0", f"100644 blob {sha1} 1 2\tx\0", f"100644 blob {sha1}      1 x\0", f"100644 blob {sha1}      1\tx",
+                f"100644 blob é{'a' * 39}      1\tx\0"):
+        with pytest.raises(bg.BenchmarkGateError) as e:
+            bg._parse_listing_oids(bad.encode())
+        assert e.value.code == "GIT_FAILED", bad
+
+
+def _add_honest_install(root: Path):
+    for rel, data in (("app.egg-info/PKG-INFO", b"Name: app\n"), ("app.egg-info/SOURCES.txt", b"x\n"), ("src/pkg.egg-info/PKG-INFO", b"Name: p\n"),
+                      ("build/lib/app/core.py", b"x = 1\n"), ("build/lib/app/ext.cpython-312-darwin.so", b"\x7fELF"),
+                      ("build/lib/app/__pycache__/core.cpython-312.pyc", b"\0"), ("build/bdist.x/y.pth", b"p\n"),
+                      ("dist/app-1.0-py3-none-any.whl", b"PK"), ("dist/app-1.0.tar.gz", b"gz"), (".eggs/setuptools-1.egg", b"PK"),
+                      (".eggs/__pycache__/m.pyc", b"\0"), (".eggs/sitecustomize.py", b"x\n"), ("app.egg-info/hashlib.py", b"x\n")):
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+
+
+def test_honest_exports_pass(world):
+    for side in world.sides.values():
+        assert bg.verify_export_against_commit(world.repo, side.commit, side.export) == []
+        _add_honest_install(side.export)
+        assert bg.verify_export_against_commit(world.repo, side.commit, side.export) == []
+    # the fixture really holds the shapes the row names
+    head = world.sides["head"].export
+    assert (head / "link").is_symlink() and (head / "vendor/sub").is_dir() and not any((head / "vendor/sub").iterdir())
+    assert os.access(head / "tools/run.sh", os.X_OK)
+
+
+@pytest.mark.parametrize("fmt", ["sha1", "sha256"])
+def test_tracked_file_differences(tmp_path, monkeypatch, fmt):
+    w = _vexport(tmp_path, monkeypatch, fmt)
+    assert w.verify() == []
+    ex = w.export
+
+    def differs(rel, mutate):
+        path = ex / rel
+        backup = path.read_bytes() if path.is_file() and not path.is_symlink() else None
+        link_target = os.readlink(path) if path.is_symlink() else None
+        mutate(path)
+        try:
+            assert _vd(w.verify()) == [("TRACKED_FILE_DIFFERS", rel)], rel
+        finally:
+            if path.is_dir() and not path.is_symlink():
+                shutil.rmtree(path)
+            elif path.is_symlink() or path.exists():
+                path.unlink()
+            if backup is not None:
+                path.write_bytes(backup)
+                path.chmod(0o755 if rel == "tools/run.sh" else 0o644)
+            elif link_target is not None:
+                path.symlink_to(link_target)
+            elif rel == "vendor/sub":
+                path.mkdir()
+        assert w.verify() == []
+
+    differs("src/app/core.py", lambda p: p.write_text("def f():\n    return 9\n"))  # same size, other byte
+    differs("src/app/core.py", lambda p: p.write_text("def f():\n    return 1\n# more\n"))
+    differs("src/app/core.py", lambda p: p.chmod(0o755))
+    differs("tools/run.sh", lambda p: p.chmod(0o644))
+    differs("README.md", lambda p: (p.unlink(), p.symlink_to("src/app/core.py")))
+    differs("README.md", lambda p: p.unlink())  # missing
+    differs("README.md", lambda p: (p.unlink(), p.mkdir()))  # a directory where a file is tracked
+    # tracked symlink: other target, escaping target, replaced by a file, a directory
+    differs("link", lambda p: (p.unlink(), p.symlink_to("README.md")))
+    differs("link", lambda p: (p.unlink(), p.symlink_to("../../outside")))
+    differs("link", lambda p: (p.unlink(), p.write_text("src/app/core.py")))
+    differs("link", lambda p: p.unlink())
+    # an escaping target keeps its bytes only if the export itself was built so: export_tree refuses that, so the case is a swapped ancestor
+    # directory (a tracked directory replaced by a symlink out of the export) -- the link, the file below it and the symlink all fail closed
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    shutil.rmtree(ex / "tools")
+    (ex / "tools").symlink_to(outside)
+    assert _vd(w.verify()) == [("TRACKED_FILE_DIFFERS", "tools/run.sh"), ("UNTRACKED_PYTHON_FILE", "tools")]
+    (ex / "tools").unlink()
+    (ex / "tools").mkdir()
+    (ex / "tools/run.sh").write_text("#!/bin/sh\n")
+    (ex / "tools/run.sh").chmod(0o755)
+    assert w.verify() == []
+    # gitlink: non-empty, a file, a symlink, missing
+    differs("vendor/sub", lambda p: (p / "x").write_text("x"))
+    differs("vendor/sub", lambda p: (p / "d").mkdir())
+    differs("vendor/sub", lambda p: (shutil.rmtree(p), p.write_text("x")))
+    differs("vendor/sub", lambda p: (shutil.rmtree(p), p.symlink_to("src")))
+    differs("vendor/sub", lambda p: shutil.rmtree(p))
+
+
+@pytest.mark.parametrize("fmt", ["sha1", "sha256"])
+def test_tracked_link_resolving_out_of_the_export_differs(tmp_path, monkeypatch, fmt):
+    """The link's bytes still match the listing, but its target name became a symlink out of the export."""
+    w = _vexport(tmp_path, monkeypatch, fmt, {"a/l": ("link", "../b"), "b": "x\n"})
+    assert w.verify() == []
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (w.export / "b").unlink()
+    (w.export / "b").symlink_to(outside)
+    assert _vd(w.verify()) == sorted([("TRACKED_FILE_DIFFERS", "b"), ("TRACKED_FILE_DIFFERS", "a/l")])
+
+
+UNTRACKED_BAD = ("hashlib.py", "mod.pyc", "ext.so", "ext.cpython-312-darwin.so", "x.pth", "x.zip", "x.egg", "x.whl", "sitecustomize.py",
+                 "usercustomize.py", "sitecustomize.txt", "m.pyd", "conftest.py", "UPPER.PY")
+
+
+def test_untracked_entries(tmp_path, monkeypatch):
+    w = _vexport(tmp_path, monkeypatch)
+    ex = w.export
+    for where in ("", "src/app/", "newdir/deep/", "vendor/", "src/pkg.egg-info/"):  # not exempt: a root file, tracked dirs, new dirs, a src egg-info
+        for name in UNTRACKED_BAD:
+            (ex / where).mkdir(parents=True, exist_ok=True)
+            path = ex / where / name
+            path.write_bytes(b"x")
+            assert _vd(w.verify()) == [("UNTRACKED_PYTHON_FILE", f"{where}{name}")], (where, name, w.verify())
+            path.unlink()
+        assert w.verify() == []
+    shutil.rmtree(ex / "newdir")
+    shutil.rmtree(ex / "src/pkg.egg-info")
+    # a __pycache__ directory (empty or not), a symlink, a fifo, a socket
+    (ex / "src/__pycache__").mkdir()
+    assert _vd(w.verify()) == [("UNTRACKED_PYTHON_FILE", "src/__pycache__")]
+    (ex / "src/__pycache__").rmdir()
+    (ex / "newlink").symlink_to("README.md")
+    assert _vd(w.verify()) == [("UNTRACKED_PYTHON_FILE", "newlink")]
+    (ex / "newlink").unlink()
+    os.mkfifo(ex / "fifo")
+    assert _vd(w.verify()) == [("UNTRACKED_PYTHON_FILE", "fifo")]
+    (ex / "fifo").unlink()
+    short = tmp_path / "s"  # AF_UNIX paths are short
+    short.mkdir()
+    import socket
+    sock = socket.socket(socket.AF_UNIX)
+    try:
+        os.chdir(ex)
+        sock.bind("sock")
+        assert _vd(w.verify()) == [("UNTRACKED_PYTHON_FILE", "sock")]
+    finally:
+        sock.close()
+        os.chdir(tmp_path)
+        (ex / "sock").unlink(missing_ok=True)
+    # root-level build/, dist/, .eggs/, <root>/*.egg-info: module suffixes and __pycache__ pass; links and special files still do not
+    for top in ("build", "dist", ".eggs", "x.egg-info"):
+        for name in UNTRACKED_BAD:
+            (ex / top / "sub").mkdir(parents=True, exist_ok=True)
+            (ex / top / "sub" / name).write_bytes(b"x")
+        (ex / top / "__pycache__").mkdir()
+        assert w.verify() == [], top
+        (ex / top / "link").symlink_to("../README.md")
+        assert _vd(w.verify()) == [("UNTRACKED_PYTHON_FILE", f"{top}/link")], top
+        shutil.rmtree(ex / top)
+    # the exemption is the root-level one only: a nested build/ is not exempt
+    (ex / "src/build").mkdir()
+    (ex / "src/build/x.py").write_bytes(b"x")
+    assert _vd(w.verify()) == [("UNTRACKED_PYTHON_FILE", "src/build/x.py")]
+    shutil.rmtree(ex / "src/build")
+    # non-code untracked inputs are not findings (disclosed)
+    for name in (".env", "data.json", "setup.cfg", "notes.txt"):
+        (ex / name).write_text("x")
+    assert w.verify() == []
+
+
+def test_overlay_allowance(tmp_path, monkeypatch):
+    w = _vexport(tmp_path, monkeypatch)
+    ex = w.export
+    body = b"def bench():\n    pass\n"
+    rel = "benchmarks/bench_new.py"
+    (ex / "benchmarks").mkdir()
+    (ex / rel).write_bytes(body)
+    allow = {rel: hashlib.sha256(body).hexdigest()}
+    assert _vd(w.verify()) == [("UNTRACKED_PYTHON_FILE", rel)]  # no allowance (the head)
+    assert w.verify(allow=allow) == [] and w.verify(allow={}) != [] and w.verify(allow=None) != []
+    (ex / rel).write_bytes(body + b" ")  # a changed byte
+    assert _vd(w.verify(allow=allow)) == [("UNTRACKED_PYTHON_FILE", rel)]
+    (ex / rel).unlink()
+    (ex / rel).symlink_to("../README.md")  # a symlink
+    assert _vd(w.verify(allow=allow)) == [("UNTRACKED_PYTHON_FILE", rel)]
+    (ex / rel).unlink()
+    (ex / rel).write_bytes(body)
+    (ex / "benchmarks/other.py").write_bytes(b"x")  # nothing else new in the directory the overlay created
+    assert _vd(w.verify(allow=allow)) == [("UNTRACKED_PYTHON_FILE", "benchmarks/other.py")]
+    (ex / "benchmarks/other.py").unlink()
+    (ex / "benchmarks/__pycache__").mkdir()
+    assert _vd(w.verify(allow=allow)) == [("UNTRACKED_PYTHON_FILE", "benchmarks/__pycache__")]
+    (ex / "benchmarks/__pycache__").rmdir()
+    (ex / "elsewhere.py").write_bytes(body)  # the same bytes at another path are not allowed
+    assert _vd(w.verify(allow=allow)) == [("UNTRACKED_PYTHON_FILE", "elsewhere.py")]
+    (ex / "elsewhere.py").unlink()
+    # the allowance is permission, not a requirement, and it does not excuse a tracked file
+    (ex / rel).unlink()
+    assert w.verify(allow=allow) == []
+    (ex / "README.md").write_text("changed\n")
+    assert _vd(w.verify(allow={"README.md": hashlib.sha256(b"changed\n").hexdigest()})) == [("TRACKED_FILE_DIFFERS", "README.md")]
+
+
+@pytest.mark.parametrize("fmt", ["sha1", "sha256"])
+def test_export_applies_no_filters(tmp_path, monkeypatch, fmt):
+    attrs = "*.txt ident\n*.crlf text eol=crlf\n*.enc text working-tree-encoding=UTF-16\n"
+    files = {"a.txt": "$Id$ x\n", "b.crlf": "one\ntwo\n", "c.enc": "café\n", "plain.txt": "no keyword\n"}
+    w = _vexport(tmp_path, monkeypatch, fmt, files, attrs=attrs)
+    blob = lambda rel: subprocess.run(["git", "show", f"{w.commit}:{rel}"], cwd=w.repo, env=GIT_ENV, capture_output=True, check=True).stdout
+    for rel in files:  # the export holds the blob bytes, so the check agrees with the listing
+        assert (w.export / rel).read_bytes() == blob(rel)
+    assert (w.export / "a.txt").read_bytes() == b"$Id$ x\n" and b"\r" not in (w.export / "b.crlf").read_bytes()
+    assert w.verify() == []
+    # the blob id is computed with the commit's hash width over the exact bytes
+    algo = hashlib.sha1 if fmt == "sha1" else hashlib.sha256
+    data = (w.export / "b.crlf").read_bytes()
+    assert git(w.repo, "rev-parse", f"{w.commit}:b.crlf") == algo(b"blob %d\0" % len(data) + data).hexdigest()
+
+
+def test_honest_install_limits_fail_closed(tmp_path, monkeypatch):
+    """A build that rewrites a tracked file, writes an untracked ``_version.py`` (setuptools_scm, hatch-vcs: exports have no ``.git``) or
+    builds an extension in place fails closed. The workaround is committed generated files or out-of-tree builds."""
+    w = _vexport(tmp_path, monkeypatch)
+    ex = w.export
+    (ex / "src/app/core.py").write_text("# generated by a build\ndef f():\n    return 1\n")
+    assert _vd(w.verify()) == [("TRACKED_FILE_DIFFERS", "src/app/core.py")]
+    (ex / "src/app/core.py").write_text("def f():\n    return 1\n")
+    assert w.verify() == []
+    (ex / "src/app/_version.py").write_text("version = '1'\n")
+    assert _vd(w.verify()) == [("UNTRACKED_PYTHON_FILE", "src/app/_version.py")]
+    (ex / "src/app/_version.py").unlink()
+    (ex / "src/app/_speedups.cpython-312-darwin.so").write_bytes(b"\xcf\xfa")
+    assert _vd(w.verify()) == [("UNTRACKED_PYTHON_FILE", "src/app/_speedups.cpython-312-darwin.so")]
+
+
+def test_error_mappings(tmp_path, monkeypatch):
+    w = _vexport(tmp_path, monkeypatch)
+    # findings are returned, never raised
+    (w.export / "hashlib.py").write_text("x")
+    assert w.verify() != []
+    (w.export / "hashlib.py").unlink()
+    # a commit that is not valid or not present
+    for commit, code in (("zz", "COMMIT_INVALID"), ("0" * 40, "COMMIT_NOT_FOUND")):
+        with pytest.raises(bg.BenchmarkGateError) as e:
+            bg.verify_export_against_commit(w.repo, commit, w.export)
+        assert e.value.code == code
+    # an export root that is not one of ours
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        bg.verify_export_against_commit(w.repo, w.commit, tmp_path)
+    assert e.value.code == "DEST_REJECTED"
+    # a listing that is oversize / hostile: EXPORT_*; git output over the cap: GIT_OUTPUT_TOO_LARGE
+    monkeypatch.setattr(bg, "_MAX_TREE_ENTRIES", 3)
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        w.verify()
+    assert e.value.code == "EXPORT_TOO_LARGE"
+    monkeypatch.undo()
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "tmp"))
+    monkeypatch.setitem(bg._PrivateGit.run.__kwdefaults__, "cap", 10)  # the default is bound at definition time
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        w.verify()
+    assert e.value.code == "GIT_OUTPUT_TOO_LARGE"
+    monkeypatch.undo()
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "tmp"))
+    # the walk's own bounds: entries and depth are TREE_TOO_LARGE, an unreadable directory TREE_UNREADABLE
+    for i in range(6):
+        (w.export / f"n{i}.txt").write_text("x")
+    real_listing = bg._parse_listing
+    monkeypatch.setattr(bg, "_MAX_TREE_ENTRIES", 12)  # the listing (about 11 with directories) fits, the walk's 6 extra entries do not
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        w.verify()
+    assert e.value.code in ("TREE_TOO_LARGE", "EXPORT_TOO_LARGE")
+    monkeypatch.undo()
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "tmp"))
+    for i in range(6):
+        (w.export / f"n{i}.txt").unlink()
+    deep = w.export / "d"
+    for _ in range(bg._MAX_HASH_DEPTH + 2):
+        deep = deep / "d"
+    try:
+        deep.mkdir(parents=True)
+    except OSError:
+        pytest.skip("path too long for this filesystem")
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        w.verify()
+    assert e.value.code == "TREE_TOO_LARGE"
+    shutil.rmtree(w.export / "d")
+    (w.export / "locked").mkdir()
+    (w.export / "locked").chmod(0)
+    try:
+        if os.geteuid() != 0:
+            with pytest.raises(bg.BenchmarkGateError) as e:
+                w.verify()
+            assert e.value.code == "TREE_UNREADABLE"
+    finally:
+        (w.export / "locked").chmod(0o755)
+    (w.export / "locked").rmdir()
+    # attacker text in a finding is escaped
+    (w.export / "ev\x1b[31mil.py").write_text("x")
+    findings = w.verify()
+    assert len(findings) == 1 and findings[0][0] == "UNTRACKED_PYTHON_FILE" and "\x1b" not in findings[0][1]
