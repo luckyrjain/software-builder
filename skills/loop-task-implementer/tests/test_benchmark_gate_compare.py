@@ -506,3 +506,113 @@ def test_fixture_fake_prefix_has_the_pin_shapes(world):
     names = {str(p.relative_to(prefix)) for p in prefix.rglob("*")}
     assert {f"bin/{PYX}", f"lib/{PYX}/os.py", f"lib/{PYX}/lib-dynload", f"lib/{PYX}/__pycache__", f"lib/{PYXY}.zip",
             "lib/libpython-fake.dylib"} <= names
+
+
+# --- fingerprint_tree (T2b1a) ---
+
+def _fp_tree(tmp_path: Path) -> Path:
+    root = tmp_path / "fp"
+    (root / "sub").mkdir(parents=True)
+    (root / "a.txt").write_text("alpha")
+    (root / "sub" / "b.txt").write_text("bravo")
+    return root
+
+
+def _fp(root: Path) -> str:
+    return bg.fingerprint_tree(root, limit=1000)
+
+
+@posix_only
+def test_fingerprint_changes_for_each_input(tmp_path):
+    root = _fp_tree(tmp_path)
+    first = _fp(root)
+    assert first == _fp(root) and len(first) == 64  # untouched: stable
+
+    def changed(label, mutate):
+        before = _fp(root)
+        mutate()
+        after = _fp(root)
+        assert after != before, label
+        return after
+
+    target = root / "a.txt"
+
+    def same_size_edit_restored_mtime():
+        st = target.stat()
+        target.write_text("ALPHA")  # same size; only ctime (not restorable) and content differ
+        os.utime(target, ns=(st.st_atime_ns, st.st_mtime_ns))
+    changed("content edit with restored mtime", same_size_edit_restored_mtime)
+    changed("chmod", lambda: os.chmod(target, 0o600))
+    changed("size", lambda: target.write_text("alpha-longer"))
+    changed("new entry", lambda: (root / "new.txt").write_text("x"))
+    changed("renamed entry", lambda: os.rename(root / "new.txt", root / "renamed.txt"))
+    changed("removed entry", lambda: os.unlink(root / "renamed.txt"))
+    changed("hard link count", lambda: os.link(target, tmp_path / "outside-link"))
+    # The root triple alone: a replacement root with identical content differs in (dev, ino, ctime_ns).
+    twin = tmp_path / "twin"
+    shutil.copytree(root, twin, symlinks=True)
+    moved = tmp_path / "old-root"
+    os.rename(root, moved)
+    os.rename(twin, root)
+    assert _fp(root) != _fp(moved)
+    empty_a, empty_b = tmp_path / "ea", tmp_path / "eb"
+    empty_a.mkdir()
+    empty_b.mkdir()
+    assert _fp(empty_a) != _fp(empty_b)  # both empty: only the root triple differs
+    before = _fp(empty_a)
+    os.chmod(empty_a, 0o700)
+    os.utime(empty_a, ns=(1, 1))
+    (empty_a / "t").write_text("")
+    os.unlink(empty_a / "t")  # the root's ctime moves although its listing is the same
+    assert _fp(empty_a) != before
+
+
+@posix_only
+def test_fingerprint_follows_no_links(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "f.txt").write_text("one")
+    root = tmp_path / "r"
+    root.mkdir()
+    os.symlink(outside, root / "link")
+    os.symlink(outside / "f.txt", root / "flink")
+    first = _fp(root)
+    (outside / "f.txt").write_text("two-changed")
+    (outside / "new").write_text("n")
+    assert _fp(root) == first
+    assert bg.fingerprint_tree(root, limit=2) == first  # the link is one entry, not its target's contents
+
+
+@posix_only
+def test_fingerprint_limits_are_errors_not_skips(tmp_path):
+    root = _fp_tree(tmp_path)  # a.txt, sub, sub/b.txt = 3 entries
+    assert bg.fingerprint_tree(root, limit=3)
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        bg.fingerprint_tree(root, limit=2)
+    assert e.value.code == "TREE_TOO_LARGE"
+
+    deep = tmp_path / "deep"
+    deep.mkdir()
+    at = deep
+    for _ in range(bg._MAX_HASH_DEPTH):
+        at = at / "d"
+        at.mkdir()
+    assert bg.fingerprint_tree(deep, limit=10_000)  # exactly at the depth limit is fine
+    (at / "d").mkdir()
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        bg.fingerprint_tree(deep, limit=10_000)
+    assert e.value.code == "TREE_TOO_LARGE"
+
+    locked = root / "sub"
+    os.chmod(locked, 0)
+    try:
+        if os.access(locked, os.R_OK):
+            pytest.skip("directory permissions are not enforced for this user")
+        with pytest.raises(bg.BenchmarkGateError) as e:
+            _fp(root)
+        assert e.value.code == "TREE_UNREADABLE"
+    finally:
+        os.chmod(locked, 0o700)
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        bg.fingerprint_tree(tmp_path / "missing", limit=10)
+    assert e.value.code == "TREE_UNREADABLE"

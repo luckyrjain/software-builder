@@ -2444,6 +2444,48 @@ def hash_export(export_root: str | os.PathLike) -> str:
     return hash_tree(root)
 
 
+_VENV_FINGERPRINT_LIMIT = 200_000
+
+
+def fingerprint_tree(root: str | os.PathLike, *, limit: int) -> str:
+    """sha256 over every entry of `root` (no link followed) as `(relpath, dev, ino, mode, nlink, size, mtime_ns, ctime_ns)`, sorted by
+    path, plus the root's `(dev, ino, ctime_ns)`. `ctime` cannot be set by a user, so a tamper-and-restore of content or `mtime` still
+    moves it. A tree over `limit` entries or deeper than `_MAX_HASH_DEPTH` levels is `TREE_TOO_LARGE`, any `OSError` (an unreadable
+    directory, a vanished entry, a root that is not a real directory) is `TREE_UNREADABLE`: a limit or a fault is never a skip."""
+    root_path = os.fsdecode(_root_path(root, "TREE_UNREADABLE"))
+    records: list[tuple[bytes, bytes]] = []
+    try:
+        root_st = os.lstat(root_path)
+        if not stat.S_ISDIR(root_st.st_mode):
+            raise BenchmarkGateError("TREE_UNREADABLE", "root is not a real directory")
+        pending = [("", 0)]
+        while pending:
+            rel, depth = pending.pop()
+            with os.scandir(os.path.join(root_path, rel) if rel else root_path) as it:
+                names = [entry.name for entry in it]
+            for name in names:
+                child = os.path.join(rel, name) if rel else name
+                st = os.lstat(os.path.join(root_path, child))
+                if len(records) >= limit:
+                    raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {limit} entries")
+                key = os.fsencode(child)
+                records.append((key, key + b"\0" + b" ".join(str(n).encode() for n in (
+                    st.st_dev, st.st_ino, st.st_mode, st.st_nlink, st.st_size, st.st_mtime_ns, st.st_ctime_ns)) + b"\n"))
+                if stat.S_ISDIR(st.st_mode):
+                    if depth + 1 > _MAX_HASH_DEPTH:
+                        raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_HASH_DEPTH} levels")
+                    pending.append((child, depth + 1))
+    except BenchmarkGateError:
+        raise
+    except OSError as exc:
+        raise BenchmarkGateError("TREE_UNREADABLE", _describe(exc)) from exc
+    digest = hashlib.sha256(b"software-builder-bench-fingerprint-v1\0")
+    digest.update(f"{root_st.st_dev} {root_st.st_ino} {root_st.st_ctime_ns}\n".encode())
+    for _, record in sorted(records):
+        digest.update(record)
+    return digest.hexdigest()
+
+
 def repo_top_levels(export_root: str | os.PathLike) -> frozenset[str]:
     """The top-level package and module names of an export (its root and `src/`), the `repo_top_levels` argument of
     `validate_benchmark_content`. Walked by descriptor with no symlink followed (a symlink named like a package, or a symlinked
