@@ -2643,3 +2643,329 @@ def test_step9_pin_errors_map_with_the_stage_overlaid(bcase, code, detail):
     with pytest.raises(bg._Verdict) as e:
         c.prepare()
     assert (e.value.reason, e.value.detail, e.value.stage) == ("ISOLATION_REJECTED", detail, "overlaid")
+
+
+# --- T4a1: step 12 (the post-run check) and the step-9 baseline ---
+
+
+def _p12(c, prepared):
+    return bg._post_run_check(prepared, str(c.world.repo), c.base, c.head, interpreter_of=c.interp)
+
+
+def _site(c, name="head"):
+    return next((c.world.sides[name].bin.parent / "lib").glob("python3*/site-packages"))
+
+
+def _unseal(*paths):
+    for path in paths:
+        os.chmod(path, 0o755 if os.path.isdir(path) else 0o644)
+
+
+def _s12_edit(c):
+    _unseal(c.roots[1], Path(c.roots[1]) / "README.md")
+    (Path(c.roots[1]) / "README.md").write_text("tampered\n")
+
+
+def _s12_tamper_restore(c):
+    path = Path(c.roots[1]) / "README.md"
+    before = os.stat(path)
+    original = path.read_bytes()
+    _unseal(c.roots[1], path)
+    path.write_bytes(b"x" * len(original))
+    path.write_bytes(original)
+    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+    os.chmod(path, stat.S_IMODE(before.st_mode))
+    os.chmod(c.roots[1], 0o555)
+    after = os.stat(path)
+    assert (path.read_bytes(), after.st_mode, after.st_mtime_ns) == (original, before.st_mode, before.st_mtime_ns)
+    assert after.st_ctime_ns != before.st_ctime_ns  # only ctime moved
+
+
+def _s12_sidecar(c):
+    path = c.world.sides["head"].export.parent / "head.export.json"
+    data = path.read_bytes()
+    path.unlink()
+    path.write_bytes(data)  # same bytes, a new inode
+
+
+def _s12_marker(c):
+    path = c.world.sides["head"].export.parent / bg._MARKER_NAME
+    path.write_bytes(path.read_bytes() + b" ")
+
+
+def _s12_new_sibling(c):
+    (c.world.sides["head"].export.parent / "extra").write_text("x")
+
+
+def _s12_removed_sibling(c):
+    (c.world.sides["head"].export.parent / "head.export.json").unlink()
+
+
+def _s12_snapshot(c):
+    c.world.sides["head"].snapshot.write_text("{}")
+
+
+def _s12_hook_and_snapshot(c):
+    (_site(c) / "evil.pth").write_text("import evil_hook\n")
+    snapshot = c.world.sides["head"].snapshot
+    snapshot.unlink()
+    bg.snapshot_venv(c.world.sides["head"].bin, snapshot)  # the snapshot now blesses the hook
+
+
+def _s12_interpreter(c):
+    stdlib = next(p for p in (c.world.prefix / "lib").glob("python3*") if p.is_dir())
+    (stdlib / "__pycache__").mkdir(exist_ok=True)
+    (stdlib / "__pycache__" / "planted.cpython-312.pyc").write_bytes(b"x")
+
+
+def _s12_hook(c):
+    (_site(c) / "evil.pth").write_text("import evil_hook\n")
+
+
+def _s12_venv_file(c):
+    (_site(c) / "data.txt").write_text("x")
+
+
+def _s12_cfg(c):
+    cfg = c.world.sides["head"].bin.parent / "pyvenv.cfg"
+    cfg.write_text(cfg.read_text() + "note = x\n")
+
+
+@posix_only
+def test_honest_run_leaves_every_fingerprint_unchanged(bcase):
+    c = bcase
+    prepared = c.prepare()
+    assert _p12(c, prepared) is None
+    assert _p12(c, prepared) is None  # and nothing the check did moved anything
+
+
+@posix_only
+@pytest.mark.parametrize("detail,mutate", [
+    ("EXPORT_CHANGED", _s12_edit), ("EXPORT_CHANGED", _s12_tamper_restore), ("EXPORT_CHANGED", _s12_sidecar),
+    ("EXPORT_CHANGED", _s12_marker), ("EXPORT_CHANGED", _s12_new_sibling), ("EXPORT_CHANGED", _s12_removed_sibling),
+    ("SNAPSHOT_CHANGED", _s12_snapshot), ("SNAPSHOT_CHANGED", _s12_hook_and_snapshot), ("INTERPRETER_CHANGED", _s12_interpreter),
+    ("VENV_HOOK_REJECTED", _s12_hook), ("VENV_CHANGED", _s12_venv_file), ("VENV_CHANGED", _s12_cfg)],
+    ids=["edit", "tamper-restore", "sidecar-swap", "marker-edit", "sibling-added", "sibling-removed", "snapshot", "hook-and-snapshot",
+         "interpreter", "venv-hook", "venv-file", "pyvenv-cfg"])
+def test_step12_detects_each_tamper(bcase, detail, mutate):
+    c = bcase
+    prepared = c.prepare()
+    mutate(c)
+    verdict = _p12(c, prepared)
+    assert isinstance(verdict, bg._Verdict)
+    assert (verdict.result, verdict.reason, verdict.detail, verdict.stage) == ("REJECTED", "ISOLATION_REJECTED", detail, "ran")
+
+
+@posix_only
+def test_tamper_and_restore_is_invisible_to_the_content_hash_and_caught_by_the_fingerprint(bcase):
+    c = bcase
+    prepared = c.prepare()
+    _s12_tamper_restore(c)
+    assert bg.hash_export(c.roots[1]) == prepared.h0[1]  # bytes, mode and names are back
+    assert _p12(c, prepared).detail == "EXPORT_CHANGED"
+
+
+@posix_only
+def test_baseline_includes_pyvenv_cfg_and_the_snapshot_files(bcase):
+    c = bcase
+    prepared = c.prepare()
+    b = prepared.baseline
+    cfgs = [hashlib.sha256((c.world.sides[n].bin.parent / "pyvenv.cfg").read_bytes()).hexdigest() for n in ("base", "head")]
+    assert list(b.cfg_sha256) == cfgs
+    assert list(b.exports) == _fp_both(c)
+    assert b.exports[0] == bg.fingerprint_tree(c.roots[0], limit=bg._MAX_TREE_ENTRIES)
+    assert b.venvs[1] == bg.fingerprint_tree(str(c.world.sides["head"].bin.parent), limit=bg._VENV_FINGERPRINT_LIMIT)
+    assert len(b.snapshots) == 2 and b.snapshots[0] != b.snapshots[1]
+    cfg = c.world.sides["base"].bin.parent / "pyvenv.cfg"
+    cfg.write_text(cfg.read_text() + "note = x\n")
+    assert _p12(c, prepared).detail == "VENV_CHANGED"
+
+
+@posix_only
+def test_baseline_dispatch_root_has_names_and_non_export_entries(bcase):
+    c = bcase
+    b = c.prepare().baseline
+    dispatch = Path(c.roots[0]).parent
+    names, entries = b.dispatch
+    assert list(names) == sorted(os.listdir(dispatch))
+    assert os.path.basename(c.roots[0]) not in dict(entries) and os.path.basename(c.roots[1]) not in dict(entries)
+    marker = os.lstat(dispatch / bg._MARKER_NAME)
+    assert dict(entries)[bg._MARKER_NAME] == (marker.st_dev, marker.st_ino, marker.st_size, marker.st_ctime_ns)
+
+
+def _stub_finding(name):
+    return lambda *a, **k: [("TRACKED_FILE_DIFFERS", "x")] if name == "verify" else [("DEPENDENCY_PARITY", "x")]
+
+
+@posix_only
+def test_step12_check_order(bcase):
+    c = bcase
+    c.spies("_check_snapshots", "hash_export", "fingerprint_tree", "check_venv", "dependency_parity", "verify_export_against_commit")
+    prepared = c.prepare()
+    c.spy.clear()
+    assert _p12(c, prepared) is None
+    kinds = [s for s in c.spy if s != "fingerprint_tree"]
+    assert kinds == ["_check_snapshots", "interpreter_of", "interpreter_of", "hash_export", "hash_export", "check_venv", "check_venv",
+                     "dependency_parity", "verify_export_against_commit", "verify_export_against_commit"]
+    first_fp = c.spy.index("fingerprint_tree")
+    assert c.spy.index("hash_export") < first_fp < c.spy.index("check_venv") < len(c.spy) - c.spy[::-1].index("fingerprint_tree") - 1
+
+
+@posix_only
+@pytest.mark.parametrize("later", range(1, 5))
+def test_step12_an_earlier_fault_beats_the_next_one(tmp_path, monkeypatch, later):
+    c = _bench_case(tmp_path, monkeypatch)
+    faults = [("SNAPSHOT_CHANGED", _s12_snapshot), ("INTERPRETER_CHANGED", _s12_interpreter), ("EXPORT_CHANGED", _s12_edit),
+              ("VENV_HOOK_REJECTED", _s12_hook), ("VENV_CHANGED", _s12_venv_file)]
+    prepared = c.prepare()
+    faults[later][1](c)
+    faults[later - 1][1](c)
+    assert _p12(c, prepared).detail == faults[later - 1][0]
+
+
+@posix_only
+def test_step12_venv_fault_beats_parity_beats_verification(bcase):
+    c = bcase
+    prepared = c.prepare()
+    c.mp.setattr(bg, "dependency_parity", _stub_finding("parity"))
+    c.mp.setattr(bg, "verify_export_against_commit", _stub_finding("verify"))
+    assert _p12(c, prepared).detail == "DEPENDENCY_PARITY"
+    _s12_venv_file(c)
+    assert _p12(c, prepared).detail == "VENV_CHANGED"
+
+
+@posix_only
+def test_step12_verification_runs_last_with_the_step9_allowance(bcase):
+    c = bcase
+    prepared = c.prepare()
+    calls = []
+    c.mp.setattr(bg, "verify_export_against_commit", lambda repo, commit, root, **kw: calls.append((commit, str(root), dict(kw.get("allow") or {}))) or [])
+    assert _p12(c, prepared) is None
+    sha = hashlib.sha256(BENCH_OK).hexdigest()
+    assert calls == [(c.base.commit, c.base.root, {BENCH: sha}), (c.head.commit, c.head.root, {})]
+    c.mp.setattr(bg, "verify_export_against_commit", _stub_finding("verify"))
+    assert _p12(c, prepared).detail == "TRACKED_FILE_DIFFERS"
+
+
+@posix_only
+def test_step12_pre_existing_origin_has_no_allowance(pcase):
+    c = pcase
+    prepared = c.prepare()
+    calls = []
+    c.mp.setattr(bg, "verify_export_against_commit", lambda repo, commit, root, **kw: calls.append(dict(kw.get("allow") or {})) or [])
+    assert _p12(c, prepared) is None
+    assert calls == [{}, {}]
+
+
+@posix_only
+@pytest.mark.parametrize("code", ["TREE_UNREADABLE", "DEST_REJECTED", "OVERLAY_FAILED", "TREE_TOO_LARGE"])
+def test_step12_hash_errors_are_hash_unreadable(bcase, code):
+    c = bcase
+    prepared = c.prepare()
+
+    def boom(root):
+        raise bg.BenchmarkGateError(code, "x")
+    c.mp.setattr(bg, "hash_export", boom)
+    v = _p12(c, prepared)
+    assert (v.reason, v.detail, v.stage) == ("ISOLATION_REJECTED", "HASH_UNREADABLE", "ran")
+
+
+@posix_only
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root reads everything")
+def test_step12_a_real_unreadable_entry_is_isolation_rejected(bcase):
+    c = bcase
+    prepared = c.prepare()
+    victim = Path(c.roots[1]) / "tools"
+    os.chmod(victim, 0)
+    try:
+        v = _p12(c, prepared)
+    finally:
+        os.chmod(victim, 0o555)
+    assert (v.reason, v.detail) == ("ISOLATION_REJECTED", "HASH_UNREADABLE")
+
+
+@posix_only
+def test_step12_fingerprint_errors(bcase):
+    c = bcase
+    prepared = c.prepare()
+    real = bg.fingerprint_tree
+
+    def too_big(root, *, limit):
+        if limit == bg._VENV_FINGERPRINT_LIMIT:
+            raise bg.BenchmarkGateError("TREE_TOO_LARGE", "x")
+        return real(root, limit=limit)
+    c.mp.setattr(bg, "fingerprint_tree", too_big)
+    assert _p12(c, prepared).detail == "FINGERPRINT_FAILED"
+
+    def unreadable(root, *, limit):
+        if limit == bg._MAX_TREE_ENTRIES:
+            raise bg.BenchmarkGateError("TREE_UNREADABLE", "x")
+        return real(root, limit=limit)
+    c.mp.setattr(bg, "fingerprint_tree", unreadable)
+    v = _p12(c, prepared)
+    assert (v.reason, v.detail) == ("ISOLATION_REJECTED", "HASH_UNREADABLE")
+
+
+@posix_only
+def test_step12_a_venv_over_its_limit_is_fingerprint_failed(bcase):
+    c = bcase
+    prepared = c.prepare()
+    c.mp.setattr(bg, "_VENV_FINGERPRINT_LIMIT", 1)
+    v = _p12(c, prepared)
+    assert (v.reason, v.detail, v.stage) == ("ISOLATION_REJECTED", "FINGERPRINT_FAILED", "ran")
+
+
+@posix_only
+@pytest.mark.parametrize("code", ["GIT_TIMEOUT", "GIT_FAILED", "REPO_UNREADABLE"])
+def test_step12_git_and_host_faults_raise(bcase, code):
+    c = bcase
+    prepared = c.prepare()
+
+    def boom(*a, **k):
+        raise bg.BenchmarkGateError(code, "x")
+    c.mp.setattr(bg, "verify_export_against_commit", boom)
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        _p12(c, prepared)
+    assert e.value.code == code
+
+
+@posix_only
+def test_step12_verification_too_large_is_export_rejected(bcase):
+    c = bcase
+    prepared = c.prepare()
+
+    def boom(*a, **k):
+        raise bg.BenchmarkGateError("GIT_OUTPUT_TOO_LARGE", "x")
+    c.mp.setattr(bg, "verify_export_against_commit", boom)
+    v = _p12(c, prepared)
+    assert (v.result, v.reason, v.detail, v.stage) == ("REJECTED", "EXPORT_REJECTED", "GIT_OUTPUT_TOO_LARGE", "ran")
+
+
+@posix_only
+def test_step12_pin_and_snapshot_errors_are_integrity_errors(bcase):
+    c = bcase
+    prepared = c.prepare()
+    real = c.interp
+
+    def boom(bin_dir):
+        raise bg.BenchmarkGateError("TREE_UNREADABLE", "x")
+    c.interp = boom
+    assert _p12(c, prepared).detail == "INTERPRETER_CHANGED"
+    c.interp = real
+    c.world.sides["head"].snapshot.unlink()
+    assert _p12(c, prepared).detail == "SNAPSHOT_CHANGED"
+
+
+@posix_only
+def test_step9_baseline_errors_are_isolation_rejected_with_stage_overlaid(bcase):
+    c = bcase
+    real = bg.fingerprint_tree
+
+    def too_big(root, *, limit):
+        if limit == bg._VENV_FINGERPRINT_LIMIT:
+            raise bg.BenchmarkGateError("TREE_TOO_LARGE", "x")
+        return real(root, limit=limit)
+    c.mp.setattr(bg, "fingerprint_tree", too_big)
+    with pytest.raises(bg._Verdict) as e:
+        c.prepare()
+    assert (e.value.reason, e.value.detail, e.value.stage) == ("ISOLATION_REJECTED", "FINGERPRINT_FAILED", "overlaid")

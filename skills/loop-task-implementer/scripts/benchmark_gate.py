@@ -5210,8 +5210,18 @@ def _compare_checks(gate: object, repo: object, base: Side, head: Side, *, attem
     return _Checked(normalized, target, salt, attempt, pins[0], pins[1], writable, load)
 
 
+class _Baseline(NamedTuple):
+    """The step-9 fingerprints (spec 2.5), taken immediately before the first child and compared by step 12. Index 0 is the base, 1 the head."""
+    exports: tuple[str, str]               # `fingerprint_tree` of each export (`_MAX_TREE_ENTRIES`)
+    venvs: tuple[str, str]                 # `fingerprint_tree` of each venv root (`_VENV_FINGERPRINT_LIMIT`)
+    snapshots: tuple[tuple, tuple]         # a stat record of each snapshot file
+    dispatch: tuple[tuple, tuple]          # (sorted names of the dispatch root, ((name, (dev, ino, size, ctime_ns)), ...) for every non-export entry)
+    cfg_sha256: tuple[str, str]            # sha256 of each venv's `pyvenv.cfg`
+    real_python: tuple[str, str]           # the interpreter each side resolved to at step 4
+
+
 class _Prepared(NamedTuple):
-    """What steps 7 to 9 learned and the run steps use (T4a1 adds the baseline fingerprints)."""
+    """What steps 7 to 9 learned and the run steps use."""
     gate: dict              # the normalized gate
     target: str
     benchmark: str          # the benchmark path (relative, as in the gate)
@@ -5221,6 +5231,7 @@ class _Prepared(NamedTuple):
     harness_sha256: str
     gate_sha256: str
     roots: tuple[str, str]
+    baseline: _Baseline
 
 
 def _benchmark_origin(repo: object, base_commit: str, path: str) -> str:
@@ -5300,7 +5311,145 @@ def _compare_prepare(repo: object, base: Side, head: Side, checked: _Checked, *,
             raise _isolation("INTERPRETER_CHANGED", [label], stage)
     _check_parity(base, head, roots, stage)
     _check_exports(repo, (base, head), roots, ({benchmark: benchmark_sha} if origin == "BUILDER_AUTHORED" else {}, {}), stage)
-    return _Prepared(checked.gate, checked.target, benchmark, origin, benchmark_sha, h0, common["harness_sha256"], common["gate_sha256"], roots)
+    baseline = _baseline_fingerprints(base, head, roots, (checked.base_pin.real_python, checked.head_pin.real_python), stage)
+    return _Prepared(checked.gate, checked.target, benchmark, origin, benchmark_sha, h0, common["harness_sha256"], common["gate_sha256"], roots,
+                     baseline)
+
+
+def _stat_record(path: str) -> tuple:
+    """`lstat` of a file as the tuple the baseline compares (`ctime` cannot be set by a user, so a restore still shows)."""
+    st = os.lstat(path)
+    return (st.st_dev, st.st_ino, st.st_mode, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+
+
+def _fingerprint_or_verdict(path: str, limit: int, fallback: str, label: str, stage: str) -> str:
+    """`fingerprint_tree` with its errors as `ISOLATION_REJECTED`: over the limit is `FINGERPRINT_FAILED` (the Builder cannot fix it), any
+    other fault is `fallback`. The module-level limits are read by the caller at call time."""
+    try:
+        return fingerprint_tree(path, limit=limit)
+    except BenchmarkGateError as exc:
+        detail = "FINGERPRINT_FAILED" if exc.code == "TREE_TOO_LARGE" else fallback
+        raise _isolation(detail, [f"{label}: {exc.detail or exc.code}"], stage) from exc
+
+
+def _dispatch_state(roots: tuple[str, str], fallback: str, stage: str) -> tuple:
+    """The dispatch root's sorted name list and every entry that is not one of the two exports as `(dev, ino, size, ctime_ns)`, so a swapped
+    sidecar, marker or sibling shows (the exports are covered by their own fingerprint)."""
+    dispatch = os.path.dirname(roots[0])
+    export_names = {os.path.basename(root) for root in roots}
+    try:
+        names = sorted(os.listdir(dispatch))
+        entries = []
+        for name in names:
+            if name not in export_names:
+                st = os.lstat(os.path.join(dispatch, name))
+                entries.append((name, (st.st_dev, st.st_ino, st.st_size, st.st_ctime_ns)))
+    except OSError as exc:
+        raise _isolation(fallback, [f"dispatch root: {_describe(exc)}"], stage) from exc
+    return tuple(names), tuple(entries)
+
+
+def _cfg_sha256(side: Side, label: str, stage: str) -> str:
+    cfg = os.path.join(os.path.dirname(os.path.abspath(side.bin_dir)), "pyvenv.cfg")
+    try:
+        return hashlib.sha256(_read_bounded(cfg, _MAX_INPUT_BYTES, nofollow=True)).hexdigest()
+    except (OSError, ValueError) as exc:
+        raise _isolation("VENV_CHANGED", [f"{label}: pyvenv.cfg unreadable: {_describe(exc)}"], stage) from exc
+
+
+def _venv_roots(base: Side, head: Side) -> tuple[str, str]:
+    return tuple(os.path.dirname(os.path.abspath(side.bin_dir)) for side in (base, head))  # type: ignore[return-value]
+
+
+def _snapshot_records(base: Side, head: Side, stage: str) -> tuple[tuple, tuple]:
+    try:
+        return _stat_record(base.snapshot), _stat_record(head.snapshot)
+    except OSError as exc:
+        raise _isolation("SNAPSHOT_CHANGED", [_describe(exc)], stage) from exc
+
+
+def _baseline_fingerprints(base: Side, head: Side, roots: tuple[str, str], real_python: tuple[str, str], stage: str) -> _Baseline:
+    """The end of step 9: fingerprints of both exports, both venvs, both snapshot files, the dispatch root and each `pyvenv.cfg`. Errors are
+    `ISOLATION_REJECTED` (`FINGERPRINT_FAILED` over a limit, else the side's own change token)."""
+    labels = ("base", "head")
+    exports = tuple(_fingerprint_or_verdict(root, _MAX_TREE_ENTRIES, "HASH_UNREADABLE", label, stage) for label, root in zip(labels, roots))
+    venvs = tuple(_fingerprint_or_verdict(root, _VENV_FINGERPRINT_LIMIT, "VENV_CHANGED", label, stage)
+                  for label, root in zip(labels, _venv_roots(base, head)))
+    return _Baseline(exports, venvs, _snapshot_records(base, head, stage),  # type: ignore[arg-type]
+                     _dispatch_state(roots, "HASH_UNREADABLE", stage),
+                     tuple(_cfg_sha256(side, label, stage) for label, side in zip(labels, (base, head))), tuple(real_python))  # type: ignore[arg-type]
+
+
+def _post_run_check(prepared: _Prepared, repo: object, base: Side, head: Side, *,
+                    interpreter_of: Callable[[str], InterpreterPin] | None) -> _Verdict | None:
+    """Step 12 (spec 2.5): everything step 9 fixed must still hold. In this order, and the first failure names the detail: snapshot pins
+    (`SNAPSHOT_CHANGED`), interpreter pin (`INTERPRETER_CHANGED`), `hash_export` and the export fingerprints and dispatch root
+    (`HASH_UNREADABLE`/`EXPORT_CHANGED`), `check_venv` and the venv fingerprints (`VENV_HOOK_REJECTED`/`VENV_CHANGED`), `dependency_parity`,
+    `verify_export_against_commit` with the step-9 allowance. Returns the `ISOLATION_REJECTED` (or `EXPORT_REJECTED`) verdict, or None. An
+    integrity error is a verdict; a git or host fault (`GIT_TIMEOUT`, `GIT_FAILED`, `REPO_UNREADABLE`) raises, as everywhere else."""
+    stage = "ran"
+    roots, before = prepared.roots, prepared.baseline
+    labels = ("base", "head")
+    sides = (base, head)
+    try:
+        # 1: snapshot pins, then the files themselves (a rewritten-and-restored snapshot moves ctime)
+        try:
+            _check_snapshots(base, head, stage)
+        except BenchmarkGateError as exc:
+            if exc.code != "VENV_SNAPSHOT_INVALID":
+                raise
+            raise _isolation("SNAPSHOT_CHANGED", [exc.detail or exc.code], stage) from exc
+        if _snapshot_records(base, head, stage) != before.snapshots:
+            raise _isolation("SNAPSHOT_CHANGED", ["snapshot file replaced or touched"], stage)
+        # 2: the interpreter
+        seam = interpreter_of or (lambda bin_dir: interpreter_pin(bin_dir, outside=roots))
+        for label, side, real in zip(labels, sides, before.real_python):
+            try:
+                pin = seam(side.bin_dir)
+            except BenchmarkGateError as exc:
+                raise _isolation("INTERPRETER_CHANGED", [f"{label}: {exc.detail or exc.code}"], stage) from exc
+            if pin.sha256 != side.interpreter_sha256 or pin.real_python != real:
+                raise _isolation("INTERPRETER_CHANGED", [label], stage)
+        # 3: the exports (content hash, then ctime fingerprints, then the dispatch root)
+        try:
+            hashes = tuple(hash_export(root) for root in roots)
+        except BenchmarkGateError as exc:  # DEST_REJECTED and OVERLAY_FAILED from the root check are integrity errors here
+            raise _isolation("HASH_UNREADABLE", [exc.detail or exc.code], stage) from exc
+        if hashes != prepared.h0:
+            raise _isolation("EXPORT_CHANGED", [label for label, now, then in zip(labels, hashes, prepared.h0) if now != then], stage)
+        prints = tuple(_fingerprint_or_verdict(root, _MAX_TREE_ENTRIES, "HASH_UNREADABLE", label, stage) for label, root in zip(labels, roots))
+        if prints != before.exports:
+            raise _isolation("EXPORT_CHANGED", [label for label, now, then in zip(labels, prints, before.exports) if now != then], stage)
+        if _dispatch_state(roots, "HASH_UNREADABLE", stage) != before.dispatch:
+            raise _isolation("EXPORT_CHANGED", ["dispatch root"], stage)
+        # 4: the venvs (the hook check, then the fingerprints, then pyvenv.cfg)
+        try:
+            _check_venvs(base, head, roots, stage)
+        except _Verdict as verdict:
+            if verdict.detail == "VENV_NOT_ISOLATED":  # it was isolated at step 9: it changed
+                verdict.detail = "VENV_CHANGED"
+            raise
+        except BenchmarkGateError as exc:
+            if exc.code != "VENV_SNAPSHOT_INVALID":
+                raise
+            raise _isolation("SNAPSHOT_CHANGED", [exc.detail or exc.code], stage) from exc
+        vprints = tuple(_fingerprint_or_verdict(root, _VENV_FINGERPRINT_LIMIT, "VENV_CHANGED", label, stage)
+                        for label, root in zip(labels, _venv_roots(base, head)))
+        if vprints != before.venvs:
+            raise _isolation("VENV_CHANGED", [label for label, now, then in zip(labels, vprints, before.venvs) if now != then], stage)
+        cfgs = tuple(_cfg_sha256(side, label, stage) for label, side in zip(labels, sides))
+        if cfgs != before.cfg_sha256:
+            raise _isolation("VENV_CHANGED", ["pyvenv.cfg"], stage)
+        # 5: the dependency inventory, 6: the exports against their commits (the base keeps the step-9 overlay allowance)
+        try:
+            _check_parity(base, head, roots, stage)
+        except BenchmarkGateError as exc:
+            raise _isolation("DEPENDENCY_PARITY", [exc.detail or exc.code], stage) from exc
+        allow = {prepared.benchmark: prepared.benchmark_sha256} if prepared.origin == "BUILDER_AUTHORED" else {}
+        _check_exports(repo, (base, head), roots, (allow, {}), stage)
+    except _Verdict as verdict:
+        return verdict
+    return None
 
 
 def _compare_impl(gate: object, repo: object, base: Side, head: Side, *, attempt: object = 1, out_path: object,
