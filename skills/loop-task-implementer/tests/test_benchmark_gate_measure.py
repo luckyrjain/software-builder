@@ -1187,3 +1187,161 @@ def test_measure_paired_rejects_a_bad_order_salt_before_any_child(tmp_path, monk
     stub_run_once(monkeypatch, AssertionError("a child must not start"))
     error = refusal(tmp_path, OK_CHILD, order_salt="")
     assert error.code == "MEASURE_ARGS_INVALID"
+
+
+# --- run_benchmark_once / _check_one_side (C4d-3 T1) ------------------------------------------------------------------------
+
+def once_world(tmp_path):
+    """A root holding ``bench.py`` and a venv-shaped bin (``pyvenv.cfg`` and a ``site-packages``, which ``_venv_layout`` needs)."""
+    root = tmp_path / "root"
+    root.mkdir(exist_ok=True)
+    (root / "bench.py").write_text("def test_bench():\n    pass\n")
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True, exist_ok=True)
+    (venv / "lib" / "python3.12" / "site-packages").mkdir(parents=True, exist_ok=True)
+    (venv / "pyvenv.cfg").write_text("home = /usr/bin\ninclude-system-site-packages = false\nversion = 3.12.1\n")
+    return root, venv / "bin"
+
+
+def run_once(tmp_path, script=None, **overrides):
+    root, bin_dir = once_world(tmp_path)
+    kwargs = dict(timeout_seconds=30)
+    if script is not None:
+        kwargs["argv_builder"] = builder(script)
+    kwargs.update(overrides)
+    target = kwargs.pop("target", "bench.py::test_bench")
+    return bg.run_benchmark_once(str(kwargs.pop("root", root)), str(kwargs.pop("bin_dir", bin_dir)), target, **kwargs)
+
+
+@posix_only
+def test_run_benchmark_once_returns_digest_and_argv(tmp_path):
+    result = run_once(tmp_path, OK_CHILD)
+    assert set(result) == {"digest", "argv"}
+    assert result["digest"] == DIGEST  # the child's own, not a boolean and not the stdout
+    assert result["argv"][-3:] == ["head", os.path.realpath(tmp_path / "root"), "bench.py::test_bench"]
+
+
+@posix_only
+def test_run_benchmark_once_default_builder_is_pytest_argv(tmp_path):
+    # the default argv is the harness argv; a spawn failure (no <bin>/python in the fake venv) still exposes nothing but the code
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        run_once(tmp_path)
+    assert info.value.code == "HEAD_NONZERO_EXIT" and info.value.kind == "spawn"
+
+
+@posix_only
+@pytest.mark.parametrize("side", ["base", "head"])
+@pytest.mark.parametrize("script,overrides,code,kind", [
+    ("import sys\nsys.exit(3)", {}, "{S}_NONZERO_EXIT", "nonzero"),
+    ("import time\ntime.sleep(30)", {"timeout_seconds": 1}, "{S}_TIMEOUT", "timeout"),
+    ("import sys\nsys.stdout.write('x' * (bg_limit + 1))", {}, "OUTPUT_TOO_LARGE", "oversize"),
+    ("print('no digest here')", {}, "DIGEST_MISSING", None),
+])
+def test_run_benchmark_once_error_codes(tmp_path, side, script, overrides, code, kind):
+    script = script.replace("bg_limit", str(bg._RUN_FSIZE_LIMIT))
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        run_once(tmp_path, script, side=side, **overrides)
+    assert info.value.code == code.format(S=side.upper())
+    assert info.value.side == side and info.value.kind == kind
+
+
+@posix_only
+def test_run_benchmark_once_spawn_failure_names_the_side(tmp_path, monkeypatch):
+    stub_run_once(monkeypatch, bg._SpawnFailed("no python"))
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        run_once(tmp_path, OK_CHILD, side="base")
+    assert (info.value.code, info.value.kind, info.value.side) == ("BASE_NONZERO_EXIT", "spawn", "base")
+
+
+@posix_only
+def test_run_benchmark_once_host_spawn_fault_is_measure_failed(tmp_path, monkeypatch):
+    stub_run_once(monkeypatch, bg._SpawnFailed("no memory", errno.ENOMEM))
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        run_once(tmp_path, OK_CHILD)
+    assert info.value.code == "MEASURE_FAILED"
+
+
+@posix_only
+@pytest.mark.parametrize("what", [
+    "relative_root", "missing_root", "relative_bin", "bad_layout", "target_missing", "target_directory", "target_symlink",
+    "target_outside", "bad_timeout", "bad_side", "bad_target_text", "bad_ini",
+])
+def test_check_one_side_rejects(tmp_path, what, monkeypatch):
+    root, bin_dir = once_world(tmp_path)
+    kwargs = dict(timeout_seconds=30, argv_builder=builder(OK_CHILD))
+    target = "bench.py::t"
+    args = [str(root), str(bin_dir)]
+    if what == "relative_root":
+        args[0] = "root"
+    elif what == "missing_root":
+        args[0] = str(tmp_path / "nope")
+    elif what == "relative_bin":
+        args[1] = "venv/bin"
+    elif what == "bad_layout":
+        (tmp_path / "venv" / "pyvenv.cfg").unlink()
+    elif what == "target_missing":
+        target = "absent.py::t"
+    elif what == "target_directory":
+        (root / "d.py").mkdir()
+        target = "d.py::t"
+    elif what == "target_symlink":
+        (root / "link.py").symlink_to(root / "bench.py")
+        target = "link.py::t"
+    elif what == "target_outside":  # an intermediate symlink out of the root: the file is regular, its resolved path is not under the root
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "b.py").write_text("x = 1\n")
+        (root / "sub").symlink_to(outside)
+        target = "sub/b.py::t"
+    elif what == "bad_timeout":
+        kwargs["timeout_seconds"] = 0
+    elif what == "bad_side":
+        kwargs["side"] = "both"
+    elif what == "bad_target_text":
+        target = "../bench.py"
+    elif what == "bad_ini":
+        kwargs["ini_path"] = "relative.ini"
+    stub_run_once(monkeypatch, AssertionError("a child must not start"))
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        bg.run_benchmark_once(args[0], args[1], target, **kwargs)
+    assert info.value.code == "MEASURE_ARGS_INVALID"
+
+
+def test_check_one_side_accepts_a_plain_directory_as_root(tmp_path):
+    root, bin_dir = once_world(tmp_path)
+    real_root, real_bin, benchmark_file = bg._check_one_side(str(root), str(bin_dir), "bench.py::t", None)
+    assert (real_root, real_bin, benchmark_file) == (os.path.realpath(root), os.path.realpath(bin_dir), "bench.py")
+
+
+def tree_state(root: Path):
+    return sorted((str(p.relative_to(root)), p.lstat().st_mode, p.lstat().st_mtime_ns, p.read_bytes() if p.is_file() else b"")
+                  for p in [root, *root.rglob("*")])
+
+
+@posix_only
+def test_run_benchmark_once_touches_nothing_in_the_root(tmp_path):
+    root, bin_dir = once_world(tmp_path)
+    before = tree_state(root)
+    bg.run_benchmark_once(str(root), str(bin_dir), "bench.py::test_bench", timeout_seconds=30, argv_builder=builder(OK_CHILD))
+    assert tree_state(root) == before  # no seal (modes unchanged), no hash file, no write
+    assert os.access(root, os.W_OK) and os.access(root / "bench.py", os.W_OK)
+
+
+@posix_only
+def test_run_benchmark_once_scratch_is_per_run_and_removed(tmp_path, monkeypatch):
+    seen = []
+    real = bg._prepare_run
+
+    def spy(side, bin_dir, work, ini_path=None):
+        result = real(side, bin_dir, work, ini_path)
+        seen.append((work, *result))
+        return result
+    monkeypatch.setattr(bg, "_prepare_run", spy)
+    run_once(tmp_path, OK_CHILD)
+    run_once(tmp_path, OK_CHILD)
+    assert len(seen) == 2
+    for work, scratch, env, ini in seen:
+        assert os.path.dirname(scratch) == work and os.path.basename(work).startswith("bench-run-")
+        assert os.path.dirname(ini) == scratch and env["HOME"].startswith(scratch)
+        assert not os.path.exists(scratch) and not os.path.exists(work)
+    assert seen[0][1] != seen[1][1]

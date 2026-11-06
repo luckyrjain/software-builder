@@ -3677,23 +3677,54 @@ def _check_timeout(timeout_seconds: object) -> None:
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "timeout_seconds must be a number in (0, 3600]")
 
 
+def _real_dirs(name: str, root: object, bin_dir: object) -> tuple[str, str]:
+    """``(realpath root, realpath bin)`` of one side, each an existing absolute directory, else ``MEASURE_ARGS_INVALID``."""
+    for label, path in (("root", root), ("bin", bin_dir)):
+        if not isinstance(path, str) or not path or "\0" in path or not os.path.isabs(path) or not os.path.isdir(path):
+            raise BenchmarkGateError("MEASURE_ARGS_INVALID", f"{name} {label} must be an existing absolute directory")
+    return os.path.realpath(root), os.path.realpath(bin_dir)
+
+
+def _check_ini(ini_path: object) -> None:
+    if ini_path is not None and (not isinstance(ini_path, str) or not os.path.isabs(ini_path) or not os.path.isfile(ini_path)):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "ini_path must be an existing absolute file")
+
+
+def _check_one_side(root: object, bin_dir: object, target: object, ini_path: object) -> tuple[str, str, str]:
+    """Validate one side for ``run_benchmark_once``; returns ``(realpath root, realpath bin, benchmark_file)``. The root and bin are existing
+    absolute directories, ``bin`` passes ``_venv_layout`` (a plain isolated venv), and the target's file is a regular, non-symlink file
+    that stays under the root once resolved (an intermediate symlink out of the root is refused). ``root`` need not be an export:
+    nothing here seals, hashes or writes. The timeout is the caller's (``_check_timeout``)."""
+    real_root, real_bin = _real_dirs("side", root, bin_dir)
+    try:
+        _venv_layout(bin_dir)
+    except BenchmarkGateError as exc:  # the layout's own codes are the compare pipeline's; here every bad argument is one code
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", f"bin is not an isolated venv bin: {exc.code}") from exc
+    benchmark_file = _benchmark_file_of(target)
+    path = os.path.join(root, benchmark_file)
+    try:
+        regular = stat.S_ISREG(os.lstat(path).st_mode)  # lstat: a symlink target is refused, not followed
+    except OSError:
+        regular = False
+    if not regular or not _inside(os.path.realpath(path), real_root):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "target must be a regular file (not a symlink) under the root")
+    _check_ini(ini_path)
+    return real_root, real_bin, benchmark_file
+
+
 def _check_sides(base_root: object, head_root: object, base_bin: object, head_bin: object, target: object,
                  ini_path: object) -> tuple[dict, str]:
     """Validate the two sides, the target and the ini; returns ``({name: (realpath root, realpath bin)}, benchmark_file)``."""
     sides = {}
     for name, root, bin_dir in (("base", base_root, base_bin), ("head", head_root, head_bin)):
-        for label, path in (("root", root), ("bin", bin_dir)):
-            if not isinstance(path, str) or not path or "\0" in path or not os.path.isabs(path) or not os.path.isdir(path):
-                raise BenchmarkGateError("MEASURE_ARGS_INVALID", f"{name} {label} must be an existing absolute directory")
-        sides[name] = (os.path.realpath(root), os.path.realpath(bin_dir))
+        sides[name] = _real_dirs(name, root, bin_dir)
     for index in (0, 1):  # root, bin: the same directory under two names (a symlink, or a case-folding file system) is one directory
         if os.path.samefile(sides["base"][index], sides["head"][index]):
             raise BenchmarkGateError("MEASURE_ARGS_INVALID", "the two sides must not share a root or a bin directory")
     if _inside(sides["base"][0], sides["head"][0]) or _inside(sides["head"][0], sides["base"][0]):
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "neither root may contain the other")
     benchmark_file = _benchmark_file_of(target)
-    if ini_path is not None and (not isinstance(ini_path, str) or not os.path.isabs(ini_path) or not os.path.isfile(ini_path)):
-        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "ini_path must be an existing absolute file")
+    _check_ini(ini_path)
     return sides, benchmark_file
 
 
@@ -3982,6 +4013,41 @@ def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, t
     if base.value != head.value:
         raise after("TRACE_MISMATCH", f"line counts differ: base {base.value}, head {head.value}", "counts_differ")
     return {"base": base.value, "head": head.value, "interpreter": base.interpreter, "argv": argvs, "body_has_control_flow": has_control_flow}
+
+
+def run_benchmark_once(root: str, bin_dir: str, target: str, *, timeout_seconds: float, side: str = "head", argv_builder=None,
+                       ini_path: str | None = None) -> dict:
+    """One untimed run of the benchmark in ``root`` with ``bin_dir``'s interpreter, through the same ``_prepare_run``/``_execute`` chain as
+    ``measure_paired`` (own scratch and ini, removed afterwards). Returns ``{"digest", "argv"}``; the digest is what the child printed and
+    is NOT evidence. Nothing in ``root`` is sealed, hashed or written by this function. Raises ``BenchmarkGateError``: ``MEASURE_ARGS_INVALID``,
+    ``UNSUPPORTED_PLATFORM``, ``<SIDE>_NONZERO_EXIT`` (also a spawn failure), ``<SIDE>_TIMEOUT``, ``OUTPUT_TOO_LARGE``, ``DIGEST_MISSING``
+    (each with ``side`` and ``kind`` set) or ``MEASURE_FAILED`` (a harness fault)."""
+    if os.name != "posix":
+        raise BenchmarkGateError("UNSUPPORTED_PLATFORM", "the harness needs POSIX process groups")
+    if side not in ("base", "head"):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "side must be 'base' or 'head'")
+    _check_timeout(timeout_seconds)
+    real_root, real_bin, _ = _check_one_side(root, bin_dir, target, ini_path)
+
+    def fail(code: str, detail: str, kind: str | None) -> BenchmarkGateError:
+        error = BenchmarkGateError(code, detail)
+        error.side, error.phase, error.partial, error.kind = side, None, None, kind
+        return error
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="bench-run-") as work:
+            scratch, env, ini = _prepare_run(side, real_bin, work, ini_path)
+            argv = argv_builder(side, real_bin, real_root, target) if argv_builder else pytest_argv(real_bin, real_root, target, ini)
+            _, stdout = _execute(side, argv, real_root, scratch, env, timeout_seconds,
+                                 lambda kind, detail: fail(_run_error_code(side, kind), detail, kind))
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:  # no disk space, no thread, a host spawn fault: a harness fault
+        error = BenchmarkGateError("MEASURE_FAILED", f"{type(exc).__name__}: {exc}")
+        error.side, error.phase, error.partial = side, None, None
+        raise error from exc
+    digest = _digest_of(stdout)
+    if digest is None:
+        raise fail("DIGEST_MISSING", "the run printed no digest", None)
+    return {"digest": digest, "argv": argv}
 
 
 # ---------------------------------------------------------------------------
