@@ -1831,6 +1831,7 @@ class Case:
         kw = self.kwargs(**over)
         gate = self.gate if gate is NO_GATE else gate
         checked = bg._compare_checks(gate, str(self.world.repo), self.base, self.head, run=run, **kw)
+        self.checked, self.run = checked, run
         if mutate is not None:
             mutate(self)
         return bg._compare_prepare(str(self.world.repo), self.base, self.head, checked, interpreter_of=kw["interpreter_of"], run=run)
@@ -2383,8 +2384,8 @@ def test_overlay_origin_pass_through(bcase):
 
 @posix_only
 def test_overlay_origin_through_the_pipeline_reaches_the_scaffold(bcase):
-    with pytest.raises(NotImplementedError):  # steps 7 to 9 passed; the runs are T4
-        bcase.impl()
+    with pytest.raises(NotImplementedError):  # steps 7 to 12 passed with honest fake children; only step 13 (T4b) is missing
+        bcase.impl(argv_builder=fake_trace_builder, min_base_ns=0)
 
 
 @posix_only
@@ -2969,3 +2970,379 @@ def test_step9_baseline_errors_are_isolation_rejected_with_stage_overlaid(bcase)
     with pytest.raises(bg._Verdict) as e:
         c.prepare()
     assert (e.value.reason, e.value.detail, e.value.stage) == ("ISOLATION_REJECTED", "FINGERPRINT_FAILED", "overlaid")
+
+
+# --- T4a2: steps 10 and 11 and the 2.7 mapping rows ---
+# Stubs of ``trace_paired`` / ``measure_paired`` raise the exact errors the real functions build (attributes ``kind``, ``side``, ``phase``,
+# ``partial``, ``trace``); the real functions are used for the spawn, the honest child and the step-12 rows. ``_compare_runs`` is called
+# directly where the outcome object matters, ``_compare_impl`` where the result file does.
+
+import errno  # noqa: E402
+
+TRACE_OK = {"base": 7, "head": 7, "interpreter": "3.12.0 cpython", "argv": {"base": ["b"], "head": ["h"]}, "body_has_control_flow": False}
+MEASURE_OK = {"order": ["base_first"] * 6, "base_ns": [10] * 6, "head_ns": [5] * 6, "digest": FAKE_DIGEST, "argv": {"base": ["b"], "head": ["h"]}}
+
+
+def _err(code, kind=None, side=None, phase=None, trace=None, partial=None, detail="boom"):
+    error = bg.BenchmarkGateError(code, detail)
+    error.kind, error.side, error.phase, error.trace, error.partial = kind, side, phase, trace, partial
+    return error
+
+
+def _seen(bk="lines", bv=7, hk="lines", hv=8, bi="3.12.0 cpython", hi="3.12.0 cpython"):
+    return {"base": {"kind": bk, "value": bv, "interpreter": bi}, "head": {"kind": hk, "value": hv, "interpreter": hi},
+            "argv": {"base": ["b"], "head": ["h"]}, "body_has_control_flow": True}
+
+
+def _stub(c, name, outcome, hook=None):
+    """Replace ``bg.<name>``; ``outcome`` is an exception (raised) or a value (returned). Returns the list of calls' keyword arguments."""
+    calls = []
+
+    def fn(*args, **kwargs):
+        calls.append(kwargs)
+        if hook is not None:
+            hook(c)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+    c.mp.setattr(bg, name, fn)
+    return calls
+
+
+def _runs(c, builder=fake_trace_builder, **over):
+    if not hasattr(c, "prepared"):  # steps 1 to 9 once per case: a second prepare would find sealed exports
+        c.prepared = c.prepare()
+    prepared = c.prepared
+    kw = dict(run=c.run, argv_builder=builder, min_base_ns=0, interpreter_of=c.interp)
+    kw.update(over)
+    return bg._compare_runs(prepared, str(c.world.repo), c.base, c.head, c.checked, **kw)
+
+
+def _ran(result, reason, detail=None):
+    _ends(result, reason, detail, stage="ran")
+
+
+def _probe_counter(c):
+    calls = []
+    c.probe = lambda: (calls.append(1), (0.1, 4))[1]
+    return calls
+
+
+def _post12(c):
+    return c.spy.count("_post_run_check")
+
+
+@posix_only
+@pytest.mark.parametrize("where,code,kind", [("trace_paired", "MEASURE_FAILED", "harness"), ("trace_paired", "MEASURE_ARGS_INVALID", None),
+                                             ("measure_paired", "MEASURE_FAILED", None), ("measure_paired", "MEASURE_ARGS_INVALID", None),
+                                             ("measure_paired", "MEASURE_FAILED", "spawn"), ("trace_paired", "MEASURE_FAILED", "spawn")])
+def test_row_T1_and_M4_raise(bcase, where, code, kind):
+    c = bcase
+    c.spies("_post_run_check")
+    if where == "measure_paired":
+        _stub(c, "trace_paired", TRACE_OK)
+    _stub(c, where, _err(code, kind), hook=_s12_edit)  # the child "edited an export", and still a raise beats the step-12 result
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+    assert e.value.code == code
+    assert _post12(c) == 0 and not Path(c.last_out).exists()
+
+
+@posix_only
+def test_row_T2_trace_unavailable(bcase):
+    c = bcase
+    calls = _probe_counter(c)
+    c.spies("_post_run_check")
+    measured = _stub(c, "measure_paired", MEASURE_OK)
+    _stub(c, "trace_paired", _err("TRACE_UNAVAILABLE", "unavailable", trace=_seen("unavailable", "no_monitoring", "unavailable", "no_monitoring"),
+                                  phase="trace"))
+    result = c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+    _ran(result, "TRACE_UNAVAILABLE")
+    assert result["result"] == "INCONCLUSIVE" and result["kind"] == "unavailable" and result["trace_mismatch_seen"] is False
+    assert result["trace"]["base"] == {"kind": "unavailable", "value": "no_monitoring", "interpreter": "3.12.0 cpython"}
+    assert result["trace"]["head"]["value"] == "no_monitoring" and result["trace"]["argv_note"] == "harness-only: temporary ini and plugin directory"
+    assert result["trace"]["argv"] == {"base": ["b"], "head": ["h"]} and result["trace"]["body_has_control_flow"] is True
+    assert measured == [] and len(calls) == 1 and _post12(c) == 1  # step 11 not run, only the start probe, step 12 ran
+    assert json.loads(Path(c.last_out).read_text()) == result
+
+
+def _bad_exe(side, bin_dir, root, target):
+    return ["/nonexistent-c4d3/python", "-c", "pass"]
+
+
+@posix_only
+def test_row_T3_spawn_from_trace_paired_through_a_real_spawn_failure(bcase):
+    c = bcase
+    c.spies("_post_run_check")
+    measured = _stub(c, "measure_paired", MEASURE_OK)
+    result = c.impl(argv_builder=_bad_exe, min_base_ns=0)  # a missing <bin>/python is caught at step 4; a failing spawn after it is this row
+    _ran(result, "ISOLATION_REJECTED", "NOT_PROVISIONED")
+    assert result["kind"] == "spawn" and result["side"] == "base" and result["trace"] is None
+    assert measured == [] and _post12(c) == 1
+
+
+@posix_only
+def test_row_T3_spawn_from_measure_paired_through_a_real_spawn_failure(bcase):
+    c = bcase
+    c.spies("_post_run_check")
+    _stub(c, "trace_paired", TRACE_OK)
+    result = c.impl(argv_builder=_bad_exe, min_base_ns=0)
+    _ran(result, "ISOLATION_REJECTED", "NOT_PROVISIONED")
+    assert result["kind"] == "spawn" and result["side"] == "base" and result["phase"] == "warmup" and result["trace"]["base"]["value"] == 7
+    assert _post12(c) == 1
+
+
+@posix_only
+@pytest.mark.parametrize("stage", ["trace", "measure"])
+@pytest.mark.parametrize("number,raises", [(errno.EAGAIN, True), (None, True), (errno.ENOMEM, True), (errno.ENOENT, False), (errno.EACCES, False)])
+def test_spawn_errno_split(bcase, stage, number, raises):
+    c = bcase
+    if stage == "measure":
+        _stub(c, "trace_paired", TRACE_OK)
+
+    def refuse(*a, **k):
+        raise bg._SpawnFailed("no", number)
+    c.mp.setattr(bg, "_run_once", refuse)
+    if raises:
+        with pytest.raises(bg.BenchmarkGateError) as e:
+            c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+        assert e.value.code == "MEASURE_FAILED"
+    else:
+        _ran(c.impl(argv_builder=fake_trace_builder, min_base_ns=0), "ISOLATION_REJECTED", "NOT_PROVISIONED")
+
+
+T4_ROWS = [("head", "nonzero", "HEAD_NONZERO_EXIT"), ("head", "timeout", "HEAD_TIMEOUT"), ("head", "oversize", "HEAD_OUTPUT_TOO_LARGE"),
+           ("base", "nonzero", "BASE_NONZERO_EXIT"), ("base", "timeout", "BASE_TIMEOUT"), ("base", "oversize", "BASE_OUTPUT_TOO_LARGE")]
+
+
+@posix_only
+@pytest.mark.parametrize("side,kind,reason", T4_ROWS)
+def test_row_T4_by_side_and_trace_fault(bcase, side, kind, reason):
+    c = bcase
+    calls = _probe_counter(c)
+    c.spies("_post_run_check")
+    measured = _stub(c, "measure_paired", MEASURE_OK)
+    _stub(c, "trace_paired", _err("TRACE_MISMATCH", kind, side, "trace", detail=f"{kind}: x\x1b[31m"))
+    result = c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+    _ran(result, reason, kind)
+    assert result["trace_fault"] == side and result["kind"] == kind and result["side"] == side and result["phase"] == "trace"
+    assert result["trace"] is None and result["trace_mismatch_seen"] is False
+    assert all("\x1b" not in t for t in result["untrusted_text"]) and result["untrusted_text"]
+    assert measured == [] and len(calls) == 1 and _post12(c) == 1
+    assert result["result"] == ("REJECTED" if (side, kind) == ("base", "nonzero") else "NOT_IMPROVED" if side == "head" else "INCONCLUSIVE")
+
+
+@posix_only
+def test_row_T5_counts_differ_is_pending_and_measure_still_runs(bcase):
+    c = bcase
+    measured = _stub(c, "measure_paired", MEASURE_OK)
+    _stub(c, "trace_paired", _err("TRACE_MISMATCH", "counts_differ", phase="trace", trace=_seen()))
+    c.spies("_post_run_check")
+    outcome = _runs(c)
+    assert len(measured) == 1 and outcome.measured == MEASURE_OK and outcome.measure_verdict is None
+    assert (outcome.pending.result, outcome.pending.reason, outcome.pending.detail, outcome.pending.stage, outcome.pending.kind) == \
+        ("REJECTED", "TRACE_MISMATCH", "counts_differ", "ran", "counts_differ")
+    assert outcome.trace["base"]["value"] == 7 and outcome.trace["head"]["value"] == 8 and outcome.trace["argv_note"]
+    assert c.run.common["trace"] == outcome.trace and _post12(c) == 1
+
+
+@posix_only
+def test_row_T5_real_children_with_differing_counts(bcase):
+    c = bcase
+
+    def builder(side, bin_dir, root, target):
+        return fake_trace_builder(side, bin_dir, root, target, lines=7 if side == "base" else 9)
+    outcome = _runs(c, builder)
+    assert outcome.pending.reason == "TRACE_MISMATCH" and outcome.measured["digest"] == FAKE_DIGEST and len(outcome.measured["base_ns"]) == 6
+    assert (outcome.trace["base"]["value"], outcome.trace["head"]["value"]) == (7, 9)
+
+
+@posix_only
+@pytest.mark.parametrize("code,kind,reason", [("HEAD_NONZERO_EXIT", "nonzero", "HEAD_NONZERO_EXIT"), ("DIGEST_MISMATCH", None, "DIGEST_MISMATCH"),
+                                              ("BASE_NONZERO_EXIT", "nonzero", "BASE_NONZERO_EXIT")])
+def test_row_T5_trace_mismatch_seen_when_measure_raises_rejected_or_not_improved(bcase, code, kind, reason):
+    c = bcase
+    _stub(c, "trace_paired", _err("TRACE_MISMATCH", "counts_differ", phase="trace", trace=_seen()))
+    _stub(c, "measure_paired", _err(code, kind, "head" if code.startswith("HEAD") else None, "timed"))
+    result = c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+    _ran(result, reason)
+    assert result["trace_mismatch_seen"] is True and result["trace"]["head"]["value"] == 8 and result["trace_fault"] is None
+
+
+@posix_only
+def test_row_T5_pending_meets_a_measure_inconclusive_and_both_are_kept_for_step_13(bcase):
+    c = bcase
+    _stub(c, "trace_paired", _err("TRACE_MISMATCH", "counts_differ", phase="trace", trace=_seen()))
+    partial = {"order": ["base_first"], "base_ns": [3], "head_ns": [2]}
+    _stub(c, "measure_paired", _err("BASE_TIMEOUT", "timeout", "base", "timed", partial=partial))
+    outcome = _runs(c)
+    assert outcome.pending.reason == "TRACE_MISMATCH" and outcome.measured is None
+    assert (outcome.measure_verdict.result, outcome.measure_verdict.reason, outcome.measure_verdict.extra["partial"]) == ("INCONCLUSIVE", "BASE_TIMEOUT", partial)
+
+
+@posix_only
+@pytest.mark.parametrize("kind", ["plugin_failed", "no_result", "unavailable_one_side", "unavailable_tokens_differ",
+                                  "unavailable_interpreters_differ", "interpreters_differ"])
+def test_row_T6_at_once(bcase, kind):
+    c = bcase
+    calls = _probe_counter(c)
+    c.spies("_post_run_check")
+    measured = _stub(c, "measure_paired", MEASURE_OK)
+    after = kind not in ("plugin_failed", "no_result")
+    side = "head" if kind in ("plugin_failed", "no_result", "unavailable_one_side") else None
+    _stub(c, "trace_paired", _err("TRACE_MISMATCH", kind, side, "trace", trace=_seen("unavailable", "no_monitoring", "lines", 3) if after else None))
+    result = c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+    _ran(result, "TRACE_MISMATCH", kind)
+    assert result["result"] == "REJECTED" and result["kind"] == kind and (result["trace"] is not None) == after
+    assert result["trace_mismatch_seen"] is False and result["trace_fault"] is None
+    assert measured == [] and len(calls) == 1 and _post12(c) == 1
+
+
+M_ROWS = [("BASE_NONZERO_EXIT", "nonzero", "base", "BASE_NONZERO_EXIT", "REJECTED"), ("DIGEST_MISSING", None, None, "DIGEST_MISSING", "REJECTED"),
+          ("DIGEST_UNSTABLE", None, "head", "DIGEST_UNSTABLE", "REJECTED"), ("WORKLOAD_TOO_SHORT", None, "base", "WORKLOAD_TOO_SHORT", "REJECTED"),
+          ("HEAD_NONZERO_EXIT", "nonzero", "head", "HEAD_NONZERO_EXIT", "NOT_IMPROVED"), ("HEAD_TIMEOUT", "timeout", "head", "HEAD_TIMEOUT", "NOT_IMPROVED"),
+          ("DIGEST_MISMATCH", None, None, "DIGEST_MISMATCH", "NOT_IMPROVED"),
+          ("OUTPUT_TOO_LARGE", "oversize", "head", "HEAD_OUTPUT_TOO_LARGE", "NOT_IMPROVED"),
+          ("BASE_TIMEOUT", "timeout", "base", "BASE_TIMEOUT", "INCONCLUSIVE"), ("OUTPUT_TOO_LARGE", "oversize", "base", "BASE_OUTPUT_TOO_LARGE", "INCONCLUSIVE")]
+
+
+@posix_only
+@pytest.mark.parametrize("code,kind,side,reason,result", M_ROWS)
+def test_rows_M1_M2_M3(bcase, code, kind, side, reason, result):
+    c = bcase
+    c.spies("_post_run_check")
+    partial = {"order": ["base_first"], "base_ns": [3], "head_ns": [2]}
+    _stub(c, "trace_paired", TRACE_OK)
+    _stub(c, "measure_paired", _err(code, kind, side, "timed", partial=partial, detail="tail text"))
+    if result == "INCONCLUSIVE":  # M3 is step 13's item 5: the outcome carries the mapped verdict, nothing is raised
+        outcome = _runs(c)
+        verdict = outcome.measure_verdict
+        assert outcome.pending is None and outcome.measured is None and outcome.trace["base"]["value"] == 7
+    else:
+        with pytest.raises(bg._Verdict) as e:
+            _runs(c)
+        verdict = e.value
+    assert (verdict.result, verdict.reason, verdict.stage, verdict.kind) == (result, reason, "ran", kind)
+    assert verdict.detail == (kind or "") and verdict.extra["side"] == side and verdict.extra["phase"] == "timed"
+    assert verdict.extra["partial"] == partial and verdict.extra["untrusted_text"] == ["tail text"]
+    assert _post12(c) == 1
+
+
+@posix_only
+@pytest.mark.parametrize("code,kind,side,reason,result", [row for row in M_ROWS if row[4] != "INCONCLUSIVE"])
+def test_rows_M1_M2_through_the_result(bcase, code, kind, side, reason, result):
+    c = bcase
+    partial = {"order": ["base_first"], "base_ns": [3], "head_ns": [2]}
+    _stub(c, "trace_paired", TRACE_OK)
+    _stub(c, "measure_paired", _err(code, kind, side, "timed", partial=partial, detail="tail"))
+    full = c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+    _ran(full, reason)
+    assert full["trace_mismatch_seen"] is False and full["side"] == side and full["phase"] == "timed" and full["partial"] == partial
+    assert full["trace"]["base"]["value"] == 7 and full["untrusted_text"] == ["tail"] and full["trace_fault"] is None
+
+
+@posix_only
+def test_dispatch_order(bcase):
+    c = bcase
+    _stub(c, "trace_paired", TRACE_OK)
+    # code first for the raising rows, even when the kind says spawn; kind == "spawn" before the NONZERO_EXIT code; unknown codes fail closed
+    _stub(c, "measure_paired", _err("MEASURE_FAILED", "spawn", "head", "timed"))
+    with pytest.raises(bg.BenchmarkGateError):
+        _runs(c)
+    c2 = c
+    _stub(c2, "measure_paired", _err("HEAD_NONZERO_EXIT", "spawn", "head", "warmup"))
+    with pytest.raises(bg._Verdict) as e:
+        _runs(c2)
+    assert (e.value.reason, e.value.detail, e.value.kind) == ("ISOLATION_REJECTED", "NOT_PROVISIONED", "spawn")  # T3, not M2
+    _stub(c2, "measure_paired", _err("HEAD_NONZERO_EXIT", "nonzero", "head", "warmup"))
+    with pytest.raises(bg._Verdict) as e:
+        _runs(c2)
+    assert (e.value.reason, e.value.detail) == ("HEAD_NONZERO_EXIT", "nonzero")
+    for code, kind in (("SOMETHING_NEW", None), ("UNSUPPORTED_PLATFORM", None)):
+        _stub(c2, "measure_paired", _err(code, kind, None, "timed"))
+        with pytest.raises(bg.BenchmarkGateError):
+            _runs(c2)
+    _stub(c2, "measure_paired", MEASURE_OK)
+    # trace_paired: code first for MEASURE_*, then spawn before the kind table, then TRACE_UNAVAILABLE by code; a harness kind or an unknown kind raises
+    for error in (_err("MEASURE_FAILED", "spawn", "base", "trace"), _err("TRACE_MISMATCH", "harness", None, "trace"),
+                  _err("TRACE_MISMATCH", "no_such_kind", None, "trace"), _err("SOMETHING_NEW", "nonzero", "head", "trace")):
+        _stub(c2, "trace_paired", error)
+        with pytest.raises(bg.BenchmarkGateError):
+            _runs(c2)
+    _stub(c2, "trace_paired", _err("TRACE_MISMATCH", "spawn", "head", "trace"))
+    with pytest.raises(bg._Verdict) as e:
+        _runs(c2)
+    assert (e.value.reason, e.value.detail) == ("ISOLATION_REJECTED", "NOT_PROVISIONED")
+    _stub(c2, "trace_paired", _err("TRACE_UNAVAILABLE", "unavailable", None, "trace", trace=_seen("unavailable", "tool_in_use", "unavailable", "tool_in_use")))
+    with pytest.raises(bg._Verdict) as e:
+        _runs(c2)
+    assert e.value.reason == "TRACE_UNAVAILABLE"
+
+
+def _edit_in_child(side, bin_dir, root, target):
+    """A real tiny child that prints its digest and trace result, and the head's also edits a file of its own export (chmod first)."""
+    edit = ("import os\nif sys.argv[3]:\n    d = sys.argv[3]; os.chmod(d, 0o755); p = os.path.join(d, 'README.md'); os.chmod(p, 0o644)\n"
+            "    open(p, 'a').write('tampered')\n")
+    return [sys.executable, "-c", _FAKE_TRACE_CHILD + edit, FAKE_DIGEST, str(FAKE_TRACE_LINES), root if side == "head" else ""]
+
+
+@posix_only
+def test_step12_through_a_real_child(bcase):
+    c = bcase
+    c.spies("_post_run_check")
+    result = c.impl(argv_builder=_edit_in_child, min_base_ns=0)
+    _ran(result, "ISOLATION_REJECTED", "EXPORT_CHANGED")
+    assert result["trace"]["head"]["value"] == FAKE_TRACE_LINES and _post12(c) == 1  # both runs went through; step 12 beat the later result
+
+
+@posix_only
+def test_an_honest_real_child_leaves_step_12_silent(bcase):
+    c = bcase
+    c.spies("_post_run_check")
+    outcome = _runs(c)
+    assert outcome.pending is None and outcome.measure_verdict is None and len(outcome.measured["base_ns"]) == 6 and _post12(c) == 1
+    assert outcome.measured["digest"] == FAKE_DIGEST and outcome.trace["base"] == {"kind": "lines", "value": FAKE_TRACE_LINES,
+                                                                                   "interpreter": outcome.trace["head"]["interpreter"]}
+    assert outcome.trace["argv_note"] and set(outcome.trace) == {"base", "head", "body_has_control_flow", "argv", "argv_note"}
+
+
+ENDINGS = {
+    "T2": ("trace", _err("TRACE_UNAVAILABLE", "unavailable", None, "trace", trace=_seen("unavailable", "no_monitoring", "unavailable", "no_monitoring")),
+           "TRACE_UNAVAILABLE"),
+    "T3-trace": ("trace", _err("TRACE_MISMATCH", "spawn", "base", "trace"), "ISOLATION_REJECTED"),
+    "T4": ("trace", _err("TRACE_MISMATCH", "nonzero", "head", "trace"), "HEAD_NONZERO_EXIT"),
+    "T6": ("trace", _err("TRACE_MISMATCH", "no_result", "base", "trace"), "TRACE_MISMATCH"),
+    "M1": ("measure", _err("DIGEST_MISSING", None, None, "warmup"), "DIGEST_MISSING"),
+    "M2": ("measure", _err("HEAD_TIMEOUT", "timeout", "head", "timed"), "HEAD_TIMEOUT"),
+    "M3": ("measure", _err("BASE_TIMEOUT", "timeout", "base", "timed"), "BASE_TIMEOUT"),
+    "T3-measure": ("measure", _err("BASE_NONZERO_EXIT", "spawn", "base", "warmup"), "ISOLATION_REJECTED"),
+    "success": ("measure", MEASURE_OK, "reaches-step-13"),
+}
+
+
+@posix_only
+@pytest.mark.parametrize("name", sorted(ENDINGS))
+def test_step12_runs_after_every_path_that_started_a_child(bcase, name):
+    c = bcase
+    c.spies("_post_run_check")
+    where, outcome, _ = ENDINGS[name]
+    if where == "trace":
+        _stub(c, "trace_paired", outcome, hook=_s12_edit)
+        _stub(c, "measure_paired", MEASURE_OK)
+    else:
+        _stub(c, "trace_paired", TRACE_OK)
+        _stub(c, "measure_paired", outcome, hook=_s12_edit)
+    result = c.impl(argv_builder=fake_trace_builder, min_base_ns=0)  # never the NotImplementedError: step 12 beats the success path too
+    _ran(result, "ISOLATION_REJECTED", "EXPORT_CHANGED")
+    assert _post12(c) == 1
+    assert result["kind"] is None  # step 12's verdict is its own, not the ending it beat
+
+
+@posix_only
+def test_step12_beats_a_pending_trace_mismatch_and_a_measure_failure(bcase):
+    c = bcase
+    _stub(c, "trace_paired", _err("TRACE_MISMATCH", "counts_differ", phase="trace", trace=_seen()))
+    _stub(c, "measure_paired", _err("HEAD_NONZERO_EXIT", "nonzero", "head", "timed"), hook=_s12_edit)
+    result = c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+    _ran(result, "ISOLATION_REJECTED", "EXPORT_CHANGED")
+    assert result["trace"]["head"]["value"] == 8  # what the trace saw stays in the file

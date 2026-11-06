@@ -5452,6 +5452,131 @@ def _post_run_check(prepared: _Prepared, repo: object, base: Side, head: Side, *
     return None
 
 
+# --- steps 10 and 11: the paired runs and the 2.7 mapping -------------------------------------------------------------------------
+
+_TRACE_ARGV_NOTE = "harness-only: temporary ini and plugin directory"
+_RAISING_CODES = frozenset({"MEASURE_FAILED", "MEASURE_ARGS_INVALID"})  # T1 and M4: a harness or caller fault, never a verdict
+_TRACE_AT_ONCE_KINDS = frozenset({"plugin_failed", "no_result", "unavailable_one_side", "unavailable_tokens_differ",
+                                  "unavailable_interpreters_differ", "interpreters_differ"})  # T6
+_RUN_FAILURE_KINDS = frozenset({"nonzero", "timeout", "oversize"})  # T4 (the `_execute` kinds that are not a spawn failure)
+_MEASURE_REASON_OF_CODE = {  # M1, M2, M3: the reason of every measure refusal that is a verdict (OUTPUT_TOO_LARGE is split by side)
+    "BASE_NONZERO_EXIT": "BASE_NONZERO_EXIT", "HEAD_NONZERO_EXIT": "HEAD_NONZERO_EXIT", "BASE_TIMEOUT": "BASE_TIMEOUT",
+    "HEAD_TIMEOUT": "HEAD_TIMEOUT", "DIGEST_MISSING": "DIGEST_MISSING", "DIGEST_UNSTABLE": "DIGEST_UNSTABLE",
+    "DIGEST_MISMATCH": "DIGEST_MISMATCH", "WORKLOAD_TOO_SHORT": "WORKLOAD_TOO_SHORT",
+}
+
+
+class _RunOutcome(NamedTuple):
+    """What steps 10 and 11 leave for step 13 (T4b) to merge, after step 12 found nothing."""
+    trace: dict | None             # the normalised trace of 2.8, None when no trace result was seen
+    pending: _Verdict | None       # the `counts_differ` TRACE_MISMATCH (T5), not yet raised
+    measured: dict | None          # `measure_paired`'s return value when it succeeded
+    measure_verdict: _Verdict | None  # the mapped INCONCLUSIVE (M3) of a measure refusal; REJECTED/NOT_IMPROVED never get here (item 3 raises)
+
+
+def _normalise_trace(trace: dict | None) -> dict | None:
+    """The 2.8 shape from a `trace_paired` error's ``trace`` (both sides' results) or its success dict; None when there is no result to show."""
+    if trace is None:
+        return None
+    if "interpreter" in trace:  # the success dict: one count and one interpreter for both sides
+        sides = {name: {"kind": "lines", "value": trace[name], "interpreter": trace["interpreter"]} for name in ("base", "head")}
+    else:
+        sides = {name: dict(trace[name]) for name in ("base", "head")}
+    return {**sides, "body_has_control_flow": trace["body_has_control_flow"], "argv": trace["argv"], "argv_note": _TRACE_ARGV_NOTE}
+
+
+def _error_extra(error: BenchmarkGateError) -> dict:
+    """The result keys an error of `trace_paired`/`measure_paired` supplies (its text is child-derived: `untrusted_text`)."""
+    return {"side": error.side, "phase": error.phase, "partial": error.partial, "untrusted_text": [error.detail or error.code]}
+
+
+def _map_trace_error(error: BenchmarkGateError) -> _Verdict:
+    """Rows T2 to T6 of 2.7 for an error of `trace_paired` (the order: the raising codes, `kind == "spawn"`, the code, the kind). Returns the
+    verdict (the caller decides whether `counts_differ`, T5, is pending); anything not in the table, and every harness fault, is re-raised."""
+    if error.code in _RAISING_CODES:  # T1
+        raise error
+    kind, extra = error.kind, _error_extra(error)
+    if kind == "spawn":  # T3: the side could not be started (stage `ran` even though no child ran)
+        return _Verdict("REJECTED", "ISOLATION_REJECTED", "NOT_PROVISIONED", kind=kind, stage="ran", extra=extra)
+    if error.code == "TRACE_UNAVAILABLE":  # T2
+        return _Verdict("INCONCLUSIVE", "TRACE_UNAVAILABLE", kind or "", kind=kind, stage="ran", extra=extra)
+    if error.code != "TRACE_MISMATCH":
+        raise error
+    if kind in _RUN_FAILURE_KINDS and error.side in ("base", "head"):  # T4: by side, with the measure rows
+        suffix = {"nonzero": "NONZERO_EXIT", "timeout": "TIMEOUT", "oversize": "OUTPUT_TOO_LARGE"}[kind]
+        reason = f"{error.side.upper()}_{suffix}"
+        return _Verdict(COMPARE_RESULT_OF_REASON[reason], reason, kind, kind=kind, stage="ran", extra={**extra, "trace_fault": error.side})
+    if kind == "counts_differ" or kind in _TRACE_AT_ONCE_KINDS:  # T5 (pending, by the caller) and T6
+        return _Verdict("REJECTED", "TRACE_MISMATCH", kind, kind=kind, stage="ran", extra=extra)
+    raise error  # `harness` or a kind this table does not know: no verdict
+
+
+def _map_measure_error(error: BenchmarkGateError) -> _Verdict:
+    """Rows T3, M1 to M3 of 2.7 for an error of `measure_paired` (the raising codes first, then `kind == "spawn"`, then the code, then the side)."""
+    if error.code in _RAISING_CODES:  # M4
+        raise error
+    kind, extra = error.kind, _error_extra(error)
+    if kind == "spawn":  # T3
+        return _Verdict("REJECTED", "ISOLATION_REJECTED", "NOT_PROVISIONED", kind=kind, stage="ran", extra=extra)
+    if error.code == "OUTPUT_TOO_LARGE" and error.side in ("base", "head"):
+        reason = f"{error.side.upper()}_OUTPUT_TOO_LARGE"
+    elif error.code in _MEASURE_REASON_OF_CODE:
+        reason = _MEASURE_REASON_OF_CODE[error.code]
+    else:
+        raise error  # UNSUPPORTED_PLATFORM (step 1 handled it) or a code this table does not know: no verdict
+    return _Verdict(COMPARE_RESULT_OF_REASON[reason], reason, kind or "", kind=kind, stage="ran", extra=extra)
+
+
+def _compare_runs(prepared: _Prepared, repo: object, base: Side, head: Side, checked: _Checked, *, run: _Run, argv_builder=None,
+                  min_base_ns: int = _MIN_BASE_NS, interpreter_of: Callable[[str], InterpreterPin] | None = None) -> _RunOutcome:
+    """Steps 10 to 12 (step 13 is T4b's). A `BenchmarkGateError` (a raise of 2.7: T1, M4, any 2.1 raise) propagates and step 12 does not run.
+    Every other path started a child (a T3 spawn too, even if none ran), so step 12 runs: its `ISOLATION_REJECTED` beats everything. Then
+    the at-once trace results (items 2) and a measure-raised REJECTED/NOT_IMPROVED (item 3) are raised as `_Verdict`; what is left for the
+    precedence list (pending trace mismatch, measure INCONCLUSIVE, success: items 4 to 6) is returned."""
+    gate, common = prepared.gate, run.common
+    common["trace_mismatch_seen"] = False
+    sides = (prepared.roots[0], prepared.roots[1], base.bin_dir, head.bin_dir)
+    ending: _Verdict | None = None
+    pending: _Verdict | None = None
+    trace: dict | None = None
+    measured: dict | None = None
+    measure_verdict: _Verdict | None = None
+    # 10: the paired trace run
+    try:
+        traced = trace_paired(*sides, prepared.target, timeout_seconds=gate["per_run_timeout_seconds"], argv_builder=argv_builder)
+        trace = _normalise_trace(traced)
+    except BenchmarkGateError as error:
+        mapped = _map_trace_error(error)
+        trace = _normalise_trace(error.trace)
+        if mapped.kind == "counts_differ":
+            pending = mapped  # T5: the measurement still runs
+        else:
+            ending = mapped
+    common["trace"] = trace
+    # 11: the paired measurement, unless the trace already ended it
+    if ending is None:
+        try:
+            measured = measure_paired(*sides, prepared.target, repeats=gate["repeats"], timeout_seconds=gate["per_run_timeout_seconds"],
+                                      base_commit=base.commit, head_commit=head.commit, benchmark_sha256=prepared.benchmark_sha256,
+                                      attempt=checked.attempt, warmup=gate["warmup_runs"], min_base_ns=min_base_ns, argv_builder=argv_builder,
+                                      order_salt=checked.order_salt)
+        except BenchmarkGateError as error:
+            mapped = _map_measure_error(error)
+            if mapped.result == "INCONCLUSIVE":  # M3: item 4 (a pending mismatch stands) or item 5; step 13 decides
+                measure_verdict = mapped
+            else:  # item 3
+                if pending is not None:
+                    mapped.extra["trace_mismatch_seen"] = True
+                ending = mapped
+    # 12: beats everything but a raise
+    finding = _post_run_check(prepared, repo, base, head, interpreter_of=interpreter_of)
+    if finding is not None:
+        raise finding
+    if ending is not None:
+        raise ending
+    return _RunOutcome(trace, pending, measured, measure_verdict)
+
+
 def _compare_impl(gate: object, repo: object, base: Side, head: Side, *, attempt: object = 1, out_path: object,
                   allow_writable_interpreter: bool = False, argv_builder=None, load_probe=None, min_base_ns: int = _MIN_BASE_NS,
                   order_salt: object = None, interpreter_of=None) -> dict:
@@ -5461,13 +5586,15 @@ def _compare_impl(gate: object, repo: object, base: Side, head: Side, *, attempt
     try:
         checked = _compare_checks(gate, repo, base, head, attempt=attempt, out_path=out_path, allow_writable_interpreter=allow_writable_interpreter,
                                   load_probe=load_probe, order_salt=order_salt, interpreter_of=interpreter_of, run=run)
-        _compare_prepare(repo, base, head, checked, interpreter_of=interpreter_of, run=run)
+        prepared = _compare_prepare(repo, base, head, checked, interpreter_of=interpreter_of, run=run)
+        _compare_runs(prepared, repo, base, head, checked, run=run, argv_builder=argv_builder, min_base_ns=min_base_ns,
+                      interpreter_of=interpreter_of)
     except _Verdict as verdict:
         result = _result_dict(verdict, run.common)
         assert run.out is not None  # a verdict only exists after step 1 validated out_path
         _write_result(str(out_path), run.out[0], run.out[1], _result_bytes(result))
         return result
-    raise NotImplementedError("steps 10 to 13: T4")  # declared scaffold: removed by T4b
+    raise NotImplementedError("step 13: T4b")  # declared scaffold: removed by T4b
 
 
 def compare(gate: object, repo: object, base: Side, head: Side, *, attempt: object = 1, out_path: object,
