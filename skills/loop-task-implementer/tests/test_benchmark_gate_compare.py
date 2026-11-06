@@ -616,3 +616,368 @@ def test_fingerprint_limits_are_errors_not_skips(tmp_path):
     with pytest.raises(bg.BenchmarkGateError) as e:
         bg.fingerprint_tree(tmp_path / "missing", limit=10)
     assert e.value.code == "TREE_UNREADABLE"
+
+
+# --- interpreter_pin and the pyvenv.cfg parser (T2b1b) ---
+# The fixture interpreter is a fake shell script, so most rows pass ``probe=`` (the injectable start-up probe). The default probe runs
+# ``<bin>/python -I -S`` and is exercised against the machine's real python in a real venv created in the test.
+
+def _stub_probe(prefix: Path, base_prefix=None, os_file=None):
+    real = os.path.realpath(prefix)
+
+    def probe(python, env):
+        assert python.endswith(os.sep + "bin" + os.sep + "python") and env["PYTHONNOUSERSITE"] == "1"
+        return "\n".join([str(base_prefix or real), str(os_file or os.path.join(real, "lib", PYX, "os.py")), str(base_prefix or real)]) + "\n"
+    return probe
+
+
+def _pin(env, **kw):
+    kw.setdefault("probe", _stub_probe(env.prefix))
+    return bg.interpreter_pin(env.bin, **kw)
+
+
+@pytest.fixture
+def pin_env(tmp_path):
+    """A fake prefix and one Homebrew-shaped venv (``bin`` and ``cfg``), without the git world."""
+    prefix = build_fake_prefix(tmp_path / "interp")
+    bin_dir = build_venv(tmp_path / "venv", "homebrew", prefix, tmp_path / "side")
+    return types.SimpleNamespace(prefix=prefix, bin=bin_dir, root=bin_dir.parent, cfg=bin_dir.parent / "pyvenv.cfg", tmp=tmp_path)
+
+
+def _code(exc_info) -> str:
+    return exc_info.value.code
+
+
+@posix_only
+def test_pin_accepts_homebrew_uv_and_clt_layouts(world):
+    pins = {}
+    for name, side in world.sides.items():
+        pin = bg.interpreter_pin(side.bin, probe=_stub_probe(world.prefix))
+        assert isinstance(pin, bg.InterpreterPin) and len(pin.sha256) == 64 and pin.real_python == os.path.realpath(world.prefix / "bin" / PYX)
+        pins[name] = pin
+    assert pins["base"] == pins["head"] or pins["base"].sha256 == pins["head"].sha256  # same interpreter, same pin
+
+
+@posix_only
+def test_pin_rejects_cfg_faults(pin_env):
+    original = pin_env.cfg.read_text()
+    minor = sys.version_info.minor
+
+    def rows():
+        yield "dup home", lambda t: t + f"home = {pin_env.prefix / 'bin'}\n"
+        yield "dup version", lambda t: t + f"version = 3.{minor}.1\n"
+        yield "version and version_info", lambda t: t + f"version_info = 3.{minor}.0\n"
+        yield "dup include", lambda t: t + "include-system-site-packages = false\n"
+        yield "dup executable", lambda t: t + "executable = /a\nexecutable = /b\n"
+        yield "include true", lambda t: t.replace("include-system-site-packages = false", "include-system-site-packages = true")
+        yield "include True", lambda t: t.replace("include-system-site-packages = false", "include-system-site-packages = True")
+        yield "version mismatch", lambda t: t.replace(f"version = 3.{minor}.0", f"version = 3.{minor + 1}.0")
+        yield "no version", lambda t: t.replace(f"version = 3.{minor}.0\n", "")
+        yield "garbled version", lambda t: t.replace(f"version = 3.{minor}.0", "version = three")
+        yield "home elsewhere", lambda t: re.sub(r"(?m)^home = .*$", f"home = {pin_env.tmp / 'decoy'}", t)
+        yield "no home", lambda t: re.sub(r"(?m)^home = .*\n", "", t)
+        yield "relative home", lambda t: re.sub(r"(?m)^home = .*$", "home = bin", t)
+        yield "non-utf8", lambda t: b"\xff\xfe" + t.encode()
+
+    (pin_env.tmp / "decoy").mkdir()  # exists, but holds no python
+    for label, mutate in rows():
+        mutated = mutate(original)
+        pin_env.cfg.write_bytes(mutated if isinstance(mutated, bytes) else mutated.encode())
+        with pytest.raises(bg.BenchmarkGateError) as e:
+            _pin(pin_env)
+        assert _code(e) == "VENV_NOT_ISOLATED", label
+    pin_env.cfg.write_text(original)
+    assert _pin(pin_env)
+
+
+@posix_only
+def test_pin_ignores_command_and_unknown_keys_and_accepts_a_non_ascii_home(pin_env):
+    text = pin_env.cfg.read_text()
+    unicode_home = pin_env.tmp / "höme-ü"
+    unicode_home.symlink_to(pin_env.prefix / "bin")
+    text = re.sub(r"(?m)^home = .*$", f"home = {unicode_home}", text)
+    pin_env.cfg.write_text(text + "command = /Users/ü/python -m venv --home home=x version=9.9\nunknown = 1\nimplementation = CPython\n", encoding="utf-8")
+    assert _pin(pin_env).real_python == os.path.realpath(pin_env.prefix / "bin" / PYX)
+
+
+@posix_only
+def test_pin_rejects_copies_venv_and_interpreters_inside_the_venv_or_export(pin_env):
+    assert _pin(pin_env)
+    # an interpreter outside the export passes; the same interpreter reported inside a protected root does not
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        _pin(pin_env, outside=(str(pin_env.prefix.parent),))
+    assert _code(e) == "VENV_NOT_ISOLATED"
+    assert _pin(pin_env, outside=(str(pin_env.tmp / "elsewhere"),))
+    # a --copies venv: bin/python is a regular file inside the venv
+    python = pin_env.bin / "python"
+    python.unlink()
+    shutil.copy2(pin_env.prefix / "bin" / PYX, python)
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        _pin(pin_env)
+    assert _code(e) == "VENV_NOT_ISOLATED"
+    # a symlinked interpreter whose whole prefix lives inside the venv, with a cfg that is otherwise consistent
+    inner = build_fake_prefix(pin_env.root / "inner")
+    python.unlink()
+    python.symlink_to(inner / "bin" / PYX)
+    cfg = re.sub(r"(?m)^home = .*$", f"home = {inner / 'bin'}", pin_env.cfg.read_text())
+    pin_env.cfg.write_text(cfg)
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        bg.interpreter_pin(pin_env.bin, probe=_stub_probe(inner))
+    assert _code(e) == "VENV_NOT_ISOLATED"
+
+
+@posix_only
+def test_startup_probe_stub_mismatches_are_rejected(pin_env):
+    assert _pin(pin_env)
+    decoy = pin_env.tmp / "decoy-prefix"
+    for label, probe in (
+            ("base_prefix", _stub_probe(pin_env.prefix, base_prefix=decoy)),
+            ("os.__file__", _stub_probe(pin_env.prefix, os_file=decoy / "lib" / PYX / "os.py")),
+            ("os.__file__ in site-packages", _stub_probe(pin_env.prefix, os_file=pin_env.prefix / "lib" / PYX / "site-packages" / "os.py")),
+            ("garbage", lambda python, env: "nonsense"),
+            ("not a string", lambda python, env: None),
+            ("raises", lambda python, env: 1 / 0)):
+        with pytest.raises(bg.BenchmarkGateError) as e:
+            bg.interpreter_pin(pin_env.bin, probe=probe)
+        assert _code(e) == "VENV_NOT_ISOLATED", label
+
+
+def _real_venv(tmp_path: Path) -> Path:
+    root = tmp_path / "realvenv"
+    venv.create(root, with_pip=False, symlinks=True)
+    python = root / "bin" / "python"
+    if not python.is_symlink():
+        pytest.skip("this platform's venv does not symlink its python")
+    return root
+
+
+@posix_only
+def test_default_probe_runs_the_real_interpreter_isolated(tmp_path):
+    root = _real_venv(tmp_path)
+    marker = tmp_path / "pth-ran"
+    site = next((root / "lib").glob("python3*/site-packages"))
+    (site / "zz_marker.pth").write_text(f"import os; open({str(marker)!r}, 'w').write('x')\n")
+    (site / "sitecustomize.py").write_text(f"open({str(marker)!r}, 'w').write('x')\n")
+    pin = bg.interpreter_pin(root / "bin")
+    assert pin.real_python == os.path.realpath(root / "bin" / "python") and len(pin.sha256) == 64
+    assert not marker.exists(), "the probe must run with -I -S: no .pth, no sitecustomize"
+    assert pin.sha256 == bg.interpreter_pin(root / "bin").sha256
+
+
+def _script_interpreter(env, *, lines, body=""):
+    """Make the fake interpreter a script that answers the start-up probe: it insists on `-I -S -c` and on a clean environment, then prints
+    ``lines`` (the three probe values) after the optional shell ``body``."""
+    exe = env.prefix / "bin" / PYX
+    exe.write_text('#!/bin/sh\n[ "$1" = -I ] && [ "$2" = -S ] && [ "$3" = -c ] && [ -n "$4" ] || exit 3\n[ -z "${SB_PROBE_SECRET+x}" ] || exit 4\n'
+                   + body + "".join(f"printf '%s\\n' '{line}'\n" for line in lines))
+    exe.chmod(0o755)
+
+
+@posix_only
+def test_default_probe_plumbing_with_a_script_interpreter(pin_env, monkeypatch):
+    monkeypatch.setenv("SB_PROBE_SECRET", "x")  # must not reach the probe
+    real = os.path.realpath(pin_env.prefix)
+    good = [real, f"{real}/lib/{PYX}/os.py", real]
+    _script_interpreter(pin_env, lines=good)
+    assert bg.interpreter_pin(pin_env.bin).real_python == os.path.realpath(pin_env.prefix / "bin" / PYX)
+    decoy = str(pin_env.tmp / "decoy")
+    for label, kwargs in (("redirected prefix", dict(lines=[decoy, f"{decoy}/lib/{PYX}/os.py", decoy])),
+                          ("redirected os", dict(lines=[real, f"{decoy}/lib/{PYX}/os.py", real])),
+                          ("nonzero exit", dict(lines=good, body="exit 1\n")),
+                          ("too much output", dict(lines=good, body="yes aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa | head -c 100000\n")),
+                          ("two lines", dict(lines=good[:2])),
+                          ("not a program", dict(lines=good, body="exec /nonexistent-binary\n"))):
+        _script_interpreter(pin_env, **kwargs)
+        with pytest.raises(bg.BenchmarkGateError) as e:
+            bg.interpreter_pin(pin_env.bin)
+        assert _code(e) == "VENV_NOT_ISOLATED", label
+    monkeypatch.setattr(bg, "_PROBE_TIMEOUT", 0.5)
+    _script_interpreter(pin_env, lines=good, body="exec sleep 30\n")
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        bg.interpreter_pin(pin_env.bin)
+    assert _code(e) == "VENV_NOT_ISOLATED"
+
+
+@posix_only
+def test_startup_probe_catches_a_redirected_home(tmp_path):
+    root = _real_venv(tmp_path)
+    real_python = Path(os.path.realpath(root / "bin" / "python"))
+    real_stdlib = real_python.parent.parent / "lib" / real_python.name
+    if not real_stdlib.is_dir():
+        pytest.skip("the real interpreter's layout is not <prefix>/lib/pythonX.Y")
+    # A decoy prefix whose bin holds a symlink to the real binary (so the by-file `home` check passes) and whose stdlib is the real one
+    # with its own os.py: only what CPython actually loads can tell.
+    decoy = tmp_path / "decoy"
+    (decoy / "bin").mkdir(parents=True)
+    (decoy / "bin" / real_python.name).symlink_to(real_python)
+    (decoy / "lib" / real_python.name).mkdir(parents=True)
+    for entry in real_stdlib.iterdir():
+        if entry.name not in ("os.py", "site-packages"):
+            (decoy / "lib" / real_python.name / entry.name).symlink_to(entry)
+    shutil.copyfile(real_stdlib / "os.py", decoy / "lib" / real_python.name / "os.py")
+    cfg = root / "pyvenv.cfg"
+    cfg.write_text(re.sub(r"(?m)^home = .*$", f"home = {decoy / 'bin'}", cfg.read_text()))
+    seen = subprocess.run([str(root / "bin" / "python"), "-I", "-S", "-c", "import os,sys;print(os.path.realpath(sys.base_prefix))"],
+                          capture_output=True, text=True, timeout=60).stdout.strip()
+    if seen != os.path.realpath(decoy):
+        # macOS framework builds find their stdlib from the loaded dylib and ignore `home`: there is nothing to redirect on such a build
+        # (and the pin's probe then correctly sees the real prefix). The probe's rejection logic is covered by the script rows above.
+        pytest.skip(f"this CPython build ignores a redirected `home` (it reports {seen})")
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        bg.interpreter_pin(root / "bin")
+    assert _code(e) == "VENV_NOT_ISOLATED" and "probe" in e.value.detail
+
+
+def _touch_and_compare(label, path: Path, pin_env, *, changes: bool, mutate=None):
+    before = _pin(pin_env).sha256
+    stat_before = path.stat() if path.exists() else None
+    if mutate:
+        mutate()
+    else:
+        path.chmod(0o644)
+        path.write_bytes(path.read_bytes() + b"!")
+        if stat_before:
+            os.chmod(path, stat_before.st_mode & 0o7777)
+    after = _pin(pin_env).sha256
+    assert (after != before) == changes, label
+
+
+@posix_only
+def test_pin_hash_covers_binary_stdlib_pycache_lib_dynload_prefix_and_lib_files(pin_env):
+    prefix = pin_env.prefix
+    std = prefix / "lib" / PYX
+    (prefix / "Python").write_bytes(b"framework dylib")  # directly under <prefix>
+    (prefix / "lib" / "x").mkdir()
+    (prefix / "lib" / "x" / "deep.so").write_bytes(b"deep")  # a deep directory under lib: not the stdlib
+    (std / "site-packages").mkdir()
+    (std / "site-packages" / "mod.py").write_text("x = 1\n")
+    for label, path in (("binary", prefix / "bin" / PYX), ("stdlib file", std / "os.py"), ("__pycache__ file", std / "__pycache__" / "os.cpython-fake.pyc"),
+                        ("lib-dynload file", std / "lib-dynload" / "_fake.so"), ("file under prefix", prefix / "Python"),
+                        ("libpython under lib", prefix / "lib" / "libpython-fake.dylib"), ("python3XY.zip", prefix / "lib" / f"{PYXY}.zip")):
+        _touch_and_compare(label, path, pin_env, changes=True)
+    for label, path in (("site-packages file", std / "site-packages" / "mod.py"), ("deep dir under lib", prefix / "lib" / "x" / "deep.so")):
+        _touch_and_compare(label, path, pin_env, changes=False)
+    # timestamps are not hashed
+    target = std / "os.py"
+    before = _pin(pin_env).sha256
+    os.utime(target, (1, 1))
+    os.utime(prefix / "bin" / PYX, (2, 2))
+    assert _pin(pin_env).sha256 == before
+    # structure is: an added, removed or renamed stdlib file, an added __pycache__ file, a new file under <prefix>
+    for label, mutate in (("add", lambda: (std / "new.py").write_text("")), ("rename", lambda: os.rename(std / "new.py", std / "renamed.py")),
+                          ("pycache add", lambda: (std / "__pycache__" / "new.pyc").write_bytes(b"")),
+                          ("prefix add", lambda: (prefix / "Python2").write_bytes(b"")), ("remove", lambda: os.unlink(std / "renamed.py"))):
+        _touch_and_compare(label, std, pin_env, changes=True, mutate=mutate)
+
+
+@posix_only
+def test_stdlib_lookup_prefers_lib_then_lib64(pin_env):
+    prefix = pin_env.prefix
+    only_lib = _pin(pin_env).sha256
+    (prefix / "lib64" / PYX).mkdir(parents=True)
+    (prefix / "lib64" / PYX / "os.py").write_text("# other\n")
+    assert _pin(pin_env).sha256 == only_lib  # lib wins; lib64 is not read
+    os.rename(prefix / "lib" / PYX, prefix / "lib" / "moved")  # now only lib64 holds the stdlib
+    via_lib64 = bg.interpreter_pin(pin_env.bin, probe=_stub_probe(prefix, os_file=prefix / "lib64" / PYX / "os.py"))
+    assert via_lib64.sha256 != only_lib
+
+
+@posix_only
+def test_missing_stdlib_is_dest_rejected(pin_env):
+    # (compare maps DEST_REJECTED, TREE_TOO_LARGE and TREE_UNREADABLE to NOT_PROVISIONED in T3a; here only the raise is pinned.)
+    shutil.rmtree(pin_env.prefix / "lib" / PYX)
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        _pin(pin_env)
+    assert _code(e) == "DEST_REJECTED"
+
+
+@posix_only
+def test_over_limit_is_tree_too_large(pin_env, monkeypatch):
+    # the entries counted: the binary, the stdlib's entries (os.py, lib-dynload, _fake.so, __pycache__, the pyc) and the two files directly
+    # under <prefix>/lib (the zip, the dylib) = 8; <prefix> itself holds none
+    monkeypatch.setattr(bg, "_INTERPRETER_LIMIT", 8)
+    assert _pin(pin_env)
+    monkeypatch.setattr(bg, "_INTERPRETER_LIMIT", 7)
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        _pin(pin_env)
+    assert _code(e) == "TREE_TOO_LARGE"
+    monkeypatch.setattr(bg, "_INTERPRETER_LIMIT", 20_000)
+    total = sum(p.stat().st_size for p in [pin_env.prefix / "bin" / PYX, pin_env.prefix / "lib" / PYX / "os.py",
+                                           pin_env.prefix / "lib" / PYX / "lib-dynload" / "_fake.so",
+                                           pin_env.prefix / "lib" / PYX / "__pycache__" / "os.cpython-fake.pyc",
+                                           pin_env.prefix / "lib" / f"{PYXY}.zip", pin_env.prefix / "lib" / "libpython-fake.dylib"])
+    monkeypatch.setattr(bg, "_INTERPRETER_BYTES", total)
+    assert _pin(pin_env)
+    monkeypatch.setattr(bg, "_INTERPRETER_BYTES", total - 1)
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        _pin(pin_env)
+    assert _code(e) == "TREE_TOO_LARGE"
+    monkeypatch.setattr(bg, "_INTERPRETER_BYTES", 1 << 30)
+    deep = pin_env.prefix / "lib" / PYX
+    for _ in range(bg._MAX_HASH_DEPTH + 1):
+        deep = deep / "d"
+        deep.mkdir()
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        _pin(pin_env)
+    assert _code(e) == "TREE_TOO_LARGE"
+
+
+@posix_only
+def test_writable_flag(pin_env, monkeypatch):
+    if os.geteuid() == 0:
+        pytest.skip("root can write everything")
+    prefix, std = pin_env.prefix, pin_env.prefix / "lib" / PYX
+    assert _pin(pin_env).writable is True  # everything here is owned by the euid
+    monkeypatch.setattr(os, "geteuid", lambda: os.getuid() + 12345)  # as if another user owned the files: only os.access decides
+
+    def lock(read_only: bool):
+        for path in [prefix, *prefix.rglob("*")]:
+            if not path.is_symlink():
+                path.chmod((0o555 if path.is_dir() else 0o444) if read_only else (0o755 if path.is_dir() else 0o644))
+    # the exe must stay executable only for realism; the pin does not run it
+    lock(True)
+    try:
+        assert _pin(pin_env).writable is False  # a read-only copy
+        for label, path in (("pinned file", std / "os.py"), ("directory containing a pinned entry", std / "lib-dynload"),
+                            ("stdlib root", std), ("prefix", prefix), ("prefix/lib", prefix / "lib"), ("binary", prefix / "bin" / PYX),
+                            ("binary's directory", prefix / "bin"), ("__pycache__ file", std / "__pycache__" / "os.cpython-fake.pyc"),
+                            ("lib file", prefix / "lib" / "libpython-fake.dylib")):
+            mode = path.stat().st_mode & 0o7777
+            path.chmod(mode | 0o200)
+            try:
+                assert _pin(pin_env).writable is True, label
+            finally:
+                path.chmod(mode)
+            assert _pin(pin_env).writable is False, label
+    finally:
+        lock(False)
+
+
+@posix_only
+def test_pin_error_mapping_names(pin_env, monkeypatch):
+    std = pin_env.prefix / "lib" / PYX
+    pin_env.cfg.write_text(pin_env.cfg.read_text() + "version = 3.0\n")
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        _pin(pin_env)
+    assert _code(e) == "VENV_NOT_ISOLATED"
+    pin_env.cfg.write_text(pin_env.cfg.read_text().replace("version = 3.0\n", ""))
+    monkeypatch.setattr(bg, "_INTERPRETER_LIMIT", 1)
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        _pin(pin_env)
+    assert _code(e) == "TREE_TOO_LARGE"
+    monkeypatch.setattr(bg, "_INTERPRETER_LIMIT", 20_000)
+    locked = std / "os.py"
+    locked.chmod(0)
+    try:
+        if os.access(locked, os.R_OK):
+            pytest.skip("file permissions are not enforced for this user")
+        with pytest.raises(bg.BenchmarkGateError) as e:
+            _pin(pin_env)
+        assert _code(e) == "TREE_UNREADABLE"
+    finally:
+        locked.chmod(0o644)
+    os.unlink(std / "os.py")
+    shutil.rmtree(std)
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        _pin(pin_env)
+    assert _code(e) == "DEST_REJECTED"

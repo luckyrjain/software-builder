@@ -3124,6 +3124,233 @@ def _inside(path: str, root: str) -> bool:
     return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
 
 
+_INTERPRETER_LIMIT = 20_000  # entries hashed into an interpreter pin (a stock CPython stdlib is a few thousand)
+_INTERPRETER_BYTES = 1 << 30  # bytes hashed into an interpreter pin
+_PROBE_MAX_OUTPUT = 4096
+_PROBE_TIMEOUT = 20.0
+_PROBE_CODE = "import os,sys;print(os.path.realpath(sys.base_prefix),os.path.realpath(os.__file__),os.path.realpath(sys.base_exec_prefix),sep='\\n')"
+_CFG_KEYS = frozenset({"home", "version", "include-system-site-packages", "executable"})  # `version_info` folds into `version`
+
+
+class InterpreterPin(NamedTuple):
+    sha256: str
+    writable: bool
+    real_python: str
+
+
+def _parse_pyvenv_cfg(data: bytes) -> dict[str, str]:
+    """The five keys that matter from a `pyvenv.cfg` (`key = value` lines, UTF-8: a user home may be non-ASCII). `version` and
+    `version_info` are one key; a duplicate of any of them is refused, because CPython and `site` would not agree on which wins. The
+    `command` key and every other key are ignored."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "pyvenv.cfg is not UTF-8") from exc
+    found: dict[str, str] = {}
+    for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        key, sep, value = line.partition("=")
+        key = key.strip().casefold()
+        key = "version" if key == "version_info" else key
+        if not sep or key not in _CFG_KEYS:
+            continue
+        if key in found:
+            raise BenchmarkGateError("VENV_NOT_ISOLATED", f"pyvenv.cfg repeats {escape_diagnostic(key, 40)}")
+        found[key] = value.strip()
+    return found
+
+
+def _probe_env(bin_path: str) -> dict[str, str]:
+    """The side's clean environment without a scratch directory: `side_env`'s allowlist minus `HOME` and `TMPDIR` (the probe needs neither)."""
+    return {"PATH": f"{bin_path}:/usr/bin:/bin", "VIRTUAL_ENV": os.path.dirname(bin_path), "PYTHONNOUSERSITE": "1", "PYTHONHASHSEED": "0",
+            "PYTHONDONTWRITEBYTECODE": "1", "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "LANG": "C.UTF-8"}
+
+
+def _startup_probe(python: str, env: dict[str, str]) -> str:
+    """Run `python -I -S -c <_PROBE_CODE>` (no shell, no `.pth`, no `sitecustomize`, no user site: only the interpreter binary runs) and
+    return its stdout. Output is read up to a cap, the run is killed after `_PROBE_TIMEOUT`; any failure is `VENV_NOT_ISOLATED`."""
+    try:
+        proc = subprocess.Popen([python, "-I", "-S", "-c", _PROBE_CODE], env=env, cwd="/", stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, close_fds=True, shell=False)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", f"the interpreter does not start: {escape_diagnostic(str(exc), 120)}") from exc
+    timer = threading.Timer(_PROBE_TIMEOUT, proc.kill)
+    timer.start()
+    try:
+        data = proc.stdout.read(_PROBE_MAX_OUTPUT + 1)  # type: ignore[union-attr]
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()  # closed its output and lingers: not a clean run
+            proc.wait()
+    finally:
+        timer.cancel()
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+        proc.stdout.close()  # type: ignore[union-attr]
+    if len(data) > _PROBE_MAX_OUTPUT or proc.returncode != 0:  # a killed or timed-out child has a negative code
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "the start-up probe failed, timed out or printed too much")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "the start-up probe printed non-UTF-8") from exc
+
+
+def _interpreter_digest(real: str, prefix: str, stdlib: str) -> tuple[str, bool]:
+    """`(sha256, writable)` of the pinned interpreter files: the real binary; the stdlib tree without its top-level `site-packages` (so
+    with `__pycache__` and `lib-dynload`); and the regular files directly under `prefix` and `prefix/lib` (the framework dylib,
+    `libpython*`, a `python3XY.zip`). Content only, no timestamps. Entries and bytes are bounded; `writable` is decided in the same walk."""
+    euid = getattr(os, "geteuid", lambda: -1)()
+    entries = 0
+    hashed = 0
+    writable = False
+    records: list[tuple[bytes, bytes]] = []
+
+    def count() -> None:
+        nonlocal entries
+        entries += 1
+        if entries > _INTERPRETER_LIMIT:
+            raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_INTERPRETER_LIMIT} interpreter entries")
+
+    def owned_or_writable(path: str, st: os.stat_result) -> None:
+        nonlocal writable
+        if st.st_uid == euid or (not stat.S_ISLNK(st.st_mode) and os.access(path, os.W_OK)):
+            writable = True
+
+    def content(path: str, st: os.stat_result) -> str:
+        nonlocal hashed
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+        try:
+            opened = os.fstat(fd)
+            if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (st.st_dev, st.st_ino):
+                raise BenchmarkGateError("TREE_UNREADABLE", "an interpreter file changed while it was read")
+            file_digest = hashlib.sha256()
+            while True:
+                chunk = os.read(fd, 1 << 20)
+                if not chunk:
+                    return file_digest.hexdigest()
+                hashed += len(chunk)
+                if hashed > _INTERPRETER_BYTES:
+                    raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_INTERPRETER_BYTES} interpreter bytes")
+                file_digest.update(chunk)
+        finally:
+            os.close(fd)
+
+    def record(tag: bytes, rel: str, path: str, st: os.stat_result) -> None:
+        count()
+        owned_or_writable(path, st)
+        key = tag + os.fsencode(rel)
+        if stat.S_ISREG(st.st_mode):
+            body = b"f" + content(path, st).encode()
+        elif stat.S_ISDIR(st.st_mode):
+            body = b"d"
+        elif stat.S_ISLNK(st.st_mode):
+            body = b"l" + os.fsencode(os.readlink(path))
+        else:
+            body = b"o"  # a fifo or device is never opened
+        records.append((key, key + b"\0" + body + b"\n"))
+
+    try:
+        for directory in (os.path.dirname(real), prefix, os.path.join(prefix, "lib")):
+            if os.path.isdir(directory):
+                owned_or_writable(directory, os.stat(directory))
+        record(b"B", os.path.basename(real), real, os.lstat(real))
+        for tag, directory in ((b"P", prefix), (b"L", os.path.join(prefix, "lib"))):
+            if not os.path.isdir(directory):
+                continue
+            with os.scandir(directory) as scan:
+                names = sorted(item.name for item in scan)
+            for name in names:
+                path = os.path.join(directory, name)
+                st = os.lstat(path)
+                if stat.S_ISREG(st.st_mode):
+                    record(tag, name, path, st)
+        owned_or_writable(stdlib, os.stat(stdlib))
+        pending = [("", 0)]
+        while pending:
+            rel, depth = pending.pop()
+            where = os.path.join(stdlib, rel) if rel else stdlib
+            with os.scandir(where) as scan:
+                names = sorted(item.name for item in scan)
+            for name in names:
+                if not rel and name == "site-packages":
+                    continue
+                child = os.path.join(rel, name) if rel else name
+                path = os.path.join(stdlib, child)
+                st = os.lstat(path)
+                record(b"S", child, path, st)
+                if stat.S_ISDIR(st.st_mode):
+                    if depth + 1 > _MAX_HASH_DEPTH:
+                        raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_HASH_DEPTH} levels")
+                    pending.append((child, depth + 1))
+    except BenchmarkGateError:
+        raise
+    except OSError as exc:
+        raise BenchmarkGateError("TREE_UNREADABLE", _describe(exc)) from exc
+    digest = hashlib.sha256(b"software-builder-bench-interpreter-v1\0")
+    for _, line in sorted(records):
+        digest.update(line)
+    return digest.hexdigest(), writable
+
+
+def interpreter_pin(bin_dir: str | os.PathLike, *, outside: tuple[str, ...] | list[str] = (),
+                    probe: Callable[[str, dict[str, str]], str] | None = None) -> InterpreterPin:
+    """Identify and hash the interpreter behind a venv's `bin/python`. `pyvenv.cfg` is parsed (`include-system-site-packages` must be
+    `false`, no duplicate keys, `version`/`version_info` agrees with a `python3.X` basename), `home` is checked BY FILE
+    (`realpath(home/<first symlink hop's name>) == realpath(bin/python)`: Homebrew, uv and Xcode CLT layouts all satisfy that and a
+    `dirname(realpath)` comparison would not), the real interpreter must lie outside the venv and every `outside` root (the sibling exports;
+    a `--copies` venv is therefore refused), and a start-up probe (`probe(python, env) -> stdout`, default `_startup_probe`) must report a
+    `base_prefix` equal to `prefix = dirname(dirname(realpath))` and an `os.__file__` under the stdlib, which catches a `home` redirected
+    to a decoy prefix. The cross-side check (both sides one interpreter) is `compare`'s. `VENV_NOT_ISOLATED` (cfg, layout, probe),
+    `TREE_TOO_LARGE`, `DEST_REJECTED` (no stdlib directory) and `TREE_UNREADABLE`."""
+    bin_path = _fs(bin_dir)
+    venv_root, _ = _venv_layout(bin_path)
+    bin_path = os.path.abspath(bin_path)
+    python = os.path.join(bin_path, "python")
+    try:
+        cfg = _parse_pyvenv_cfg(_read_bounded(os.path.join(venv_root, "pyvenv.cfg"), 64 << 10, nofollow=True))
+        real = os.path.realpath(python)
+        if not stat.S_ISREG(os.stat(real).st_mode):
+            raise OSError("not a regular file")
+    except (OSError, ValueError) as exc:
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", f"bin/python or pyvenv.cfg unusable: {escape_diagnostic(str(exc), 120)}") from exc
+    forbidden = [os.path.realpath(venv_root)] + [os.path.realpath(_fs(root)) for root in outside]
+    if any(_inside(real, root) for root in forbidden):
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "the interpreter lies inside the venv or an export (a --copies venv?)")
+    if cfg.get("include-system-site-packages", "false").casefold() != "false":
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "the venv includes the system site-packages")
+    home = cfg.get("home", "")
+    first_hop = os.path.basename(os.readlink(python)) if os.path.islink(python) else "python"
+    if not os.path.isabs(home) or "\0" in home or os.path.realpath(os.path.join(home, first_hop)) != real:
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "pyvenv.cfg `home` does not lead to the venv's python")
+    version = re.fullmatch(r"(\d+)\.(\d+)(?:\..*)?", cfg.get("version", ""))
+    if not version:
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "pyvenv.cfg has no usable version")
+    named = re.fullmatch(r"python(\d+)\.(\d+)", os.path.basename(real))
+    if named and named.groups() != version.groups():
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "pyvenv.cfg version does not match the interpreter's name")
+    xy = f"python{version[1]}.{version[2]}"
+    prefix = os.path.dirname(os.path.dirname(real))
+    stdlib = next((path for path in (os.path.join(prefix, "lib", xy), os.path.join(prefix, "lib64", xy)) if os.path.isdir(path)), None)
+    if stdlib is None:
+        raise BenchmarkGateError("DEST_REJECTED", f"no {xy} standard library under the interpreter prefix")
+    try:
+        out = (probe or _startup_probe)(python, _probe_env(bin_path))
+        lines = out.rstrip("\n").split("\n")
+        if len(lines) != 3:
+            raise ValueError("unexpected probe output")
+        base_prefix, os_file = os.path.realpath(lines[0]), os.path.realpath(lines[1])
+    except BenchmarkGateError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - a stub or a odd output is a failed probe, whatever it raised
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", f"the start-up probe is unusable: {escape_diagnostic(_describe(exc), 120)}") from exc
+    real_stdlib = os.path.realpath(stdlib)  # `site-packages` is not in the pin, so an `os` loaded from there is not the pinned one
+    if base_prefix != prefix or not _inside(os_file, real_stdlib) or _inside(os_file, os.path.join(real_stdlib, "site-packages")):
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "the start-up probe loads another prefix than the pinned one (`home` redirected?)")
+    sha256, writable = _interpreter_digest(real, prefix, stdlib)
+    return InterpreterPin(sha256, writable, real)
+
+
 def _pth_problem(site: str, data: bytes, export_root: str, export_aliases: tuple[str, ...] = ()) -> str | None:
     """Why a `.pth` file's content may not run, or None. Mirrors `site.addpackage`: a line starting with `#` is a comment, one
     starting with `import ` or `import<TAB>` is executed, anything else is a path joined to the site directory. Allowed: comments,
