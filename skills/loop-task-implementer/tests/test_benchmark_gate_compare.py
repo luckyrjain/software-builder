@@ -9,7 +9,14 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
+import shutil
+import stat
+import subprocess
 import sys
+import tempfile
+import types
+import venv
 from fractions import Fraction
 from pathlib import Path
 
@@ -295,3 +302,207 @@ def test_temp_name_is_random_and_a_planted_temp_is_irrelevant(outdir, monkeypatc
         ident, name = bg._validate_out_path(out, [])
         bg._write_result(out, ident, name, b"{}\n")
     assert len(seen) == 2 and seen[0] != seen[1] and all("/" not in s and s != "r0.json" and s != "r1.json" for s in seen)
+
+
+# --- T2b0 shared fixtures: a real repository, two exports, two venvs, a fake interpreter prefix -------------------------------------------
+# Built per test (``world``), never shared: later tasks mutate the exports and the venvs. Helpers are copied from the exports tests (the
+# test modules share nothing; there is no conftest).
+
+GIT_ENV = {
+    "PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": "/nonexistent", "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_CONFIG_NOSYSTEM": "1", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com",
+    "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com",
+}
+GIT_FLAGS = ["-c", "init.defaultBranch=main", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "-c", "protocol.file.allow=never"]
+PYX = f"python{sys.version_info.major}.{sys.version_info.minor}"
+PYXY = f"python{sys.version_info.major}{sys.version_info.minor}"
+VENV_SHAPES = ("homebrew", "uv", "clt")
+DISPATCH_ROOT = "bench-c4d3fix"
+
+
+def git(cwd, *args, inp=None) -> str:
+    done = subprocess.run(["git", *GIT_FLAGS, *args], cwd=cwd, env=GIT_ENV, input=inp, capture_output=True, timeout=120)
+    assert done.returncode == 0, done.stderr
+    return done.stdout.decode().strip()
+
+
+def make_commit(repo: Path, files: dict, msg: str) -> str:
+    """``files``: {path: str | ("exec", str) | ("link", target)}; staged by path (a gitlink is added separately by the caller)."""
+    for rel, value in files.items():
+        path = repo / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(value, tuple) and value[0] == "link":
+            path.symlink_to(value[1])
+            continue
+        path.write_text(value[1] if isinstance(value, tuple) else value)
+        path.chmod(0o755 if isinstance(value, tuple) else 0o644)
+    git(repo, "add", "-f", "--", *files)  # not -A: the gitlink has no directory on disk, so -A would drop it from the index
+    return msg
+
+
+def build_repo(tmp_path: Path) -> tuple[Path, str, str]:
+    """A sha1 repository with two commits. Tracked in both: a regular file, an executable, a symlink and a gitlink (``vendor/sub``); the
+    second commit changes ``src/app/core.py`` and adds ``src/app/extra.py``. Returns ``(repo, base_commit, head_commit)``."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-q", "--object-format=sha1")
+    make_commit(repo, {"src/app/__init__.py": "", "src/app/core.py": "def f():\n    return 1\n", "tools/run.sh": ("exec", "#!/bin/sh\n"),
+                       "link": ("link", "src/app/core.py"), "README.md": "r\n"}, "base")
+    git(repo, "update-index", "--add", "--cacheinfo", "160000," + "ab" * 20 + ",vendor/sub")
+    git(repo, "commit", "-q", "-m", "base")
+    base = git(repo, "rev-parse", "HEAD")
+    make_commit(repo, {"src/app/core.py": "def f():\n    return 2\n", "src/app/extra.py": "y = 1\n"}, "head")
+    git(repo, "commit", "-q", "-m", "head")
+    return repo, base, git(repo, "rev-parse", "HEAD")
+
+
+def build_fake_prefix(path: Path) -> Path:
+    """A small fake interpreter prefix: the shapes ``interpreter_pin`` has to cover, no real Python in it."""
+    (path / "bin").mkdir(parents=True)
+    exe = path / "bin" / PYX
+    exe.write_text("#!/bin/sh\nexit 0\n")
+    exe.chmod(0o755)
+    lib = path / "lib" / PYX
+    (lib / "lib-dynload").mkdir(parents=True)
+    (lib / "__pycache__").mkdir()
+    (lib / "os.py").write_text("# fake stdlib\n")
+    (lib / "lib-dynload" / "_fake.so").write_bytes(b"\x7fELF-fake")
+    (lib / "__pycache__" / "os.cpython-fake.pyc").write_bytes(b"fake")
+    (path / "lib" / f"{PYXY}.zip").write_bytes(b"PK\x05\x06" + b"\0" * 18)
+    (path / "lib" / "libpython-fake.dylib").write_bytes(b"fake dylib")
+    return path
+
+
+def build_venv(root: Path, shape: str, prefix: Path, scratch: Path) -> Path:
+    """A fresh, pip-less venv at ``root`` whose ``bin/python`` is a SYMLINK into the fake ``prefix``, with one of three ``pyvenv.cfg`` shapes,
+    and a pytest-bearing ``.pth`` (the pattern of ``pytest_venv`` in test_benchmark_gate_trace.py) written BEFORE the caller snapshots it.
+    homebrew: ``home`` is a symlink path to the prefix's ``bin``. uv: ``version_info`` only, ``home`` a minor-version symlink directory.
+    clt: ``home`` is a shim directory holding a symlink to the interpreter. Returns the venv's ``bin`` directory."""
+    venv.create(root, with_pip=False, symlinks=True)
+    bin_dir = root / "bin"
+    real_bin = prefix / "bin"
+    if shape == "homebrew":
+        home = scratch / "opt" / "python" / "libexec" / "bin"
+        home.parent.mkdir(parents=True)
+        home.symlink_to(real_bin)
+        cfg = f"home = {home}\ninclude-system-site-packages = false\nversion = {sys.version_info.major}.{sys.version_info.minor}.0\n"
+    elif shape == "uv":
+        parent = scratch / "uv" / "python"
+        parent.mkdir(parents=True)
+        (parent / f"cpython-{sys.version_info.major}.{sys.version_info.minor}").symlink_to(real_bin)
+        home = parent / f"cpython-{sys.version_info.major}.{sys.version_info.minor}"
+        cfg = f"home = {home}\nimplementation = CPython\nuv = 0.0.0\nversion_info = {sys.version_info.major}.{sys.version_info.minor}.0\n" \
+              "include-system-site-packages = false\n"
+    elif shape == "clt":
+        home = scratch / "clt" / "usr" / "bin"
+        home.mkdir(parents=True)
+        (home / PYX).symlink_to(real_bin / PYX)
+        cfg = f"home = {home}\ninclude-system-site-packages = false\nversion = {sys.version_info.major}.{sys.version_info.minor}.0\n"
+    else:
+        raise ValueError(shape)
+    (root / "pyvenv.cfg").write_text(cfg)
+    for entry in list(bin_dir.iterdir()):
+        if entry.is_symlink() and entry.name.startswith("python"):
+            entry.unlink()
+    (bin_dir / PYX).symlink_to(home / PYX)
+    (bin_dir / "python").symlink_to(PYX)
+    (bin_dir / "python3").symlink_to(PYX)
+    sites = {os.path.dirname(os.path.dirname(sys.modules[name].__file__)) for name in ("pytest", "_pytest", "pluggy", "iniconfig", "packaging")
+             if name in sys.modules}
+    site = next((root / "lib").glob("python3*/site-packages"))
+    (site / "zz_pytest.pth").write_text("\n".join(sorted(sites)) + "\n")
+    return bin_dir
+
+
+class World(types.SimpleNamespace):
+    """``repo base head`` (commits) ``prefix`` (fake interpreter) ``dispatch`` (the dispatch root) ``sides`` (name -> SimpleNamespace(commit,
+    export, bin, snapshot, shape)) ``interpreter_of`` (a callable for the seam: a bin dir to the fake interpreter path)."""
+
+
+def build_world(tmp_path: Path, monkeypatch, shapes=("homebrew", "uv")) -> World:
+    """Rebuild everything under ``tmp_path``: the fixed parent is redirected there, so nothing touches the real temp directory."""
+    temp = tmp_path / "tmp"
+    temp.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(temp))
+    try:
+        bg._require_modern_git()
+    except bg.BenchmarkGateError as exc:
+        if exc.code != "GIT_TOO_OLD":
+            raise
+        pytest.skip(f"git >= 2.43 is needed: {exc.detail}")
+    repo, base, head = build_repo(tmp_path)
+    prefix = build_fake_prefix(tmp_path / "interp")
+    dispatch = bg.fixed_parent() / DISPATCH_ROOT
+    sides = {}
+    for name, commit, shape in (("base", base, shapes[0]), ("head", head, shapes[1])):
+        export = bg.export_tree(repo, commit, dispatch / name)
+        bin_dir = build_venv(dispatch / f"venv-{name}", shape, prefix, tmp_path / f"{name}-{shape}")
+        snapshot = tmp_path / f"{name}-venv.json"
+        bg.snapshot_venv(bin_dir, snapshot)
+        sides[name] = types.SimpleNamespace(commit=commit, export=export, bin=bin_dir, snapshot=snapshot, shape=shape)
+    return World(repo=repo, base=base, head=head, prefix=prefix, dispatch=dispatch, sides=sides,
+                 interpreter_of=lambda bin_dir: str(prefix / "bin" / PYX))
+
+
+@pytest.fixture(params=[("homebrew", "uv"), ("clt", "homebrew")], ids=lambda p: "+".join(p))
+def world(tmp_path, monkeypatch, request):
+    return build_world(tmp_path, monkeypatch, request.param)
+
+
+def test_fixture_world_is_consistent(world):
+    # (The plan says "exports verify against their commits": ``verify_export_against_commit`` arrives in T2b2, so this checks them against
+    # ``git ls-tree`` directly: names, modes and bytes.)
+    for name, side in world.sides.items():
+        listing = git(world.repo, "ls-tree", "-r", "-z", side.commit).split("\0")
+        seen = {}
+        for record in filter(None, listing):
+            meta, path = record.split("\t", 1)
+            mode, kind, _ = meta.split()
+            seen[path] = mode
+            target = side.export / path
+            if mode == "160000":
+                assert target.is_dir() and not target.is_symlink() and not list(target.iterdir())
+            elif mode == "120000":
+                assert target.is_symlink() and os.readlink(target) == git(world.repo, "show", f"{side.commit}:{path}")
+            else:
+                assert target.read_bytes() == subprocess.run(["git", "show", f"{side.commit}:{path}"], cwd=world.repo, env=GIT_ENV,
+                                                             capture_output=True, check=True, timeout=60).stdout
+                assert bool(target.stat().st_mode & stat.S_IXUSR) == (mode == "100755")
+        assert {"README.md", "link", "tools/run.sh", "vendor/sub"} <= set(seen) and seen["link"] == "120000" and seen["vendor/sub"] == "160000"
+        on_disk = {str(p.relative_to(side.export)) for p in side.export.rglob("*") if p.is_file() or p.is_symlink()}
+        assert on_disk == {p for p, m in seen.items() if m != "160000"}
+        marker = json.loads((side.export.parent / bg._MARKER_NAME).read_text())
+        assert marker["kind"] == bg._MARKER_KIND and marker["root"] == DISPATCH_ROOT
+        assert json.loads(side.export.parent.joinpath(f"{name}.export.json").read_text())["commit"] == side.commit
+        # the venv: a symlinked python that resolves into the fake prefix, and a snapshot that check_venv accepts
+        python = side.bin / "python"
+        assert python.is_symlink() and os.path.realpath(python) == os.path.realpath(world.prefix / "bin" / PYX)
+        assert world.interpreter_of(side.bin) == str(world.prefix / "bin" / PYX)
+        other = world.sides["head" if name == "base" else "base"]
+        assert bg.check_venv(side.bin, side.snapshot, side.export, (str(other.export),)) == os.path.realpath(side.bin.parent)
+    base, head = world.sides["base"], world.sides["head"]
+    assert (base.export / "src/app/core.py").read_text() != (head.export / "src/app/core.py").read_text()
+    assert not (base.export / "src/app/extra.py").exists() and (head.export / "src/app/extra.py").exists()
+
+
+def test_fixture_venv_shapes_and_pth(world):
+    for side in world.sides.values():
+        cfg = (side.bin.parent / "pyvenv.cfg").read_text()
+        keys = {line.partition("=")[0].strip() for line in cfg.splitlines() if "=" in line}
+        home = Path(re.search(r"^home = (.*)$", cfg, re.M)[1])
+        if side.shape == "uv":
+            assert "version_info" in keys and "version" not in keys and home.is_symlink() and home.name.startswith("cpython-")
+        elif side.shape == "homebrew":
+            assert "version" in keys and home.is_symlink()
+        else:
+            assert "version" in keys and not home.is_symlink() and (home / PYX).is_symlink()
+        assert os.path.realpath(home / PYX) == os.path.realpath(side.bin / "python")
+        pth = next((side.bin.parent / "lib").glob("python3*/site-packages/zz_pytest.pth"))
+        assert pth.read_text().strip() and json.loads(side.snapshot.read_text())["entries"][os.path.relpath(pth, side.bin.parent)]["kind"] == "file"
+
+
+def test_fixture_fake_prefix_has_the_pin_shapes(world):
+    prefix = world.prefix
+    names = {str(p.relative_to(prefix)) for p in prefix.rglob("*")}
+    assert {f"bin/{PYX}", f"lib/{PYX}/os.py", f"lib/{PYX}/lib-dynload", f"lib/{PYX}/__pycache__", f"lib/{PYXY}.zip",
+            "lib/libpython-fake.dylib"} <= names
