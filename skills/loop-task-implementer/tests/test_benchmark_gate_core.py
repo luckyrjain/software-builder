@@ -472,6 +472,7 @@ def test_gate_command_rejected(command):
     "overrides",
     [
         {"warmup_runs": -1},
+        {"warmup_runs": 0},
         {"warmup_runs": 3},
         {"repeats": 5},
         {"repeats": 2},
@@ -496,7 +497,7 @@ def test_gate_bounds_rejected(overrides):
 @pytest.mark.parametrize(
     "overrides",
     [
-        {"warmup_runs": 0, "repeats": 4, "per_run_timeout_seconds": 10},
+        {"warmup_runs": 1, "repeats": 4, "per_run_timeout_seconds": 10},
         {"warmup_runs": 2, "repeats": 8, "per_run_timeout_seconds": 69},
         {"min_improvement": 0.05, "max_noise": 0.02},
         {"min_improvement": 0.9, "max_noise": 0.3},
@@ -545,9 +546,13 @@ def test_gate_huge_int_threshold_is_bounds_rejected_not_a_crash(field, huge):
     assert bg.validate_benchmark_gate(_gate(**{field: huge})) == (None, "BOUNDS_REJECTED")
 
 
-@pytest.mark.parametrize("warmup, largest", [(0, 81), (1, 75), (2, 69)])
+def test_gate_warmup_zero_is_bounds_rejected():
+    assert bg.validate_benchmark_gate(_gate(warmup_runs=0)) == (None, "BOUNDS_REJECTED")
+
+
+@pytest.mark.parametrize("warmup, largest", [(1, 75), (2, 69)])
 def test_gate_budget_largest_timeout_at_repeats_8_per_warmup(warmup, largest):
-    # The figures in validate_benchmark_gate's docstring.
+    # The figures in validate_benchmark_gate's docstring (warmup_runs 0 is no longer accepted).
     gate = _gate(warmup_runs=warmup, repeats=8, per_run_timeout_seconds=largest)
     assert bg.validate_benchmark_gate(gate)[1] == "OK"
     gate["per_run_timeout_seconds"] = largest + 1
@@ -663,6 +668,64 @@ def test_huge_and_tiny_integers():
     assert _ev([1] * 6, [1] * 6) == ("NOT_IMPROVED", "BELOW_HALF_THRESHOLD")
     assert _ev([10] * 6, [9] * 6) == ("IMPROVED", "IMPROVED_CLEAR")
     assert _ev([1] * 6, [10**400] * 6) == ("NOT_IMPROVED", "BELOW_HALF_THRESHOLD")
+
+
+def _verdict_from_ratio_stats(base, head, repeats, min_improvement, max_noise):
+    # Re-derives the verdict from _ratio_stats alone, mirroring the documented branch order.
+    ratios, median, mad = bg._ratio_stats(base, head)
+    threshold = Fraction(str(min_improvement))
+    noise_limit = Fraction(str(max_noise))
+    if sum(1 for r in ratios if r <= 1 - threshold) >= bg._NEED_CLEAR[repeats]:
+        return "IMPROVED", "IMPROVED_CLEAR"
+    if mad / median > noise_limit:
+        return "INCONCLUSIVE", "NOISY"
+    if 1 - median >= threshold:
+        return "INCONCLUSIVE", "INCONSISTENT"
+    if 1 - median < threshold / 2:
+        return "NOT_IMPROVED", "BELOW_HALF_THRESHOLD"
+    return "INCONCLUSIVE", "BORDERLINE"
+
+
+@pytest.mark.parametrize(
+    "base, head, repeats",
+    [
+        ([1000] * 6, [900] * 6, 6),  # clear
+        ([1000] * 4, [900, 900, 900, 1000], 4),  # inconsistent
+        ([1000] * 8, [900] * 7 + [1000], 8),
+        ([1000] * 6, [500, 1500, 600, 1400, 700, 1300], 6),  # noisy
+        ([10000] * 6, [9001] * 6, 6),  # borderline
+        ([10000] * 6, [9501] * 6, 6),  # below half
+        ([1000] * 6, [850, 850, 850, 950, 950, 950], 6),  # even-count median
+        ([3, 7, 11, 13, 17, 19], [4, 5, 13, 12, 21, 20], 6),  # unsorted ratios, non-trivial fractions
+    ],
+)
+def test_ratio_stats_matches_evaluate_on_every_branch(base, head, repeats):
+    ratios, median, mad = bg._ratio_stats(base, head)
+    assert ratios == [Fraction(h, b) for b, h in zip(base, head)]  # input order, exact
+    assert all(type(x) is Fraction for x in (*ratios, median, mad))
+    assert median == bg._median(ratios)
+    assert mad == bg._median([abs(r - median) for r in ratios])
+    assert _verdict_from_ratio_stats(base, head, repeats, 0.10, 0.10) == _ev(base, head, repeats=repeats)
+
+
+def test_ratio_stats_does_not_validate():
+    # Validation stays in _evaluate; _ratio_stats on a single sample just computes.
+    assert bg._ratio_stats([4], [2]) == ([Fraction(1, 2)], Fraction(1, 2), Fraction(0))
+    assert _ev([1000] * 5, [900] * 5) == ("INCONCLUSIVE", "INVALID_INPUT")
+
+
+@pytest.mark.parametrize(
+    "command, expected",
+    [
+        ("pytest -q --no-header bench/b.py::t", "bench/b.py::t"),
+        ("python3 -m pytest bench/b.py::t -q", "bench/b.py::t"),
+        ("pytest bench/b.py", "bench/b.py"),
+        ("pytest -q bench/b.py --no-header", "bench/b.py"),
+        ("python3 -m pytest -q --no-header bench/b.py", "bench/b.py"),
+    ],
+)
+def test_benchmark_target_is_the_single_non_dash_token(command, expected):
+    assert bg.benchmark_target({"command": command}) == expected
 
 
 INVALID = ("INCONCLUSIVE", "INVALID_INPUT")

@@ -345,7 +345,8 @@ def validate_benchmark_gate(gate: object) -> tuple[dict | None, str]:
     NaN and infinity) and ``BUDGET_REJECTED``. The budget cap
     ``(warmup_runs + repeats + 3) * 2 * per_run_timeout_seconds <= 1800`` keeps one Lens B dispatch inside its
     wait; the ``+3`` is the untimed trace run, allowed 3x a timed run, per side. Defaults use 1600 s; at
-    ``repeats`` 8 the timeout may be at most 81 with ``warmup_runs`` 0, 75 with 1 and 69 with 2.
+    ``repeats`` 8 the timeout may be at most 75 with ``warmup_runs`` 1 and 69 with 2 (``warmup_runs`` 0 is
+    ``BOUNDS_REJECTED``: ``measure_paired`` needs at least one warm-up).
     """
     if not isinstance(gate, dict):
         return None, "GATE_MISSING"
@@ -382,7 +383,7 @@ def validate_benchmark_gate(gate: object) -> tuple[dict | None, str]:
         return None, "COMMAND_REJECTED"
 
     if not (
-        0 <= values["warmup_runs"] <= 2
+        1 <= values["warmup_runs"] <= 2
         and values["repeats"] in _REPEATS_ALLOWED
         and 10 <= values["per_run_timeout_seconds"] <= 300
         and Fraction("0.05") <= fractions["min_improvement"] <= Fraction("0.90")
@@ -405,6 +406,19 @@ def validate_benchmark_gate(gate: object) -> tuple[dict | None, str]:
     return normalized, "OK"
 
 
+def benchmark_target(normalized_gate: dict) -> str:
+    """The pytest target (path or ``path::symbol``) of a validated gate command: its one non-option token."""
+    tokens = normalized_gate["command"].split(" ")
+    if tokens[:3] == ["python3", "-m", "pytest"]:
+        tokens = tokens[3:]
+    elif tokens[:1] == ["pytest"]:
+        tokens = tokens[1:]
+    targets = [token for token in tokens if token and not token.startswith("-")]
+    if len(targets) != 1:
+        raise ValueError("gate command has no single target")  # unreachable for a validated gate
+    return targets[0]
+
+
 # ---------------------------------------------------------------------------
 # evaluate_paired_samples
 # ---------------------------------------------------------------------------
@@ -419,6 +433,14 @@ def _median(values: list[Fraction]) -> Fraction:
     if len(ordered) % 2:
         return ordered[mid]
     return (ordered[mid - 1] + ordered[mid]) / 2
+
+
+def _ratio_stats(base, head) -> tuple[list[Fraction], Fraction, Fraction]:
+    """Exact ``(ratios, median, mad)`` of head/base per pair, in input order; does not validate (``_evaluate`` does)."""
+    ratios = [Fraction(h, b) for b, h in zip(base, head)]
+    median = _median(ratios)
+    mad = _median([abs(r - median) for r in ratios])
+    return ratios, median, mad
 
 
 def _evaluate(base, head, repeats, min_improvement, max_noise) -> tuple[str, str]:
@@ -436,14 +458,12 @@ def _evaluate(base, head, repeats, min_improvement, max_noise) -> tuple[str, str
         if any(not _is_real_int(v) or v <= 0 for v in samples):
             return "INCONCLUSIVE", "INVALID_INPUT"
 
-    ratios = [Fraction(h, b) for b, h in zip(base, head)]
+    ratios, median, mad = _ratio_stats(base, head)
     # (1) Clear win: at least `need` ratios <= 1 - min_improvement. The noise gate is skipped here (the median
     # clause of revision 3 was redundant). need = 7 at n=8 is the stricter setting: need 6 gave 11.9% false
     # IMPROVED in the period-4 lock-in regime (revision 5).
     if sum(1 for r in ratios if r <= 1 - threshold) >= _NEED_CLEAR[repeats]:
         return "IMPROVED", "IMPROVED_CLEAR"
-    median = _median(ratios)
-    mad = _median([abs(r - median) for r in ratios])
     if mad / median > noise_limit:
         return "INCONCLUSIVE", "NOISY"
     if 1 - median >= threshold:
