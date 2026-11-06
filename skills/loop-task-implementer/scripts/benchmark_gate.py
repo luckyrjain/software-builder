@@ -5110,11 +5110,18 @@ def _cmd_export(args: argparse.Namespace) -> int:
 
 
 def _cmd_snapshot_venv(args: argparse.Namespace) -> int:
-    """Record a fresh venv's `.pth` and startup files before the project install (exit 0; 2 on any failure, with the code on stderr)."""
+    """Record a fresh venv's `.pth` and startup files before the project install, then print the two pins `compare` takes:
+    ``snapshot_sha256: <hex>`` (the written file's bytes) and ``interpreter_sha256: <hex>`` (`interpreter_pin`). Exit 0; 2 on any failure,
+    with the code on stderr and nothing on stdout. The interpreter pin is computed BEFORE the file is written: `snapshot_venv` refuses an
+    existing path, so a pin failure after the write would leave a file that blocks the retry."""
     try:
+        pin = interpreter_pin(args.bin)
         snapshot_venv(args.bin, args.out)
-    except BenchmarkGateError as exc:
-        return _fail(exc)
+        data = _read_bounded(args.out, _VENV_MAX_SNAPSHOT_BYTES, nofollow=True)
+    except (BenchmarkGateError, OSError, ValueError) as exc:
+        return _fail(exc if isinstance(exc, BenchmarkGateError) else BenchmarkGateError("TREE_UNREADABLE", escape_diagnostic(str(exc), 120)))
+    print(f"snapshot_sha256: {hashlib.sha256(data).hexdigest()}")
+    print(f"interpreter_sha256: {pin.sha256}")
     return 0
 
 
@@ -5177,7 +5184,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="pid in a NEW root's marker, a positive int below 2**31 (default: this short-lived process, so cleanup is "
                              "allowed at once; ignored for an existing root)")
     export.set_defaults(func=_cmd_export)
-    snapshot = sub.add_parser("snapshot-venv", help="record a fresh venv's .pth and startup files; run BEFORE installing the project (exit 0, 2 failure)")
+    snapshot = sub.add_parser("snapshot-venv", help="record a fresh venv's .pth and startup files; run BEFORE installing the project; prints snapshot_sha256 and interpreter_sha256 (exit 0, 2 failure)")
     snapshot.add_argument("--bin", required=True, metavar="DIR", help="the venv's bin directory")
     snapshot.add_argument("--out", required=True, metavar="FILE", help="a new file")
     snapshot.set_defaults(func=_cmd_snapshot_venv)

@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -363,9 +364,58 @@ def test_a_missing_export_root_is_refused(world):
 
 # --- CLI ------------------------------------------------------------------------------------------------------------------------
 
-def test_cli_snapshot_venv_writes_the_file(world, capsys):
+@pytest.fixture
+def pinned_world(world, tmp_path, monkeypatch):
+    """`world` plus what the interpreter pin needs: `bin/python` -> `bin/python3.12` -> a small fake prefix, and a `pyvenv.cfg` whose `home`
+    is that prefix's `bin`. The start-up probe is stubbed (the fake interpreter is a shell stub); the real one has its own rows."""
+    prefix = tmp_path / "interp"
+    (prefix / "bin").mkdir(parents=True)
+    exe = prefix / "bin" / "python3.12"
+    exe.write_text("#!/bin/sh\nexit 0\n")
+    exe.chmod(0o755)
+    (prefix / "lib" / "python3.12").mkdir(parents=True)
+    (prefix / "lib" / "python3.12" / "os.py").write_text("# fake stdlib\n")
+    venv, bin_dir = world[0], world[1]
+    (bin_dir / "python3.12").symlink_to(exe)
+    (bin_dir / "python").symlink_to("python3.12")
+    (venv / "pyvenv.cfg").write_text(f"home = {prefix / 'bin'}\ninclude-system-site-packages = false\nversion = 3.12.1\n")
+    real = os.path.realpath(prefix)
+    monkeypatch.setattr(bg, "_startup_probe", lambda python, env: "\n".join([real, os.path.join(real, "lib", "python3.12", "os.py"), real]) + "\n")
+    return world
+
+
+def test_cli_snapshot_venv_writes_the_file(pinned_world, capsys):
+    world = pinned_world
     assert bg.main(["snapshot-venv", "--bin", str(world[1]), "--out", str(world[4])]) == 0
     assert json.loads(world[4].read_text())["kind"] == bg._VENV_SNAPSHOT_KIND
+
+
+def test_snapshot_venv_prints_both_pins(pinned_world, capsys):
+    import hashlib
+    world = pinned_world
+    assert bg.main(["snapshot-venv", "--bin", str(world[1]), "--out", str(world[4])]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert len(out) == 2 and out[0].startswith("snapshot_sha256: ") and out[1].startswith("interpreter_sha256: ")
+    assert re.fullmatch(r"snapshot_sha256: [0-9a-f]{64}", out[0]) and re.fullmatch(r"interpreter_sha256: [0-9a-f]{64}", out[1])
+    assert out[0].split(": ")[1] == hashlib.sha256(world[4].read_bytes()).hexdigest()
+    assert out[1].split(": ")[1] == bg.interpreter_pin(str(world[1])).sha256
+
+
+def test_snapshot_venv_missing_or_oversized_stdlib_exits_2_with_the_code_on_stderr(pinned_world, capsys, monkeypatch):
+    world = pinned_world
+    prefix = Path(os.path.realpath(world[1] / "python")).parent.parent
+    os.rename(prefix / "lib" / "python3.12", prefix / "lib" / "gone")
+    assert bg.main(["snapshot-venv", "--bin", str(world[1]), "--out", str(world[4])]) == 2
+    cap = capsys.readouterr()
+    assert "DEST_REJECTED" in cap.err and cap.out == "" and not world[4].exists()
+    os.rename(prefix / "lib" / "gone", prefix / "lib" / "python3.12")
+    limit = bg._INTERPRETER_LIMIT
+    monkeypatch.setattr(bg, "_INTERPRETER_LIMIT", 1)
+    assert bg.main(["snapshot-venv", "--bin", str(world[1]), "--out", str(world[4])]) == 2
+    cap = capsys.readouterr()
+    assert "TREE_TOO_LARGE" in cap.err and cap.out == "" and not world[4].exists()
+    monkeypatch.setattr(bg, "_INTERPRETER_LIMIT", limit)
+    assert bg.main(["snapshot-venv", "--bin", str(world[1]), "--out", str(world[4])]) == 0  # a retry is not blocked by a leftover file
 
 
 def test_cli_snapshot_venv_failures_are_exit_2_with_the_code_on_stderr(world, capsys):

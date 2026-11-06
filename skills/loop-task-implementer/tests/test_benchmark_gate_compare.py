@@ -508,6 +508,61 @@ def test_fixture_fake_prefix_has_the_pin_shapes(world):
             "lib/libpython-fake.dylib"} <= names
 
 
+# --- fake_trace_builder (T2c) ---
+# A shared argv_builder (the C4d-1/2 seam) for children that must speak both protocols: every run prints the result digest (what a measure
+# run needs), and the trace result line is written only when the harness put BENCH_TRACE_* in the child's environment (what only a trace run
+# does), with the run's own nonce. Used by the pipeline rows of T4a2; ``fake_sides`` is the tiny two-directory world of the measure tests.
+
+FAKE_DIGEST = "ab" * 32
+FAKE_TRACE_LINES = 7
+_FAKE_TRACE_CHILD = """
+import os, sys
+print("BENCH_RESULT_DIGEST: " + sys.argv[1])
+out, nonce = os.environ.get("BENCH_TRACE_OUT"), os.environ.get("BENCH_TRACE_NONCE")
+if out and nonce and os.environ.get("BENCH_TRACE_FILE"):
+    v = sys.version_info
+    with open(out, "w") as f:
+        f.write("BENCH_TRACE_LINES: %s %d.%d.%d %s %s\\n" % (sys.argv[2], v[0], v[1], v[2], sys.implementation.name, nonce))
+"""
+
+
+def fake_trace_builder(side, bin_dir, root, target, *, digest=FAKE_DIGEST, lines=FAKE_TRACE_LINES):
+    """argv for a tiny real child: prints ``BENCH_RESULT_DIGEST: <digest>`` always; writes the nonce-bearing trace result only when
+    ``BENCH_TRACE_*`` is in its environment. Pass as ``argv_builder=fake_trace_builder`` (or a ``functools.partial`` for other values)."""
+    return [sys.executable, "-c", _FAKE_TRACE_CHILD, digest, str(lines)]
+
+
+def _fake_pair(tmp_path):
+    roots, bins = {}, {}
+    for side in ("base", "head"):
+        roots[side] = tmp_path / f"{side}-root"
+        bins[side] = tmp_path / f"{side}-venv" / "bin"
+        roots[side].mkdir()
+        bins[side].mkdir(parents=True)
+    return roots, bins
+
+
+@posix_only
+def test_fake_trace_builder_emits_digest_always_and_trace_result_only_with_trace_env(tmp_path):
+    roots, bins = _fake_pair(tmp_path)
+    args = (str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::test_b")
+    traced = bg.trace_paired(*args, timeout_seconds=30, argv_builder=fake_trace_builder)
+    assert traced["base"] == traced["head"] == FAKE_TRACE_LINES and traced["argv"]["base"][0] == sys.executable
+    measured = bg.measure_paired(*args, repeats=4, timeout_seconds=30, base_commit="a" * 40, head_commit="b" * 40, benchmark_sha256="c" * 64,
+                                 min_base_ns=0, argv_builder=fake_trace_builder)
+    assert measured["digest"] == FAKE_DIGEST and len(measured["base_ns"]) == 4
+    # the child itself: no BENCH_TRACE_* means no result file, with them it writes exactly the one line for the given nonce
+    out = tmp_path / "trace.out"
+    env = {k: v for k, v in os.environ.items() if not k.startswith("BENCH_TRACE_")}
+    argv = fake_trace_builder("base", "", "", "")
+    done = subprocess.run(argv, env=env, capture_output=True, text=True, check=True)
+    assert done.stdout == f"BENCH_RESULT_DIGEST: {FAKE_DIGEST}\n" and not out.exists()
+    env.update(BENCH_TRACE_FILE="bench.py", BENCH_TRACE_OUT=str(out), BENCH_TRACE_NONCE="f" * 32)
+    done = subprocess.run(argv, env=env, capture_output=True, text=True, check=True)
+    assert done.stdout == f"BENCH_RESULT_DIGEST: {FAKE_DIGEST}\n"
+    assert bg._trace_result(out.read_bytes(), "f" * 32) == bg._TraceResult("lines", FAKE_TRACE_LINES, f"{sys.version_info[0]}.{sys.version_info[1]}.{sys.version_info[2]} {sys.implementation.name}")
+
+
 # --- fingerprint_tree (T2b1a) ---
 
 def _fp_tree(tmp_path: Path) -> Path:
