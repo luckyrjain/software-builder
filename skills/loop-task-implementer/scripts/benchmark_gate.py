@@ -3433,6 +3433,288 @@ def check_venv(bin_dir: str | os.PathLike, snapshot_path: str | os.PathLike, exp
 
 
 # ---------------------------------------------------------------------------
+# C4d-3 dependency parity: an inventory of each venv's site-packages (spec 2.5), not a comparison of RECORD files
+# ---------------------------------------------------------------------------
+
+_VENV_HASH_BYTES = 1 << 30  # bytes hashed per venv; more is NOT_PROVISIONED
+_RECORD_MAX_BYTES = 16 << 20
+_PARITY_FINDINGS_MAX = 50
+_PARITY_NAMES_SHOWN = 8
+_DIST_INFO_FREE = frozenset({"INSTALLER", "REQUESTED", "RECORD", "direct_url.json"})
+_EDITABLE_OWNED_PREFIXES = ("__editable__", "_editable_impl_")
+_FINDER_RE = re.compile(r"__editable___[A-Za-z0-9_]+_finder\.py", re.ASCII)
+
+
+class _ParityOverBudget(Exception):
+    pass
+
+
+def _parity_hash(path: str, st: os.stat_result, spent: list[int]) -> str:
+    """sha256 of a regular file by descriptor (no link followed), charged against the venv's byte budget."""
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        opened = os.fstat(fd)
+        if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (st.st_dev, st.st_ino):
+            raise OSError("entry changed while hashing")
+        digest = hashlib.sha256()
+        while True:
+            chunk = os.read(fd, 1 << 20)
+            if not chunk:
+                return digest.hexdigest()
+            spent[0] += len(chunk)
+            if spent[0] > _VENV_HASH_BYTES:
+                raise _ParityOverBudget()
+            digest.update(chunk)
+    finally:
+        os.close(fd)
+
+
+def _parity_walk(site: str, spent: list[int], add: Callable[[str], None]) -> dict[str, str]:
+    """`{relpath: sha256}` of every regular file under `site`, by `lstat` with no link followed. A symlink, device, socket, fifo, `.pyc`
+    or `__pycache__` is a finding and is not descended into; a limit or an I/O fault is an error, never a skip."""
+    files: dict[str, str] = {}
+    count = 0
+    pending = [("", 0)]
+    while pending:
+        rel, depth = pending.pop()
+        with os.scandir(os.path.join(site, rel) if rel else site) as it:
+            names = sorted(entry.name for entry in it)
+        for name in names:
+            count += 1
+            if count > _VENV_FINGERPRINT_LIMIT:
+                raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_VENV_FINGERPRINT_LIMIT} entries in site-packages")
+            child = f"{rel}/{name}" if rel else name
+            full = os.path.join(site, child)
+            st = os.lstat(full)
+            if stat.S_ISLNK(st.st_mode):
+                add(f"symlink {escape_diagnostic(child, 100)}")
+            elif stat.S_ISDIR(st.st_mode):
+                if name.casefold() == "__pycache__":
+                    add(f"bytecode directory {escape_diagnostic(child, 100)}")
+                    continue
+                if depth + 1 > _MAX_HASH_DEPTH:
+                    raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_HASH_DEPTH} levels in site-packages")
+                pending.append((child, depth + 1))
+            elif not stat.S_ISREG(st.st_mode):
+                add(f"device, socket or fifo {escape_diagnostic(child, 100)}")
+            elif name.casefold().endswith((".pyc", ".pyo")):
+                add(f"bytecode {escape_diagnostic(child, 100)}")
+            else:
+                files[child] = _parity_hash(full, st, spent)
+    return files
+
+
+def _record_path(raw: str) -> str | None:
+    """A RECORD row's path as a clean relative path, `None` for a console-script row (a leading `../` run: out of site-packages, dropped);
+    `ValueError` for anything else that is not a plain relative path. An absolute path is refused here and never joined."""
+    if not raw or "\0" in raw or "\\" in raw or raw.startswith("/"):
+        raise ValueError("not a plain relative path")
+    parts = raw.split("/")
+    lead = 0
+    while lead < len(parts) and parts[lead] == "..":
+        lead += 1
+    rest = parts[lead:]
+    if not rest or any(part in ("", ".", "..") for part in rest):
+        raise ValueError("empty, dot or dot-dot component")
+    return None if lead else "/".join(rest)
+
+
+def _file_url_inside(url: object, export_real: str) -> bool | None:
+    """`None` if `url` is not a local `file://` URL, else whether it resolves inside `export_real`."""
+    import urllib.parse
+    if type(url) is not str:
+        return None
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme != "file":
+        return None
+    path = urllib.parse.unquote(parts.path)
+    if parts.netloc not in ("", "localhost") or "\0" in path or not os.path.isabs(path):
+        return False
+    return _inside(os.path.realpath(path), export_real)
+
+
+def _finder_problem(source: bytes, export_real: str) -> str | None:
+    """`MAPPING` and `NAMESPACES` of a setuptools editable finder, parsed as literals only; every target must resolve inside the export."""
+    try:
+        tree = ast.parse(source.decode("utf-8"))
+    except (UnicodeDecodeError, SyntaxError, ValueError, RecursionError, MemoryError):
+        return "the editable finder does not parse"
+    found: dict[str, object] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            name, value = node.targets[0].id, node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
+            name, value = node.target.id, node.value
+        else:
+            continue
+        if name in ("MAPPING", "NAMESPACES"):
+            if name in found:
+                return f"{name} is assigned twice"
+            try:
+                found[name] = ast.literal_eval(value)
+            except (ValueError, TypeError, SyntaxError, RecursionError, MemoryError):
+                return f"{name} is not a literal"
+    mapping, namespaces = found.get("MAPPING"), found.get("NAMESPACES")
+    if not isinstance(mapping, dict) or not isinstance(namespaces, dict):
+        return "MAPPING or NAMESPACES missing or not a dict"
+    targets = list(mapping.values())
+    for value in namespaces.values():
+        if not isinstance(value, (list, tuple)):
+            return "a NAMESPACES value is not a list"
+        targets.extend(value)
+    for target in targets:
+        if type(target) is not str or not target or "\0" in target or not os.path.isabs(target):
+            return "a finder target is not an absolute path"
+        if not _inside(os.path.realpath(target), export_real):
+            return "a finder target resolves outside the export"
+    return None
+
+
+def _side_inventory(bin_dir: object, export_root: object, label: str, add: Callable[[str, str], None]) -> tuple[dict[str, str], set[str]] | None:
+    """`(inventory, exempt keys)` of one venv, findings through `add(detail, text)`; `None` when the byte budget ran out."""
+    import base64
+    import csv
+    import urllib.parse  # noqa: F401  (used by _file_url_inside)
+    root, sites = _venv_layout(_fs(bin_dir))
+    export_real = os.path.realpath(_fs(export_root))
+
+    def bad(text: str) -> None:
+        add("DEPENDENCY_PARITY", f"{label}: {text}")
+
+    inventory: dict[str, str] = {}
+    exempt: set[str] = set()
+    editable_dists: list[str] = []
+    spent = [0]
+    try:
+        for site in sites:
+            prefix = os.path.relpath(site, root)
+            files = _parity_walk(site, spent, bad)
+            inventory.update({f"{prefix}/{rel}": digest for rel, digest in files.items()})
+            dists = sorted({rel.split("/", 1)[0] for rel in files if "/" in rel and rel.split("/", 1)[0].endswith(".dist-info")})
+            claimed: set[str] = set()
+            for dist in dists:
+                exempt_dist = False
+                owned_all: list[str] = []
+                record_key = f"{dist}/RECORD"
+                url_key = f"{dist}/direct_url.json"
+                if url_key in files:
+                    try:
+                        meta = json.loads(_read_bounded(os.path.join(site, url_key), _PTH_MAX_BYTES, nofollow=True).decode("utf-8"))
+                        if not isinstance(meta, dict):
+                            raise ValueError("not an object")
+                        info = meta.get("dir_info")
+                        editable = isinstance(info, dict) and info.get("editable") is True
+                        inside = _file_url_inside(meta.get("url"), export_real)
+                    except (OSError, ValueError, RecursionError) as exc:
+                        bad(f"{escape_diagnostic(dist, 80)} has an unreadable direct_url.json ({escape_diagnostic(str(exc), 60)})")
+                        editable, inside = False, None
+                    if editable and inside:
+                        exempt_dist = True
+                        editable_dists.append(dist)
+                    elif editable:
+                        bad(f"{escape_diagnostic(dist, 80)} is editable but not from this side's export")
+                    elif inside:
+                        bad(f"{escape_diagnostic(dist, 80)} is a non-editable install of the project")
+                if record_key not in files:
+                    bad(f"{escape_diagnostic(dist, 80)} has no RECORD")
+                    continue
+                try:
+                    data = _read_bounded(os.path.join(site, record_key), _RECORD_MAX_BYTES, nofollow=True)
+                    if len(data) > _RECORD_MAX_BYTES:
+                        raise ValueError("RECORD too large")
+                    if hashlib.sha256(data).hexdigest() != files[record_key]:
+                        raise ValueError("RECORD changed while checking")
+                    rows = [row for row in csv.reader(io.StringIO(data.decode("utf-8"), newline="")) if row]
+                except (OSError, ValueError, csv.Error) as exc:
+                    bad(f"{escape_diagnostic(dist, 80)} RECORD unusable ({escape_diagnostic(str(exc), 60)})")
+                    continue
+                for row in rows:
+                    try:
+                        rel = _record_path(row[0])
+                    except ValueError:
+                        bad(f"{escape_diagnostic(dist, 80)} RECORD row path refused: {escape_diagnostic(row[0], 80)}")
+                        continue
+                    if rel is None:
+                        continue
+                    owned_all.append(rel)
+                    digest = row[1] if len(row) > 1 else ""
+                    if not digest:
+                        continue  # an unhashed row (the RECORD itself, a bytecode row) verifies and owns nothing
+                    if not digest.startswith("sha256="):
+                        bad(f"{escape_diagnostic(dist, 80)} RECORD row {escape_diagnostic(rel, 80)} is not sha256")
+                        continue
+                    claimed.add(rel)
+                    disk = files.get(rel)
+                    if disk is None:
+                        bad(f"{escape_diagnostic(dist, 80)} RECORD names a missing file {escape_diagnostic(rel, 80)}")
+                    elif base64.urlsafe_b64encode(bytes.fromhex(disk)).rstrip(b"=").decode() != digest[7:].rstrip("="):
+                        bad(f"hash on disk differs from RECORD: {escape_diagnostic(rel, 100)}")
+                if exempt_dist:
+                    own_prefix = dist + "/"
+                    for rel in owned_all:
+                        top = rel.split("/", 1)[0]
+                        if not (rel.startswith(own_prefix) or (rel.endswith(".pth") and "/" not in rel) or top.startswith(_EDITABLE_OWNED_PREFIXES)):
+                            bad(f"the editable dist {escape_diagnostic(dist, 80)} owns {escape_diagnostic(rel, 80)}")
+                        elif _FINDER_RE.fullmatch(rel) and rel in files:
+                            try:
+                                problem = _finder_problem(_read_bounded(os.path.join(site, rel), 1 << 20, nofollow=True), export_real)
+                            except (OSError, ValueError) as exc:
+                                problem = f"finder unreadable ({escape_diagnostic(str(exc), 60)})"
+                            if problem:
+                                bad(f"{escape_diagnostic(rel, 80)}: {problem}")
+                    exempt.update(f"{prefix}/{rel}" for rel in owned_all if rel in files)
+                    exempt.update(f"{prefix}/{rel}" for rel in files if rel.startswith(own_prefix))
+            for rel in files:
+                name = rel.rsplit("/", 1)[-1]
+                parent = rel.rsplit("/", 1)[0] if "/" in rel else ""
+                if (rel in claimed or (parent in dists and name in _DIST_INFO_FREE)
+                        or (not parent and (name == "distutils-precedence.pth" or name.startswith("_virtualenv.")))):
+                    continue
+                bad(f"file not owned by a verified RECORD row: {escape_diagnostic(rel, 100)}")
+    except _ParityOverBudget:
+        add("NOT_PROVISIONED", f"{label}: more than {_VENV_HASH_BYTES} bytes in site-packages")
+        return None
+    except OSError as exc:
+        raise BenchmarkGateError("TREE_UNREADABLE", f"{label}: {_describe(exc)}") from exc
+    if len(editable_dists) > 1:
+        bad("more than one editable dist: " + ", ".join(escape_diagnostic(d, 60) for d in editable_dists[:4]))
+        exempt.clear()
+    return inventory, exempt
+
+
+def dependency_parity(base_bin: str | os.PathLike, head_bin: str | os.PathLike,
+                      base_root: str | os.PathLike, head_root: str | os.PathLike) -> list[tuple[str, str]]:
+    """Findings `(detail, text)` for the two venvs' site-packages; an empty list is a pass. `detail` is `DEPENDENCY_PARITY`, or
+    `NOT_PROVISIONED` when a venv holds more than `_VENV_HASH_BYTES`. Each venv is inventoried `{relpath: sha256 on disk}` with no link
+    followed; every regular file must be a hash-verified RECORD row or one of the few allowed names; the two inventories must be equal
+    except for the one exempt editable dist per side. `text` is escaped. `VENV_NOT_ISOLATED`, `TREE_TOO_LARGE` and `TREE_UNREADABLE`
+    are raised (a venv that cannot be inspected is not a finding about the dependencies)."""
+    findings: list[tuple[str, str]] = []
+
+    def add(detail: str, text: str) -> None:
+        if len(findings) < _PARITY_FINDINGS_MAX:
+            findings.append((detail, escape_diagnostic(text, 300)))
+
+    base = _side_inventory(base_bin, base_root, "base", add)
+    head = _side_inventory(head_bin, head_root, "head", add)
+    if any(detail == "NOT_PROVISIONED" for detail, _ in findings):
+        return [item for item in findings if item[0] == "NOT_PROVISIONED"]
+    assert base is not None and head is not None
+    skip = base[1] | head[1]
+    # A RECORD is excluded from the comparison: its console-script rows embed the venv's own path. Every row of it was verified against
+    # the disk above and what it does not list is refused as unowned, so its text decides nothing the file inventory does not.
+    def comparable(inv: dict[str, str]) -> dict[str, str]:
+        return {k: v for k, v in inv.items() if k not in skip and not (k.endswith(".dist-info/RECORD"))}
+
+    left, right = comparable(base[0]), comparable(head[0])
+    for label, names in (("only in base", sorted(left.keys() - right.keys())), ("only in head", sorted(right.keys() - left.keys())),
+                         ("content differs", sorted(k for k in left.keys() & right.keys() if left[k] != right[k]))):
+        if names:
+            add("DEPENDENCY_PARITY", f"{label} ({len(names)}): " + ", ".join(escape_diagnostic(n, 60) for n in names[:_PARITY_NAMES_SHOWN]))
+    return findings
+
+
+# ---------------------------------------------------------------------------
 # C4d-1 the measurement harness (`measure_paired`); the block also holds the C4d-2 trace (`TRACE_PLUGIN_SOURCE`, `trace_env`, `trace_paired`)
 #
 # Runs the benchmark as a child process of each side, alternating sides in a seeded balanced order, and returns raw wall times.

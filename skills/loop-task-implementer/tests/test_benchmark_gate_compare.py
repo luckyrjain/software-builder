@@ -981,3 +981,368 @@ def test_pin_error_mapping_names(pin_env, monkeypatch):
     with pytest.raises(bg.BenchmarkGateError) as e:
         _pin(pin_env)
     assert _code(e) == "DEST_REJECTED"
+
+
+# --- dependency_parity (T2b1c) ---
+
+def _b64(data: bytes) -> str:
+    import base64
+    return base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()
+
+
+def _mk_side(tmp_path: Path, name: str) -> types.SimpleNamespace:
+    """A bare venv shape (``bin``, ``pyvenv.cfg``, ``lib/python3.X/site-packages``) and an export directory: enough for ``_venv_layout``."""
+    root = tmp_path / f"dp-{name}"
+    site = root / "lib" / PYX / "site-packages"
+    site.mkdir(parents=True)
+    (root / "bin").mkdir()
+    (root / "pyvenv.cfg").write_text("home = /nowhere\ninclude-system-site-packages = false\n")
+    export = tmp_path / f"dp-export-{name}"
+    (export / "src" / "proj").mkdir(parents=True)
+    return types.SimpleNamespace(root=root, bin=root / "bin", site=site, export=export)
+
+
+def _add_dist(side, dist: str, files: dict[str, bytes], *, rows=(), direct_url=None, record=True, version="1.0") -> Path:
+    """Write ``files`` under site-packages and an honest ``<dist>-<version>.dist-info`` (METADATA, INSTALLER, RECORD) for them."""
+    info = f"{dist}-{version}.dist-info"
+    table = dict(files)
+    table[f"{info}/METADATA"] = f"Name: {dist}\n".encode()
+    for rel, data in table.items():
+        path = side.site / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    (side.site / info / "INSTALLER").write_text("pip\n")
+    if direct_url is not None:
+        (side.site / info / "direct_url.json").write_text(json.dumps(direct_url))
+    if record:
+        import csv
+        with open(side.site / info / "RECORD", "w", newline="") as handle:
+            writer = csv.writer(handle)
+            for rel, data in table.items():
+                writer.writerow([rel, "sha256=" + _b64(data), len(data)])
+            for row in rows:
+                writer.writerow(row)
+            writer.writerow([f"{info}/RECORD", "", ""])
+    return side.site / info
+
+
+def _honest_pair(tmp_path: Path):
+    sides = []
+    for name in ("base", "head"):
+        side = _mk_side(tmp_path, name)
+        # A pip-style dist: its console-script row points out of site-packages and hashes differently per venv path.
+        _add_dist(side, "pip", {"pip/__init__.py": b"v = 1\n", "pip/_x.py": b"x = 2\n"},
+                  rows=[["../../../bin/pip", "sha256=" + _b64(f"#!{side.root}/bin/python\n".encode()), "30"]])
+        _add_dist(side, "dep", {"dep.py": b"d = 3\n", "dep_data/a.txt": b"hello"})
+        sides.append(side)
+    return sides
+
+
+def _parity(a, b):
+    return bg.dependency_parity(a.bin, b.bin, a.export, b.export)
+
+
+def _details(findings):
+    return {detail for detail, _ in findings}
+
+
+@posix_only
+def test_console_scripts_at_different_paths_pass(tmp_path):
+    base, head = _honest_pair(tmp_path)
+    assert (base.site / "pip-1.0.dist-info" / "RECORD").read_bytes() != (head.site / "pip-1.0.dist-info" / "RECORD").read_bytes()
+    assert _parity(base, head) == []
+
+
+@posix_only
+def test_two_real_pip_venvs_pass(tmp_path):
+    sides = []
+    for name in ("base", "head"):
+        root = tmp_path / f"real-{name}"
+        venv.create(root, with_pip=True, symlinks=True)
+        for cache in list(root.rglob("__pycache__")):  # the provisioning contract removes bytecode before pinning
+            shutil.rmtree(cache)
+        export = tmp_path / f"real-export-{name}"
+        export.mkdir()
+        sides.append(types.SimpleNamespace(bin=root / "bin", export=export, root=root))
+    base, head = sides
+    assert _parity(base, head) == []
+    # the pip console scripts' RECORD rows differ per venv path, and the comparison still passes (a raw RECORD comparison would not)
+    records = [next((s.root / "lib").glob("python3*/site-packages/pip-*.dist-info/RECORD")).read_text() for s in sides]
+    assert records[0] != records[1]
+    # an edit to an installed file with RECORD intact is caught on the real tree too
+    target = next((head.root / "lib").glob("python3*/site-packages/pip/__init__.py"))
+    target.write_text(target.read_text() + "\n# edited\n")
+    assert _details(_parity(base, head)) == {"DEPENDENCY_PARITY"}
+
+
+@posix_only
+def test_edited_dependency_file_with_intact_record_fails(tmp_path):
+    base, head = _honest_pair(tmp_path)
+    (head.site / "dep.py").write_bytes(b"d = 4\n")
+    findings = _parity(base, head)
+    assert _details(findings) == {"DEPENDENCY_PARITY"} and any("dep.py" in text for _, text in findings)
+    # the same edit on BOTH sides is caught too: the RECORD no longer matches the disk
+    (base.site / "dep.py").write_bytes(b"d = 4\n")
+    assert _details(_parity(base, head)) == {"DEPENDENCY_PARITY"}
+
+
+@posix_only
+@pytest.mark.parametrize("name", ["bare.py", "ext.cpython-3-x.so", "ext.pyd", "evil.pth", "x.egg-link", "dep_data/new.py", "newdir/inner.py"])
+def test_bare_module_so_pth_egg_link_and_unlisted_py_fail(tmp_path, name):
+    base, head = _honest_pair(tmp_path)
+    for side in (base, head):  # the same file on both sides: the inventories agree, the ownership rule alone must refuse it
+        path = side.site / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x = 1\n")
+    findings = _parity(base, head)
+    assert _details(findings) == {"DEPENDENCY_PARITY"} and any(name in text for _, text in findings)
+
+
+@posix_only
+def test_symlink_device_fifo_pyc_and_pycache_fail(tmp_path):
+    cases = {
+        "symlink": lambda s: (s.site / "dep_data" / "l").symlink_to("a.txt"),
+        "dirlink": lambda s: (s.site / "dl").symlink_to(s.export),
+        "fifo": lambda s: os.mkfifo(s.site / "dep_data" / "f"),
+        "pyc": lambda s: (s.site / "dep_data" / "m.pyc").write_bytes(b"\0"),
+        "pycache": lambda s: (s.site / "dep_data" / "__pycache__").mkdir(),
+        "pycache_with_file": lambda s: ((s.site / "pip" / "__pycache__").mkdir(), (s.site / "pip" / "__pycache__" / "x.txt").write_text("")),
+    }
+    for label, make in cases.items():
+        base, head = _honest_pair(tmp_path / label)
+        for side in (base, head):
+            make(side)
+        findings = _parity(base, head)
+        assert _details(findings) == {"DEPENDENCY_PARITY"}, label
+    # a symlink is a finding even where its own target would be fine, and it is not followed (the export target is not walked)
+    assert not any("proj" in text for _, text in findings)
+
+
+@posix_only
+def test_record_row_path_rules(tmp_path):
+    base, head = _honest_pair(tmp_path / "ok")
+    # a leading ../ run is dropped, whatever it points at, and nothing is read from it
+    for side in (base, head):
+        info = side.site / "dep-1.0.dist-info" / "RECORD"
+        info.write_text(info.read_text() + "../../../../bin/x,sha256=AAAA,1\n../../etc/y,,\n")
+    assert _parity(base, head) == []
+
+    def run(row, tag):
+        b, h = _honest_pair(tmp_path / tag)
+        record = h.site / "dep-1.0.dist-info" / "RECORD"
+        record.write_text(record.read_text() + row)
+        return _parity(b, h)
+
+    outside = tmp_path / "abs-target"
+    outside.write_text("secret")
+    for tag, row in (("abs", f"{outside},sha256={_b64(b'secret')},6\n"), ("mid", "a/../dep.py,,\n"), ("trail", "dep_data/,,\n"),
+                     ("dot", "./dep.py,,\n"), ("back", "dep_data\\a.txt,,\n"), ("nul", "dep\0.py,,\n"), ("empty", ",,\n"),
+                     ("lead_then_mid", "../a/../b,,\n"), ("algo", "dep_data/a.txt,md5=abc,5\n"), ("missing", "gone.py,sha256=AAAA,1\n"),
+                     ("wrong", "dep_data/a.txt,sha256=AAAA,5\n")):
+        assert _details(run(row, tag)) == {"DEPENDENCY_PARITY"}, tag
+    # a row without a hash owns nothing: the file it names is unowned
+    b, h = _honest_pair(tmp_path / "nohash")
+    (h.site / "stray.py").write_text("x")
+    record = h.site / "dep-1.0.dist-info" / "RECORD"
+    record.write_text(record.read_text() + "stray.py,,\n")
+    assert _details(_parity(b, h)) == {"DEPENDENCY_PARITY"}
+    # a RECORD-less dist
+    b, h = _honest_pair(tmp_path / "norecord")
+    (h.site / "dep-1.0.dist-info" / "RECORD").unlink()
+    assert _details(_parity(b, h)) == {"DEPENDENCY_PARITY"}
+    # a RECORD that is not valid UTF-8 or not CSV-parsable
+    b, h = _honest_pair(tmp_path / "badrecord")
+    (h.site / "dep-1.0.dist-info" / "RECORD").write_bytes(b"\xff\xfe\n")
+    assert _details(_parity(b, h)) == {"DEPENDENCY_PARITY"}
+
+
+@posix_only
+def test_allowed_dist_info_files(tmp_path):
+    base, head = _honest_pair(tmp_path / "ok")
+    for side in (base, head):
+        info = side.site / "dep-1.0.dist-info"
+        (info / "REQUESTED").write_text("")
+        (info / "direct_url.json").write_text(json.dumps({"url": "https://example.invalid/x.whl", "archive_info": {}}))
+        (side.site / "distutils-precedence.pth").write_text("import os\n")
+        (side.site / "_virtualenv.py").write_text("x = 1\n")
+        (side.site / "_virtualenv.pth").write_text("import _virtualenv\n")
+    assert _parity(base, head) == []
+    for tag, rel in (("meta", "dep-1.0.dist-info/other.txt"), ("nested", "dep-1.0.dist-info/sub/INSTALLER"), ("subvirt", "x/_virtualenv.py"),
+                     ("lookalike", "_virtualenvx.py"), ("subdp", "x/distutils-precedence.pth")):
+        b, h = _honest_pair(tmp_path / tag)
+        for side in (b, h):
+            path = side.site / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("x")
+        assert _details(_parity(b, h)) == {"DEPENDENCY_PARITY"}, tag
+    # the free names are free only at the dist-info of a dist: a top-level INSTALLER is not
+    b, h = _honest_pair(tmp_path / "top")
+    for side in (b, h):
+        (side.site / "INSTALLER").write_text("x")
+    assert _details(_parity(b, h)) == {"DEPENDENCY_PARITY"}
+
+
+def _editable(side, *, name="proj", url=None, extra_rows=(), extra_files=None, mapping=None, namespaces="{}", finder=True, editable=True):
+    export_proj = side.export / "src" / name
+    export_proj.mkdir(parents=True, exist_ok=True)
+    url = url if url is not None else side.export.as_uri()
+    files = {f"__editable__.{name}-1.0.pth": f"import __editable___{name}_1_0_finder; __editable___{name}_1_0_finder.install()\n".encode()}
+    if finder:
+        mapping = mapping if mapping is not None else repr({name: str(export_proj)})
+        files[f"__editable___{name}_1_0_finder.py"] = f"MAPPING: dict[str, str] = {mapping}\nNAMESPACES: dict[str, list[str]] = {namespaces}\n".encode()
+    files.update(extra_files or {})
+    return _add_dist(side, name, files, rows=extra_rows, version="1.0", direct_url={"url": url, "dir_info": {"editable": editable}})
+
+
+@posix_only
+def test_one_exempt_editable_dist_per_side(tmp_path):
+    base, head = _honest_pair(tmp_path / "ok")
+    _editable(base, name="proj")
+    _editable(head, name="proj")
+    # the exempt dist differs between the sides (another export path in its files) and still passes
+    (head.site / "__editable___proj_1_0_finder.py").write_text(
+        "MAPPING: dict[str, str] = " + repr({"proj": str(head.export / "src" / "proj")}) + "\nNAMESPACES: dict[str, list[str]] = {}\n# extra\n")
+    rewrite = head.site / "proj-1.0.dist-info" / "RECORD"
+    import csv
+    rows = list(csv.reader(open(rewrite, newline="")))
+    data = (head.site / "__editable___proj_1_0_finder.py").read_bytes()
+    for row in rows:
+        if row[0] == "__editable___proj_1_0_finder.py":
+            row[1], row[2] = "sha256=" + _b64(data), str(len(data))
+    with open(rewrite, "w", newline="") as handle:
+        csv.writer(handle).writerows(rows)
+    assert _parity(base, head) == []
+    # one side without any editable dist is fine as long as the other's exempt dist is clean
+    b2, h2 = _honest_pair(tmp_path / "head-only")
+    _editable(h2)
+    assert _parity(b2, h2) == []
+
+    def fails(tag, mutate):
+        b, h = _honest_pair(tmp_path / tag)
+        _editable(b)
+        _editable(h)
+        mutate(b, h)
+        findings = _parity(b, h)
+        assert _details(findings) == {"DEPENDENCY_PARITY"}, tag
+        return findings
+
+    fails("two_exempt", lambda b, h: _editable(h, name="other"))
+    fails("forged_extra_head", lambda b, h: _add_dist(h, "forged", {"forged.py": b"x = 1\n"}, direct_url={"url": h.export.as_uri(), "dir_info": {"editable": True}}))
+    fails("forged_extra_outside", lambda b, h: _add_dist(h, "forged", {"forged.py": b"x = 1\n"},
+                                                         direct_url={"url": (tmp_path / "elsewhere").as_uri(), "dir_info": {"editable": True}}))
+    fails("non_editable_project", lambda b, h: _add_dist(h, "plain", {"plain.py": b"x = 1\n"},
+                                                         direct_url={"url": h.export.as_uri(), "dir_info": {}}))
+    fails("other_side_export", lambda b, h: _add_dist(h, "oth", {"oth.py": b"x = 1\n"}, direct_url={"url": b.export.as_uri(), "dir_info": {"editable": True}}))
+
+    def owns_other(b, h):
+        (h.site / "extra.py").write_text("x = 1\n")
+        record = h.site / "proj-1.0.dist-info" / "RECORD"
+        record.write_text(record.read_text() + f"extra.py,sha256={_b64(b'x = 1' + chr(10).encode())},6\n")
+    fails("owns_other_file", owns_other)
+
+    def owns_nested(b, h):
+        (h.site / "dep_data" / "n.pth").write_text("x\n")
+        record = h.site / "proj-1.0.dist-info" / "RECORD"
+        record.write_text(record.read_text() + "dep_data/n.pth,,\n")
+    fails("owns_nested_pth", owns_nested)
+    fails("bad_url_scheme", lambda b, h: (h.site / "proj-1.0.dist-info" / "direct_url.json").write_text(
+        json.dumps({"url": "https://example.invalid/", "dir_info": {"editable": True}})))
+    fails("malformed_direct_url", lambda b, h: (h.site / "proj-1.0.dist-info" / "direct_url.json").write_text("{not json"))
+    fails("url_remote_host", lambda b, h: (h.site / "proj-1.0.dist-info" / "direct_url.json").write_text(
+        json.dumps({"url": "file://example.invalid" + str(h.export), "dir_info": {"editable": True}})))
+    # an editable dist on one side only with an edited non-exempt dist is still caught
+    fails("edited_dep", lambda b, h: (h.site / "dep.py").write_bytes(b"d = 9\n"))
+
+
+@posix_only
+def test_editable_finder_mapping_is_parsed_with_literal_eval_and_confined(tmp_path):
+    outside = tmp_path / "outside-target"
+    outside.mkdir()
+
+    def run(tag, **kw):
+        """Each keyword is a template: ``{E}`` is the head export, ``{O}`` the directory outside it."""
+        b, h = _honest_pair(tmp_path / tag)
+        (h.export / "src" / "esc").symlink_to(outside)
+        _editable(b)
+        _editable(h, **{k: v.format(E=h.export, O=outside) for k, v in kw.items()})
+        return _parity(b, h)
+
+    assert run("literal") == []
+    assert run("namespaces_inside", namespaces="{{'ns': ['{E}/src']}}") == []
+    for tag, kw in (("computed", dict(mapping="{{'proj': __import__('os').getcwd()}}")),
+                    ("call", dict(mapping="dict(proj='/x')")),
+                    ("outside", dict(mapping="{{'proj': '{O}'}}")),
+                    ("outside_ns", dict(namespaces="{{'ns': ['{O}']}}")),
+                    ("dotdot", dict(mapping="{{'proj': '{E}/src/../../outside-target'}}")),
+                    ("relative", dict(mapping="{{'proj': 'src/proj'}}")),
+                    ("non_str", dict(mapping="{{'proj': 3}}")),
+                    ("syntax", dict(mapping="{{")),
+                    ("symlink_escape", dict(mapping="{{'proj': '{E}/src/esc'}}")),
+                    ("missing_namespaces", dict(namespaces="__import__('os')"))):
+        assert _details(run(tag, **kw)) == {"DEPENDENCY_PARITY"}, tag
+
+
+@posix_only
+def test_over_the_hash_budget_is_not_provisioned(tmp_path, monkeypatch):
+    base, head = _honest_pair(tmp_path)
+    assert bg._VENV_HASH_BYTES == 1 << 30
+    monkeypatch.setattr(bg, "_VENV_HASH_BYTES", 20)
+    findings = _parity(base, head)
+    assert _details(findings) == {"NOT_PROVISIONED"}
+    # exactly at the budget passes: the bound is "more than"
+    total = sum(p.stat().st_size for p in base.site.rglob("*") if p.is_file())
+    monkeypatch.setattr(bg, "_VENV_HASH_BYTES", total)
+    assert _parity(base, head) == []
+    monkeypatch.setattr(bg, "_VENV_HASH_BYTES", total - 1)
+    assert _details(_parity(base, head)) == {"NOT_PROVISIONED"}
+
+
+@posix_only
+def test_untrusted_text_names_the_differences(tmp_path):
+    base, head = _honest_pair(tmp_path)
+    nasty = "evil`\n#name|x.py"
+    (head.site / "dep_data" / nasty).write_text("x")
+    (head.site / "dep.py").write_bytes(b"changed")
+    (base.site / "dep_data" / "only_base.txt").write_text("b")
+    findings = _parity(head, base)
+    assert findings and all(type(d) is str and type(t) is str for d, t in findings)
+    text = "\n".join(t for _, t in findings)
+    for needle in ("only_base.txt", "dep.py", "evil"):
+        assert needle in text, needle
+    for _, t in findings:
+        assert "\n" not in t and "`" not in t and "|" not in t and len(t) <= 400
+    assert all(c.isprintable() and ord(c) < 127 for c in text.replace("\n", ""))
+
+
+@posix_only
+def test_parity_inventory_differences_and_bounds(tmp_path, monkeypatch):
+    # an extra, RECORD-consistent dist on one side only is a difference, a differing owned file too
+    base, head = _honest_pair(tmp_path / "extra")
+    _add_dist(head, "added", {"added.py": b"a = 1\n"})
+    findings = _parity(base, head)
+    assert _details(findings) == {"DEPENDENCY_PARITY"} and any("added.py" in t for _, t in findings)
+    base, head = _honest_pair(tmp_path / "differ")
+    for side, data in ((base, b"one\n"), (head, b"two\n")):
+        _add_dist(side, "same", {"same.py": data})
+    assert any("same.py" in t for _, t in _parity(base, head))
+    # the walk is bounded: entries and depth are errors, never a skip
+    base, head = _honest_pair(tmp_path / "bounds")
+    monkeypatch.setattr(bg, "_VENV_FINGERPRINT_LIMIT", 3)
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        _parity(base, head)
+    assert _code(e) == "TREE_TOO_LARGE"
+    monkeypatch.setattr(bg, "_VENV_FINGERPRINT_LIMIT", 200_000)
+    deep = base.site / "d"
+    for _ in range(bg._MAX_HASH_DEPTH + 2):
+        deep = deep / "d"
+    try:
+        deep.mkdir(parents=True)
+    except OSError:
+        pytest.skip("path too long for this filesystem")
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        _parity(base, head)
+    assert _code(e) == "TREE_TOO_LARGE"
+    # a venv that is not a venv is the layout's own refusal
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        bg.dependency_parity(tmp_path / "nope" / "bin", head.bin, base.export, head.export)
+    assert _code(e) == "VENV_NOT_ISOLATED"
