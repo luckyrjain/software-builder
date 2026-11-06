@@ -1,5 +1,5 @@
-"""Tests for the C4c-1 filesystem and git pieces of `benchmark_gate.py`: `export_tree`, tree hash and seal,
-`cleanup_root`, and the `export` / `cleanup` CLIs.
+"""Tests for the filesystem and git pieces of `benchmark_gate.py` (`export_tree`, tree hash and seal, `cleanup_root`, and the `export` / `cleanup`
+CLIs) and for its exported surface: the error-code vocabularies, including the C4d pins (`MEASURE_*`, `TRACE_REFUSAL_CODES`).
 
 Everything git-related runs against real temporary repositories (no network, hooks or signing); hostile trees (`.git`
 entries, `..`, case collisions, escaping symlinks) are built with `git mktree`, since `git add` refuses them.
@@ -465,12 +465,12 @@ def test_code_vocabularies_are_pinned():
         BENCHMARK_MODIFIED OVERLAY_COMMIT_MISMATCH OVERLAY_FAILED OVERLAY_BASE_SEALED HARNESS_UNREADABLE
         PROTECTED_PATH_CHANGED BENCHMARK_AWARE_CODE VENV_NOT_ISOLATED VENV_HOOK_REJECTED VENV_SNAPSHOT_INVALID
         UNSUPPORTED_PLATFORM BASE_NONZERO_EXIT HEAD_NONZERO_EXIT BASE_TIMEOUT HEAD_TIMEOUT OUTPUT_TOO_LARGE DIGEST_MISSING DIGEST_UNSTABLE DIGEST_MISMATCH
-        WORKLOAD_TOO_SHORT MEASURE_ARGS_INVALID MEASURE_FAILED""".split())
+        WORKLOAD_TOO_SHORT MEASURE_ARGS_INVALID MEASURE_FAILED TRACE_MISMATCH TRACE_UNAVAILABLE""".split())
     assert bg.DIFF_REFUSAL_CODES == ("PROTECTED_PATH_CHANGED", "BENCHMARK_AWARE_CODE")
     assert bg.VENV_REFUSAL_CODES == ("VENV_NOT_ISOLATED", "VENV_HOOK_REJECTED")
     assert bg.OVERLAY_REFUSAL_CODES == tuple(
         "OVERLAY_PATH_REJECTED OVERLAY_NOT_REGULAR OVERLAY_PATH_CONFLICT BENCHMARK_MODIFIED".split())
-    for vocabulary in (bg.EXPORT_REFUSAL_CODES, bg.CLEANUP_CODES, bg.ERROR_CODES, bg.OVERLAY_REFUSAL_CODES, bg.DIFF_REFUSAL_CODES, bg.VENV_REFUSAL_CODES):
+    for vocabulary in (bg.EXPORT_REFUSAL_CODES, bg.CLEANUP_CODES, bg.ERROR_CODES, bg.OVERLAY_REFUSAL_CODES, bg.DIFF_REFUSAL_CODES, bg.VENV_REFUSAL_CODES, bg.TRACE_REFUSAL_CODES):
         assert len(set(vocabulary)) == len(vocabulary)
         assert all(code.isascii() and code.replace("_", "").isalpha() and bg.escape_diagnostic(code) == code for code in vocabulary)
 

@@ -526,6 +526,13 @@ def test_gate_budget_boundary_is_inclusive():
     assert bg.validate_benchmark_gate(_gate(per_run_timeout_seconds=90))[1] == "OK"  # 10*2*90 == 1800
 
 
+def test_gate_budget_cap_follows_the_trace_timeout_factor(monkeypatch):
+    gate = _gate(repeats=8, per_run_timeout_seconds=75)  # (1 + 8 + 3) * 2 * 75 == 1800
+    assert bg.validate_benchmark_gate(gate)[1] == "OK"
+    monkeypatch.setattr(bg, "_TRACE_TIMEOUT_FACTOR", 4)  # 13 * 2 * 75 == 1950
+    assert bg.validate_benchmark_gate(gate) == (None, "BUDGET_REJECTED")
+
+
 def test_gate_int_thresholds_are_numbers_but_out_of_bounds():
     # An int is a real number for the two thresholds (so not TYPE_REJECTED), but 0 and 1 are out of bounds.
     assert bg.validate_benchmark_gate(_gate(min_improvement=1)) == (None, "BOUNDS_REJECTED")

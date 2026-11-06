@@ -13,8 +13,8 @@ read only the repository and the two commits, no export, so they can run before 
 marker pid defaults to the exporting process, so pass ``--owner-pid`` when ``cleanup`` will run from another process),
 ``repo_top_levels(base)`` (BEFORE the install: afterwards ``build/``, ``dist/`` and ``venv/`` would join the lint's allowlist), venv and
 ``check_venv`` x2 (after each install), ``overlay_benchmark_file(..., head_ref_commit=...)``, ``seal_export`` x2, ``read_benchmark`` on BOTH roots (required equal) and
-the lint, ``hash_export`` x2, measure, ``hash_export`` x2; ``harness_sha256`` at any point (both parts are fixed at import and at the
-first load of the validator, whose module body it therefore runs); C4d is delivered in parts: C4d-1 adds the measurement harness (``run_order``, ``side_env``, ``pytest_argv``, ``measure_paired``: seeded balanced order, one child per run in its own process group, digest and exit checks, raw wall times), then the trace and ``compare`` with ``run-once``; C4e
+the lint, ``hash_export`` x2, ``trace_paired`` (C4d-2; after the pairing set-up, before the timed measurement), measure, ``hash_export`` x2; ``harness_sha256`` at any point (both parts are fixed at import and at the
+first load of the validator, whose module body it therefore runs); C4d is delivered in parts: C4d-1 (#366) adds the measurement harness (``run_order``, ``side_env``, ``pytest_argv``, ``measure_paired``: seeded balanced order, one child per run in its own process group, digest and exit checks, raw wall times); C4d-2 adds the trace (``TRACE_PLUGIN_SOURCE``, ``trace_env``, ``trace_paired``, and the helpers shared with ``measure_paired``: ``_prepare_run``, ``_execute``, ``_check_timeout``, ``_check_sides``, ``_benchmark_file_of``); ``compare`` and ``run-once`` are still to come (C4d-3). Limits of the trace: it is a narrow tripwire, not a proof of equal work. For the typical benchmark, which makes one library call and prints a digest, the executed-line count is a small constant on both sides, so equality proves nothing; the trace discriminates only when the test body loops or branches on library behaviour. Blind spots: helpers and callbacks, generator expressions, lambdas, ``map``, ``exec``/``eval``, ``asyncio.run(main())``, a same-named decoy, and branches inside one line. In-process tampering by code running in the child, and detection of the trace run itself, are not detected. The trace run also differs from a timed run in the contents of its per-side work directory (extra ``plugin-`` and ``out-`` entries) and the pycache prefix tree, in ``config.invocation_params`` and ``getoption('plugins')`` (not tokenised), and in a cold pycache. A suppressed or missing result is fail-closed; only a forged, matching result is a bypass. C4e
 the classifier and docs, C4f the workflow wiring. Specification (revision 5, the converged result of four review
 rounds): ``docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md`` (APIs table,
 Data model, Capacity, Threat model). This docstring states each function's own contract and the reason each
@@ -58,7 +58,7 @@ import unicodedata
 import warnings
 from fractions import Fraction
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal, NamedTuple
 
 # ---------------------------------------------------------------------------
 # benchmark_symbol_from_location
@@ -389,7 +389,7 @@ def validate_benchmark_gate(gate: object) -> tuple[dict | None, str]:
         and Fraction("0.02") <= fractions["max_noise"] <= Fraction("0.30")
     ):
         return None, "BOUNDS_REJECTED"
-    if (values["warmup_runs"] + values["repeats"] + 3) * 2 * values["per_run_timeout_seconds"] > _BUDGET_CAP_SECONDS:
+    if (values["warmup_runs"] + values["repeats"] + _TRACE_TIMEOUT_FACTOR) * 2 * values["per_run_timeout_seconds"] > _BUDGET_CAP_SECONDS:
         return None, "BUDGET_REJECTED"
 
     normalized = {
@@ -905,9 +905,15 @@ class BenchmarkGateError(Exception):
         super().__init__(code)
         self.code = code
         self.detail = escape_diagnostic(detail, 200)
-        self.side: str | None = None  # measure_paired: which side failed ("base" or "head"), None if neither or both
-        self.phase: str | None = None  # measure_paired: "warmup" or "timed"
-        self.partial: dict | None = None  # measure_paired: {"order", "base_ns", "head_ns"} of the completed rounds when phase == "timed"
+        self.side: str | None = None  # measure_paired and trace_paired: which side failed ("base" or "head"), None if neither or both
+        self.phase: str | None = None  # measure_paired: "warmup" or "timed"; trace_paired: "trace" (None for an argument error)
+        self.partial: dict | None = None  # measure_paired only: {"order", "base_ns", "head_ns"} of the completed rounds when phase == "timed" (None for trace_paired)
+        self.kind: str | None = None  # trace_paired only: why it failed, one of TRACE_FAILURE_KINDS (None for every other error)
+        # trace_paired only, and only for an error raised AFTER both sides produced a result (the kinds unavailable_one_side,
+        # unavailable_tokens_differ, unavailable_interpreters_differ, interpreters_differ, counts_differ, unavailable): {"base": {"kind":
+        # "lines"|"unavailable", "value": int count | str token, "interpreter": "<ver> <impl>"}, "head": {...}, "argv": {"base": [...],
+        # "head": [...]}, "body_has_control_flow": bool}. None for an error raised during a side's run and for every other error.
+        self.trace: dict | None = None
         self.hits: list[dict] = []  # the diff checks put what they found here (already escaped), for the evidence a human is shown
 
     def __str__(self) -> str:  # a traceback or log line shows the reason, not only the code
@@ -2170,7 +2176,7 @@ def harness_sha256() -> str:
     the loaded `validate_task_target.py` (length-prefixed, domain `software-builder-bench-harness-v1`). Both name the code this
     process has been using (up to the stale-`.pyc` residual of `_digest_own_file`): this file is digested when it is imported, the
     validator when it is loaded (and cached until
-    `_reset_task_target_cache()`). C4d adds the trace plugin and any new harness file to this definition and bumps the domain string.
+    `_reset_task_target_cache()`). The trace plugin is a constant inside this file, so the own-file digest covers it; the domain string stays ``-v1``.
     `HARNESS_UNREADABLE` if either part cannot be read."""
     try:
         if not _SELF_DIGEST:
@@ -2655,7 +2661,9 @@ _PROTECTED_PREFIXES_SUFFIXES = (  # (prefix, suffix) of the casefolded basename
 )
 _STARTUP_MODULES = frozenset({"sitecustomize", "usercustomize"})
 _STDLIB_FOLDED = frozenset(name.casefold() for name in sys.stdlib_module_names)
-_TRIPWIRE_TOKENS = (b"PYTEST_CURRENT_TEST", b"BENCH_RESULT_DIGEST", b"BENCH_TRACE_LINES", b"os._exit", b"sys.argv")  # + the benchmark's path
+_TRIPWIRE_TOKENS = (b"PYTEST_CURRENT_TEST", b"BENCH_RESULT_DIGEST", b"BENCH_TRACE_LINES", b"os._exit", b"sys.argv",
+                    b"BENCH_TRACE_", b"bench_trace_plugin", b"sys.monitoring", b"import monitoring", b"orig_argv",
+                    b"/proc/self/cmdline", b"/proc/self/environ")  # + the benchmark's path; textual only (no bare `/proc/self` or `monitoring`); orig_argv and cmdline because the trace run's argv differs from a timed run's
 _MODULE_FILE_RE = re.compile(r"([^.]+)(?:\.[^.]+)?\.(?:py|pyc|so|pyd)")  # `json.py`, a sourceless `json.pyc` (imported straight from the directory), `json.so`, `json.cpython-312-darwin.so`, `json.abi3.so`
 _GIT_ESCAPES = {b"a": b"\a", b"b": b"\b", b"t": b"\t", b"n": b"\n", b"v": b"\v", b"f": b"\f", b"r": b"\r", b'"': b'"', b"\\": b"\\"}
 _HUNK_RE = re.compile(rb"@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
@@ -2865,7 +2873,10 @@ def _added_lines(patch: bytes):
 
 def token_tripwire(repo: str | os.PathLike, base_commit: str, head_commit: str, benchmark_path: str) -> None:
     """Raise `BENCHMARK_AWARE_CODE` if a line ADDED between the commits, in any file other than the benchmark, contains one of
-    `PYTEST_CURRENT_TEST`, `BENCH_RESULT_DIGEST`, `BENCH_TRACE_LINES`, `os._exit`, `sys.argv` or the benchmark's full path:
+    `PYTEST_CURRENT_TEST`, `BENCH_RESULT_DIGEST`, `BENCH_TRACE_LINES`, `os._exit`, `sys.argv`, `BENCH_TRACE_` (the trace
+    plugin's environment prefix), `bench_trace_plugin`, `sys.monitoring`, `import monitoring`, `orig_argv`, `/proc/self/cmdline`,
+    `/proc/self/environ` or the benchmark's full path (the tokens are textual only; a bare `/proc/self` and a bare `monitoring` are deliberately
+    not tokens, and `sys.orig_argv` and `/proc/self/cmdline` are included because the trace run's argv differs from a timed run's):
     what a fix needs to behave differently when it is being measured, or to forge the harness's output. Added lines come from
     a zero-context patch of the two trees (binary files are read as text, no rename detection, no textconv or external diff). A TRIPWIRE: a
     token built at run time passes, and a line that moved is still an added line. The detail counts the `token in path` pairs and names the
@@ -3133,7 +3144,7 @@ def check_venv(bin_dir: str | os.PathLike, snapshot_path: str | os.PathLike, exp
 
 
 # ---------------------------------------------------------------------------
-# C4d-1 the measurement harness (`measure_paired`)
+# C4d-1 the measurement harness (`measure_paired`); the block also holds the C4d-2 trace (`TRACE_PLUGIN_SOURCE`, `trace_env`, `trace_paired`)
 #
 # Runs the benchmark as a child process of each side, alternating sides in a seeded balanced order, and returns raw wall times.
 # It decides nothing: the verdict is `evaluate_paired_samples` over the lists, called by `compare` (C4d-3). POSIX only.
@@ -3154,14 +3165,282 @@ MEASURE_REFUSAL_CODES = (
     "DIGEST_MISMATCH",          # the sides disagree, or only ONE side printed a digest
     "WORKLOAD_TOO_SHORT",       # the base median is under the minimum: timing noise would dominate
 )
-# MEASURE_ARGS_INVALID: a caller error. MEASURE_FAILED: a harness fault (no disk space, no thread, a failed temp file): not the Builder's.
+# MEASURE_ARGS_INVALID: a caller error. MEASURE_FAILED: a harness fault (no disk space, no thread, a failed temp file, a bad plugin file): not the
+# Builder's; `measure_paired` and `trace_paired` both raise it (the trace with phase "trace").
 ERROR_CODES += MEASURE_REFUSAL_CODES + ("MEASURE_ARGS_INVALID", "MEASURE_FAILED")
+# C4d-2: the paired trace run's refusals. TRACE_MISMATCH: the sides' executed-line traces disagree (or a side's trace is not as the plugin must
+# have produced it); TRACE_UNAVAILABLE: no trustworthy trace could be taken (a harness limit, not the Builder's fault). Both are raised by
+# `trace_paired` only, with phase "trace"; a harness fault there is `MEASURE_FAILED`, not one of these.
+TRACE_REFUSAL_CODES = ("TRACE_MISMATCH", "TRACE_UNAVAILABLE")
+ERROR_CODES += TRACE_REFUSAL_CODES
+# The closed vocabulary of ``BenchmarkGateError.kind`` that ``trace_paired`` sets on EVERY error it raises after validation: the four ``_execute``
+# kinds, then plugin_failed ("plugin reported failure"), no_result ("no trace result"), the four post-result unavailable/interpreter
+# kinds, counts_differ (TRACE_MISMATCH), unavailable (TRACE_UNAVAILABLE) and harness (MEASURE_FAILED).
+TRACE_FAILURE_KINDS = ("spawn", "oversize", "timeout", "nonzero", "plugin_failed", "no_result", "unavailable_one_side",
+                       "unavailable_tokens_differ", "unavailable_interpreters_differ", "interpreters_differ", "counts_differ", "unavailable",
+                       "harness")
 
 _RUN_FSIZE_LIMIT = 1 << 20
 _STDERR_TAIL = 2048
 _MIN_BASE_NS = 2_000_000_000
 _DIGEST_RE = re.compile(rb"BENCH_RESULT_DIGEST: ([0-9a-f]{64})(?![0-9a-f])")
 _EMPTY_INI = "[pytest]\n"
+_TRACE_MODULE = "bench_trace_plugin"  # the one pytest plugin the gate may load (C4d-2): `-p bench_trace_plugin`, found through PYTHONPATH
+_TRACE_TIMEOUT_FACTOR = 3  # the traced run may take this many times the per-run timeout; per_run_timeout_seconds must leave room for a traced run (about 7x the benchmark time for a tight loop); the gate budget cap uses this factor
+
+# The trace plugin, written fresh into a harness-owned directory per side (spec D1, D2). It must stay ASCII, annotation-free and importable
+# on CPython 3.8: it runs inside the side's own venv, whose interpreter may be older than this one. Raw string: no escape is interpreted.
+TRACE_PLUGIN_SOURCE = r"""import os
+import sys
+import threading
+
+import pytest
+
+
+class _State(object):
+    def __init__(self):
+        self.traced_ids = set()  # id() of the code objects to count; membership is by identity, code objects compare by value
+        self.keep = []  # holds those code objects alive so an id is never reused
+        self.thread = None
+        self.count = 0
+        self.failed = False
+        self.unavailable = None
+        self.claimed = False
+        self.out = None
+        self.nonce = None
+        self.root_real = None
+        self.target_real = None
+
+
+STATE = _State()
+
+
+def _claim_tool(sys_module):
+    # None when tool id 4 is ours; otherwise a token. Never raises: the import of this module must not fail.
+    try:
+        monitoring = getattr(sys_module, "monitoring", None)
+        if monitoring is None:
+            return "no_monitoring"
+        monitoring.use_tool_id(4, "bench_trace_plugin")
+    except ValueError:
+        return "tool_in_use"
+    except Exception:
+        return "error"
+    return None
+
+
+def _release_tool(sys_module):
+    # 3.12 has no clear_tool_id and a callback survives free_tool_id there, so unregister both events by hand first.
+    monitoring = sys_module.monitoring
+    if hasattr(monitoring, "clear_tool_id"):
+        monitoring.clear_tool_id(4)
+    else:
+        monitoring.register_callback(4, monitoring.events.LINE, None)
+        monitoring.register_callback(4, monitoring.events.JUMP, None)
+    monitoring.free_tool_id(4)
+
+
+def on_event(code, arg1, arg2=None):
+    # LINE calls (code, line), JUMP calls (code, instruction_offset, destination_offset).
+    try:
+        if id(code) not in STATE.traced_ids:
+            return sys.monitoring.DISABLE
+        if threading.get_ident() == STATE.thread:
+            STATE.count += 1
+    except BaseException:
+        STATE.failed = True
+    return None
+
+
+def _traced_set(obj, originalname):
+    # The code objects to count, or None. obj plus at most 8 __wrapped__ hops; a cycle, a longer chain, a link without __code__, or an
+    # innermost code that is not in the target file under the test's own name -> None. Never calls os.getcwd().
+    codes = []
+    seen = set()
+    link = obj
+    hops = 0
+    while True:
+        if id(link) in seen:
+            return None
+        seen.add(id(link))
+        code = getattr(link, "__code__", None)
+        if code is None:
+            return None
+        codes.append(code)
+        following = getattr(link, "__wrapped__", None)
+        if following is None:
+            break
+        hops += 1
+        if hops > 8:
+            return None
+        link = following
+    innermost = codes[-1]
+    if innermost.co_name != originalname or os.path.realpath(innermost.co_filename) != STATE.target_real:
+        return None
+    return tuple(c for c in codes if os.path.realpath(c.co_filename) == STATE.target_real)
+
+
+def pytest_collection_modifyitems(session, config, items):
+    if len(items) != 1:
+        STATE.failed = True
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_pyfunc_call(pyfuncitem):
+    enabled = False
+    if STATE.claimed and not STATE.failed:
+        try:
+            traced = _traced_set(pyfuncitem.obj, pyfuncitem.originalname)
+            if traced is None:
+                STATE.failed = True
+            else:
+                STATE.traced_ids = set(id(c) for c in traced)
+                STATE.keep = list(traced)
+                STATE.thread = threading.get_ident()
+                monitoring = sys.monitoring
+                monitoring.register_callback(4, monitoring.events.LINE, on_event)
+                monitoring.register_callback(4, monitoring.events.JUMP, on_event)
+                enabled = True
+                monitoring.set_events(4, monitoring.events.LINE | monitoring.events.JUMP)
+        except BaseException:
+            STATE.failed = True
+    try:
+        yield
+    finally:
+        if enabled:
+            try:
+                sys.monitoring.set_events(4, 0)
+            except BaseException:
+                STATE.failed = True
+
+
+def _write_marker(path, content):
+    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+    try:
+        data = content.encode("ascii")
+        while data:
+            written = os.write(fd, data)
+            data = data[written:]
+    finally:
+        os.close(fd)
+
+
+# Precedence of the one terminal marker: failed first, then unavailable, then a zero count (a failure), then the success line. It also runs when
+# the tool was not claimed (STATE.unavailable is then set, so the marker is UNAVAILABLE, or STATE.failed is, so it is the failed marker).
+def _write_terminal_marker():
+    if STATE.out is None:
+        pytest.exit("trace out path missing", returncode=3)
+    version = "%d.%d.%d" % sys.version_info[:3]
+    failed_path = STATE.out + ".failed"
+    if STATE.failed or (STATE.unavailable is None and STATE.count == 0):
+        primary = None
+    elif STATE.unavailable is not None:
+        primary = "BENCH_TRACE_UNAVAILABLE: %s %s %s %s\n" % (STATE.unavailable, version, sys.implementation.name, STATE.nonce)
+    else:
+        primary = "BENCH_TRACE_LINES: %d %s %s %s\n" % (STATE.count, version, sys.implementation.name, STATE.nonce)
+    if primary is not None:
+        try:
+            _write_marker(STATE.out, primary)
+            return
+        except Exception:
+            pass
+    try:
+        _write_marker(failed_path, "failed\n")
+    except Exception:
+        pytest.exit("trace marker not writable", returncode=3)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    try:
+        if STATE.claimed:
+            sys.monitoring.set_events(4, 0)
+            if sys.monitoring.get_tool(4) != "bench_trace_plugin":
+                STATE.failed = True
+            _release_tool(sys)
+    except BaseException:
+        STATE.failed = True
+    finally:
+        _write_terminal_marker()
+
+
+def _init(environ, sys_module):
+    # Pop with defaults so a missing variable cannot leave the others behind.
+    target = environ.pop("BENCH_TRACE_FILE", None)
+    STATE.out = environ.pop("BENCH_TRACE_OUT", None)
+    STATE.nonce = environ.pop("BENCH_TRACE_NONCE", None)
+    if target is None or STATE.out is None or STATE.nonce is None:
+        STATE.failed = True
+    else:
+        # Captured once, so a benchmark that later chdirs (even to /) cannot move them.
+        try:
+            STATE.root_real = os.path.realpath(os.getcwd())
+            STATE.target_real = os.path.realpath(os.path.join(STATE.root_real, target))
+            if not os.path.isfile(STATE.target_real) or not STATE.target_real.startswith(STATE.root_real.rstrip(os.sep) + os.sep):
+                STATE.failed = True
+        except Exception:
+            STATE.failed = True
+    # Hygiene, not an integrity control: sys.modules still holds this module.
+    own_dir = os.path.dirname(__file__)
+    while own_dir in sys.path:
+        sys.path.remove(own_dir)
+    if "PYTHONPATH" in environ:
+        kept = [p for p in environ["PYTHONPATH"].split(os.pathsep) if p != own_dir]
+        if kept:
+            environ["PYTHONPATH"] = os.pathsep.join(kept)
+        else:
+            del environ["PYTHONPATH"]
+    if not STATE.failed:
+        token = _claim_tool(sys_module)
+        if token is None:
+            STATE.claimed = True
+        elif token == "error":
+            STATE.failed = True
+        else:
+            STATE.unavailable = token
+
+
+_init(os.environ, sys)
+"""
+
+
+def _write_plugin(plugin_dir: str) -> str:
+    """Write ``TRACE_PLUGIN_SOURCE`` as the one read-only file ``<plugin_dir>/bench_trace_plugin.py`` (O_EXCL, no symlink follow); return its path."""
+    if os.pathsep in plugin_dir:
+        raise BenchmarkGateError("MEASURE_FAILED", "plugin directory path contains the path separator")
+    path = os.path.join(plugin_dir, _TRACE_MODULE + ".py")
+    data = TRACE_PLUGIN_SOURCE.encode("ascii")
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o400)
+        try:
+            view = memoryview(data)
+            while view:
+                view = view[os.write(fd, view):]
+        finally:
+            os.close(fd)
+    except OSError as exc:
+        raise BenchmarkGateError("MEASURE_FAILED", f"plugin write failed: {type(exc).__name__}: {exc}") from exc
+    return path
+
+
+def _verify_plugin(path: str) -> None:
+    """Raise ``MEASURE_FAILED`` unless the file at ``path`` still holds exactly ``TRACE_PLUGIN_SOURCE``."""
+    want = hashlib.sha256(TRACE_PLUGIN_SOURCE.encode("ascii")).digest()
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            chunks = []
+            while True:
+                chunk = os.read(fd, 1 << 16)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+        finally:
+            os.close(fd)
+        got = hashlib.sha256(b"".join(chunks)).digest()
+    except OSError:
+        got = b""
+    if got != want:
+        raise BenchmarkGateError("MEASURE_FAILED", "plugin file hash mismatch")
 
 
 def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int, repeats: int) -> list[str]:
@@ -3188,7 +3467,8 @@ def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt
 def side_env(bin_dir: str, scratch: str) -> dict[str, str]:
     """The child's environment: an allowlist, not a sandbox. The side's venv ``bin`` first on ``PATH``, no user site, a fixed hash seed, a
     per-side ``PYTHONPYCACHEPREFIX`` under ``scratch``, fresh ``HOME`` and ``TMPDIR`` under ``scratch``, plugin autoload off. No
-    ``PYTHONPATH``, no SCM, cloud or API token."""
+    ``PYTHONPATH``, no SCM, cloud or API token. The trace's environment is ``trace_env``, which adds ``PYTHONPATH`` and the three ``BENCH_TRACE_*``
+    keys (file, out, nonce) for the trace run only."""
     home = os.path.join(scratch, "home")
     tmp = os.path.join(scratch, "tmp")
     for directory in (home, tmp):
@@ -3206,13 +3486,24 @@ def side_env(bin_dir: str, scratch: str) -> dict[str, str]:
     }
 
 
-def pytest_argv(bin_dir: str, root: str, target: str, ini: str) -> list[str]:
+def trace_env(env: dict[str, str], plugin_dir: str, benchmark_file: str, out_path: str, nonce: str) -> dict[str, str]:
+    """A COPY of ``env`` plus the four keys the trace plugin reads: ``PYTHONPATH`` (``plugin_dir``), ``BENCH_TRACE_FILE``,
+    ``BENCH_TRACE_OUT`` and ``BENCH_TRACE_NONCE``. ``env`` is not changed."""
+    return {**env, "PYTHONPATH": plugin_dir, "BENCH_TRACE_FILE": benchmark_file, "BENCH_TRACE_OUT": out_path, "BENCH_TRACE_NONCE": nonce}
+
+
+def pytest_argv(bin_dir: str, root: str, target: str, ini: str, *, plugins: tuple[str, ...] | list[str] = ()) -> list[str]:
     """The harness argv, built from the gate and never from the command string. ``-P`` drops the cwd entry from ``sys.path`` so a head-added
     ``pytest.py``, ``hashlib.py`` or ``statistics.py`` cannot shadow (the code under test must therefore be INSTALLED into the side's venv);
-    ``-s`` lets the digest through; an empty harness-owned ini and ``--noconftest`` keep the tree's configuration out."""
+    ``-s`` lets the digest through; an empty harness-owned ini and ``--noconftest`` keep the tree's configuration out.
+    ``plugins`` (keyword-only) is a tuple or list whose every element is exactly the trace module; each becomes ``-p <name>`` after
+    ``-p no:cacheprovider`` and before the target. Anything else (a string, another name) is a ``ValueError``."""
+    if not isinstance(plugins, (tuple, list)) or any(not isinstance(p, str) or p != _TRACE_MODULE for p in plugins):
+        raise ValueError("plugins must be a tuple or list of the trace module name only")
     return [
         os.path.join(bin_dir, "python"), "-P", "-m", "pytest", "-q", "--no-header", "-s", "--noconftest",
-        "--import-mode=importlib", "-c", ini, "--rootdir", root, "-p", "no:cacheprovider", target,
+        "--import-mode=importlib", "-c", ini, "--rootdir", root, "-p", "no:cacheprovider",
+        *(arg for name in plugins for arg in ("-p", name)), target,
     ]
 
 
@@ -3283,6 +3574,77 @@ def _tail_detail(tail: bytes) -> str:
     return tail.decode("ascii", "replace")[-150:]
 
 
+def _prepare_run(side: str, bin_dir: str, work: str, counter: int) -> tuple[str, dict]:
+    """Make the run's scratch directory and build its environment (``side_env`` makes the home and tmp directories)."""
+    scratch = os.path.join(work, f"{side}-{counter}")
+    os.makedirs(scratch)
+    env = side_env(bin_dir, scratch)
+    env["PYTHONPYCACHEPREFIX"] = os.path.join(work, f"pycache-{side}")  # per side, shared by its runs (a warm cache is part of the warmup)
+    return scratch, env
+
+
+def _execute(side: str, argv: list[str], root: str, scratch: str, env: dict[str, str], timeout_seconds: float,
+             fail: Callable[[str, str], BenchmarkGateError]) -> tuple[int, bytes]:
+    """Run once, always remove ``scratch``, and raise ``fail(kind, detail)`` for a spawn failure, oversize output, timeout or nonzero exit
+    (kinds ``spawn``, ``oversize``, ``timeout``, ``nonzero``, checked in that order). Returns ``(elapsed_ns, stdout)``."""
+    try:
+        code, elapsed, stdout, tail, oversize = _run_once(argv, root, env, float(timeout_seconds))
+    except _SpawnFailed as exc:  # no <bin>/python, not executable, a failed fork: the side was not provisioned
+        raise fail("spawn", f"could not start the run: {exc}") from exc
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    if oversize:
+        raise fail("oversize", f"{side} run wrote {_RUN_FSIZE_LIMIT} bytes")
+    if code is None:
+        raise fail("timeout", f"run exceeded {timeout_seconds} s")
+    if code != 0:
+        raise fail("nonzero", f"exit {code}: {_tail_detail(tail)}")
+    return elapsed, stdout
+
+
+_TARGET_MESSAGE = "target must be a .py path under the root, without '..' or a leading '-'"
+
+
+def _benchmark_file_of(target: object) -> str:
+    """The file part of a pytest target (before the first ``::``), checked: the target is ASCII with no NUL; the file part is a relative
+    ``.py`` path with no empty, ``.`` or ``..`` component, no control character (below 0x20 or 0x7f), no backslash and no leading ``-``.
+    The id part after ``::`` may hold a backslash (a parametrize id such as ``t[a\\b]``)."""
+    if not isinstance(target, str) or not target.isascii() or "\0" in target:
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", _TARGET_MESSAGE)
+    file_part = target.split("::", 1)[0]
+    if (not file_part or "\\" in file_part or any(ord(c) < 0x20 or ord(c) == 0x7F for c in file_part)
+            or file_part.startswith(("/", "-")) or not file_part.endswith(".py") or any(part in ("", ".", "..") for part in file_part.split("/"))):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", _TARGET_MESSAGE)
+    return file_part
+
+
+def _check_timeout(timeout_seconds: object) -> None:
+    """Raise ``MEASURE_ARGS_INVALID`` unless ``timeout_seconds`` is a real number (not a bool, not NaN) in (0, 3600]."""
+    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)) or not 0 < timeout_seconds <= 3600 \
+            or timeout_seconds != timeout_seconds:
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "timeout_seconds must be a number in (0, 3600]")
+
+
+def _check_sides(base_root: object, head_root: object, base_bin: object, head_bin: object, target: object,
+                 ini_path: object) -> tuple[dict, str]:
+    """Validate the two sides, the target and the ini; returns ``({name: (realpath root, realpath bin)}, benchmark_file)``."""
+    sides = {}
+    for name, root, bin_dir in (("base", base_root, base_bin), ("head", head_root, head_bin)):
+        for label, path in (("root", root), ("bin", bin_dir)):
+            if not isinstance(path, str) or not path or "\0" in path or not os.path.isabs(path) or not os.path.isdir(path):
+                raise BenchmarkGateError("MEASURE_ARGS_INVALID", f"{name} {label} must be an existing absolute directory")
+        sides[name] = (os.path.realpath(root), os.path.realpath(bin_dir))
+    for index in (0, 1):  # root, bin: the same directory under two names (a symlink, or a case-folding file system) is one directory
+        if os.path.samefile(sides["base"][index], sides["head"][index]):
+            raise BenchmarkGateError("MEASURE_ARGS_INVALID", "the two sides must not share a root or a bin directory")
+    if _inside(sides["base"][0], sides["head"][0]) or _inside(sides["head"][0], sides["base"][0]):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "neither root may contain the other")
+    benchmark_file = _benchmark_file_of(target)
+    if ini_path is not None and (not isinstance(ini_path, str) or not os.path.isabs(ini_path) or not os.path.isfile(ini_path)):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "ini_path must be an existing absolute file")
+    return sides, benchmark_file
+
+
 def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, target: str, *, repeats: int, timeout_seconds: float,
                    base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int = 1, warmup: int = 1,
                    min_base_ns: int = _MIN_BASE_NS, argv_builder=None, ini_path: str | None = None) -> dict:
@@ -3300,32 +3662,16 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
     nondeterministic on both sides is therefore reported as a mismatch there); from then on a run without a digest or with another one is
     ``DIGEST_UNSTABLE``; the digests of ALL runs (warmup included) must be one value at the end. ``WORKLOAD_TOO_SHORT`` needs the timed
     rounds and names the measured median. ``argv_builder(side, bin_dir, root, target) -> argv`` is the test seam; the default is
-    ``pytest_argv``. A trace run is not part of this function (C4d-2)."""
+    ``pytest_argv``. ``phase`` here is only ``"warmup"`` or ``"timed"``; the paired trace run is ``trace_paired``, a separate function."""
     if os.name != "posix":
         raise BenchmarkGateError("UNSUPPORTED_PLATFORM", "the harness needs POSIX process groups")
     order = run_order(base_commit, head_commit, benchmark_sha256, attempt, repeats)
     if not _is_real_int(warmup) or not 1 <= warmup <= 3:
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "warmup must be 1 to 3")
-    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)) or not 0 < timeout_seconds <= 3600 \
-            or timeout_seconds != timeout_seconds:
-        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "timeout_seconds must be a number in (0, 3600]")
+    _check_timeout(timeout_seconds)
     if not _is_real_int(min_base_ns) or min_base_ns < 0:
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "min_base_ns must be a non-negative int")
-    sides = {}
-    for name, root, bin_dir in (("base", base_root, base_bin), ("head", head_root, head_bin)):
-        for label, path in (("root", root), ("bin", bin_dir)):
-            if not isinstance(path, str) or not path or "\0" in path or not os.path.isabs(path) or not os.path.isdir(path):
-                raise BenchmarkGateError("MEASURE_ARGS_INVALID", f"{name} {label} must be an existing absolute directory")
-        sides[name] = (os.path.realpath(root), os.path.realpath(bin_dir))
-    for index in (0, 1):  # root, bin: the same directory under two names (a symlink, or a case-folding file system) is one directory
-        if os.path.samefile(sides["base"][index], sides["head"][index]):
-            raise BenchmarkGateError("MEASURE_ARGS_INVALID", "the two sides must not share a root or a bin directory")
-    if _inside(sides["base"][0], sides["head"][0]) or _inside(sides["head"][0], sides["base"][0]):
-        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "neither root may contain the other")
-    if not isinstance(target, str) or not target or "\0" in target or target.startswith("-"):
-        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "target must be a non-empty string that does not start with '-'")
-    if ini_path is not None and (not isinstance(ini_path, str) or not os.path.isabs(ini_path) or not os.path.isfile(ini_path)):
-        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "ini_path must be an existing absolute file")
+    sides, _ = _check_sides(base_root, head_root, base_bin, head_bin, target, ini_path)
 
     base_ns: list[int] = []
     head_ns: list[int] = []
@@ -3338,7 +3684,7 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
         return error
 
     try:
-        with tempfile.TemporaryDirectory(prefix="bench-measure-") as work:
+        with tempfile.TemporaryDirectory(prefix="bench-run-") as work:
             ini = ini_path
             if ini is None:
                 ini = os.path.join(work, "empty.ini")
@@ -3353,24 +3699,18 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
                 counter += 1
                 phase_now[0] = phase
                 root, bin_dir = sides[side]
-                scratch = os.path.join(work, f"{side}-{counter}")
-                os.makedirs(scratch)
-                env = side_env(bin_dir, scratch)
-                env["PYTHONPYCACHEPREFIX"] = os.path.join(work, f"pycache-{side}")  # per side, shared by its runs (a warm cache is part of the warmup)
+                scratch, env = _prepare_run(side, bin_dir, work, counter)
                 argv = argv_builder(side, bin_dir, root, target) if argv_builder else pytest_argv(bin_dir, root, target, ini)
                 argvs.setdefault(side, argv)
-                try:
-                    code, elapsed, stdout, tail, oversize = _run_once(argv, root, env, float(timeout_seconds))
-                except _SpawnFailed as exc:  # no <bin>/python, not executable, a failed fork: the side was not provisioned
-                    raise fail(f"{side.upper()}_NONZERO_EXIT", f"could not start the run: {exc}", side, phase) from exc
-                finally:
-                    shutil.rmtree(scratch, ignore_errors=True)
-                if oversize:
-                    raise fail("OUTPUT_TOO_LARGE", f"{side} run wrote {_RUN_FSIZE_LIMIT} bytes", side, phase)
-                if code is None:
-                    raise fail(f"{side.upper()}_TIMEOUT", f"run exceeded {timeout_seconds} s", side, phase)
-                if code != 0:
-                    raise fail(f"{side.upper()}_NONZERO_EXIT", f"exit {code}: {_tail_detail(tail)}", side, phase)
+
+                def adapt(kind: str, detail: str) -> BenchmarkGateError:
+                    codes = {"oversize": "OUTPUT_TOO_LARGE", "timeout": f"{side.upper()}_TIMEOUT", "nonzero": f"{side.upper()}_NONZERO_EXIT",
+                             "spawn": f"{side.upper()}_NONZERO_EXIT"}  # a spawn failure (a venv that was not provisioned) is a nonzero exit
+                    if kind not in codes:
+                        raise AssertionError(f"unknown _execute failure kind {kind!r}")
+                    return fail(codes[kind], detail, side, phase)
+
+                elapsed, stdout = _execute(side, argv, root, scratch, env, timeout_seconds, adapt)
                 return elapsed, _digest_of(stdout)
 
             def record(side: str, phase: str, digest: str | None, first_round: bool) -> None:
@@ -3408,6 +3748,198 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
         error.phase = phase_now[0]
         error.partial = {"order": order, "base_ns": list(base_ns), "head_ns": list(head_ns)} if phase_now[0] == "timed" else None
         raise error from exc
+
+
+_TRACE_LINES_RE = re.compile(r"\ABENCH_TRACE_LINES: ([0-9]{1,18}) ([0-9]+\.[0-9]+\.[0-9]+) ([a-z]+) ([0-9a-f]{32})\n\Z")
+_TRACE_UNAVAILABLE_RE = re.compile(
+    r"\ABENCH_TRACE_UNAVAILABLE: (no_monitoring|tool_in_use) ([0-9]+\.[0-9]+\.[0-9]+) ([a-z]+) ([0-9a-f]{32})\n\Z")
+_TRACE_RESULT_MAX = 256  # a result line is about 60 bytes
+_BODY_SOURCE_MAX = 16 * 1024
+_CONTROL_FLOW_NODES = (ast.For, ast.AsyncFor, ast.While, ast.If, ast.IfExp, ast.Try, ast.TryStar, ast.Match, ast.BoolOp, ast.ListComp,
+                       ast.SetComp, ast.DictComp)
+_NOT_ENTERED_NODES = (ast.Lambda, ast.FunctionDef, ast.AsyncFunctionDef, ast.GeneratorExp)  # the trace cannot see into these
+
+
+def _read_regular_file(path: str, limit: int, owner_only: bool) -> bytes | None:
+    """At most ``limit`` bytes of the regular file at ``path`` (never followed through a symlink, never blocking on a FIFO), or ``None``
+    when it is absent, not a regular file, longer than ``limit`` or unreadable. ``owner_only`` also needs a single link and our uid.
+    The checks are made on the open descriptor, so a swap after the ``open`` cannot change what was checked."""
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    if owner_only:
+        flags |= os.O_NOCTTY | os.O_CLOEXEC
+    try:
+        fd = os.open(path, flags)
+    except OSError:
+        return None
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > limit or (owner_only and (info.st_nlink != 1 or info.st_uid != os.getuid())):
+            return None
+        chunks: list[bytes] = []
+        total = 0
+        while total <= limit:
+            chunk = os.read(fd, limit + 1 - total)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+        data = b"".join(chunks)
+        return data if len(data) <= limit else None
+    except OSError:
+        return None
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+
+
+def _body_has_control_flow(root: str, benchmark_file: str, target: str) -> bool:
+    """Advisory: does the benchmark's test body loop or branch (what the trace can discriminate)? Reads the base root's benchmark file,
+    picks the module-level function the target names (the LAST one when a name is defined twice: Python runs the last), else the first
+    module-level ``test*`` function, and walks it without entering nested lambdas, functions or generator expressions. A class-method or
+    parametrized target (``file::Class::method``) names no module-level function, so it falls back to the first module-level test function
+    (advisory only). Every failure to read or parse is ``False``."""
+    try:
+        data = _read_regular_file(os.path.join(root, benchmark_file), _BODY_SOURCE_MAX, False)
+        if data is None:
+            return False
+        functions = [node for node in ast.parse(data).body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        parts = target.split("::")
+        named = [f for f in functions if len(parts) == 2 and f.name == parts[1]]
+        chosen = named[-1] if named else next((f for f in functions if f.name.startswith("test")), None)
+        if chosen is None:
+            return False
+        stack: list[ast.AST] = list(chosen.body)
+        while stack:
+            node = stack.pop()
+            if isinstance(node, _NOT_ENTERED_NODES):
+                continue
+            if isinstance(node, _CONTROL_FLOW_NODES):
+                return True
+            stack.extend(ast.iter_child_nodes(node))
+        return False
+    except Exception:  # noqa: BLE001 - SyntaxError, ValueError, RecursionError, MemoryError, OSError: advisory only
+        return False
+
+
+class _TraceResult(NamedTuple):
+    kind: str  # "lines" or "unavailable"
+    value: int | str  # the executed-line count, or the unavailability token
+    interpreter: str  # "<version> <impl>"
+
+
+def _trace_result(raw: bytes | None, nonce: str) -> _TraceResult | None:
+    """A ``_TraceResult`` for a well-formed result of THIS run (``kind`` ``lines`` with the int count, or ``unavailable`` with the token),
+    else ``None``."""
+    if raw is None:
+        return None
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError:
+        return None
+    found = _TRACE_LINES_RE.match(text)
+    if found:
+        if int(found.group(1)) == 0 or found.group(4) != nonce:
+            return None
+        return _TraceResult("lines", int(found.group(1)), f"{found.group(2)} {found.group(3)}")
+    found = _TRACE_UNAVAILABLE_RE.match(text)
+    if found and found.group(4) == nonce:
+        return _TraceResult("unavailable", found.group(1), f"{found.group(2)} {found.group(3)}")
+    return None
+
+
+def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, target: str, *, timeout_seconds: float,
+                 argv_builder=None, ini_path: str | None = None) -> dict:
+    """One untimed, traced run per side (base, then head) and a comparison of what the harness-owned plugin counted in the test body.
+    Returns ``{"base": int, "head": int, "interpreter": "<version> <impl>", "argv": {"base": [...], "head": [...]},
+    "body_has_control_flow": bool}`` (the last is advisory: computed from the base root's benchmark file before the first run).
+
+    Validation is C4d-1's (``UNSUPPORTED_PLATFORM``, then the timeout, then the sides, target and ini: ``MEASURE_ARGS_INVALID``), with
+    ``phase`` ``None``. After it every error has ``phase == "trace"`` and ``partial`` ``None``. One rule: a fault of the harness's own
+    machinery (a temp directory, the plugin file, its hash, a path separator in the directory) is ``MEASURE_FAILED`` (``side`` ``None``);
+    what the child did (a failed run, a missing or malformed result, ``.failed``, differing counts or interpreters) is
+    ``TRACE_MISMATCH``, or ``TRACE_UNAVAILABLE`` when both sides report the same unavailability. A hard failure on either side raises at
+    once. Every error carries ``kind``, one of ``TRACE_FAILURE_KINDS`` (the ``_execute`` kinds are the first four). An error raised after
+    BOTH sides produced a result (the kinds ``unavailable_one_side``, ``unavailable_tokens_differ``, ``unavailable_interpreters_differ``,
+    ``interpreters_differ``, ``counts_differ``, ``unavailable``) also carries ``trace``: ``{"base": {"kind": "lines"|"unavailable", "value":
+    int count | str token, "interpreter": "<ver> <impl>"}, "head": {...}, "argv": {"base": [...], "head": [...]}, "body_has_control_flow":
+    bool}``; ``trace`` is ``None`` for an error raised during a side's run. The run's timeout is ``_TRACE_TIMEOUT_FACTOR * timeout_seconds``. The digest is not checked and stdout is not parsed.
+    ``argv_builder(side, bin_dir, root, target) -> argv`` is the test seam."""
+    if os.name != "posix":
+        raise BenchmarkGateError("UNSUPPORTED_PLATFORM", "the harness needs POSIX process groups")
+    _check_timeout(timeout_seconds)
+    sides, benchmark_file = _check_sides(base_root, head_root, base_bin, head_bin, target, ini_path)
+
+    def fail(code: str, detail: str, kind: str, side: str | None = None, trace: dict | None = None) -> BenchmarkGateError:
+        error = BenchmarkGateError(code, detail)
+        error.side, error.phase, error.partial, error.kind, error.trace = side, "trace", None, kind, trace
+        return error
+
+    def run_side(side: str) -> tuple[_TraceResult, list[str]]:
+        root, bin_dir = sides[side]
+        with tempfile.TemporaryDirectory(prefix="bench-run-") as work:
+            ini = ini_path
+            if ini is None:
+                ini = os.path.join(work, "empty.ini")
+                with open(ini, "w", encoding="ascii") as handle:
+                    handle.write(_EMPTY_INI)
+            scratch, env = _prepare_run(side, bin_dir, work, 1)
+            plugin_dir = tempfile.mkdtemp(dir=work, prefix="plugin-")
+            out_dir = tempfile.mkdtemp(dir=work, prefix="out-")  # a sibling of scratch: _execute removes scratch before the result is read
+            out_path = os.path.join(out_dir, "trace.out")
+            nonce = os.urandom(16).hex()
+            plugin_path = _write_plugin(plugin_dir)
+            argv = argv_builder(side, bin_dir, root, target) if argv_builder else pytest_argv(bin_dir, root, target, ini, plugins=(_TRACE_MODULE,))
+            env = trace_env(env, plugin_dir, benchmark_file, out_path, nonce)
+            _verify_plugin(plugin_path)  # last, right before the child starts: nothing the argv builder did can slip past it
+
+            def adapt(kind: str, detail: str) -> BenchmarkGateError:
+                if kind == "timeout":
+                    detail += f" ({_TRACE_TIMEOUT_FACTOR}x the per-run timeout)"
+                return fail("TRACE_MISMATCH", f"{kind}: {detail}", kind, side)
+
+            _execute(side, argv, root, scratch, env, _TRACE_TIMEOUT_FACTOR * timeout_seconds, adapt)
+            if os.path.lexists(out_path + ".failed"):
+                raise fail("TRACE_MISMATCH", "plugin reported failure", "plugin_failed", side)
+            result = _trace_result(_read_regular_file(out_path, _TRACE_RESULT_MAX, True), nonce)
+            if result is None:
+                raise fail("TRACE_MISMATCH", "no trace result", "no_result", side)
+            return result, argv
+
+    has_control_flow = _body_has_control_flow(sides["base"][0], benchmark_file, target)
+    results: dict[str, _TraceResult] = {}
+    argvs: dict[str, list[str]] = {}
+    try:
+        for side in ("base", "head"):
+            results[side], argvs[side] = run_side(side)
+    except BenchmarkGateError as exc:  # raised by _write_plugin / _verify_plugin, or by `fail`
+        if exc.phase is None:
+            exc.side, exc.phase, exc.partial, exc.kind = None, "trace", None, "harness"
+        raise
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:  # the harness's own machinery, outside the child
+        raise fail("MEASURE_FAILED", f"{type(exc).__name__}: {exc}", "harness") from exc
+
+    base, head = results["base"], results["head"]
+    seen = {"base": base._asdict(), "head": head._asdict(), "argv": dict(argvs), "body_has_control_flow": has_control_flow}
+
+    def after(code: str, detail: str, kind: str, side: str | None = None) -> BenchmarkGateError:
+        return fail(code, detail, kind, side, seen)
+
+    if (base.kind == "unavailable") != (head.kind == "unavailable"):
+        raise after("TRACE_MISMATCH", "unavailable on one side only", "unavailable_one_side", "base" if base.kind == "unavailable" else "head")
+    if base.kind == "unavailable":
+        if base.value != head.value:
+            raise after("TRACE_MISMATCH", f"unavailable for different reasons: base {base.value}, head {head.value}", "unavailable_tokens_differ")
+        if base.interpreter != head.interpreter:
+            raise after("TRACE_MISMATCH", f"{base.value} on different interpreters: base {base.interpreter}, head {head.interpreter}",
+                        "unavailable_interpreters_differ")
+        raise after("TRACE_UNAVAILABLE", f"{base.value} ({base.interpreter})", "unavailable")
+    if base.interpreter != head.interpreter:
+        raise after("TRACE_MISMATCH", f"different interpreters: base {base.interpreter}, head {head.interpreter}", "interpreters_differ")
+    if base.value != head.value:
+        raise after("TRACE_MISMATCH", f"line counts differ: base {base.value}, head {head.value}", "counts_differ")
+    return {"base": base.value, "head": head.value, "interpreter": base.interpreter, "argv": argvs, "body_has_control_flow": has_control_flow}
 
 
 # ---------------------------------------------------------------------------

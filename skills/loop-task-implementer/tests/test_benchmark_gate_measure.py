@@ -2,7 +2,8 @@
 
 Children are ``python -c`` processes injected through the ``argv_builder`` seam (a real ``python -m pytest`` costs 0.4 s median and up to
 3 s under load); one test runs real pytest to prove the digest is read with ``-P --import-mode=importlib`` and that a head-added
-``hashlib.py`` cannot shadow. No assertion depends on a measured duration.
+``hashlib.py`` cannot shadow (that is the only real-pytest test in this file; the trace's real-pytest rows are in test_benchmark_gate_trace.py).
+No assertion depends on a measured duration.
 """
 
 from __future__ import annotations
@@ -98,6 +99,28 @@ def test_pytest_argv_is_the_designed_argv():
                     "-c", "/w/empty.ini", "--rootdir", "/r", "-p", "no:cacheprovider", "benchmarks/test_b.py::test_b"]
 
 
+def test_trace_env_is_a_copy_with_four_keys():
+    env = {"PATH": "/x", "HOME": "/h"}
+    out = bg.trace_env(env, "/plug", "benchmarks/b.py", "/out/trace.json", "n0nce")
+    assert out is not env and env == {"PATH": "/x", "HOME": "/h"}
+    assert out == {**env, "PYTHONPATH": "/plug", "BENCH_TRACE_FILE": "benchmarks/b.py", "BENCH_TRACE_OUT": "/out/trace.json",
+                   "BENCH_TRACE_NONCE": "n0nce"}
+
+
+def test_pytest_argv_plugins_keyword_only_validated_and_placed_before_the_target():
+    base = bg.pytest_argv("/v/bin", "/r", "t.py::t", "/w/e.ini")
+    for plugins in (("bench_trace_plugin",), ["bench_trace_plugin"]):
+        argv = bg.pytest_argv("/v/bin", "/r", "t.py::t", "/w/e.ini", plugins=plugins)
+        assert argv[-5:] == ["-p", "no:cacheprovider", "-p", "bench_trace_plugin", "t.py::t"]
+        assert argv[:-3] == base[:-1]
+    assert bg.pytest_argv("/v/bin", "/r", "t.py::t", "/w/e.ini", plugins=()) == base
+    with pytest.raises(TypeError):
+        bg.pytest_argv("/v/bin", "/r", "t.py::t", "/w/e.ini", ("bench_trace_plugin",))
+    for bad in ("abc", "bench_trace_plugin", ("os",), ["x;y"], ("bench_trace_plugin", "os"), 5, None):
+        with pytest.raises(ValueError):
+            bg.pytest_argv("/v/bin", "/r", "t.py::t", "/w/e.ini", plugins=bad)
+
+
 # --- measure_paired with injected children --------------------------------------------------------------------------------
 
 def fake_sides(tmp_path):
@@ -191,15 +214,15 @@ def test_each_run_has_its_own_home_and_tmpdir_and_the_roots_as_cwd(tmp_path):
     marker = tmp_path / "marker"
     script = f"""
         import os, sys
-        open({str(marker)!r}, "a").write(" ".join([sys.argv[1], os.getcwd(), os.environ["HOME"], os.environ["TMPDIR"], os.environ["PYTHONHASHSEED"], str("PYTHONPATH" in os.environ)]) + "\\n")
+        open({str(marker)!r}, "a").write(" ".join([sys.argv[1], os.getcwd(), os.environ["HOME"], os.environ["TMPDIR"], os.environ["PYTHONHASHSEED"], str("PYTHONPATH" in os.environ), str(any(n in os.environ for n in ("BENCH_TRACE_FILE", "BENCH_TRACE_OUT", "BENCH_TRACE_NONCE")))]) + "\\n")
         print("BENCH_RESULT_DIGEST: {DIGEST}")
     """
     measure(tmp_path, script)
     rows = [line.split() for line in marker.read_text().splitlines()]
     assert len({row[2] for row in rows}) == len(rows) and len({row[3] for row in rows}) == len(rows)
-    for side, cwd, _home, _tmp, seed, has_path in rows:
+    for side, cwd, _home, _tmp, seed, has_path, has_trace in rows:
         assert os.path.realpath(cwd) == os.path.realpath(tmp_path / f"{side}-root")
-        assert seed == "0" and has_path == "False"
+        assert seed == "0" and has_path == "False" and has_trace == "False"
 
 
 @posix_only
@@ -210,6 +233,16 @@ def test_scratch_directories_are_removed(tmp_path, monkeypatch):
     monkeypatch.setattr(tempfile, "tempdir", None)
     measure(tmp_path, OK_CHILD)
     assert list((tmp_path / "tmp").iterdir()) == []
+
+
+@posix_only
+def test_an_unknown_execute_failure_kind_is_an_assertion_error(tmp_path, monkeypatch):
+    def execute(side, argv, root, scratch, env, timeout, fail):
+        raise fail("mystery", "x")
+
+    monkeypatch.setattr(bg, "_execute", execute)
+    with pytest.raises(AssertionError, match="unknown _execute failure kind"):
+        measure(tmp_path, OK_CHILD)
 
 
 @posix_only
@@ -283,6 +316,77 @@ def test_oversize_stderr_is_detected(tmp_path):
         print("BENCH_RESULT_DIGEST: {DIGEST}")
     """
     assert refusal(tmp_path, script).code == "OUTPUT_TOO_LARGE"
+
+
+OVERSIZE_THEN = """
+    import sys
+    try:
+        sys.stdout.write("x" * (3 << 20))
+        sys.stdout.flush()
+    except OSError:
+        pass
+    {after}
+"""
+
+
+@posix_only
+def test_characterize_error_details(tmp_path):
+    roots, bins = fake_sides(tmp_path)
+    with pytest.raises(bg.BenchmarkGateError) as info:  # no <bin>/python: Popen cannot start the child
+        bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t", repeats=4, timeout_seconds=30,
+                          base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0)
+    assert info.value.detail.startswith("could not start the run: ")
+    for name in ("a", "b", "c", "d"):
+        (tmp_path / name).mkdir()
+    timeout = refusal(tmp_path / "a", "import time\ntime.sleep(30)", timeout_seconds=1)
+    assert timeout.code == "BASE_TIMEOUT" and timeout.detail == "run exceeded 1 s"
+    oversize = refusal(tmp_path / "b", OVERSIZE_THEN.format(after="pass"))
+    assert oversize.code == "OUTPUT_TOO_LARGE" and oversize.detail == "base run wrote 1048576 bytes"
+    nonzero = refusal(tmp_path / "c", 'import sys\nsys.stderr.write("boomtail")\nsys.exit(3)')
+    assert nonzero.code == "BASE_NONZERO_EXIT" and re.fullmatch(r"exit 3: .*boomtail", nonzero.detail)
+
+
+@posix_only
+def test_oversize_beats_timeout(tmp_path):
+    err = refusal(tmp_path, OVERSIZE_THEN.format(after="import time; time.sleep(30)"), timeout_seconds=1)
+    assert err.code == "OUTPUT_TOO_LARGE"
+
+
+@posix_only
+def test_oversize_beats_nonzero_exit(tmp_path):
+    err = refusal(tmp_path, OVERSIZE_THEN.format(after="sys.exit(3)"))
+    assert err.code == "OUTPUT_TOO_LARGE"
+
+
+@posix_only
+def test_scratch_is_removed_after_spawn_failure_timeout_and_nonzero(tmp_path, monkeypatch):
+    real = bg.shutil.rmtree
+    removed = []
+
+    def spy(path, *args, **kwargs):
+        if re.fullmatch(r"(base|head)-\d+", os.path.basename(str(path))):
+            removed.append(os.path.basename(str(path)))
+        return real(path, *args, **kwargs)
+    monkeypatch.setattr(bg.shutil, "rmtree", spy)
+    roots, bins = fake_sides(tmp_path)
+    with pytest.raises(bg.BenchmarkGateError):  # spawn failure
+        bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t", repeats=4, timeout_seconds=30,
+                          base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0)
+    assert removed == ["base-1"]
+    for name, script, overrides in (("t", "import time\ntime.sleep(30)", {"timeout_seconds": 1}), ("n", "import sys\nsys.exit(3)", {})):
+        removed.clear()
+        (tmp_path / name).mkdir()
+        refusal(tmp_path / name, script, **overrides)
+        assert removed == ["base-1"], name
+
+
+@posix_only
+def test_spawn_failure_cause_is_spawn_failed(tmp_path):
+    roots, bins = fake_sides(tmp_path)
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t", repeats=4, timeout_seconds=30,
+                          base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0)
+    assert isinstance(info.value.__cause__, bg._SpawnFailed)
 
 
 @posix_only
@@ -418,7 +522,7 @@ def test_only_the_head_timing_out_is_a_head_timeout(tmp_path):
 def test_a_missing_python_in_the_bin_directory_is_a_coded_nonzero_exit(tmp_path):
     roots, bins = fake_sides(tmp_path)
     with pytest.raises(bg.BenchmarkGateError) as info:
-        bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "t", repeats=4, timeout_seconds=30,
+        bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t", repeats=4, timeout_seconds=30,
                           base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0)
     assert info.value.code == "BASE_NONZERO_EXIT" and info.value.side == "base"
     assert "could not start" in info.value.detail
@@ -455,7 +559,7 @@ def test_the_default_argv_uses_a_caller_owned_ini_when_given(tmp_path):
     for side in ("base", "head"):
         (bins[side] / "python").symlink_to(sys.executable)
     with pytest.raises(bg.BenchmarkGateError) as info:  # the child is not pytest: it fails, but the argv was built
-        bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "t", repeats=4, timeout_seconds=30,
+        bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t", repeats=4, timeout_seconds=30,
                           base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0, ini_path=str(ini))
     assert info.value.code in ("BASE_NONZERO_EXIT", "DIGEST_MISSING")
 
@@ -612,7 +716,7 @@ def test_a_workload_under_the_minimum_is_too_short(tmp_path):
 def test_the_default_minimum_is_two_seconds(tmp_path):
     roots, bins = fake_sides(tmp_path)
     with pytest.raises(bg.BenchmarkGateError) as info:
-        bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "t", repeats=4, timeout_seconds=30,
+        bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t", repeats=4, timeout_seconds=30,
                           base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, argv_builder=builder(OK_CHILD))
     assert info.value.code == "WORKLOAD_TOO_SHORT"
 
@@ -693,6 +797,67 @@ def test_nested_roots_are_rejected(tmp_path):
         bg.measure_paired(str(roots["base"]), str(inner), str(bins["base"]), str(bins["head"]), "t", repeats=4, timeout_seconds=30,
                           base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0, argv_builder=builder(OK_CHILD))
     assert info.value.code == "MEASURE_ARGS_INVALID"
+
+
+GOOD_TARGETS = (("bench.py::t", "bench.py"), ("a/b/test_x.py", "a/b/test_x.py"), ("x.py::T::m", "x.py"), ("bench.py::t[a\\b]", "bench.py"))
+BAD_TARGETS = (5, None, b"x.py", "", "a\0.py", "a\\b.py", "/abs/x.py", "./x.py", "a/./x.py", "../x.py", "a/../x.py", "a//x.py", "a/", "-x.py",
+               "x.txt", "x.py2", "dir", "b\ud800.py::t", "b\u00e9.py", "bench.py::\ud800", "\nbench.py", "a\tb.py", "a\x7fb.py", "a\x1fb.py::t",
+               "bench.py::t\0")
+
+
+def test_benchmark_file_of_accepts_and_rejects_targets():
+    for target, expected in GOOD_TARGETS:
+        assert bg._benchmark_file_of(target) == expected
+    for target in BAD_TARGETS:
+        with pytest.raises(bg.BenchmarkGateError) as info:
+            bg._benchmark_file_of(target)
+        assert info.value.code == "MEASURE_ARGS_INVALID", target
+        assert info.value.detail == "target must be a .py path under the root, without '..' or a leading '-'", target
+
+
+def test_check_timeout_accepts_and_rejects_values():
+    for good in (1, 0.5, 30, 3600, 3600.0):
+        bg._check_timeout(good)
+    for bad in (True, False, float("nan"), 0, 0.0, -1, 3601, "30", None):
+        with pytest.raises(bg.BenchmarkGateError) as info:
+            bg._check_timeout(bad)
+        assert info.value.code == "MEASURE_ARGS_INVALID", bad
+
+
+@posix_only
+def test_measure_paired_rejects_bad_targets_and_timeouts(tmp_path):
+    roots, bins = fake_sides(tmp_path)
+    common = dict(repeats=4, timeout_seconds=30, base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0,
+                  argv_builder=builder(OK_CHILD))
+    for target in BAD_TARGETS:
+        with pytest.raises(bg.BenchmarkGateError) as info:
+            bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), target, **common)
+        assert info.value.code == "MEASURE_ARGS_INVALID", target
+    for bad in (True, float("nan"), 0, 3601, "30", None):
+        with pytest.raises(bg.BenchmarkGateError) as info:
+            bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t",
+                              **{**common, "timeout_seconds": bad})
+        assert info.value.code == "MEASURE_ARGS_INVALID", bad
+
+
+@posix_only
+def test_sides_checks_run_before_the_target_check(tmp_path):
+    roots, bins = fake_sides(tmp_path)
+    inner = roots["base"] / "inner"
+    inner.mkdir()
+    common = dict(repeats=4, timeout_seconds=30, base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0,
+                  argv_builder=builder(OK_CHILD))
+    cases = (
+        ((str(roots["base"]), str(roots["head"]), "", str(bins["head"])), "base bin must be an existing absolute directory"),
+        (("relative", str(roots["head"]), str(bins["base"]), str(bins["head"])), "base root must be an existing absolute directory"),
+        ((str(roots["base"]), str(roots["base"]), str(bins["base"]), str(bins["head"])), "the two sides must not share a root or a bin directory"),
+        ((str(roots["base"]), str(inner), str(bins["base"]), str(bins["head"])), "neither root may contain the other"),
+    )
+    for args, message in cases:
+        with pytest.raises(bg.BenchmarkGateError) as info:
+            bg.measure_paired(*args, "../bad", **common)
+        assert info.value.code == "MEASURE_ARGS_INVALID"
+        assert info.value.detail == message, (args, info.value.detail)
 
 
 @posix_only
