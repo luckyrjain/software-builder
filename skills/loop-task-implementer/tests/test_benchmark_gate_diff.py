@@ -17,22 +17,9 @@ from pathlib import Path
 
 import pytest
 
+from _gitskip import skip_old_git
+
 _SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
-
-
-def skip_old_git(message: str):
-    """A git older than 2.43 skips these tests on a developer machine and FAILS them under CI (the ``CI`` variable): a skip there would hide a
-    whole suite. Production's ``_require_modern_git`` hard-fails either way."""
-    if os.environ.get("CI"):
-        pytest.fail(message)
-    pytest.skip(message)
-def test_skip_old_git_fails_under_ci_and_skips_elsewhere(monkeypatch):
-    monkeypatch.setenv("CI", "true")
-    with pytest.raises(pytest.fail.Exception, match="needed"):
-        skip_old_git("git >= 2.43 is needed")
-    monkeypatch.delenv("CI", raising=False)
-    with pytest.raises(pytest.skip.Exception, match="needed"):
-        skip_old_git("git >= 2.43 is needed")
 
 
 def _load(path: Path, name: str):

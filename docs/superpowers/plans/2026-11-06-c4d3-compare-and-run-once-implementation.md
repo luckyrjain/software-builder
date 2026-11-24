@@ -1,5 +1,12 @@
 # C4d-3 `compare`, `run-once` and the verdict mapping: implementation plan
 
+> **Note (round 5): the spec wins over this plan** wherever they differ, and the spec is annotated by round (design D1 to D6, implementation I1 to I5). Known
+> differences: the spawn guard (`spawn_guard`, called before every spawn, with the recorded directory identities); `_IdentityChanged` (derives from
+> `Exception`, not from `BenchmarkGateError`); `_WrittenResult` and `written_sha256` (the CLI prints the line from the in-memory result and the hash of the
+> bytes written); the retry rule (two constants, `COMPARE_RETRYABLE_AUTOMATIC` and `COMPARE_RETRYABLE_WITH_HUMAN_FLAG`, not one); `harness-sha256`; `allow_abbrev=False`.
+> "Spec question 4" and the `NotImplementedError` scaffold between T3a and T4b are HISTORICAL: the scaffold was removed, `_compare_impl` has none. Commands and
+> paths below that name a machine-local Python are generic: use any Python 3.12+ with PyYAML.
+
 **Goal:** add `compare` (the 13-step pipeline, the result vocabularies, the integrity checks, the result file) and `run-once` to the
 benchmark gate in `skills/loop-task-implementer/scripts/benchmark_gate.py`, plus the CLI crash contract. Library and CLI only; nothing is
 wired until C4f. The provisioning, the `IMPROVED` acceptance screen, the retry policy and the write-back of the parent-design deviations are
@@ -11,7 +18,7 @@ an internal `_Verdict` into a result dict (or raises `BenchmarkGateError` for a 
 (`fingerprint_tree`, `interpreter_pin`, `dependency_parity`, `verify_export_against_commit`) are separate module-level functions. The C4d-1/2
 run chain is hardened first (per-run scratch and ini, no pycache prefix, errno-aware spawn failures, `kind` on measure errors, salted order).
 
-**Tech stack:** Python standard library only (the skill ships `scripts/` wholesale); pytest for tests (`/opt/homebrew/bin/python3`).
+**Tech stack:** Python standard library only (the skill ships `scripts/` wholesale); pytest for tests (any Python 3.12+ with PyYAML for `make lint-static`).
 
 **Spec (binding):** `docs/superpowers/specs/2026-11-06-c4d3-compare-and-run-once-design.md` (rev 7; sections 2.1 to 2.11, 3 acceptance, 4 tests
 and "Existing tests changed", 6 task table). Where this plan and the spec disagree, the spec wins; stop and report the disagreement. The
@@ -23,9 +30,9 @@ and "Existing tests changed", 6 task table). Where this plan and the spec disagr
 
 - All code tasks edit the **same file**, so tasks run strictly in order; never run two implementers at once, never edit `benchmark_gate.py`
   while a full suite runs (the harness-hash test reads the module hash at import).
-- Test commands (no engineering profile exists): focused `/opt/homebrew/bin/python3 -m pytest <file> -q`; the benchmark-gate set
-  `/opt/homebrew/bin/python3 -m pytest skills/loop-task-implementer/tests -q -k "benchmark_gate or packaged_runtime"` (8 to 10 minutes: run in
-  the background); lint `PATH=/tmp/pybin:$PATH make lint-static` (`/tmp/pybin` holds a symlink to `/opt/homebrew/bin/python3`, which has `yaml`).
+- Test commands (no engineering profile exists): focused `python3 -m pytest <file> -q`; the benchmark-gate set
+  `python3 -m pytest skills/loop-task-implementer/tests -q -k "benchmark_gate or packaged_runtime"` (8 to 10 minutes: run in
+  the background); lint `make lint-static` (run it with a Python 3.12+ first on `PATH` that has PyYAML).
 - TDD: write the failing test first, see it fail for the stated reason (on the base, or on the previous task's commit), then implement. A task's
   tests must be green at its own commit. A "green on arrival" pin (T7) is proven non-vacuous by a temporary mutation that is reverted, not committed.
 - Commits: one commit per task, message `C4d-3 <task>: <what>`, ending with the line
@@ -67,7 +74,7 @@ says so (the whole C4d-1/2 suite); no un-coded exception out of the CLI; honest 
   call `_ratio_stats` before it; spec 2.11 allows the harmless extra median) and its branch order. `benchmark_target(normalized_gate) -> str`: split
   `normalized_gate["command"]` on a space, drop the `pytest` or `python3 -m pytest` prefix, return the one token that does not start with `-`
   (the gate was validated, so exactly one exists; a missing one raises `ValueError`, unreachable).
-- **Run:** `/opt/homebrew/bin/python3 -m pytest skills/loop-task-implementer/tests/test_benchmark_gate_core.py -q` -> all pass.
+- **Run:** `python3 -m pytest skills/loop-task-implementer/tests/test_benchmark_gate_core.py -q` -> all pass.
 - **Commit:** `C4d-3 T0a: gate warmup 1..2, _ratio_stats, benchmark_target`.
 
 ### T0b1 `[CODE]` `kind` on measure errors, errno-aware spawn failures, salted order
@@ -99,7 +106,7 @@ says so (the whole C4d-1/2 suite); no un-coded exception out of the CLI; honest 
   (`oversize -> OUTPUT_TOO_LARGE`, `timeout -> <SIDE>_TIMEOUT`, `nonzero`/`spawn -> <SIDE>_NONZERO_EXIT`) with the `AssertionError`; `adapt` sets
   `error.kind = kind` (the `kind` attribute exists, `BenchmarkGateError.kind`, `:911`). `run_order(..., *, salt=None)`: validate (`None` or lowercase hex of 1 to 64
   chars, else `MEASURE_ARGS_INVALID`) after the existing checks; with a salt the seed string gains `"\0" + salt`. `measure_paired(..., order_salt=None)` passes it through.
-- **Run:** `/opt/homebrew/bin/python3 -m pytest skills/loop-task-implementer/tests/test_benchmark_gate_measure.py skills/loop-task-implementer/tests/test_benchmark_gate_trace.py -q` -> all pass.
+- **Run:** `python3 -m pytest skills/loop-task-implementer/tests/test_benchmark_gate_measure.py skills/loop-task-implementer/tests/test_benchmark_gate_trace.py -q` -> all pass.
 - **Commit:** `C4d-3 T0b1: error kind, spawn errno split, salted run order`.
 
 ### T0b2a `[CODE]` per-run scratch and ini, no pycache prefix, work identity check (the blocker test)
@@ -188,7 +195,7 @@ says so (the whole C4d-1/2 suite); no un-coded exception out of the CLI; honest 
   2.8 key set with `None` for not applicable and `untrusted_text` capped at 20; `_validate_out_path(out_path, forbidden) -> (dir_ident, name)`; `_write_result(...)` per 2.9
   (`O_DIRECTORY|O_NOFOLLOW` open of the recorded directory, random temp via `dir_fd`, `os.link(src_dir_fd=, dst_dir_fd=)`, `unlink` in `finally`, final identity `stat`, returns the sha256 of
   the bytes written); `ERROR_CODES += ("BASE_NOT_ANCESTOR",)` directly after `ERROR_CODES += TRACE_REFUSAL_CODES`.
-- **Run:** `/opt/homebrew/bin/python3 -m pytest skills/loop-task-implementer/tests/test_benchmark_gate_compare.py skills/loop-task-implementer/tests/test_benchmark_gate_exports.py -q` -> all pass.
+- **Run:** `python3 -m pytest skills/loop-task-implementer/tests/test_benchmark_gate_compare.py skills/loop-task-implementer/tests/test_benchmark_gate_exports.py -q` -> all pass.
 - **Commit:** `C4d-3 T2a: compare vocabularies, Side, result assembly, dir-fd writer`.
 
 ### T2b0 `[CODE]` shared fixtures (no production code)
@@ -298,7 +305,7 @@ says so (the whole C4d-1/2 suite); no un-coded exception out of the CLI; honest 
     the environment; used by T4a2; exercised here against `trace_paired` and `measure_paired` with a real tiny child).
 - **Implement:** `_cmd_snapshot_venv` computes `interpreter_pin(args.bin)` **first**, then `snapshot_venv(...)`, then reads the written file once (`_read_bounded`, nofollow), prints `snapshot_sha256: <hex>` and
   `interpreter_sha256: <hex>`; any `BenchmarkGateError` is `_fail`. Update the subparser help and `_cmd_snapshot_venv` docstring. `fake_trace_builder` is a test helper.
-- **Run:** `/opt/homebrew/bin/python3 -m pytest skills/loop-task-implementer/tests/test_benchmark_gate_venv.py skills/loop-task-implementer/tests/test_benchmark_gate_compare.py -q` -> all pass.
+- **Run:** `python3 -m pytest skills/loop-task-implementer/tests/test_benchmark_gate_venv.py skills/loop-task-implementer/tests/test_benchmark_gate_compare.py -q` -> all pass.
 - **Commit:** `C4d-3 T2c: snapshot-venv prints the snapshot and interpreter pins`.
 
 ### T3a `[CODE]` `_compare_checks` (steps 1 to 6) and the signature layer
@@ -451,7 +458,7 @@ says so (the whole C4d-1/2 suite); no un-coded exception out of the CLI; honest 
   help text and docstring; the `repo_top_levels` docstring (`:2427-2433`) and the `overlay_benchmark_file` docstring (`:2589-2600`) so they state that `compare` takes `repo_top_levels` after the install (and that `build/` and `dist/` joining the allowlist is harmless and disclosed). `workflow/*` is not touched (C4e). Test-file docstrings (compare, measure, trace, venv, exports).
 - **Pins (green on arrival; prove each non-vacuous by a temporary mutation, then revert; spec section 4 row 18):** `test_main_registers_compare_and_run_once` (subparsers exist), `test_cli_path_uses_default_seams` (the CLI calls `compare`, whose default seams are used: `argv_builder`, `load_probe`, `order_salt`, `interpreter_of` all unset), `test_generated_salt_is_random_and_recorded`
   (two `_compare_impl` calls without a salt record different `order_salt` values; the recorded salt reproduces the `order`).
-- **Run:** `PATH=/tmp/pybin:$PATH make lint-static` -> exit 0; compare, measure, trace, venv, exports files pass.
+- **Run:** `make lint-static` -> exit 0; compare, measure, trace, venv, exports files pass.
 - **Commit:** `C4d-3 T7: docs and pins for compare and run-once`.
 
 ### T8 `[CONTROLLER]` gates, reviews, PR

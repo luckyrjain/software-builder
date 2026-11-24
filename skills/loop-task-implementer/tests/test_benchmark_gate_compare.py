@@ -32,6 +32,8 @@ from pathlib import Path
 
 import pytest
 
+from _gitskip import skip_losing_coverage, skip_old_git
+
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "benchmark_gate.py"
 spec = importlib.util.spec_from_file_location("benchmark_gate_compare_under_test", SCRIPT)
 bg = importlib.util.module_from_spec(spec)
@@ -40,22 +42,6 @@ spec.loader.exec_module(bg)
 
 posix_only = pytest.mark.skipif(os.name != "posix", reason="POSIX harness")
 
-
-def skip_old_git(message: str):
-    """A git older than 2.43 skips these tests on a developer machine and FAILS them under CI (the ``CI`` variable): a skip there would hide a
-    whole suite. Production's ``_require_modern_git`` hard-fails either way."""
-    if os.environ.get("CI"):
-        pytest.fail(message)
-    pytest.skip(message)
-
-
-def test_skip_old_git_fails_under_ci_and_skips_elsewhere(monkeypatch):
-    monkeypatch.setenv("CI", "true")
-    with pytest.raises(pytest.fail.Exception, match="needed"):
-        skip_old_git("git >= 2.43 is needed")
-    monkeypatch.delenv("CI", raising=False)
-    with pytest.raises(pytest.skip.Exception, match="needed"):
-        skip_old_git("git >= 2.43 is needed")
 
 REJECTED = "GATE_REJECTED ISOLATION_REJECTED PROTECTED_PATH_CHANGED BENCHMARK_AWARE_CODE DIFF_UNCHECKABLE EXPORT_REJECTED OVERLAY_REJECTED " \
            "BENCHMARK_MODIFIED LINT_REJECTED TRACE_MISMATCH BASE_NONZERO_EXIT DIGEST_MISSING DIGEST_UNSTABLE WORKLOAD_TOO_SHORT".split()
@@ -67,35 +53,48 @@ INCONCLUSIVE = "UNSUPPORTED_PLATFORM HOST_BUSY_START HOST_BUSY_END TRACE_UNAVAIL
 # --- the docstring's residuals and spec 2.5 say the same thing ---
 
 SPEC_C4D3 = Path(__file__).resolve().parents[3] / "docs" / "superpowers" / "specs" / "2026-11-06-c4d3-compare-and-run-once-design.md"
-# number -> a phrase that must be in BOTH the module docstring's item and spec 2.5's item of that number (case-insensitive)
-RESIDUAL_PHRASES = {1: "setsid", 2: "harness_sha256", 3: "3.12", 4: "path chain", 5: "/tmp", 6: "ctime tick", 7: "writable interpreter", 8: "sigkill",
-                    9: "record-consistent"}
+# The stable labels `[R<n>:<word>]` of the nine residuals: the module docstring is their single source and spec 2.5 carries the same labels. The test
+# compares numbers and these short labels only, never prose, so re-wrapping or rewording a paragraph cannot break it.
+RESIDUAL_LABELS = {1: "setsid", 2: "harness-file", 3: "py312", 4: "path-chain", 5: "outside-state", 6: "ctime-tick", 7: "writable-interpreter",
+                   8: "sigkill", 9: "third-party"}
+_LABEL_RE = re.compile(r"\[R(\d):([a-z0-9-]+)\]")
 
 
 def _spec_text():
-    if not SPEC_C4D3.parent.parent.parent.is_dir():  # `docs/` itself is absent: a packaged install, not the repository checkout
-        pytest.skip("the repository's docs/ directory is not present (not a checkout)")
-    return SPEC_C4D3.read_text(encoding="utf-8")  # a missing spec in a checkout is a failure (FileNotFoundError), never a skip
+    # skipped only when this is not a repository checkout: the spec file AND the `docs/superpowers` directory are both absent. Anywhere else a
+    # missing spec is a failure (FileNotFoundError), never a skip.
+    if not SPEC_C4D3.is_file() and not SPEC_C4D3.parent.parent.is_dir():
+        pytest.skip("neither the C4d-3 spec nor docs/superpowers is present (not a repository checkout)")
+    return SPEC_C4D3.read_text(encoding="utf-8")
 
 
-def _numbered(text, pattern):
-    parts = re.split(pattern, text, flags=re.M)
-    return {int(parts[i]): parts[i + 1].lower() for i in range(1, len(parts) - 1, 2)}
+def _labels(text):
+    return {int(number): word for number, word in _LABEL_RE.findall(text)}
 
 
-def test_every_numbered_residual_of_the_module_docstring_is_in_spec_2_5():
+def test_every_residual_label_of_the_module_docstring_is_in_spec_2_5():
     doc = bg.__doc__
     section = doc[doc.index("Known residuals of ``compare``"):doc.index("Limits of the trace:")]
-    in_doc = _numbered(section, r"^\((\d)\) ")
     spec = _spec_text()
     block = spec[spec.index("**Disclosed residuals"):spec.index("### 2.6 Host checks")]
-    in_spec = _numbered(block, r"^(\d)\. ")
-    assert sorted(in_doc) == sorted(in_spec) == sorted(RESIDUAL_PHRASES) == list(range(1, 10))
-    for number, phrase in RESIDUAL_PHRASES.items():
-        assert phrase in in_doc[number], (number, phrase, "docstring")
-        assert phrase in in_spec[number], (number, phrase, "spec 2.5")
-    # the compare docstring numbers them the same way
-    assert all(f"({number})" in bg.compare.__doc__ for number in RESIDUAL_PHRASES)
+    found_in_doc = _LABEL_RE.findall(section)
+    found_in_spec = _LABEL_RE.findall(block)
+    assert len(found_in_doc) == len(found_in_spec) == 9  # each label once: no duplicates, none missing
+    assert _labels(section) == _labels(block) == RESIDUAL_LABELS
+
+
+def test_the_compare_docstring_points_at_the_module_docstring_instead_of_copying_the_residuals():
+    assert not _LABEL_RE.search(bg.compare.__doc__) and "(1)" not in bg.compare.__doc__ and "(9)" not in bg.compare.__doc__
+    assert "single source" in bg.compare.__doc__ and "[R1]" in bg.compare.__doc__
+
+
+def test_the_spec_skip_rule_fails_in_a_checkout_without_the_spec(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys.modules[__name__], "SPEC_C4D3", tmp_path / "docs" / "superpowers" / "specs" / "missing.md")
+    with pytest.raises(pytest.skip.Exception):  # no docs/superpowers at all: a packaged install
+        _spec_text()
+    (tmp_path / "docs" / "superpowers" / "specs").mkdir(parents=True)
+    with pytest.raises(FileNotFoundError):  # the directory exists but the spec does not: a failure, not a skip
+        _spec_text()
 
 
 def test_the_provisioning_contract_and_the_c4e_write_back_list_name_the_two_pins():
@@ -952,7 +951,8 @@ def _real_venv(tmp_path: Path) -> Path:
     venv.create(root, with_pip=False, symlinks=True)
     python = root / "bin" / "python"
     if not python.is_symlink():
-        pytest.skip("this platform's venv does not symlink its python")
+        skip_losing_coverage("this platform's venv does not symlink its python",
+                             "every real-venv row (interpreter pin, start-up probe, real children) that needs `bin/python` to be a symlink")
     return root
 
 
@@ -1009,7 +1009,8 @@ def test_startup_probe_catches_a_redirected_home(tmp_path):
     real_python = Path(os.path.realpath(root / "bin" / "python"))
     real_stdlib = real_python.parent.parent / "lib" / real_python.name
     if not real_stdlib.is_dir():
-        pytest.skip("the real interpreter's layout is not <prefix>/lib/pythonX.Y")
+        skip_losing_coverage("the real interpreter's layout is not <prefix>/lib/pythonX.Y",
+                             "the start-up probe's redirected-`home` rejection against a real interpreter (the script rows still cover its logic)")
     # A decoy prefix whose bin holds a symlink to the real binary (so the by-file `home` check passes) and whose stdlib is the real one
     # with its own os.py: only what CPython actually loads can tell.
     decoy = tmp_path / "decoy"
@@ -1027,7 +1028,8 @@ def test_startup_probe_catches_a_redirected_home(tmp_path):
     if seen != os.path.realpath(decoy):
         # macOS framework builds find their stdlib from the loaded dylib and ignore `home`: there is nothing to redirect on such a build
         # (and the pin's probe then correctly sees the real prefix). The probe's rejection logic is covered by the script rows above.
-        pytest.skip(f"this CPython build ignores a redirected `home` (it reports {seen})")
+        skip_losing_coverage(f"this CPython build ignores a redirected `home` (it reports {seen})",
+                             "the start-up probe's redirected-`home` rejection against a real interpreter (the script rows still cover its logic)")
     with pytest.raises(bg.BenchmarkGateError) as e:
         bg.interpreter_pin(root / "bin")
     assert _code(e) == "VENV_NOT_ISOLATED" and "probe" in e.value.detail
@@ -2261,10 +2263,12 @@ def test_step4_writable_interpreter_needs_the_flag_and_the_result_says_so(case):
     _iso(result, "INTERPRETER_WRITABLE")
     assert result["interpreter_writable"] is True
     case.pin_mods.update(base=lambda p: p._replace(writable=False), head=lambda p: p._replace(writable=False))
-    assert case.checks().writable is False  # a non-writable interpreter passes without the flag
+    case.checks()  # a non-writable interpreter passes without the flag
+    assert case.common["interpreter_writable"] is False
     case.pin_mods.clear()
     case.allow = True
-    assert case.checks().writable is True and case.common["interpreter_writable"] is True  # the flag lets it through, and the fact is recorded
+    case.checks()
+    assert case.common["interpreter_writable"] is True  # the flag lets it through, and the fact is recorded
 
 
 @posix_only
@@ -2560,7 +2564,7 @@ def test_overlay_origin_pass_through(bcase):
     assert prepared.benchmark == BENCH and prepared.target == bg.benchmark_target(prepared.gate) and prepared.roots == c.roots
     assert prepared.benchmark_sha256 == hashlib.sha256(BENCH_OK).hexdigest() == c.common["benchmark_sha256"]
     assert prepared.h0 == (bg.hash_export(c.roots[0]), bg.hash_export(c.roots[1]))
-    assert prepared.harness_sha256 == c.common["harness_sha256"] and prepared.gate_sha256 == c.common["gate_sha256"]
+    assert {"harness_sha256", "gate_sha256"}.isdisjoint(bg._Prepared._fields) and "writable" not in bg._Checked._fields  # no unread fields (the result carries them)
     base_bench = Path(c.roots[0]) / BENCH  # overlaid, and both exports are sealed
     assert base_bench.read_bytes() == BENCH_OK and not os.stat(base_bench).st_mode & 0o222 and not os.stat(c.roots[0]).st_mode & 0o200
     assert not os.stat(c.roots[1]).st_mode & 0o200
@@ -4977,6 +4981,78 @@ def test_a_real_child_that_rewrites_its_ini_or_plants_a_file_under_work_changes_
 
 # --- T7 pins (spec 4 row 18): the CLI registers both commands, the CLI path uses the default seams, the generated salt is random ---
 
+# --- round 5: the exit-code contract cannot fail open (M3) and the harness pin is reproducible (M1) ---
+
+@posix_only
+def test_compare_help_is_a_bare_exit_0_and_is_not_an_improved():
+    done = _cli("compare", "--help")
+    assert done.returncode == 0 and "RESULT:" not in done.stdout  # argparse's own exit 0: no result line at all
+    assert parse_compare_outcome(done.returncode, done.stdout, None) == 2
+    assert parse_compare_outcome(done.returncode, done.stdout, b"{}") == 2  # even next to some file: exit 0 needs a valid RESULT line of IMPROVED
+    assert parse_compare_outcome(0, "", b'{"result": "IMPROVED", "reason": "IMPROVED_CLEAR"}\n') == 2
+
+
+@posix_only
+@pytest.mark.parametrize("abbreviation", ["--allow-writable-i", "--allow-writable", "--att"])
+def test_an_abbreviated_option_is_refused_for_compare_and_never_sets_the_human_flag(monkeypatch, capsys, abbreviation):
+    seen = []
+    monkeypatch.setattr(bg, "_cmd_compare", lambda args: seen.append(args) or 0)
+    full = [part for flag in COMPARE_FLAGS for part in (flag, f"v{flag[2:]}")]
+    assert bg.main(["compare", *full, abbreviation, *(["1"] if abbreviation == "--att" else [])]) == 2 and seen == []
+    assert "unrecognized arguments" in capsys.readouterr().err
+    assert bg.main(["compare", *full, "--allow-writable-interpreter"]) == 0 and seen[0].allow_writable_interpreter is True  # the full name works
+
+
+@posix_only
+def test_an_abbreviated_option_is_refused_for_run_once_and_the_other_commands(monkeypatch):
+    seen = []
+    monkeypatch.setattr(bg, "_cmd_run_once", lambda args: seen.append(args) or 0)
+    assert bg.main(["run-once", "--gate", "g", "--root", "r", "--bin", "b", "--sid", "base"]) == 2
+    assert bg.main(["run-once", "--gate", "g", "--roo", "r", "--bin", "b"]) == 2 and seen == []
+    assert bg.main(["run-once", "--gate", "g", "--root", "r", "--bin", "b", "--side", "base"]) == 0 and seen[0].side == "base"
+    assert bg.main(["lint", "--benchmark", "f", "--symb", "s"]) == 2
+    assert bg.main(["harness-sha256", "--x"]) == 2
+
+
+def _every_parser(parser):
+    yield parser
+    for action in parser._actions:
+        if getattr(action, "choices", None) and isinstance(action.choices, dict):
+            for child in action.choices.values():
+                yield from _every_parser(child)
+
+
+def test_every_parser_of_the_cli_has_abbreviations_off(monkeypatch):
+    captured = []
+    real = bg.argparse.ArgumentParser.parse_args
+    monkeypatch.setattr(bg.argparse.ArgumentParser, "parse_args", lambda self, argv=None, namespace=None: (captured.append(self), real(self, argv, namespace))[1])
+    bg.main(["fixed-parent"])
+    parsers = list(_every_parser(captured[0]))
+    assert len(parsers) == 10 and not any(parser.allow_abbrev for parser in parsers)  # the main parser and the nine subparsers
+
+
+def test_the_harness_sha256_command_prints_the_digest_the_result_carries(capsys):
+    assert bg.main(["harness-sha256"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == f"harness_sha256: {bg.harness_sha256()}\n" and captured.err == ""
+    assert re.fullmatch(r"harness_sha256: [0-9a-f]{64}\n", captured.out)
+
+
+def test_the_harness_sha256_command_fails_with_exit_2_when_the_harness_cannot_be_digested(monkeypatch, capsys):
+    def boom():
+        raise bg.BenchmarkGateError("HARNESS_UNREADABLE", "x")
+    monkeypatch.setattr(bg, "harness_sha256", boom)
+    assert bg.main(["harness-sha256"]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == "" and "HARNESS_UNREADABLE" in captured.err
+
+
+@posix_only
+def test_the_harness_sha256_command_in_a_real_process_matches_the_in_process_digest():
+    done = _cli("harness-sha256")
+    assert done.returncode == 0 and done.stdout == f"harness_sha256: {bg.harness_sha256()}\n"
+
+
 @posix_only
 def test_main_registers_compare_and_run_once(monkeypatch, capsys):
     seen = []
@@ -5133,13 +5209,20 @@ def test_the_cli_fails_closed_when_compare_returns_no_hash_of_what_it_wrote(tmp_
 
 def test_the_public_docstrings_state_the_reading_contract():
     doc = bg.__doc__ + bg._cmd_compare.__doc__ + bg.main.__doc__
-    for phrase in ("counts as exit 2", "IGNORED", "NEVER be auto-retried", "COMPARE_RETRYABLE_ON_SAME_EXPORTS", "INTERPRETER_CHANGED", "Disclosed residuals"):
+    for phrase in ("counts as exit 2", "IGNORED", "NEVER be auto-retried", "COMPARE_RETRYABLE_AUTOMATIC", "COMPARE_RETRYABLE_WITH_HUMAN_FLAG",
+                   "INTERPRETER_CHANGED", "single source", "allow_abbrev=False", "bare exit 0", "NOT an ``IMPROVED``", "TRUSTED copy"):
         assert phrase in doc or phrase.lower() in doc.lower(), phrase
-    for reason, _stage, detail in bg.COMPARE_RETRYABLE_ON_SAME_EXPORTS:  # the prose names exactly what the constant lists
+    for reason, _stage, detail in bg.COMPARE_RETRYABLE_AUTOMATIC | bg.COMPARE_RETRYABLE_WITH_HUMAN_FLAG:  # the prose names exactly what the constants list
         assert reason in bg.compare.__doc__ and (detail in bg.compare.__doc__ or not detail)
     assert "interpreter's own path chain" in bg.__doc__  # the disclosed residual of the pinned-by-content interpreter path
-    assert "before the interpreter is pinned" not in bg.__doc__ and "section 9" not in bg.__doc__ and "section 9" not in bg.compare.__doc__
-    assert "writes nothing of its own" not in bg._cmd_compare.__doc__
+    assert "TRUSTED copy" in bg.harness_sha256.__doc__ and "never from a previous `compare` result" in bg.harness_sha256.__doc__
+
+
+def test_the_spec_and_the_docstrings_say_the_expected_harness_digest_comes_from_a_trusted_copy():
+    spec = _spec_text()
+    for text in (spec[spec.index("**Provisioning contract for C4e"):spec.index("**Interpreter (T2b1b)")], spec[spec.index("## 9. Deviations"):], bg.__doc__):
+        flat = " ".join(text.split())
+        assert "TRUSTED copy" in flat and "harness-sha256" in flat and "previous `compare` result" in flat.replace("``", "`")
 
 
 # --- round 2 (security): the dispatch root is bound by identity, before every spawn ---
@@ -5398,6 +5481,21 @@ def test_a_pre_measure_guard_that_objects_is_a_verdict_before_measure_paired_run
 
 
 @posix_only
+def test_trace_mismatch_seen_is_true_when_a_pending_counts_differ_meets_a_guard_ending(bcase, monkeypatch):
+    """A pending `counts_differ` (T5) and then the pre-measure guard (call 2) objects: the ending is the guard's, and the result still says a trace
+    mismatch was seen (the consolidated block after the measure `try`, not the branch that maps a measure error: a mutant that moves it into
+    that `else` fails here), with the trace kept."""
+    c = bcase
+    _stub(c, "trace_paired", _err("TRACE_MISMATCH", "counts_differ", phase="trace", trace=_seen()))
+    _guard_objecting_from_call(monkeypatch, 2)
+    ran = _stub(c, "measure_paired", MEASURE_OK)
+    result = c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+    _ends(result, "ISOLATION_REJECTED", "EXPORT_CHANGED", stage="ran")
+    assert result["trace_mismatch_seen"] is True and result["trace"] is not None and result["trace"]["head"]["value"] == 8
+    assert ran == []  # the guard ended it before the measurement
+
+
+@posix_only
 def test_the_baseline_records_every_directory_identity_and_the_dispatch_root_ctime(bcase):
     c = bcase
     prepared = c.prepare()
@@ -5469,22 +5567,36 @@ def test_the_result_is_linked_without_following_symlinks(tmp_path, monkeypatch):
 
 # --- round 3: the retry rule as data, the gate-code drift, the bounded dispatch listing, the guard's text and root ---
 
-def test_the_retry_rule_is_one_machine_readable_constant_and_agrees_with_the_reason_table():
-    assert bg.COMPARE_RETRYABLE_ON_SAME_EXPORTS == {("HOST_BUSY_START", "pre_overlay", ""),
-                                                    ("ISOLATION_REJECTED", "pre_overlay", "INTERPRETER_WRITABLE")}
-    for reason, stage, detail in bg.COMPARE_RETRYABLE_ON_SAME_EXPORTS:
+def test_the_retry_rule_is_two_machine_readable_constants_and_agrees_with_the_reason_table():
+    assert bg.COMPARE_RETRYABLE_AUTOMATIC == {("HOST_BUSY_START", "pre_overlay", "")}
+    assert bg.COMPARE_RETRYABLE_WITH_HUMAN_FLAG == {("ISOLATION_REJECTED", "pre_overlay", "INTERPRETER_WRITABLE")}
+    assert not bg.COMPARE_RETRYABLE_AUTOMATIC & bg.COMPARE_RETRYABLE_WITH_HUMAN_FLAG
+    assert not hasattr(bg, "COMPARE_RETRYABLE_ON_SAME_EXPORTS")  # one reader per constant: C4e keys on these two
+    both = bg.COMPARE_RETRYABLE_AUTOMATIC | bg.COMPARE_RETRYABLE_WITH_HUMAN_FLAG
+    for reason, stage, detail in both:
         result, stages, details = bg.COMPARE_REASONS[reason]
         assert stage in stages and detail in details and stage == "pre_overlay"  # a result that exists, before anything was overlaid or run
     # only the first two steps' outcomes can change on the same exports: no step-7 refusal (content), nothing at overlaid or ran
-    assert not {reason for reason, _, _ in bg.COMPARE_RETRYABLE_ON_SAME_EXPORTS} & {"OVERLAY_REJECTED", "BENCHMARK_MODIFIED", "LINT_REJECTED",
-                                                                                    "PROTECTED_PATH_CHANGED", "BENCHMARK_AWARE_CODE"}
+    assert not {reason for reason, _, _ in both} & {"OVERLAY_REJECTED", "BENCHMARK_MODIFIED", "LINT_REJECTED", "PROTECTED_PATH_CHANGED",
+                                                    "BENCHMARK_AWARE_CODE"}
 
 
 @posix_only
 def test_the_two_retryable_results_are_what_compare_gives_for_them(case):
+    """BOTH halves: each real result matches its own constant and NOT the other (a human-only retry must never read as automatic)."""
+    case.allow = False
+    writable = case.impl()
+    triple = (writable["reason"], writable["stage"], writable["detail"])
+    assert triple in bg.COMPARE_RETRYABLE_WITH_HUMAN_FLAG and triple not in bg.COMPARE_RETRYABLE_AUTOMATIC
+    assert triple == ("ISOLATION_REJECTED", "pre_overlay", "INTERPRETER_WRITABLE")
+
+
+@posix_only
+def test_the_host_busy_result_is_the_automatic_retry_and_not_the_human_one(case):
     case.probe = lambda: (1.41, 2)
     busy = case.impl()
-    assert (busy["reason"], busy["stage"], busy["detail"]) in bg.COMPARE_RETRYABLE_ON_SAME_EXPORTS
+    triple = (busy["reason"], busy["stage"], busy["detail"])
+    assert triple in bg.COMPARE_RETRYABLE_AUTOMATIC and triple not in bg.COMPARE_RETRYABLE_WITH_HUMAN_FLAG
 
 
 def test_every_gate_rejection_code_validate_benchmark_gate_can_return_is_in_the_compare_table():

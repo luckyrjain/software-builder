@@ -34,9 +34,9 @@
 # so `make lint` still works in a bare pytest environment -- xdist's -n flag would
 # otherwise error as unrecognized.
 #
-# Deliberately NOT reused for the smaller per-skill suites (one exception: lint-loop-task-implementer-scripts, below) (skills/pr-review/tests/,
-# skills/k8s-overprovisioning-datadog/tests/, skills/incident-rca/tests/,
-# skills/squad-map/tests/, skills/migration-program-manager/tests/): those targets
+# Deliberately NOT reused for the smaller per-skill suites (skills/pr-review/tests/, skills/k8s-overprovisioning-datadog/tests/,
+# skills/incident-rca/tests/, skills/squad-map/tests/, skills/migration-program-manager/tests/; the one exception is
+# lint-loop-task-implementer-scripts, below): those targets
 # already run concurrently with each other and with this one under `make -j`
 # (lint-suites), so each also spawning its own
 # `-n auto` (= nproc) worker pool oversubscribes CI runners by up to 6x and was the
@@ -58,8 +58,8 @@
 # plain local `make lint` (no outer -j) leaves it at "auto" and keeps full parallelism.
 PYTEST_XDIST_WORKERS ?= auto
 # Recursively (not immediately) expanded: the probe spawns a Python interpreter,
-# and only the pytest recipe at lint-framework-tests references this. `:=` made
-# every `make` invocation pay it, `make install-pr-review` included.
+# and only the pytest recipes that use it (lint-framework-tests and lint-loop-task-implementer-scripts) reference
+# it. `:=` made every `make` invocation pay it, `make install-pr-review` included.
 PYTEST_XDIST_FLAG = $(shell python3 -c "import xdist" >/dev/null 2>&1 && echo "-n $(PYTEST_XDIST_WORKERS)" || true)
 
 install:
@@ -598,7 +598,8 @@ lint-loop-task-implementer: lint-loop-task-implementer-skill lint-loop-task-impl
 # co-located with it and run from the target that lints it. Parallel via PYTEST_XDIST_FLAG with
 # `--dist loadgroup`: the rows marked xdist_group("real-timing") (real pytest children, real pip) share one worker, so they are serialized only
 # against EACH OTHER: not against the other workers' tests, nor against sibling make targets under `make -j`, so a real-timing row can still
-# see load from them (the rows tolerate noise: a noisy outcome is retried, skipped or accepted, never asserted as a speedup).
+# see load from them. The real rows are asserted as a speedup ONLY when the host is quiet: a noisy outcome is retried up to 3 times and then
+# skipped (its non-timing assertions run on every attempt).
 lint-loop-task-implementer-scripts:
 	@echo "py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/validate_loop_lifecycle.py"
 	@echo "py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/run_log.py"

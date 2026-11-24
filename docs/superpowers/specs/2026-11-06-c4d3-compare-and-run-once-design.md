@@ -1,4 +1,4 @@
-# C4d-3: `compare`, `run-once` and the verdict mapping (rev 7, review rounds 1 to 6 applied)
+# C4d-3: `compare`, `run-once` and the verdict mapping (rev 7: design review rounds D1 to D6; implementation review rounds I1 to I5 follow it)
 
 Ticket C4 (performance-review to loop-task-implementer benchmark gate), sub-ticket C4d-3. Base `2dc72667` (C4d-2, #367, merged).
 Parent design (untracked in the main checkout, read there): `docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md`,
@@ -8,11 +8,16 @@ rest, and section 9 below, go to the C4e docs write-back).
 
 ## Revision history
 
-- rev 1 to 4: rounds 1 to 3. Result-or-raise split, one precedence list, ctime fingerprint, snapshot pin, per-run scratch/ini (the shared work
+Two sequences, never to be confused: the **design rounds D1 to D6** (revisions 1 to 7, before any code) and the **implementation review rounds
+I1 to I5** (after the code existed; each is one commit `C4d-3 round N: fix review findings` on the branch).
+
+### Design rounds D1 to D6 (revisions 1 to 7)
+
+- rev 1 to 4: design rounds D1 to D3. Result-or-raise split, one precedence list, ctime fingerprint, snapshot pin, per-run scratch/ini (the shared work
   directory was a writable channel), `untrusted_text`, crash contract, head-first provisioning, `verify_export`, stage table.
-- rev 5 (round 4: 1 blocker, 10 majors): overlay allowance (every PR adding its benchmark was rejected), `pyvenv.cfg` pin, dependency parity, tracked
+- rev 5 (D4: 1 blocker, 10 majors): overlay allowance (every PR adding its benchmark was rejected), `pyvenv.cfg` pin, dependency parity, tracked
   symlinks, errno classification, salt semantics, re-derived test fallout.
-- rev 6 (round 5: 2 blockers, 7 majors): **dependency parity** compared a RECORD hash that differs between any two honest venvs (console scripts
+- rev 6 (D5: 2 blockers, 7 majors): **dependency parity** compared a RECORD hash that differs between any two honest venvs (console scripts
   embed the venv path) and verified no file: now it excludes `../` rows, verifies every hashed row against disk, and requires every top-level
   site-packages entry to be owned by a verified RECORD; the **`home` check** failed on Homebrew, uv and Xcode CLT venvs: now it resolves
   `home/<name>`; `version_info` accepted; the interpreter pin now includes `__pycache__`, the files directly under `<prefix>` and `<prefix>/lib` (the
@@ -21,21 +26,37 @@ rest, and section 9 below, go to the C4e docs write-back).
   **Scope statement**: `compare` is a mechanical filter that raises the cost of forging a result; the control the parent relies on is the human
   acceptance of every `IMPROVED`. The spec pins what can be pinned before the install, checks what can be checked cheaply, requires a provisioning
   contract of C4e, and records the rest as residuals.
-- rev 7 (round 6, the last allowed; applied without a further round): `dependency_parity` became a full site-packages **inventory** (every file hash-verified
+- rev 7 (D6, the last allowed; applied without a further round): `dependency_parity` became a full site-packages **inventory** (every file hash-verified
   or allowlisted, no symlinks, no bytecode, one exempt editable dist limited to its own names with its finder mapping parsed and confined to the export);
   the interpreter pin gained a **start-up probe** (`python -I -S`) because CPython finds the stdlib from `pyvenv.cfg` `home`; error codes of the
   interpreter helper named; `pyvenv.cfg` in the baseline fingerprint; `interpreter_writable=n/a`; the editable-finder, bytecode and `.egg-link`
   residuals settled; minors from the Software Architect (CLEAN) applied. Open risk accepted knowingly: no seventh review round.
-- round 2 (implementation review, wording only): the retry rule is keyed on `(reason, stage, detail)` (2.3); the provisioning contract no longer orders
+
+### Implementation review rounds I1 to I5
+
+- I1 (implementation round 1): the `compare` CLI no longer re-reads the result file (the `RESULT:` line, the exit code and `interpreter_writable` come
+  from the in-memory result and the sha256 `_write_result` returned; `_compare_impl` returns a `dict` subclass carrying `written_sha256`); the signal
+  table is built lazily (imports without `SIGHUP`); `_run_once` kills the process group in its own `finally`; one `COMPARE_REASONS` table with the
+  derived vocabularies; invariant asserts became `BenchmarkGateError(MEASURE_FAILED)`; wait-floor wording with the per-git-invocation caveat;
+  `dependency_parity` keeps `NOT_PROVISIONED` outside the capped findings; step 12 maps `TREE_TOO_LARGE` from `check_venv` to `VENV_CHANGED`.
+- I2 (implementation round 2, wording only): the retry rule is keyed on `(reason, stage, detail)` (2.3); the provisioning contract no longer orders
   bytecode removal before the pin (the pins precede the install, the removal follows it; 2.5 step 5b); step 12's `EXPORT_REJECTED` also beats everything
   (2.4, 2.7 item 1); security round 2: the dispatch root, both exports, both bin directories and both venv roots are bound by `(st_dev, st_ino)` at
   the step-9 baseline and re-checked before EVERY spawn (2.5, "Directory identity"); the dispatch root's ctime joins the dispatch state; the runs get
   the step-9 resolved roots and bins; `_result_dict` allowlists `kind`, `trace_fault`, `side`, `phase`, `host_check`, `benchmark_origin`; the result
   file is linked with `follow_symlinks=False`.
-- round 3 (implementation review, wording only): the retry column of 2.3 means "the same-exports retry can change the outcome" and the rule is the
-  machine-readable `COMPARE_RETRYABLE_ON_SAME_EXPORTS`; the spawn guard also takes the root it spawns in, keeps the sealed roots' ctime, runs again when an
+- I3 (implementation round 3, wording only): the retry column of 2.3 means "the same-exports retry can change the outcome" and the rule is the
+  machine-readable constant (split in I5 into `COMPARE_RETRYABLE_AUTOMATIC` and `COMPARE_RETRYABLE_WITH_HUMAN_FLAG`); the spawn guard also takes the root it spawns in, keeps the sealed roots' ctime, runs again when an
   argument check fails after a child ran, and its exception is not a `BenchmarkGateError`; a `.pth`/finder path through a link the user owns is refused;
   the dispatch listing is bounded.
+- I4 (implementation round 4): the residuals numbered 1 to 9 the same in the module docstring, the `compare` docstring and 2.5 (pinned by a test), the
+  provisioning contract and section 9 gain "pin the expected `harness_sha256`" and "project venv CPython >= 3.12"; a `.pth`/editable-finder target is
+  judged on its RAW text (non-normal targets refused) and no alias is trusted when the euid is 0; the codecs are looked up at import; old-git skips
+  fail under `CI`; the `EXPORT_CHANGED` result carries `side`, `phase`, `partial`.
+- I5 (implementation round 5): `harness-sha256` subcommand and the rule that the expected digest comes from a TRUSTED copy (2.5 item 6); the retry rule
+  split into two constants (2.3); `allow_abbrev=False` and the exit-0-needs-a-RESULT-line reading (2.9); the residuals carry stable labels `[R1]` to
+  `[R9]` (2.5); a link is trusted only in a directory only root can change, with one name ("Directory identity"); the euid 0 consequence (2.5, 9); the
+  probe wording (2.4, 2.2); `busy_end` is always probed (2.6); one snapshot size limit.
 
 ## 1. Premise check (read against `2dc72667`)
 
@@ -100,7 +121,7 @@ seed bytes unchanged; a given salt is appended as a fifth `\0`-joined field); in
 `os.urandom(8).hex()`, and the result records the salt used. Salt validation (lowercase hex, 1 to 64 chars, else `MEASURE_ARGS_INVALID`) happens at
 step 1. Helpers: `_compare_checks` (steps 1 to 6), `_compare_prepare` (7 to 9; frozen `_Prepared`), `_compare_runs` (10 to 13). `_Verdict` subclasses
 `Exception` only. All in `benchmark_gate.py`, so `harness_sha256` covers it. The 1800 s gate cap budgets child time only; `is_ancestor` and
-`diff_checks` (up to 300 s each) and the hashing sit outside it, so the Orchestrator's wait is at least `cap + hashing + 300 s x (the git invocations `compare` opens, at least nine contexts)`: `is_ancestor`, `diff_checks`, the benchmark-origin read at step 7 and `verify_export_against_commit` per side at steps 4, 9 and 12, several invocations each (the module docstring says the same).
+`diff_checks` (up to 300 s each) and the hashing sit outside it, so the Orchestrator's wait is at least `cap + hashing + 300 s x (the git invocations `compare` opens, at least nine contexts)` plus up to ~20 s per interpreter probe (`python -I -S`, `_startup_probe`, a child that runs before the sealed runs at steps 4, 9 and 12): `is_ancestor`, `diff_checks`, the benchmark-origin read at step 7 and `verify_export_against_commit` per side at steps 4, 9 and 12, several invocations each (the module docstring says the same). The floor is a lower bound, not a deadline.
 
 ### 2.3 Vocabularies (module constants, each pinned by an exact-contents test)
 - `COMPARE_RESULT_OF_REASON: dict[str, str]`, one entry per reason: REJECTED: `GATE_REJECTED`, `ISOLATION_REJECTED`, `PROTECTED_PATH_CHANGED`,
@@ -124,8 +145,9 @@ step 1. Helpers: `_compare_checks` (steps 1 to 6), `_compare_prepare` (7 to 9; f
 - **Step to stage table** (`stage` in `pre_overlay`, `overlaid`, `ran`; pinned by a test that asserts the stage of every step-ending):
 
 "Retry on the same exports" means: a second `compare` on the SAME exports, always with a new `out_path`, **can give another outcome**. The rule is the
-module constant `COMPARE_RETRYABLE_ON_SAME_EXPORTS` (a set of `(reason, stage, detail)` triples, validated against `COMPARE_REASONS` by a test); every row below
-is "no" unless it names a triple of that constant. Step-7 refusals are content-determined (the same files refuse again), so they are "no".
+two module constants of `(reason, stage, detail)` triples, validated against `COMPARE_REASONS` by a test: `COMPARE_RETRYABLE_AUTOMATIC` (the `HOST_BUSY_START` triple
+only: the Orchestrator waits and retries by itself) and `COMPARE_RETRYABLE_WITH_HUMAN_FLAG` (the `INTERPRETER_WRITABLE` triple: retried ONLY after a human sets
+`--allow-writable-interpreter`, never automatically); every row below is "no" unless it names a triple of one of them. Step-7 refusals are content-determined (the same files refuse again), so they are "no".
 
 | Step | Stage | Retry on the same exports |
 |---|---|---|
@@ -135,10 +157,14 @@ is "no" unless it names a triple of that constant. Step-7 refusals are content-d
 | 7 success, 8, 9 | `overlaid` | no: fresh exports, new install, snapshot and origin |
 | 10, 11, 12, 13 (incl. `HOST_BUSY_END`, `TRACE_UNAVAILABLE`, step-12 `ISOLATION_REJECTED`, the spawn guard's `ISOLATION_REJECTED`/`EXPORT_CHANGED` with no measured fields; also a T3 spawn even if no child ran) | `ran` | no: fresh exports |
 
-C4e keys the retry on `COMPARE_RETRYABLE_ON_SAME_EXPORTS` (`(reason, stage, detail)`) and records every `compare` result of a dispatch, showing the count at the acceptance screen (fresh-export
+A step-12 `_check_parity` that is over budget is `ISOLATION_REJECTED`/`NOT_PROVISIONED` at stage `ran` (the same word as at step 4, a later stage); `INTERPRETER_CHANGED` can likewise end at `overlaid` (step 9) or `ran` (step 12), not only at `pre_overlay`, and neither is retryable on the same exports.
+
+C4e keys the retry on the two constants (`COMPARE_RETRYABLE_AUTOMATIC` may be retried by C4e itself; `COMPARE_RETRYABLE_WITH_HUMAN_FLAG` only by a human decision), by `(reason, stage, detail)`, and records every `compare` result of a dispatch, showing the COUNT of `compare` results at the acceptance screen (fresh-export
 retries give a bimodal head repeated draws). Fresh exports means a fresh head-first provisioning (2.5).
 
 ### 2.4 Pipeline
+No BENCHMARK child runs before step 10, but the interpreter probe (`python -I -S`, `_startup_probe`, up to ~20 s each, at steps 4, 9 and 12) IS a child that runs before the sealed runs; the wait floor (2.2) counts it.
+
 | # | Step | Ends with |
 |---|---|---|
 | 1 | arguments (incl. salt, `attempt`, `out_path`, `Side` shapes) validated before anything is touched; then POSIX else a result | `UNSUPPORTED_PLATFORM`; bad arguments raise |
@@ -165,7 +191,7 @@ repository's pinned requirements (or a wheelhouse), the project **editable only*
 by the build user; a writable one needs `--allow-writable-interpreter` and shows in the `RESULT:` line; (5) a stray-process census around the
 installs is recommended and not enforced here; (5b) `--no-compile` at install, and every `__pycache__` and `.pyc` under the venv's site-packages removed
 after the install and before `compare` (`dependency_parity` rejects bytecode there). The pins of (1) are minted before the install and are never
-re-minted after one: the removal touches only site-packages, which the interpreter pin does not cover; (6) the Orchestrator pins the EXPECTED `harness_sha256` (the harness file is writable by the same user, residual 2) and compares it with the result's; (7) each project venv must be CPython >= 3.12 (no `sys.monitoring` before it: the trace is `TRACE_UNAVAILABLE` and the run can never reach `IMPROVED`, residual 3); (8) the Orchestrator reads the result file once into bytes, hashes those bytes, compares to `sha256=`, parses the SAME bytes and reads `stage` and `detail` only from them (the `RESULT:` line carries neither; `INTERPRETER_WRITABLE` needs the detail from the file) and checks the line's result and reason against them.
+re-minted after one: the removal touches only site-packages, which the interpreter pin does not cover; (6) the Orchestrator pins the EXPECTED `harness_sha256` (the harness file is writable by the same user, [R2]) and compares it with the result's. `harness_sha256` is a domain-separated, length-prefixed digest of the module's import-time source and the loaded `validate_task_target.py`: `sha256sum` cannot reproduce it, and the `harness-sha256` subcommand prints it (`harness_sha256: <hex>`, exit 0). The expected value must be taken from a TRUSTED copy of the harness (the pinned release, or `harness-sha256` run in a clean checkout), NEVER from a previous `compare` result (that is circular: a tampered harness would vouch for itself); (7) each project venv must be CPython >= 3.12 (no `sys.monitoring` before it: the trace is `TRACE_UNAVAILABLE` and the run can never reach `IMPROVED`, [R3]); (8) the Orchestrator reads the result file once into bytes, hashes those bytes, compares to `sha256=`, parses the SAME bytes and reads `stage` and `detail` only from them (the `RESULT:` line carries neither; `INTERPRETER_WRITABLE` needs the detail from the file) and checks the line's result and reason against them; (9) when the harness's euid is 0 (a root Orchestrator, e.g. in Docker) every symlink alias is refused (see "Directory identity"): the paths handed to `compare` must have no symlink hop, and a refusal that comes from an alias (a `.pth` or finder path, the venv hook check) is an ENVIRONMENT fault that C4e routes as such, not a Builder fault.
 
 **Interpreter (T2b1b), `interpreter_pin(bin_dir) -> InterpreterPin(sha256, writable, real_python)`.** Per side, `pyvenv.cfg` is parsed as `key = value`
 lines (UTF-8, non-ASCII allowed: a user home may contain it; the `command` key and every key other than the four below are ignored); a duplicate of
@@ -244,8 +270,10 @@ fingerprints (`EXPORT_CHANGED`/`HASH_UNREADABLE`), `check_venv` and the venv fin
 
 **Directory identity (security round 2).** Children are spawned by path (`cwd=<root>`, `<bin>/python`), so a path swap between runs could run a planted
 tree and restore the original afterwards with every inode inside unchanged. A `.pth` line or editable-finder target whose lexical string goes through a
-symlink is accepted only when every link on the way is owned by root (macOS `/var` -> `/private/var`); a link the user owns could be repointed by a head child
-between runs, and the guard only re-checks resolved paths. The step-9 baseline therefore records `(resolved path, st_dev, st_ino, label, ctime_ns or None)` of the
+symlink is accepted only when every link on the way is trusted (macOS `/var` -> `/private/var`): owned by root, held by a directory that the harness's euid cannot write
+(`os.access`) and that group and other cannot write (`st_mode & 0o022 == 0`, or sticky and root-owned), with `st_nlink == 1`; the owner alone is not enough, because whoever can rename or
+unlink a link in its directory replaces it. A link the user owns, or one in a directory the user can write, could be repointed or replaced by a head child between runs, and
+the guard only re-checks resolved paths. When the harness's euid is 0 the head child is root too, so NO alias is trusted (a root Orchestrator must use paths without symlink hops). The step-9 baseline therefore records `(resolved path, st_dev, st_ino, label, ctime_ns or None)` of the
 dispatch root, both exports, both resolved bin directories and both venv roots (the ctime only for the dispatch root and the two sealed export roots, which the
 harness never modifies after sealing; the bins and venv roots are not sealed, so they stay `(dev, ino)`), and `_dispatch_state` adds the dispatch root's own
 `(dev, ino, ctime_ns)` and is bounded by `_MAX_TREE_ENTRIES` (over it: `FINGERPRINT_FAILED`, a verdict). A rename-and-restore moves the ctime, which the guard
@@ -286,34 +314,34 @@ the CLI path. `_run_once` masks SIGTERM, SIGHUP and SIGINT with `pthread_sigmask
 an empty mask), enters `try`, then unmasks; `signal` and `pthread_sigmask` are imported in the parent before the fork. The mask is per thread: the
 window is safe only while the process is single-threaded, which `_run_once`'s comment states by contract (not asserted).
 
-**Disclosed residuals (claim no more).** Numbered here and in the module docstring of `benchmark_gate.py` ("Known residuals of `compare`") with the
-same numbers; a test pins that every numbered residual of the docstring appears here.
-1. An escaped `setsid` daemon: a head child can leave the process-group kill behind with fork + `setsid`; a stray same-user daemon survives the run
+**Disclosed residuals (claim no more).** The module docstring of `benchmark_gate.py` ("Known residuals of `compare`") is the single source of the wording; this list keeps the same
+stable labels `[R1]` to `[R9]` (a test compares the numbers and the short labels, not the prose, so re-wrapping cannot break it).
+1. [R1:setsid] An escaped `setsid` daemon: a head child can leave the process-group kill behind with fork + `setsid`; a stray same-user daemon survives the run
    and nothing detects it (no process census; page-cache effects included).
-2. The harness file is writable by the same user: C4e must pin the EXPECTED `harness_sha256` and compare it with the result's; it should also prefer a
+2. [R2:harness-file] The harness file is writable by the same user: C4e must pin the EXPECTED `harness_sha256` and compare it with the result's; it should also prefer a
    non-writable interpreter (a stray `.pyc` in a writable prefix between the pin and `compare` gives `INTERPRETER_CHANGED`; `INTERPRETER_DIFFERS` is a
    different fault).
-3. A project venv older than CPython 3.12 has no `sys.monitoring`: its trace is `TRACE_UNAVAILABLE` and it can never reach `IMPROVED`.
-4. The interpreter's own path chain (the `home` of `pyvenv.cfg`, symlink hops to the real prefix, the parent of the prefix) is pinned by content and
+3. [R3:py312] A project venv older than CPython 3.12 has no `sys.monitoring`: its trace is `TRACE_UNAVAILABLE` and it can never reach `IMPROVED`.
+4. [R4:path-chain] The interpreter's own path chain (the `home` of `pyvenv.cfg`, symlink hops to the real prefix, the parent of the prefix) is pinned by content and
    not guarded by directory identity, so a user-writable hop in front of a prefix that is not user-owned (a layout `INTERPRETER_WRITABLE` does not
    refuse) could be repointed by a head child between runs.
-5. State outside the fingerprints: they detect changes to the exports, venvs and dispatch root between the baseline and the end, not writes elsewhere
+5. [R5:outside-state] State outside the fingerprints: they detect changes to the exports, venvs and dispatch root between the baseline and the end, not writes elsewhere
    (absolute `/tmp` or `/dev/shm` state a head run leaves for a later run).
-6. A coarse ctime tick: a change undone inside one ctime tick on a coarse filesystem is not seen.
-7. A writable interpreter: the interpreter pin covers the files listed and is exact only for a non-writable interpreter; a bytecode or file planted
+6. [R6:ctime-tick] A coarse ctime tick: a change undone inside one ctime tick on a coarse filesystem is not seen.
+7. [R7:writable-interpreter] A writable interpreter: the interpreter pin covers the files listed and is exact only for a non-writable interpreter; a bytecode or file planted
    into a writable interpreter by a *child during a run* is caught only by the end-of-run pin, not if restored.
-8. A SIGKILLed `compare` leaves a running child until its own timeout.
-9. Third-party content that is identical and RECORD-consistent on both sides is not judged.
+8. [R8:sigkill] A SIGKILLed `compare` leaves a running child until its own timeout.
+9. [R9:third-party] Third-party content that is identical and RECORD-consistent on both sides is not judged.
 
 **The human acceptance of every `IMPROVED` is the control that remains.** The run order is public but salted (`order_salt`; the recorded `order`
 reproduces a run).
 
 ### 2.6 Host checks
 Exact arithmetic on `Fraction(str(load1))`: `busy_start = load1 * 10 > 7 * cpu_count` (always probed); `busy_end = (load1 - 1) * 10 > 7 * cpu_count`,
-probed only when `cpu_count >= 3` (`_HOST_BUSY_MIN_CPUS`; for the end check only). A probe that raises or returns a non-finite, negative, `bool` or
+probed at the end when the start probe worked and the run reached precedence item 6 (it always records `loadavg.end` and `cpu_count.end`), and CHECKED only when `cpu_count >= 3` (`_HOST_BUSY_MIN_CPUS`; below it only the CHECK is skipped, `host_check: "end_skipped_few_cpus"`). A probe that raises or returns a non-finite, negative, `bool` or
 non-real load, or a non-positive `cpu_count`, records `host_check: "skipped_probe_failed"` and skips both checks. `host_check` is `"checked"`,
 `"end_skipped_few_cpus"`, `"start_only"` (the end probe did not run on this path) or `"skipped_probe_failed"`; `loadavg` and `cpu_count` are
-`{"start": ..., "end": ...}` objects (`end` null when not probed).
+`{"start": ..., "end": ...}` objects (`end` is recorded whenever the end probe ran, also when its CHECK was skipped for few CPUs; null only when the end probe did not run on this path or failed).
 
 ### 2.7 Trace and measure outcomes, and the precedence list
 `measure_paired` errors carry `kind` (`spawn`, `oversize`, `timeout`, `nonzero`) from `_execute` through `_run_error_code(side, kind)` (keeps the
@@ -372,10 +400,14 @@ the file are data, none is trusted.
 - `compare --gate FILE --repo DIR --base-root DIR --head-root DIR --base-commit SHA --head-commit SHA --base-bin DIR --head-bin DIR --base-snapshot FILE
   --base-snapshot-sha256 HEX --base-interpreter-sha256 HEX --head-snapshot FILE --head-snapshot-sha256 HEX --head-interpreter-sha256 HEX --out FILE
   [--attempt N] [--allow-writable-interpreter]`. `--gate` holds the raw `benchmark_gate` JSON (bounded read). Prints `RESULT: <result> <reason>
-  interpreter_writable=<0|1|n/a> sha256=<hex of the written bytes>` (closed sets) after the file exists. **Exit** 0 if and only if `IMPROVED`; 1 any other
-  result; 2 usage, a raised error or a crash. An exit 1 **without** a valid RESULT line and a matching file sha256 is treated as exit 2 (Python's
+  interpreter_writable=<0|1|n/a> sha256=<hex of the written bytes>` (closed sets) after the file exists. **Exit** 0 only for `IMPROVED`, and an exit 0 counts as an `IMPROVED` ONLY together with a valid `RESULT: IMPROVED ...` line whose `sha256=` matches the bytes of the
+  file: a bare exit 0 (for example `compare --help`, which argparse ends with exit 0 and no `RESULT:` line) is NOT an `IMPROVED`; 1 any other
+  result; 2 usage, a raised error or a crash. Every parser (the main one and each subparser) has `allow_abbrev=False`: an abbreviation such as `--allow-writable-i` is a usage
+  error (exit 2) and never sets the human flag. An exit 1 **without** a valid RESULT line and a matching file sha256 is treated as exit 2 (Python's
   uncaught-exception exit is also 1). The Orchestrator reads the file once into bytes, hashes those bytes, checks the RESULT sha, parses the same bytes
   and checks the RESULT line's result and reason against them. Exit 2 with a file present means "ignore the file".
+- `harness-sha256` prints `harness_sha256: <hex>` (exit 0; 2 with the code on stderr if the harness cannot be digested). It is how C4e obtains the EXPECTED digest from a TRUSTED
+  copy of the harness (2.5 item 6). `snapshot-venv` fails (exit 2, `VENV_SNAPSHOT_INVALID`) for a snapshot over `_VENV_MAX_SNAPSHOT_BYTES`, the one limit every reader uses.
 - Crash contract: `_cmd_compare` and `_cmd_run_once` catch `BenchmarkGateError`, `OSError`, `ValueError`, `RecursionError`, `Exception` and
   `KeyboardInterrupt`, print `usage error: <CODE or INTERNAL>: <type>` (never attacker text), return 2 and write nothing. Sealed exports stay sealed;
   `cleanup` restores them.
@@ -514,10 +546,10 @@ precedes the ancestry check, which raises. 5. A pending `TRACE_MISMATCH` after `
 makes every trace fault `TRACE_MISMATCH`; both are non-pass; `trace_fault` carries the escalation signal; C4e to confirm). 6. New reasons
 `DIFF_UNCHECKABLE`, `EXPORT_REJECTED`, `BASE_/HEAD_OUTPUT_TOO_LARGE`; the `TRACE_UNAVAILABLE` row; `NOT_PROVISIONED` and the other
 `ISOLATION_DETAILS`. 7. Result fields `stage`, `untrusted_text`, `trace_mismatch_seen`, `trace_fault`, `order_salt`, `interpreter_*`; retry keyed on
-`(reason, stage, detail)` (the constant `COMPARE_RETRYABLE_ON_SAME_EXPORTS`); the spawn guard's `ISOLATION_REJECTED`/`EXPORT_CHANGED` at stage `ran` with no
+`(reason, stage, detail)` (the constants `COMPARE_RETRYABLE_AUTOMATIC` and `COMPARE_RETRYABLE_WITH_HUMAN_FLAG`: C4e retries the first by itself and the second only on a human's `--allow-writable-interpreter`); the spawn guard's `ISOLATION_REJECTED`/`EXPORT_CHANGED` at stage `ran` with no
 measured fields (C4e routes it as tamper, to a human); `detail` is a closed vocabulary (parent: free-form escaped). 8. **Head provisioned first, base created after**, the provisioning
 contract of 2.5, snapshot and interpreter pins minted pre-install, `--allow-writable-interpreter`, `verify_export_against_commit`,
-`dependency_parity`, the ctime fingerprint, per-run scratch and ini, no pycache prefix; the C4e write-back list also carries: pin the expected `harness_sha256`, and the project venv must be CPython >= 3.12. 9. `out_path` written by dir-fd link after step 12 with the
+`dependency_parity`, the ctime fingerprint, per-run scratch and ini, no pycache prefix; the C4e write-back list also carries: pin the expected `harness_sha256`, taken from a TRUSTED copy of the harness with `harness-sha256` (never from a previous `compare` result), and the project venv must be CPython >= 3.12; remove every `__pycache__` and `.pyc` under the venv's site-packages after the install and before `compare` (2.5 step 5b); install editable only and with `--no-compile`; read the result file ONCE into bytes and hash, parse and read `stage`/`detail` from those same bytes (2.5 item 8); an exit 0 is an `IMPROVED` only with a valid `RESULT: IMPROVED` line whose `sha256=` matches the file (2.9); never degrade `TRACE_UNAVAILABLE` to "measure without the trace" (2.7 T2); show the count of `compare` results of a dispatch at the acceptance screen (2.3); with a root Orchestrator (euid 0) every symlink alias is refused, so route an alias or venv-hook refusal as an environment fault, not a Builder fault (2.5 item 9). 9. `out_path` written by dir-fd link after step 12 with the
 file's sha256 in the `RESULT:` line (parent: temp file then rename). 10. `repo_top_levels` taken after the install. 11. Seeded order gains a random
 salt. 12. The Orchestrator's wait is at least the gate cap plus hashing plus 300 s x the git invocations `compare` opens (at least nine contexts). 13. `compare`'s signature: `Side` tuples with the two pins and
 `allow_writable_interpreter` replace the parent's positional `(gate, base_root, head_root, repo, base_commit, head_commit, base_bin, head_bin, ...)`.
