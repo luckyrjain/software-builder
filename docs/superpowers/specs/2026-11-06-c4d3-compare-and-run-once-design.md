@@ -26,6 +26,12 @@ rest, and section 9 below, go to the C4e docs write-back).
   the interpreter pin gained a **start-up probe** (`python -I -S`) because CPython finds the stdlib from `pyvenv.cfg` `home`; error codes of the
   interpreter helper named; `pyvenv.cfg` in the baseline fingerprint; `interpreter_writable=n/a`; the editable-finder, bytecode and `.egg-link`
   residuals settled; minors from the Software Architect (CLEAN) applied. Open risk accepted knowingly: no seventh review round.
+- round 2 (implementation review, wording only): the retry rule is keyed on `(reason, stage, detail)` (2.3); the provisioning contract no longer orders
+  bytecode removal before the pin (the pins precede the install, the removal follows it; 2.5 step 5b); step 12's `EXPORT_REJECTED` also beats everything
+  (2.4, 2.7 item 1); security round 2: the dispatch root, both exports, both bin directories and both venv roots are bound by `(st_dev, st_ino)` at
+  the step-9 baseline and re-checked before EVERY spawn (2.5, "Directory identity"); the dispatch root's ctime joins the dispatch state; the runs get
+  the step-9 resolved roots and bins; `_result_dict` allowlists `kind`, `trace_fault`, `side`, `phase`, `host_check`, `benchmark_origin`; the result
+  file is linked with `follow_symlinks=False`.
 
 ## 1. Premise check (read against `2dc72667`)
 
@@ -113,13 +119,13 @@ step 1. Helpers: `_compare_checks` (steps 1 to 6), `_compare_prepare` (7 to 9; f
 
 | Step | Stage | Retry on the same exports |
 |---|---|---|
-| 1, 2, 4, 5, 6 (incl. `HOST_BUSY_START`, `INTERPRETER_WRITABLE`) | `pre_overlay` | yes, after the cause is fixed or waited out, with a new `out_path` |
+| 1, 2, 4, 5, 6 | `pre_overlay` | by `(reason, stage, detail)`, always with a new `out_path`: **retryable on the same exports** are `HOST_BUSY_START` (waited out) and `INTERPRETER_WRITABLE` only when a human sets `--allow-writable-interpreter`; every other `ISOLATION_REJECTED` at `pre_overlay` (`INTERPRETER_CHANGED`, `INTERPRETER_DIFFERS`, `SNAPSHOT_CHANGED`, `DEPENDENCY_PARITY`, `TRACKED_FILE_DIFFERS`, ...) is **not**: the pins are minted before the install and never re-minted after one, so it needs fresh provisioning. `INTERPRETER_CHANGED` is what a stray `.pyc` in the interpreter prefix gives; `INTERPRETER_DIFFERS` comes from two different interpreters, an interpreter inside a venv or export, or a failed start-up probe |
 | 3 | raises | n/a |
 | 7 refusals (the overlay leaves nothing it created) | `pre_overlay` | yes |
 | 7 success, 8, 9 | `overlaid` | no: fresh exports, new install, snapshot and origin |
 | 10, 11, 12, 13 (incl. `HOST_BUSY_END`, `TRACE_UNAVAILABLE`, step-12 `ISOLATION_REJECTED`; also a T3 spawn even if no child ran) | `ran` | no: fresh exports |
 
-C4e keys the retry on `(reason, stage)` and records every `compare` result of a dispatch, showing the count at the acceptance screen (fresh-export
+C4e keys the retry on `(reason, stage, detail)` and records every `compare` result of a dispatch, showing the count at the acceptance screen (fresh-export
 retries give a bimodal head repeated draws). Fresh exports means a fresh head-first provisioning (2.5).
 
 ### 2.4 Pipeline
@@ -136,7 +142,7 @@ retries give a bimodal head repeated draws). Fresh exports means a fresh head-fi
 | 9 | **immediately before the first child**: rerun the snapshot pin, `check_venv`, interpreter pin, `dependency_parity` and `verify_export_against_commit` (base with `allow = {benchmark_rel: benchmark_sha256}` only when the origin is `BUILDER_AUTHORED`, which also allows the directories the overlay created; head with an empty allowance); then the baseline fingerprints (2.5) | `ISOLATION_REJECTED` |
 | 10 | `trace_paired(..., timeout_seconds=per_run_timeout_seconds)` | 2.7 |
 | 11 | `measure_paired(...)`, `warmup = warmup_runs`, `repeats`, seed `(base, head, benchmark_sha256, attempt)` + salt, `min_base_ns` | 2.7 |
-| 12 | **post-run check** (2.5), after every path that started a child (also if a T3 spawn means none did) | `ISOLATION_REJECTED`; beats everything below |
+| 12 | **post-run check** (2.5), after every path that started a child (also if a T3 spawn means none did) | `ISOLATION_REJECTED` (or `EXPORT_REJECTED`, stage `ran`, from the step-12 export check); beats everything below |
 | 13 | the precedence list (2.7): the single merge point of steps 10 to 12 | the verdict |
 
 Gate change (T0a): `validate_benchmark_gate` accepts `warmup_runs` 1..2 (default already 1); `BOUNDS_REJECTED` for 0.
@@ -148,7 +154,8 @@ finished**; (3) install with `PYTHONDONTWRITEBYTECODE=1`, a fresh `HOME` and `TM
 repository's pinned requirements (or a wheelhouse), the project **editable only**, ideally with no network; (4) prefer an interpreter not writable
 by the build user; a writable one needs `--allow-writable-interpreter` and shows in the `RESULT:` line; (5) a stray-process census around the
 installs is recommended and not enforced here; (5b) `--no-compile` at install, and every `__pycache__` and `.pyc` under the venv's site-packages removed
-before pinning (`dependency_parity` rejects bytecode there); (6) the Orchestrator cross-checks that the `RESULT:` line's result and reason equal the parsed file's.
+after the install and before `compare` (`dependency_parity` rejects bytecode there). The pins of (1) are minted before the install and are never
+re-minted after one: the removal touches only site-packages, which the interpreter pin does not cover; (6) the Orchestrator cross-checks that the `RESULT:` line's result and reason equal the parsed file's.
 
 **Interpreter (T2b1b), `interpreter_pin(bin_dir) -> InterpreterPin(sha256, writable, real_python)`.** Per side, `pyvenv.cfg` is parsed as `key = value`
 lines (UTF-8, non-ASCII allowed: a user home may contain it; the `command` key and every key other than the four below are ignored); a duplicate of
@@ -197,7 +204,7 @@ modules in place fails closed. The workaround is committed generated files or ou
 
 **`dependency_parity(base_bin, head_bin, base_root, head_root)`** (T2b1c): an **inventory** of each venv's site-packages, not a RECORD comparison.
 - Walk every entry with `lstat` and no link followed. Any symlink, device, socket or fifo is `DEPENDENCY_PARITY`; so is any `.pyc` and any
-  `__pycache__` directory (the provisioning contract installs with `--no-compile` and removes bytecode before pinning; the cost is that the
+  `__pycache__` directory (the provisioning contract installs with `--no-compile` and removes bytecode after the install; the cost is that the
   dependencies compile on every run on both sides, calibrated in T6; verifying a `.pyc` against its source is not possible without running the
   venv's interpreter and marshal output is not reproducible). `inventory = {relpath: sha256 of the bytes on disk}` for every regular file; bounded by
   `_VENV_HASH_BYTES = 1 << 30` (else `NOT_PROVISIONED`).
@@ -224,6 +231,16 @@ fingerprint. Step 12 runs, in this order: snapshot pins (`SNAPSHOT_CHANGED`), in
 fingerprints (`EXPORT_CHANGED`/`HASH_UNREADABLE`), `check_venv` and the venv fingerprints (`VENV_CHANGED`/`VENV_HOOK_REJECTED`),
 `dependency_parity`, `verify_export_against_commit` (with the step-9 allowance); the first failure names the detail. A venv over its limit is
 `FINGERPRINT_FAILED`, which the Builder cannot fix.
+
+**Directory identity (security round 2).** Children are spawned by path (`cwd=<root>`, `<bin>/python`), so a path swap between runs could run a planted
+tree and restore the original afterwards with every inode inside unchanged. The step-9 baseline therefore records `(resolved path, st_dev, st_ino)` of the
+dispatch root, both exports, both resolved bin directories and both venv roots, and `_dispatch_state` adds the dispatch root's own `(dev, ino, ctime_ns)`
+(a rename-and-restore moves its ctime, which step 12 sees). `trace_paired` and `measure_paired` receive the step-9 resolved roots and bins (not resolved
+again after a child ran) and a `spawn_guard` that `_execute` calls before every spawn: each recorded path must still be its own `realpath` and the same
+inode, else `_IdentityChanged` (code `MEASURE_FAILED` for a library caller). `compare` maps it, conservatively, to **`ISOLATION_REJECTED`/`EXPORT_CHANGED`,
+stage `ran`** with no further run and no measured field, and step 12 still runs and wins with its own finding (precedence item 1). It never becomes a
+measured verdict. Test row: the planted-dispatch swap during the trace, during measurement (restored at the last head run) and not restored, each with
+step 12 live and with step 12 stubbed out.
 
 **2.5b Work directory (closes the round-2 blocker).** No mutable harness state crosses a child boundary. `_prepare_run(side, bin_dir, work,
 ini_path=None) -> (scratch, env, ini)` (the `counter` argument goes) makes the scratch with `tempfile.mkdtemp(dir=work)`, writes that run's
@@ -285,7 +302,7 @@ raising rows T1 and M4 (`MEASURE_FAILED`, `MEASURE_ARGS_INVALID`: `kind` is `har
 
 **The one precedence list** (highest first):
 0. A raise (T1, M4, or any 2.1 raise): exit 2. Step 12 does not run; each child's process group was already killed by `_run_once`'s `finally`.
-1. `ISOLATION_REJECTED` from step 12 beats everything below (when it and a T3 both apply, step 12's detail wins).
+1. `ISOLATION_REJECTED` or `EXPORT_REJECTED` from step 12 beats everything below (when it and a T3 both apply, step 12's detail wins).
 2. An at-once trace result: T2, T3, T4, T6. `HOST_BUSY_END` is not probed; step 11 does not run.
 3. A measure-raised REJECTED or NOT_IMPROVED (M1, M2, and a T3 spawn from measure). If a `counts_differ` was pending: `trace_mismatch_seen: true`.
    C4e escalates `trace_mismatch_seen` and `trace_fault` as human-review signals (a head that crashes only in the trace run is evidence of detection).
@@ -374,6 +391,7 @@ recorded in T6 (unverified until then). One test row exists per vocabulary entry
 | two honest venvs with pip-installed console-script dists at different paths | `dependency_parity` passes |
 | a dependency file edited with its RECORD intact; a bare module or `.so` in site-packages; a non-editable project install | `ISOLATION_REJECTED`/`DEPENDENCY_PARITY` |
 | a child rewrites its `empty.ini` or plants a file in the harness work directory | no effect on the next run (fresh scratch and ini per run) |
+| a child renames the dispatch root, plants a copy, and restores the original later | `ISOLATION_REJECTED`/`EXPORT_CHANGED` at the next spawn (stage `ran`), never a measurement |
 | tracked file edited after the install; untracked `hashlib.py`; untracked symlink; `__pycache__`; `_version.py`; an in-place `.so` | `ISOLATION_REJECTED`/`TRACKED_FILE_DIFFERS` / `UNTRACKED_PYTHON_FILE`, stage `pre_overlay` |
 | honest tree with `*.egg-info`, `src/pkg.egg-info`, `build/lib`, `dist/`, a tracked symlink and a gitlink | passes `verify_export_against_commit` |
 | `warmup_runs: 0` | `GATE_REJECTED`/`BOUNDS_REJECTED` |
@@ -440,7 +458,7 @@ of `run_order`, `measure_paired`, `trace_paired`, `_prepare_run`, `_execute`, `_
 | T2c | `snapshot-venv` prints both sha256s (+ the venv test fixture), `fake_trace_builder` | T2b1b, T0b2a |
 | T3a | `_compare_checks` (steps 1 to 6) | T2b1a-c, T2b2, T2c |
 | T3b | `_compare_prepare` (steps 7 to 9) | T3a |
-| T4a1 | step 12 post-run check and the step-9 baseline (`_Prepared` gains its baseline field here) | T3b |
+| T4a1 | step 12 post-run check and the step-9 baseline (`_Prepared` gains its baseline field here; the baseline also holds the directory identities and resolved bins) | T3b |
 | T4a2 | steps 10, 11 and the 2.7 rows | T4a1, T0b2a |
 | T4b | step 13: precedence, `HOST_BUSY_END`, statistics, the coverage and stage tests | T4a2 |
 | T5a | `_run_once` signal masking and child restore, CLI handler helper, with their library-level tests | T4b |

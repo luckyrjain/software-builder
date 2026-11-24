@@ -62,9 +62,20 @@ def test_vocabularies_are_pinned_exactly():
         EXPORT_CHANGED VENV_CHANGED HASH_UNREADABLE FINGERPRINT_FAILED""".split())
     assert bg.COMPARE_STAGES == ("pre_overlay", "overlaid", "ran")
     assert bg.Side._fields == ("root", "commit", "bin_dir", "snapshot", "snapshot_sha256", "interpreter_sha256")
-    # the detail vocabulary is derived from the one production table (`COMPARE_REASONS`), narrowed to what really is a detail
-    derived = tuple(dict.fromkeys(token for _, _, details in bg.COMPARE_REASONS.values() for token in details if token))
-    assert isinstance(bg.COMPARE_DETAIL_TOKENS, tuple) and bg.COMPARE_DETAIL_TOKENS == derived
+    # the exact contents, as a literal (not re-derived with the production expression): a token added or dropped anywhere fails here
+    assert isinstance(bg.COMPARE_DETAIL_TOKENS, tuple) and bg.COMPARE_DETAIL_TOKENS == tuple(
+        """GATE_MISSING KEY_MISSING KEY_UNKNOWN TYPE_REJECTED PATH_REJECTED SYMBOL_REJECTED COMMAND_REJECTED BOUNDS_REJECTED BUDGET_REJECTED
+        ROOT_HAS_GIT BIN_NOT_ISOLATED NOT_PROVISIONED INTERPRETER_DIFFERS INTERPRETER_WRITABLE HARNESS_FILE_UNDER_ROOT TRACKED_FILE_DIFFERS
+        UNTRACKED_PYTHON_FILE DEPENDENCY_PARITY BENCHMARK_BYTES_DIFFER VENV_NOT_ISOLATED VENV_HOOK_REJECTED SNAPSHOT_CHANGED INTERPRETER_CHANGED
+        EXPORT_CHANGED VENV_CHANGED HASH_UNREADABLE FINGERPRINT_FAILED PROTECTED_PATH_CHANGED BENCHMARK_AWARE_CODE GIT_OUTPUT_TOO_LARGE
+        TREE_TOO_LARGE EXPORT_PATH_REJECTED EXPORT_PATH_COLLISION EXPORT_ENTRY_MODE EXPORT_TOO_LARGE EXPORT_SYMLINK_ESCAPES EXPORT_VERIFY_FAILED
+        SEAL_FAILED TREE_UNREADABLE OVERLAY_PATH_REJECTED OVERLAY_NOT_REGULAR OVERLAY_PATH_CONFLICT BENCHMARK_MODIFIED SOURCE_NOT_BYTES
+        FILE_TOO_LARGE NON_ASCII_SOURCE ENCODING_REJECTED PARSE_FAILED ANALYSIS_FAILED SYMBOL_INVALID FORBIDDEN_CLASS FORBIDDEN_ASYNC_FUNCTION
+        FORBIDDEN_LAMBDA FORBIDDEN_TRY FORBIDDEN_WITH FORBIDDEN_GLOBAL FORBIDDEN_NONLOCAL FORBIDDEN_DECORATOR RELATIVE_IMPORT STAR_IMPORT
+        IMPORT_NOT_ALLOWED BANNED_NAME DUNDER_NAME TEST_NAME_COUNT TEST_NOT_FUNCTION TEST_HAS_PARAMETERS MISSING_PRINT MISSING_DIGEST_LITERAL
+        MISSING_SHA256 MISSING_SYMBOL_REFERENCE plugin_failed no_result unavailable_one_side unavailable_tokens_differ
+        unavailable_interpreters_differ interpreters_differ counts_differ nonzero timeout oversize unavailable""".split())
+    assert len(bg.COMPARE_DETAIL_TOKENS) == 81
     assert {reason: row[0] for reason, row in bg.COMPARE_REASONS.items()} == bg.COMPARE_RESULT_OF_REASON
     for part in (bg.ISOLATION_DETAILS, bg.VIOLATION_CODES, bg.OVERLAY_REFUSAL_CODES, bg.DIFF_REFUSAL_CODES, bg.EXPORT_REFUSAL_CODES):
         assert set(part) <= set(bg.COMPARE_DETAIL_TOKENS)
@@ -109,7 +120,6 @@ def test_result_dict_validates_the_detail_and_the_stage_against_the_table():
     def build(reason, detail, stage="ran"):
         return bg._result_dict(bg._Verdict(bg.COMPARE_RESULT_OF_REASON[reason], reason, detail, stage=stage), {})
     assert build("BASE_NONZERO_EXIT", "nonzero")["detail"] == "nonzero"
-    assert build("BASE_NONZERO_EXIT", "nonzero 12 7")["detail"] == "nonzero 12 7"  # the token, then integers
     assert build("NOISY", "")["detail"] == ""
     assert build("ISOLATION_REJECTED", "EXPORT_CHANGED", "overlaid")["detail"] == "EXPORT_CHANGED"
     for reason, detail, stage in [("BASE_NONZERO_EXIT", "EVIL text", "ran"), ("BASE_NONZERO_EXIT", "nonzero x", "ran"),
@@ -122,7 +132,7 @@ def test_result_dict_validates_the_detail_and_the_stage_against_the_table():
         with pytest.raises(ValueError):
             build(reason, detail, stage)
     with pytest.raises(ValueError):
-        build("BASE_NONZERO_EXIT", "nonzero \u0663")  # a non-ASCII digit is not an integer here
+        build("BASE_NONZERO_EXIT", "nonzero 12 7")  # a detail is exactly one token: nothing produces one with numbers
 
 
 def test_error_code_and_compare_reason_names_overlap_exactly_here():
@@ -132,10 +142,11 @@ def test_error_code_and_compare_reason_names_overlap_exactly_here():
     assert bg.ERROR_CODES[:len(bg.GIT_TREE_SEAL_CODES)] == bg.GIT_TREE_SEAL_CODES
 
 
-def test_error_codes_gain_exactly_base_not_ancestor_appended():
-    assert bg.ERROR_CODES[-1] == "BASE_NOT_ANCESTOR" and bg.ERROR_CODES.count("BASE_NOT_ANCESTOR") == 1
-    assert bg.ERROR_CODES[-3:-1] == bg.TRACE_REFUSAL_CODES
-    assert "BASE_NOT_ANCESTOR" not in bg.CLEANUP_CODES
+def test_error_codes_gain_base_not_ancestor_appended_and_the_old_prefix_is_unchanged():
+    assert bg.ERROR_CODES.count("BASE_NOT_ANCESTOR") == 1 and len(set(bg.ERROR_CODES)) == len(bg.ERROR_CODES)
+    old = bg.ERROR_CODES[:bg.ERROR_CODES.index("BASE_NOT_ANCESTOR")]  # everything before it is the vocabulary C4d-2 left: untouched
+    assert old[-len(bg.TRACE_REFUSAL_CODES):] == bg.TRACE_REFUSAL_CODES and old[:len(bg.GIT_TREE_SEAL_CODES)] == bg.GIT_TREE_SEAL_CODES
+    assert "BASE_NOT_ANCESTOR" not in bg.CLEANUP_CODES  # a later appended code does not break this test
 
 
 def test_the_module_imports_where_sighup_is_missing():
@@ -205,7 +216,7 @@ def test_result_assembly_rejects_internal_inconsistencies():
 
 def test_attacker_text_appears_only_in_untrusted_text_and_is_capped():
     hostile = [f"line {i}\n```\x00# heading | table é " + "A" * 500 for i in range(30)]
-    verdict = bg._Verdict("REJECTED", "ISOLATION_REJECTED", "TRACKED_FILE_DIFFERS 3", stage="pre_overlay",
+    verdict = bg._Verdict("REJECTED", "ISOLATION_REJECTED", "TRACKED_FILE_DIFFERS", stage="pre_overlay",
                           extra={"untrusted_text": hostile})
     common = {"python": "/tmp/`evil`\n# xé" + "p" * 500, "interpreter_home": "> home\x00" + "h" * 500}
     result = bg._result_dict(verdict, common)
@@ -213,7 +224,7 @@ def test_attacker_text_appears_only_in_untrusted_text_and_is_capped():
     for entry in result["untrusted_text"]:
         assert entry == bg.escape_diagnostic(entry, 200) and len(entry) <= 200
         assert "`" not in entry and "\n" not in entry and "\x00" not in entry and entry.isascii()
-    assert result["detail"] == "TRACKED_FILE_DIFFERS 3"
+    assert result["detail"] == "TRACKED_FILE_DIFFERS"
     assert result["python"] == bg.escape_diagnostic(common["python"], 200) and len(result["python"]) <= 200
     assert result["interpreter_home"] == bg.escape_diagnostic(common["interpreter_home"], 200)
     assert result["python"].isascii() and "`" not in result["python"] and result["interpreter_home"].startswith("'")
@@ -1967,6 +1978,9 @@ BAD_ARGS = {
     "salt-upper": lambda c: dict(order_salt="AB"),
     "salt-65": lambda c: dict(order_salt="a" * 65),
     "salt-non-str": lambda c: dict(order_salt=12),
+    "allow-flag-int": lambda c: dict(allow_writable_interpreter=1),
+    "allow-flag-str": lambda c: dict(allow_writable_interpreter="yes"),
+    "allow-flag-none": lambda c: dict(allow_writable_interpreter=None),
     "out-relative": lambda c: dict(out_path="result.json"),
     "out-none": lambda c: dict(out_path=None),
     "out-exists": lambda c: dict(out_path=str(c.tmp / "exists.json")),
@@ -2328,8 +2342,7 @@ def test_diff_checks_results(case):
         return fn
 
     hit = {"path": "a.py", "token": "sys.argv", "line_number": 3, "line": "x = sys.argv"}
-    for code, reason in (("PROTECTED_PATH_CHANGED", "PROTECTED_PATH_CHANGED"), ("BENCHMARK_AWARE_CODE", "BENCHMARK_AWARE_CODE"),
-                         ("GIT_OUTPUT_TOO_LARGE", "DIFF_UNCHECKABLE"), ("TREE_TOO_LARGE", "DIFF_UNCHECKABLE")):
+    for code, reason in (*((code, code) for code in bg.DIFF_REFUSAL_CODES), *((code, "DIFF_UNCHECKABLE") for code in bg.COMPARE_REASONS["DIFF_UNCHECKABLE"][2])):
         case.mp.setattr(bg, "diff_checks", raising(code, [hit] if reason != "DIFF_UNCHECKABLE" else []))
         result = case.impl()
         _ends(result, reason, code)
@@ -2530,11 +2543,20 @@ def test_step9_allowance_is_the_overlaid_file_on_the_base_only(bcase):
     assert calls[2:] == [(c.base.commit, c.base.root, {BENCH: sha}), (c.head.commit, c.head.root, {})]
 
 
+STEP7_ROWS = [(code, "BENCHMARK_MODIFIED" if code == "BENCHMARK_MODIFIED" else "OVERLAY_REJECTED") for code in bg.OVERLAY_REFUSAL_CODES] + [
+    (code, "EXPORT_REJECTED") for code in ("TREE_TOO_LARGE", "TREE_UNREADABLE", "SEAL_FAILED")]
+
+
+def test_step7_every_overlay_refusal_code_is_a_verdict_row_and_the_table_agrees():
+    # a code added to OVERLAY_REFUSAL_CODES is a row of the parametrised test below (it must return a verdict, not raise), and the table has it
+    assert {code for code, _ in STEP7_ROWS if _ != "EXPORT_REJECTED"} == set(bg.OVERLAY_REFUSAL_CODES)
+    assert set(bg.OVERLAY_REFUSAL_CODES) == {"BENCHMARK_MODIFIED"} | set(bg.COMPARE_REASONS["OVERLAY_REJECTED"][2])
+    for code, reason in STEP7_ROWS:
+        assert code in bg.COMPARE_REASONS[reason][2], (code, reason)
+
+
 @posix_only
-@pytest.mark.parametrize("code,reason", [("BENCHMARK_MODIFIED", "BENCHMARK_MODIFIED"), ("OVERLAY_PATH_REJECTED", "OVERLAY_REJECTED"),
-                                         ("OVERLAY_NOT_REGULAR", "OVERLAY_REJECTED"), ("OVERLAY_PATH_CONFLICT", "OVERLAY_REJECTED"),
-                                         ("TREE_TOO_LARGE", "EXPORT_REJECTED"), ("TREE_UNREADABLE", "EXPORT_REJECTED"),
-                                         ("SEAL_FAILED", "EXPORT_REJECTED")])
+@pytest.mark.parametrize("code,reason", STEP7_ROWS)
 def test_step7_refusals_map_and_leave_nothing_sealed_or_created(bcase, code, reason):
     c = bcase
     c.spies("seal_export")
@@ -3470,7 +3492,9 @@ def test_compare_passes_the_gate_and_the_attempt_through_to_both_library_calls(b
     _ran(result, "IMPROVED_CLEAR")
     (trace_kwargs,), (measure_kwargs,) = c.calls  # each stub was called once
     # the spec's step table: `trace_paired(..., timeout_seconds=per_run_timeout_seconds)` (the 3x of the trace run is trace_paired's own)
+    assert callable(trace_kwargs.pop("spawn_guard"))  # step 12's companion: the per-spawn identity guard
     assert trace_kwargs == {"timeout_seconds": 40, "argv_builder": fake_trace_builder}
+    assert callable(measure_kwargs.pop("spawn_guard"))
     assert measure_kwargs == {"repeats": 8, "timeout_seconds": 40, "base_commit": c.base.commit, "head_commit": c.head.commit,
                               "benchmark_sha256": hashlib.sha256(BENCH_OK).hexdigest(), "attempt": 2, "warmup": 2, "min_base_ns": 0,
                               "argv_builder": fake_trace_builder, "order_salt": "ab12"}
@@ -3820,6 +3844,7 @@ def _mapped(fn, code, kind=None, side=None):
     except bg.BenchmarkGateError:
         return "RAISES"
     assert bg.COMPARE_RESULT_OF_REASON[verdict.reason] == verdict.result
+    bg._result_dict(verdict, {})  # a mapped row whose detail or stage is outside COMPARE_REASONS raises ValueError here
     return verdict.reason
 
 
@@ -4406,15 +4431,46 @@ def _wait_for_pid(pidfile: Path, proc, deadline=240.0) -> int:
     raise AssertionError("the child never wrote its grandchild's pid")
 
 
+def _pid_state(pid: int) -> str:
+    """``ps -o stat=`` of ``pid``: empty when there is no such process, ``Z...`` for a zombie (portable to macOS and Linux)."""
+    done = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True, timeout=30)
+    return done.stdout.strip()
+
+
 def _pid_is_gone(pid: int, deadline=15.0) -> bool:
+    """True when ``pid`` no longer runs: it does not exist, or it is a zombie (killed and not yet reaped by its parent)."""
     end = time.monotonic() + deadline
     while time.monotonic() < end:
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
             return True
+        state = _pid_state(pid)
+        if state == "" or state.startswith("Z"):
+            return True
         time.sleep(0.05)
     return False
+
+
+@posix_only
+def test_pid_is_gone_treats_a_zombie_as_gone():
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])  # exits at once; nobody waits for it, so it stays a zombie
+    try:
+        end = time.monotonic() + 30
+        while not _pid_state(proc.pid).startswith("Z"):
+            assert time.monotonic() < end, "the child never became a zombie"
+            time.sleep(0.05)
+        os.kill(proc.pid, 0)  # a zombie still answers signal 0: the old check would have waited out its deadline
+        assert _pid_is_gone(proc.pid, deadline=5.0)
+    finally:
+        proc.wait()
+    assert _pid_is_gone(proc.pid, deadline=5.0)  # reaped: really gone
+    live = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        assert not _pid_is_gone(live.pid, deadline=0.3)
+    finally:
+        live.kill()
+        live.wait()
 
 
 def _real_pytest_bin(tmp_path: Path) -> Path:
@@ -4680,7 +4736,8 @@ def test_real_improved_overlay_origin(tmp_path, monkeypatch):
     # a lower bound, not equality: removing half the work cannot give more than 0.5, and a quiet machine gave 0.45 to 0.49 (T6 calibration); 0.25 is
     # about half of that, above the gate's own 0.10 (never loosened) and far from anything noise alone would make
     assert result["improvement"] >= 0.25 and len(result["ratios"]) == 6 and result["n"] == 6
-    assert result["host_check"] == "checked" and result["interpreter_writable"] is True and result["order_salt"] == "ab12"
+    fixture_writable = any(bg.interpreter_pin(side.bin, outside=c.roots).writable for side in c.world.sides.values())
+    assert result["host_check"] == "checked" and result["interpreter_writable"] is fixture_writable and result["order_salt"] == "ab12"
     # JSON with every 2.8 key, equal to what was returned
     assert set(result) == set(bg.COMPARE_RESULT_KEYS) and json.loads(Path(c.last_out).read_text()) == result
     assert [k for k, v in result.items() if v is None] == ["kind", "trace_fault", "side", "phase", "partial"]
@@ -4703,7 +4760,7 @@ def test_real_not_improved_pre_existing_benchmark(tmp_path, monkeypatch):
     # can never happen is pinned here (not IMPROVED); the exact-reason rows are the stubbed ENDING_ROWS
     c, result, seen = _real_compare(tmp_path, monkeypatch, "pre")
     assert result["result"] in ("NOT_IMPROVED", "INCONCLUSIVE") and result["result"] != "IMPROVED"
-    assert result["reason"] in ("BELOW_HALF_THRESHOLD", "BORDERLINE", "NOISY"), result["reason"]
+    assert result["reason"] in ("BELOW_HALF_THRESHOLD", "BORDERLINE", "NOISY", "INCONSISTENT"), result["reason"]
     assert result["stage"] == "ran" and result["benchmark_origin"] == "PRE_EXISTING"
     assert len(result["ratios"]) == 6 and result["n"] == 6
     assert set(result) == set(bg.COMPARE_RESULT_KEYS) and json.loads(Path(c.last_out).read_text()) == result
@@ -4898,3 +4955,226 @@ def test_generated_salt_is_random_and_recorded(bcase, tmp_path, monkeypatch):
         again = bg.run_order(result["base_commit"], result["head_commit"], result["benchmark_sha256"], result["attempt"], result["repeats"],
                              salt=result["order_salt"])
         assert result["order"] == again  # the recorded salt reproduces the order
+
+
+# --- round 2: the venv check's size error, step 12's parity mapping, the flag type, the written hash ---
+
+@posix_only
+def test_step4_check_venv_too_many_hook_candidates_is_isolation_rejected_not_a_raise(case):
+    """spec 2.1: step 12 gave `VENV_CHANGED` for it; steps 4 and 9 must give a verdict too (exit 1 with a RESULT line), never exit 2."""
+    def boom(*a, **k):
+        raise bg.BenchmarkGateError("TREE_TOO_LARGE", "too many hook candidates")
+    case.mp.setattr(bg, "check_venv", boom)
+    result = case.impl()
+    _iso(result, "NOT_PROVISIONED")
+    assert result["stage"] == "pre_overlay" and json.loads(Path(case.last_out).read_text()) == result
+
+
+@posix_only
+def test_step9_check_venv_too_many_hook_candidates_is_venv_changed_not_a_raise(bcase):
+    c = bcase
+    real, calls = bg.check_venv, []
+
+    def grown(*a, **k):
+        calls.append(1)
+        if len(calls) > 2:  # step 4 asks once per side; the third call is step 9: the venv grew after step 4 accepted it
+            raise bg.BenchmarkGateError("TREE_TOO_LARGE", "too many hook candidates")
+        return real(*a, **k)
+    c.mp.setattr(bg, "check_venv", grown)
+    with pytest.raises(bg._Verdict) as e:
+        c.prepare()
+    assert (e.value.result, e.value.reason, e.value.detail, e.value.stage) == ("REJECTED", "ISOLATION_REJECTED", "VENV_CHANGED", "overlaid")
+
+
+@posix_only
+@pytest.mark.parametrize("code", ["VENV_NOT_ISOLATED", "TREE_UNREADABLE"])
+def test_step12_parity_integrity_errors_say_venv_changed(bcase, code):
+    c = bcase
+    prepared = c.prepare()
+
+    def boom(*a):
+        raise bg.BenchmarkGateError(code, "x")
+    c.mp.setattr(bg, "dependency_parity", boom)
+    v = _p12(c, prepared)  # it was isolated at step 9 (the same word `_check_venvs` uses at step 12)
+    assert (v.reason, v.detail, v.stage) == ("ISOLATION_REJECTED", "VENV_CHANGED", "ran")
+
+
+@posix_only
+@pytest.mark.parametrize("code", ["MEASURE_FAILED", "MEASURE_ARGS_INVALID"])
+def test_step12_a_harness_fault_in_parity_raises_instead_of_blaming_the_builder(bcase, code):
+    c = bcase
+    prepared = c.prepare()
+
+    def boom(*a):
+        raise bg.BenchmarkGateError(code, "internal invariant")
+    c.mp.setattr(bg, "dependency_parity", boom)
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        _p12(c, prepared)
+    assert e.value.code == code
+
+
+@posix_only
+def test_step12_an_unknown_parity_error_is_still_dependency_parity(bcase):
+    c = bcase
+    prepared = c.prepare()
+    c.mp.setattr(bg, "dependency_parity", lambda *a: (_ for _ in ()).throw(bg.BenchmarkGateError("DEST_REJECTED", "x")))
+    assert _p12(c, prepared).detail == "DEPENDENCY_PARITY"
+
+
+def test_written_result_has_no_hash_until_one_is_written():
+    assert bg._WrittenResult({"a": 1}).written_sha256 is None
+
+
+@posix_only
+def test_the_cli_fails_closed_when_compare_returns_no_hash_of_what_it_wrote(tmp_path, monkeypatch, capsys):
+    gate = tmp_path / "gate.json"
+    gate.write_text(json.dumps(GATE))
+    full = [part for flag in COMPARE_FLAGS for part in (flag, f"v{flag[2:]}")]
+    full[full.index("--gate") + 1] = str(gate)
+    plain = {"result": "IMPROVED", "reason": "IMPROVED_CLEAR", "interpreter_writable": False}  # a plain dict: no `written_sha256` at all
+    monkeypatch.setattr(bg, "compare", lambda *a, **k: plain)
+    assert _run_main(capsys, ["compare", *full]) == (2, "", "usage error: INTERNAL: ValueError\n")
+    unset = bg._WrittenResult(plain)  # the class default: nothing was written
+    monkeypatch.setattr(bg, "compare", lambda *a, **k: unset)
+    assert _run_main(capsys, ["compare", *full]) == (2, "", "usage error: INTERNAL: ValueError\n")
+    unset.written_sha256 = "a" * 64
+    monkeypatch.setattr(bg, "compare", lambda *a, **k: unset)
+    assert _run_main(capsys, ["compare", *full]) == (0, f"RESULT: IMPROVED IMPROVED_CLEAR interpreter_writable=0 sha256={'a' * 64}\n", "")
+
+
+def test_the_public_docstrings_state_the_reading_contract():
+    doc = bg.__doc__ + bg._cmd_compare.__doc__ + bg.main.__doc__
+    for phrase in ("counts as exit 2", "IGNORED", "NEVER be auto-retried", "(reason, stage, detail)", "INTERPRETER_CHANGED", "Disclosed residuals"):
+        assert phrase in doc or phrase.lower() in doc.lower(), phrase
+    assert "before the interpreter is pinned" not in bg.__doc__ and "section 9" not in bg.__doc__ and "section 9" not in bg.compare.__doc__
+    assert "writes nothing of its own" not in bg._cmd_compare.__doc__
+
+
+# --- round 2 (security): the dispatch root is bound by identity, before every spawn ---
+
+SWAP_CHILD = r'''
+import os, sys, shutil, time
+side, disp, moved, junk, state, log, swap_at, restore_at, digest, lines = sys.argv[1:11]
+swap_at, restore_at = int(swap_at), int(restore_at)
+
+def toggle():
+    n = int(open(state).read()) if os.path.exists(state) else 0
+    open(state, "w").write(str(n + 1))
+    if n == swap_at:   # swap the dispatch root for a planted copy (the other entries are symlinked back)
+        os.rename(disp, moved)
+        os.mkdir(disp)
+        shutil.copytree(os.path.join(moved, "base"), os.path.join(disp, "base"), symlinks=True)
+        os.chmod(os.path.join(disp, "base"), 0o755)
+        open(os.path.join(disp, "base", "PLANTED"), "w").write("x")
+        for name in os.listdir(moved):
+            if name != "base":
+                os.symlink(os.path.join(moved, name), os.path.join(disp, name))
+    elif n == restore_at:   # put the original back: every inode inside is the original again
+        os.rename(disp, junk)
+        os.rename(moved, disp)
+
+planted = os.path.exists(os.path.join(os.getcwd(), "PLANTED"))
+if side == "base":
+    if planted:
+        time.sleep(0.2)  # the planted base is slower: it would make the head look faster
+    open(log, "a").write("base saw PLANTED=%s\n" % planted)
+else:
+    toggle()
+print("BENCH_RESULT_DIGEST: " + digest)
+out, nonce = os.environ.get("BENCH_TRACE_OUT"), os.environ.get("BENCH_TRACE_NONCE")
+if out and nonce and os.environ.get("BENCH_TRACE_FILE"):
+    v = sys.version_info
+    with open(out, "w") as f:
+        f.write("BENCH_TRACE_LINES: %s %d.%d.%d %s %s\n" % (lines, v[0], v[1], v[2], sys.implementation.name, nonce))
+'''
+
+
+@posix_only
+@pytest.mark.parametrize("swap_at,restore_at", [(0, 99), (1, 7), (2, 99)], ids=["during-trace", "during-measure-restored", "measure-not-restored"])
+@pytest.mark.parametrize("blind", [False, True], ids=["step12", "step12-blind"])
+def test_a_swapped_dispatch_root_is_isolation_rejected_and_never_measured(tmp_path, monkeypatch, swap_at, restore_at, blind):
+    """`blind` stubs step 12 out: the spawn guard alone must end the run (the swap is undone by the child in the restored rows)."""
+    c = _bench_case(tmp_path, monkeypatch)
+    if blind:
+        monkeypatch.setattr(bg, "_post_run_check", lambda *a, **k: None)
+    state, log = str(tmp_path / "state.txt"), str(tmp_path / "log.txt")
+
+    def builder(side, bin_dir, root, target):
+        disp = os.path.dirname(root)
+        return [sys.executable, "-c", SWAP_CHILD, side, disp, disp + ".x", disp + ".junk", state, log, str(swap_at), str(restore_at), FAKE_DIGEST, "7"]
+    result = c.impl(argv_builder=builder, min_base_ns=0)
+    _ends(result, "ISOLATION_REJECTED", stage="ran")
+    assert result["detail"] == "EXPORT_CHANGED" if blind else result["detail"] in ("EXPORT_CHANGED", "HASH_UNREADABLE")
+    assert result["result"] == "REJECTED" and result["improvement"] is None and result["base_ns"] is None and result["ratios"] is None
+    assert "PLANTED=True" not in (open(log).read() if os.path.exists(log) else "")  # no child ever ran in the planted tree
+    assert json.loads(Path(c.last_out).read_text()) == result
+
+
+@posix_only
+def test_the_baseline_records_every_directory_identity_and_the_dispatch_root_ctime(bcase):
+    c = bcase
+    prepared = c.prepare()
+    b = prepared.baseline
+    dispatch = os.path.dirname(c.roots[0])
+    recorded = {path: (dev, ino) for path, dev, ino in b.identities}
+    assert set(recorded) == {dispatch, c.roots[0], c.roots[1], *b.bins, *map(os.path.realpath, bg._venv_roots(c.base, c.head))}
+    for path, (dev, ino) in recorded.items():
+        st = os.lstat(path)
+        assert (st.st_dev, st.st_ino) == (dev, ino) and os.path.realpath(path) == path
+    own = dict(b.dispatch[1])["."]
+    st = os.lstat(dispatch)
+    assert own == (st.st_dev, st.st_ino, st.st_ctime_ns)
+    guard = bg._spawn_guard(b.identities)
+    guard("base")  # nothing changed: silent
+    os.rename(dispatch, dispatch + ".moved")
+    try:
+        with pytest.raises(bg._IdentityChanged) as e:
+            guard("head")
+        assert e.value.code == "MEASURE_FAILED"
+    finally:
+        os.rename(dispatch + ".moved", dispatch)
+    # restored (inodes equal again): the dispatch root's ctime moved, which step 12 sees
+    assert bg._dispatch_state(c.roots, "HASH_UNREADABLE", "ran") != b.dispatch
+
+
+@posix_only
+def test_the_runs_get_the_step9_resolved_paths(bcase, monkeypatch):
+    c = bcase
+    seen = {}
+
+    def spy(name, answer):
+        def fn(*a, **k):
+            seen[name] = (a, k)
+            return answer
+        return fn
+    c.mp.setattr(bg, "trace_paired", spy("trace", TRACE_OK))
+    c.mp.setattr(bg, "measure_paired", spy("measure", MEASURE_OK))
+    c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+    for name in ("trace", "measure"):
+        args, kwargs = seen[name]
+        assert list(args[:4]) == [*c.roots, *(os.path.realpath(side.bin_dir) for side in (c.base, c.head))] and callable(kwargs["spawn_guard"])
+
+
+def test_result_dict_allowlists_the_short_string_fields():
+    ok = dict(stage="ran")
+    base = bg._Verdict("INCONCLUSIVE", "NOISY", "", **ok)
+    assert bg._result_dict(base, {"host_check": "checked", "benchmark_origin": "PRE_EXISTING", "side": "base", "phase": "timed"})["side"] == "base"
+    for key, bad in (("host_check", "EVIL\x1b[31m"), ("benchmark_origin", "x"), ("side", "both"), ("phase", "later"), ("trace_fault", "EVIL"), ("side", 7)):
+        with pytest.raises(ValueError):
+            bg._result_dict(base, {key: bad})
+    with pytest.raises(ValueError):
+        bg._result_dict(bg._Verdict("INCONCLUSIVE", "NOISY", "", kind="EVIL", **ok), {})
+    for kind in bg.TRACE_FAILURE_KINDS:
+        bg._result_dict(bg._Verdict("INCONCLUSIVE", "NOISY", "", kind=kind, **ok), {})
+
+
+@posix_only
+def test_the_result_is_linked_without_following_symlinks(tmp_path, monkeypatch):
+    seen = []
+    real = os.link
+    monkeypatch.setattr(os, "link", lambda *a, **k: (seen.append(k), real(*a, **k))[1])
+    out = tmp_path / "r.json"
+    dir_stat = os.stat(tmp_path)
+    digest = bg._write_result(str(out), (dir_stat.st_dev, dir_stat.st_ino), "r.json", b"{}\n")
+    assert out.read_bytes() == b"{}\n" and digest == hashlib.sha256(b"{}\n").hexdigest()
+    assert real in os.supports_follow_symlinks and seen and seen[0]["follow_symlinks"] is False
