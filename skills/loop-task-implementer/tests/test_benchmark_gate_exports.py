@@ -1,5 +1,7 @@
 """Tests for the filesystem and git pieces of `benchmark_gate.py` (`export_tree`, tree hash and seal, `cleanup_root`, and the `export` / `cleanup`
-CLIs) and for its exported surface: the error-code vocabularies, including the C4d pins (`MEASURE_*`, `TRACE_REFUSAL_CODES`).
+CLIs) and for its exported surface: the error-code vocabularies, including the C4d pins (`MEASURE_*`, `TRACE_REFUSAL_CODES`, and `BASE_NOT_ANCESTOR`, appended by C4d-3). The
+reasons that exist only in a `compare` result (`HOST_BUSY_*` and the rest of `COMPARE_RESULT_OF_REASON`) are not error codes and are pinned in
+test_benchmark_gate_compare.py.
 
 Everything git-related runs against real temporary repositories (no network, hooks or signing); hostile trees (`.git`
 entries, `..`, case collisions, escaping symlinks) are built with `git mktree`, since `git add` refuses them.

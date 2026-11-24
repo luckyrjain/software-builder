@@ -3,6 +3,10 @@
 Fake venvs only (a directory with `pyvenv.cfg`, `bin/` and `lib/python3.12/site-packages`), as the design asks: no real venvs in unit tests.
 The `.pth` lines are the ones the real editable backends write (setuptools finder, hatchling/pdm path lines, flit/poetry path lines,
 pytest-cov's `a1_coverage.pth`). Design: docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md.
+
+The `snapshot-venv` CLI also prints `snapshot_sha256: <hex>` (the written file's bytes) and `interpreter_sha256: <hex>` (the interpreter pin),
+both computed before any install; they are what `compare` takes in `Side`. The interpreter pin itself (`interpreter_pin`) is tested in
+test_benchmark_gate_compare.py (C4d-3).
 """
 
 from __future__ import annotations

@@ -8,6 +8,9 @@ The plugin is a raw-string constant that is written into a side's harness-owned 
 source in a scratch namespace (the module ends with ``_init(os.environ, sys)``, which runs on the real process objects, so each test sets the
 ``BENCH_TRACE_*`` variables, changes into a directory holding a real target file, and replaces ``sys.monitoring`` with a fake unless the row
 deliberately claims the real tool id 4). Anything really claimed is released in a ``finally`` through the plugin's own ``_release_tool``.
+
+Every ``trace_paired`` error after the validation carries ``kind`` (one of ``TRACE_FAILURE_KINDS``), ``phase == "trace"`` and no ``partial``; the
+result tests of ``compare`` over the trace (what it makes of each kind) are in test_benchmark_gate_compare.py.
 """
 
 from __future__ import annotations

@@ -1,21 +1,45 @@
 #!/usr/bin/env python3
 """Validation, lint and statistics core of the performance-review -> loop-task-implementer benchmark gate (Epic C).
 
-**This module is not wired into anything yet.** It is delivered by a series of eleven PRs for gap-backlog ticket
-C4 (C4a core, C4b lint, C4c-1a export, C4c-1b seal/cleanup, C4c-1c claim recovery, C4c-2 overlay/diff/venv check, C4d harness, C4e classifier/docs, C4f wiring); no workflow file,
-lifecycle validator or other script calls it until C4f. So far it holds the pure, string-level and arithmetic
-pieces (``validate``, ``lint``) and C4c-1 (a: export, b: seal and cleanup, c: claim recovery): ``export``, ``fixed-parent``, ``cleanup`` and the library
-functions ``compare`` will call (``export_tree``, ``seal_tree``, ``unseal_tree``, ``cleanup_root``). C4c-2 is delivered in three parts: 2a adds the library functions ``hash_tree``,
-``overlay_benchmark_file``, ``read_benchmark``, ``export_commit``, ``repo_top_levels``, ``seal_export``, ``hash_export`` and
-``harness_sha256``; 2b (``protected_path_diff``, ``token_tripwire``, ``diff_checks``, ``is_ancestor``) the protected-path diff and the
-token tripwire; 2c (``snapshot_venv``, ``check_venv``, CLI ``snapshot-venv``) the venv ``.pth`` and startup-file check. Calling order for ``compare`` (C4d): ``is_ancestor`` and ``diff_checks`` first (they
-read only the repository and the two commits, no export, so they can run before anything is built), then ``export_tree`` x2 (the dispatch root's
-marker pid defaults to the exporting process, so pass ``--owner-pid`` when ``cleanup`` will run from another process),
-``repo_top_levels(base)`` (BEFORE the install: afterwards ``build/``, ``dist/`` and ``venv/`` would join the lint's allowlist), venv and
-``check_venv`` x2 (after each install), ``overlay_benchmark_file(..., head_ref_commit=...)``, ``seal_export`` x2, ``read_benchmark`` on BOTH roots (required equal) and
-the lint, ``hash_export`` x2, ``trace_paired`` (C4d-2; after the pairing set-up, before the timed measurement), measure, ``hash_export`` x2; ``harness_sha256`` at any point (both parts are fixed at import and at the
-first load of the validator, whose module body it therefore runs); C4d is delivered in parts: C4d-1 (#366) adds the measurement harness (``run_order``, ``side_env``, ``pytest_argv``, ``measure_paired``: seeded balanced order, one child per run in its own process group, digest and exit checks, raw wall times); C4d-2 adds the trace (``TRACE_PLUGIN_SOURCE``, ``trace_env``, ``trace_paired``, and the helpers shared with ``measure_paired``: ``_prepare_run``, ``_execute``, ``_check_timeout``, ``_check_sides``, ``_benchmark_file_of``); ``compare`` and ``run-once`` are still to come (C4d-3). Limits of the trace: it is a narrow tripwire, not a proof of equal work. For the typical benchmark, which makes one library call and prints a digest, the executed-line count is a small constant on both sides, so equality proves nothing; the trace discriminates only when the test body loops or branches on library behaviour. Blind spots: helpers and callbacks, generator expressions, lambdas, ``map``, ``exec``/``eval``, ``asyncio.run(main())``, a same-named decoy, and branches inside one line. In-process tampering by code running in the child, and detection of the trace run itself, are not detected. The trace run also differs from a timed run in the contents of its per-side work directory (extra ``plugin-`` and ``out-`` entries) and the pycache prefix tree, in ``config.invocation_params`` and ``getoption('plugins')`` (not tokenised), and in a cold pycache. A suppressed or missing result is fail-closed; only a forged, matching result is a bypass. C4e
-the classifier and docs, C4f the workflow wiring. Specification (revision 5, the converged result of four review
+**This module is not wired into anything yet.** It is delivered by a series of PRs for gap-backlog ticket C4 (C4a core, C4b lint,
+C4c-1a export, C4c-1b seal/cleanup, C4c-1c claim recovery, C4c-2 overlay/diff/venv check, C4d harness, C4e classifier/docs, C4f wiring); no
+workflow file, lifecycle validator or other script calls it until C4f. C4d is delivered in three parts: C4d-1 the measurement harness
+(``run_order``, ``side_env``, ``pytest_argv``, ``measure_paired``), C4d-2 the trace (``TRACE_PLUGIN_SOURCE``, ``trace_env``,
+``trace_paired``) and C4d-3 ``compare`` (the pipeline of ``_compare_impl``: integrity checks, paired trace and measurement, post-run
+check, verdict), ``run_benchmark_once`` and the CLI commands ``compare`` and ``run-once``. C4e is the classifier and docs, C4f the workflow
+wiring.
+
+Sections, in file order: the gate's string-level validation (``benchmark_symbol_from_location``, ``validate_benchmark_command``,
+``validate_benchmark_gate``, ``benchmark_target``); ``evaluate_paired_samples``; ``escape_diagnostic``; the AST lint
+(``validate_benchmark_content``); C4c-1 export, seal and cleanup (``export_tree``, ``seal_tree``, ``unseal_tree``, ``cleanup_root``,
+``BenchmarkGateError`` and the error codes); C4c-2a tree hash and overlay (``hash_tree``, ``harness_sha256``, ``export_commit``,
+``read_benchmark``, ``seal_export``, ``hash_export``, ``fingerprint_tree``, ``repo_top_levels``, ``overlay_benchmark_file``); C4c-2b the
+diff checks (``protected_path_diff``, ``token_tripwire``, ``diff_checks``, ``is_ancestor``); C4c-2c the venv hook check
+(``snapshot_venv``, ``interpreter_pin``, ``check_venv``); C4d-3 ``dependency_parity`` and ``verify_export_against_commit``; C4d-1 and C4d-2
+the measurement harness and the trace (``measure_paired``, ``trace_paired``); ``run_benchmark_once``; C4d-3 ``compare`` (vocabularies,
+``Side``, result assembly and writing, steps 1 to 13); the CLI.
+
+Calling order. The Orchestrator provisions HEAD FIRST (spec 2.5): for each side it creates the venv, runs ``snapshot-venv`` (which prints
+``snapshot_sha256`` and ``interpreter_sha256``) BEFORE that side's install, then installs; it creates the base export and venv only after the
+head install has finished. Each export comes from ``export_tree`` (the dispatch root's marker pid defaults to the exporting process, so pass
+``--owner-pid`` when ``cleanup`` will run from another process). It then calls ``compare`` ONCE per pair of fresh exports. ``compare`` runs
+``is_ancestor``, then the isolation checks of both sides (roots, interpreter pin, snapshots, ``check_venv``, ``dependency_parity``,
+``verify_export_against_commit``), ``diff_checks`` and the host-load check, all before any export is modified; then ``repo_top_levels`` of the
+base export (after the install, so ``build/`` and ``dist/`` can join the lint allowlist: harmless, disclosed) and ``overlay_benchmark_file``;
+``seal_export`` x2, ``read_benchmark`` on BOTH roots (required equal), the lint and ``hash_export`` x2; the integrity checks once more
+immediately before the first child; ``trace_paired``; ``measure_paired``; a post-run check of every hash, fingerprint, snapshot and pin
+after any path that started a child; and the verdict, written to ``out_path``. ``harness_sha256`` is computed at step 2 (both parts are fixed
+at import and at the first load of the validator, whose module body it therefore runs).
+
+Limits of the trace: it is a narrow tripwire, not a proof of equal work. For the typical benchmark, which makes one library call and prints a
+digest, the executed-line count is a small constant on both sides, so equality proves nothing; the trace discriminates only when the test body
+loops or branches on library behaviour. Blind spots: helpers and callbacks, generator expressions, lambdas, ``map``, ``exec``/``eval``,
+``asyncio.run(main())``, a same-named decoy, and branches inside one line. In-process tampering by code running in the child, and detection of
+the trace run itself, are not detected. The trace run also differs from a timed run in the contents of its per-side work directory (extra
+``plugin-`` and ``out-`` entries), in its environment (``PYTHONPATH`` and the three ``BENCH_TRACE_*`` keys), in ``config.invocation_params`` and
+``getoption('plugins')`` (not tokenised), and in compiling the plugin on every run (no bytecode is written: ``PYTHONDONTWRITEBYTECODE``). A
+suppressed or missing result is fail-closed; only a forged, matching result is a bypass. C4d-3 specification:
+``docs/superpowers/specs/2026-11-06-c4d3-compare-and-run-once-design.md``. Parent Specification (revision 5, the converged result of four review
 rounds): ``docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md`` (APIs table,
 Data model, Capacity, Threat model). This docstring states each function's own contract and the reason each
 rule exists; it does not re-derive the design.
@@ -870,6 +894,10 @@ EXPORT_REFUSAL_CODES = (
     "EXPORT_SYMLINK_ESCAPES",   # a symlink whose real target is outside the export
     "EXPORT_VERIFY_FAILED",     # the written tree differs from the commit's listing
 )
+# ERROR_CODES: the codes a `BenchmarkGateError.code` can carry (built up in stages below). The reasons of a `compare` RESULT that exist only
+# there (`HOST_BUSY_START`, `HOST_BUSY_END`, `IMPROVED_CLEAR`, `NOISY`, `BORDERLINE`, `GATE_REJECTED`, `ISOLATION_REJECTED`, `LINT_REJECTED`,
+# `HEAD_OUTPUT_TOO_LARGE`, ... see `COMPARE_RESULT_OF_REASON`) are not exceptions and are not listed here. A few names are both (`BASE_TIMEOUT`,
+# `DIGEST_MISSING`: a library error code that `compare` also reports as a reason).
 ERROR_CODES = (  # MARKER_MISSING / MARKER_INVALID also appear in CLEANUP_CODES: the same condition seen by `cleanup`
     "COMMIT_INVALID", "COMMIT_NOT_FOUND", "REPO_UNREADABLE", "DEST_REJECTED", "GIT_FAILED", "GIT_TOO_OLD", "GIT_TIMEOUT",
     "GIT_OUTPUT_TOO_LARGE", "TREE_UNREADABLE", "TREE_TOO_LARGE", "SEAL_FAILED", "MARKER_MISSING", "MARKER_INVALID",
@@ -930,8 +958,11 @@ class BenchmarkGateError(Exception):
         self.side: str | None = None  # measure_paired and trace_paired: which side failed ("base" or "head"), None if neither or both
         self.phase: str | None = None  # measure_paired: "warmup" or "timed"; trace_paired: "trace" (None for an argument error)
         self.partial: dict | None = None  # measure_paired only: {"order", "base_ns", "head_ns"} of the completed rounds when phase == "timed" (None for trace_paired)
-        self.kind: str | None = None  # trace_paired: why it failed, one of TRACE_FAILURE_KINDS; measure_paired: the _execute kind of a run failure; else None
-        # trace_paired only, and only for an error raised AFTER both sides produced a result (the kinds unavailable_one_side,
+        # why a run failed. trace_paired: one of TRACE_FAILURE_KINDS on every error after validation; measure_paired: the `_execute` kind (spawn,
+        # oversize, timeout, nonzero) of a failed run only (None for a digest error, WORKLOAD_TOO_SHORT, MEASURE_FAILED or a bad argument);
+        # run_benchmark_once: the same `_execute` kind of a failed run, None for DIGEST_MISSING; `compare` maps by kind. None for every other error.
+        self.kind: str | None = None
+        # trace_paired only (`compare` shows it in its result), and only for an error raised AFTER both sides produced a result (the kinds unavailable_one_side,
         # unavailable_tokens_differ, unavailable_interpreters_differ, interpreters_differ, counts_differ, unavailable): {"base": {"kind":
         # "lines"|"unavailable", "value": int count | str token, "interpreter": "<ver> <impl>"}, "head": {...}, "argv": {"base": [...],
         # "head": [...]}, "body_has_control_flow": bool}. None for an error raised during a side's run and for every other error.
@@ -2511,9 +2542,10 @@ def fingerprint_tree(root: str | os.PathLike, *, limit: int) -> str:
 def repo_top_levels(export_root: str | os.PathLike) -> frozenset[str]:
     """The top-level package and module names of an export (its root and `src/`), the `repo_top_levels` argument of
     `validate_benchmark_content`. Walked by descriptor with no symlink followed (a symlink named like a package, or a symlinked
-    `src`, contributes nothing). Compute it from the BASE export BEFORE `overlay_benchmark_file` and before any build step that
-    could create `build/`, `dist/` or `venv/` there: afterwards those names would join the allowlist too. `DEST_REJECTED` for a bad
-    root, `TREE_TOO_LARGE`, `OVERLAY_FAILED` for an I/O failure."""
+    `src`, contributes nothing). Compute it from the BASE export BEFORE `overlay_benchmark_file`. `compare` calls it at step 7, AFTER
+    the project install, so a build step that created `build/` or `dist/` in the base export has already added those names to the
+    allowlist: harmless, and disclosed. A caller that wants the strict list computes it before any install. `DEST_REJECTED`
+    for a bad root, `TREE_TOO_LARGE`, `OVERLAY_FAILED` for an I/O failure."""
     try:
         root = _export_root(export_root, "export_root")
         names: set[str] = set()
@@ -2681,7 +2713,8 @@ def overlay_benchmark_file(
     for the file's origin: presence is read from the base export AFTER the project install, so a build step that wrote that path would
     make a Builder-authored file look `PRE_EXISTING`. The Orchestrator re-derives the origin itself (`git cat-file -e <base>:<path>`),
     never from this value or the JSON. `read_benchmark` gives back the bytes for the hash and the lint; `repo_top_levels` (taken
-    BEFORE the overlay) gives the lint its argument. One writer per base.
+    BEFORE the overlay, but by `compare` after the install: `build/` and `dist/` can join the allowlist, harmless and disclosed)
+    gives the lint its argument. One writer per base.
 
     Both commits are REQUIRED and each must equal the commit in its export's sidecar (`export_commit`), so neither export can come from
     another commit than the one it is named for.
@@ -3111,7 +3144,10 @@ def _venv_entries(root: str, sites: list[str]) -> dict[str, dict]:
 def snapshot_venv(bin_dir: str | os.PathLike, out_path: str | os.PathLike) -> None:
     """Record the hook candidates of a FRESH venv (run after creating it and BEFORE installing the project) to `out_path`, JSON, written
     atomically; an existing `out_path` is refused (`DEST_REJECTED`). `VENV_NOT_ISOLATED` if the venv is not a plain isolated one;
-    `TREE_UNREADABLE` for an I/O error. Anything already in the snapshot (the venv's own `distutils-precedence.pth`, say) is not judged later."""
+    `TREE_UNREADABLE` for an I/O error. Anything already in the snapshot (the venv's own `distutils-precedence.pth`, say) is not judged later.
+    The CLI `snapshot-venv` also prints the snapshot file's sha256 and the interpreter pin's (`snapshot_sha256`, `interpreter_sha256`): the
+    Orchestrator passes both to `compare` in `Side`, and `compare` ends with `ISOLATION_REJECTED` (`SNAPSHOT_CHANGED`, `INTERPRETER_CHANGED`) when either no longer hashes to its pin. This
+    function writes only the snapshot; the digest is computed from the file that was written."""
     try:
         root, sites = _venv_layout(_fs(bin_dir))
         out = _fs(out_path)
@@ -4188,11 +4224,13 @@ def _verify_plugin(path: str) -> None:
 
 def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int, repeats: int, *, salt: str | None = None) -> list[str]:
     """The round order: exactly ``repeats / 2`` rounds are ``"head_first"``, the rest ``"base_first"``, shuffled by a PRNG seeded from
-    ``sha256(base_commit || head_commit || benchmark_sha256 || attempt)``. Strict alternation phase-locks onto a period-4 disturbance
+    ``sha256(base_commit || head_commit || benchmark_sha256 || attempt [|| salt])`` (fields joined by ``\\0``). Strict alternation phase-locks onto a period-4 disturbance
     (about 25% false IMPROVED); a seeded balanced permutation does not, and a human can reproduce it. ``attempt`` makes the one allowed
     re-measure use a different order. ``salt`` (``None`` means unsalted: today's seed bytes, unchanged) is lowercase hex of 1 to 64
     characters and is appended as a fifth ``\\0``-joined seed field, so a run's order is reproducible from the recorded salt but not
-    predictable from the public inputs. Raises ``MEASURE_ARGS_INVALID`` for a bad argument."""
+    predictable from the public inputs. ``measure_paired`` passes its ``order_salt`` straight through (so ``None`` is unsalted there);
+    ``compare`` generates a random salt when it is given none and records it as ``order_salt`` in its result, so the order of any
+    result can be recomputed. Raises ``MEASURE_ARGS_INVALID`` for a bad argument."""
     import random
 
     if not all(isinstance(c, str) and _COMMIT_RE.fullmatch(c) for c in (base_commit, head_commit)):
@@ -4213,8 +4251,9 @@ def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt
 
 
 def side_env(bin_dir: str, scratch: str) -> dict[str, str]:
-    """The child's environment: an allowlist, not a sandbox. The side's venv ``bin`` first on ``PATH``, no user site, a fixed hash seed, a
-    ``PYTHONDONTWRITEBYTECODE``, fresh ``HOME`` and ``TMPDIR`` under ``scratch``, plugin autoload off. No ``PYTHONPYCACHEPREFIX``: a prefix
+    """The child's environment, exactly nine keys: an allowlist, not a sandbox. The side's venv ``bin`` first on ``PATH`` (and ``VIRTUAL_ENV``),
+    no user site, a fixed hash seed, ``PYTHONDONTWRITEBYTECODE=1``, fresh ``HOME`` and ``TMPDIR`` under ``scratch`` (it makes both
+    directories), ``LANG``, pytest plugin autoload off. No ``PYTHONPYCACHEPREFIX``: a prefix
     would make CPython ignore every existing ``__pycache__`` and recompile the interpreter, pytest and the benchmark's imports on every
     run, pushing ratios toward 1 and letting compile time satisfy the workload floor; existing bytecode is read, none is written. No
     ``PYTHONPATH``, no SCM, cloud or API token. The trace's environment is ``trace_env``, which adds ``PYTHONPATH`` and the three ``BENCH_TRACE_*``
@@ -4297,7 +4336,10 @@ def _run_once(argv: list[str], cwd: str, env: dict[str, str], timeout: float) ->
     """One child run: ``(exit code or None if killed by the watchdog, wall nanoseconds, stdout, stderr tail, output hit the size limit)``.
     A blocking ``wait`` with a watchdog ``Timer`` (cancelled and joined after the wait, so a late fire cannot ``killpg`` a reused pgid),
     and a group kill after EVERY run. ``RLIMIT_FSIZE`` kills nothing in Python (CPython ignores SIGXFSZ), so oversize is detected by a
-    file whose size equals the limit."""
+    file whose size equals the limit. The child starts in its own session with default dispositions for the guarded signals and an empty
+    signal mask (the parent has handlers for them, or ignores them, and blocks them around the spawn), no stdin, and ``env`` exactly as given. ``Popen`` failing
+    raises ``_SpawnFailed`` (with the errno), which ``_execute`` splits into a provisioning fault of the side and a host fault. Used by
+    ``measure_paired``, ``trace_paired`` and ``run_benchmark_once`` through ``_execute`` only."""
     import resource  # imported here, in the parent, not between fork and exec
 
     def child_setup() -> None:  # runs in the child between fork and exec; touches nothing but `signal` and `resource`
@@ -4382,9 +4424,11 @@ def _tail_detail(tail: bytes) -> str:
 
 
 def _prepare_run(side: str, bin_dir: str, work: str, ini_path: str | None = None) -> tuple[str, dict, str]:
-    """Make the run's scratch directory (unpredictable name, so a planted name cannot fail the run) and build its environment (``side_env``
-    makes the home and tmp directories). Returns ``(scratch, env, ini)``: ``ini`` is ``ini_path`` when given, else a fresh ``empty.ini``
-    written inside the scratch, so a child that rewrites its ini changes nothing for the next run (no mutable harness state crosses a child)."""
+    """Make the run's scratch directory (``tempfile.mkdtemp`` inside ``work``, so an unpredictable name and a planted name cannot fail the run)
+    and build its environment (``side_env`` makes the home and tmp directories). Returns ``(scratch, env, ini)``: ``ini`` is ``ini_path``
+    when given, else a fresh ``empty.ini`` written inside the scratch, so a child that rewrites its ini changes nothing for the next run
+    (no mutable harness state crosses a child). Shared by ``measure_paired``, ``trace_paired`` and ``run_benchmark_once``; the caller owns
+    ``work`` (a temporary directory it removes), and ``_execute`` removes the scratch."""
     scratch = tempfile.mkdtemp(dir=work)
     env = side_env(bin_dir, scratch)
     ini = ini_path
@@ -4398,7 +4442,11 @@ def _prepare_run(side: str, bin_dir: str, work: str, ini_path: str | None = None
 def _execute(side: str, argv: list[str], root: str, scratch: str, env: dict[str, str], timeout_seconds: float,
              fail: Callable[[str, str], BenchmarkGateError]) -> tuple[int, bytes]:
     """Run once, always remove ``scratch``, and raise ``fail(kind, detail)`` for a spawn failure, oversize output, timeout or nonzero exit
-    (kinds ``spawn``, ``oversize``, ``timeout``, ``nonzero``, checked in that order). Returns ``(elapsed_ns, stdout)``."""
+    (kinds ``spawn``, ``oversize``, ``timeout``, ``nonzero``, checked in that order; ``spawn`` only for a provisioning errno of the side,
+    ``_SPAWN_PROVISIONING_ERRNOS``). A host spawn fault (``EAGAIN``, ``ENOMEM``, a failed ``preexec_fn``) raises ``RuntimeError``, which the
+    callers turn into ``MEASURE_FAILED``. Returns ``(elapsed_ns, stdout)``; the exit code and stderr are not returned (only a failure's
+    detail shows the stderr tail). ``fail`` is the caller's error factory: ``measure_paired`` and ``run_benchmark_once`` map the kind to
+    a code and keep it in ``error.kind``; ``trace_paired`` makes every kind a ``TRACE_MISMATCH``."""
     try:
         code, elapsed, stdout, tail, oversize = _run_once(argv, root, env, float(timeout_seconds))
     except _SpawnFailed as exc:
@@ -4502,12 +4550,13 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
     Raises ``BenchmarkGateError`` with a ``MEASURE_REFUSAL_CODES`` code, or ``MEASURE_ARGS_INVALID`` (a caller error) or ``MEASURE_FAILED`` (a harness fault: no disk space, no thread; not the Builder's). The exception
     carries (always, ``None`` when not applicable) ``side`` (``"base"``, ``"head"`` or ``None``), ``phase`` (``"warmup"``, ``"timed"`` or ``None``) and, for a failure after
     timing began (``phase == "timed"``), ``partial`` (``{"order", "base_ns", "head_ns"}`` of the completed rounds). A spawn failure (no ``<bin>/python``: a venv that was not
-    provisioned) is ``<SIDE>_NONZERO_EXIT``. Digest rules: after the FIRST warmup round both sides have run, so a digest printed by
+    provisioned) is ``<SIDE>_NONZERO_EXIT``. ``kind`` is the ``_execute`` kind (``spawn``, ``oversize``, ``timeout``, ``nonzero``) of a failed run and ``None`` for every
+    other error (a digest error, ``WORKLOAD_TOO_SHORT``, ``MEASURE_FAILED``, a bad argument): ``compare`` needs it because a spawn and a nonzero exit share a code. Digest rules: after the FIRST warmup round both sides have run, so a digest printed by
     neither is ``DIGEST_MISSING``, by one is ``DIGEST_MISMATCH``, by both but different is ``DIGEST_MISMATCH`` (a benchmark that is
     nondeterministic on both sides is therefore reported as a mismatch there); from then on a run without a digest or with another one is
     ``DIGEST_UNSTABLE``; the digests of ALL runs (warmup included) must be one value at the end. ``WORKLOAD_TOO_SHORT`` needs the timed
     rounds and names the measured median. ``argv_builder(side, bin_dir, root, target) -> argv`` is the test seam; the default is
-    ``pytest_argv``. ``order_salt`` is ``run_order``'s ``salt`` (``None``: unsalted). ``phase`` here is only ``"warmup"`` or ``"timed"``; the paired trace run is ``trace_paired``, a separate function."""
+    ``pytest_argv``. ``order_salt`` is ``run_order``'s ``salt`` (``None``: unsalted; ``compare`` always passes one). ``phase`` here is only ``"warmup"`` or ``"timed"``; the paired trace run is ``trace_paired``, a separate function."""
     if os.name != "posix":
         raise BenchmarkGateError("UNSUPPORTED_PLATFORM", "the harness needs POSIX process groups")
     order = run_order(base_commit, head_commit, benchmark_sha256, attempt, repeats, salt=order_salt)
@@ -4700,7 +4749,8 @@ def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, t
     machinery (a temp directory, the plugin file, its hash, a path separator in the directory) is ``MEASURE_FAILED`` (``side`` ``None``);
     what the child did (a failed run, a missing or malformed result, ``.failed``, differing counts or interpreters) is
     ``TRACE_MISMATCH``, or ``TRACE_UNAVAILABLE`` when both sides report the same unavailability. A hard failure on either side raises at
-    once. Every error carries ``kind``, one of ``TRACE_FAILURE_KINDS`` (the ``_execute`` kinds are the first four). An error raised after
+    once. Every error raised after the validation carries ``kind``, one of ``TRACE_FAILURE_KINDS`` (the ``_execute`` kinds are the first four;
+    the validation errors have ``kind`` ``None``, and ``measure_paired`` and ``run_benchmark_once`` also set ``kind``, to an ``_execute`` kind, on a failed run). An error raised after
     BOTH sides produced a result (the kinds ``unavailable_one_side``, ``unavailable_tokens_differ``, ``unavailable_interpreters_differ``,
     ``interpreters_differ``, ``counts_differ``, ``unavailable``) also carries ``trace``: ``{"base": {"kind": "lines"|"unavailable", "value":
     int count | str token, "interpreter": "<ver> <impl>"}, "head": {...}, "argv": {"base": [...], "head": [...]}, "body_has_control_flow":

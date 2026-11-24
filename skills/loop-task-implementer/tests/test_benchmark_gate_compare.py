@@ -1,6 +1,13 @@
-"""C4d-3 ``compare``: vocabularies, ``Side``, result assembly and the dir-fd result writer (task T2a).
+"""C4d-3 ``compare`` and ``run-once``: the tests of the whole feature (spec 4), in file order: vocabularies, result assembly, the dir-fd result
+writer (pure, no child, no git); the shared fixtures (a real git repository, two exports, two fake-interpreter venvs, ``fake_trace_builder``);
+``fingerprint_tree``, ``interpreter_pin``, ``dependency_parity``, ``verify_export_against_commit``; the pipeline steps 1 to 13 with fake
+children and stubbed ``trace_paired``/``measure_paired`` (raise-versus-return rows, the stage table, the precedence list, host checks, step 12);
+the CLI (exit codes, the ``RESULT:`` line, the crash contract); two real-pytest rows and the real-child tamper rows; and the T7 pins at the
+end (both commands registered, the CLI path uses the default seams, the generated salt is random and recorded).
 
-Pure tests only: no child process, no git. The pipeline rows arrive with later tasks and extend this module.
+The pipeline tests drive ``_compare_impl`` through the ``Case`` helper with its seams (``argv_builder``, ``load_probe``, ``order_salt``,
+``interpreter_of``, ``min_base_ns``); only the real-pytest rows use the default ``argv_builder``. One ``compare`` per fixture: a second call
+on the same exports meets the step-4 untracked-file check. Design: docs/superpowers/specs/2026-11-06-c4d3-compare-and-run-once-design.md.
 """
 
 from __future__ import annotations
@@ -4643,3 +4650,74 @@ def test_a_real_child_that_rewrites_its_ini_or_plants_a_file_under_work_changes_
     assert all(row["ini"] == bg._EMPTY_INI and row["scratch"] == ["empty.ini", "home", "tmp"] for row in rows)
     assert any(row["work_has_planted"] for row in rows)  # the plant did land under work for the measure runs: the row is not vacuous
     assert result["stage"] == "ran" and result["reason"] != "ISOLATION_REJECTED" and len(result["ratios"]) == 6 and result["trace"]["head"]["value"] == FAKE_TRACE_LINES
+
+
+# --- T7 pins (spec 4 row 18): the CLI registers both commands, the CLI path uses the default seams, the generated salt is random ---
+
+@posix_only
+def test_main_registers_compare_and_run_once(monkeypatch, capsys):
+    seen = []
+    monkeypatch.setattr(bg, "_cmd_compare", lambda args: seen.append("compare") or 0)
+    monkeypatch.setattr(bg, "_cmd_run_once", lambda args: seen.append("run-once") or 0)
+    assert bg.main(["--help"]) == 0  # argparse prints the subcommand list and exits 0
+    helptext = capsys.readouterr().out
+    assert "compare" in helptext and "run-once" in helptext
+    full = [part for flag in COMPARE_FLAGS for part in (flag, f"v{flag[2:]}")]
+    assert bg.main(["compare", *full]) == 0 and seen == ["compare"]
+    assert bg.main(["run-once", "--gate", "g", "--root", "r", "--bin", "b"]) == 0 and seen == ["compare", "run-once"]
+    assert bg.main(["no-such-command"]) == 2 and seen == ["compare", "run-once"]
+
+
+@posix_only
+def test_cli_path_uses_default_seams(monkeypatch, tmp_path):
+    """``main`` -> ``_cmd_compare`` -> ``compare`` -> ``_compare_impl`` passes only the five spec arguments: no ``argv_builder``,
+    ``load_probe``, ``order_salt``, ``interpreter_of`` (or ``min_base_ns``): a real CLI process has no seams."""
+    calls = []
+
+    def impl(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise bg.BenchmarkGateError("MEASURE_FAILED", "stop here")
+    monkeypatch.setattr(bg, "_compare_impl", impl)
+    gate = tmp_path / "gate.json"
+    gate.write_text(json.dumps(GATE))
+    full = [part for flag in COMPARE_FLAGS for part in (flag, f"v{flag[2:]}")]
+    full[full.index("--gate") + 1] = str(gate)
+    assert bg.main(["compare", *full, "--attempt", "2", "--allow-writable-interpreter"]) == 2  # the stub's raise: exit 2, nothing else ran
+    (args, kwargs), = calls
+    assert kwargs == {"attempt": 2, "out_path": "vout", "allow_writable_interpreter": True}
+    assert args[0] == GATE and args[1] == "vrepo"
+    assert args[2] == bg.Side("vbase-root", "vbase-commit", "vbase-bin", "vbase-snapshot", "vbase-snapshot-sha256", "vbase-interpreter-sha256")
+    assert args[3] == bg.Side("vhead-root", "vhead-commit", "vhead-bin", "vhead-snapshot", "vhead-snapshot-sha256", "vhead-interpreter-sha256")
+    calls.clear()
+    with pytest.raises(bg.BenchmarkGateError):  # the library entry point too
+        bg.compare(GATE, "r", args[2], args[3], out_path="o")
+    (_, kwargs), = calls
+    assert set(kwargs) == {"attempt", "out_path", "allow_writable_interpreter"}
+
+
+@posix_only
+def test_generated_salt_is_random_and_recorded(bcase, tmp_path, monkeypatch):
+    recorded = []
+
+    def run_one(case):
+        seen = {}
+
+        def measure(*a, **kw):
+            seen.update(kw)
+            order = bg.run_order(kw["base_commit"], kw["head_commit"], kw["benchmark_sha256"], kw["attempt"], kw["repeats"], salt=kw["order_salt"])
+            return {**MEASURE_OK, "order": order}
+        case.mp.setattr(bg, "trace_paired", lambda *a, **k: TRACE_OK)
+        case.mp.setattr(bg, "measure_paired", measure)
+        result = case.impl(argv_builder=fake_trace_builder, min_base_ns=0, order_salt=None)  # no salt: _compare_impl generates one
+        recorded.append((result, seen))
+        return result
+    first = run_one(bcase)
+    second_dir = tmp_path / "second"  # one compare per world: the second needs fresh exports
+    second_dir.mkdir()
+    second = run_one(_bench_case(second_dir, monkeypatch))
+    assert first["order_salt"] != second["order_salt"]
+    for result, seen in recorded:
+        assert re.fullmatch("[0-9a-f]{16}", result["order_salt"]) and seen["order_salt"] == result["order_salt"]  # what ran is what was recorded
+        again = bg.run_order(result["base_commit"], result["head_commit"], result["benchmark_sha256"], result["attempt"], result["repeats"],
+                             salt=result["order_salt"])
+        assert result["order"] == again  # the recorded salt reproduces the order
