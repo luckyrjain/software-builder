@@ -5901,11 +5901,82 @@ def _cmd_cleanup(args: argparse.Namespace) -> int:
     return 0 if code in ("REMOVED", "ABSENT") else 1
 
 
+def _crash_message(exc: BaseException) -> str:
+    """The crash contract's one stderr line (spec 2.9): ``usage error: <CODE or INTERNAL>: <type>``. Never the exception's text: it may carry
+    attacker bytes. ``CODE`` is a ``BenchmarkGateError`` code from the closed ``ERROR_CODES``; anything else is ``INTERNAL``."""
+    code = exc.code if isinstance(exc, BenchmarkGateError) and exc.code in ERROR_CODES else "INTERNAL"
+    return f"usage error: {code}: {escape_diagnostic(type(exc).__name__, 64)}"
+
+
+_RUN_ONCE_REASONS = frozenset({"BASE_NONZERO_EXIT", "HEAD_NONZERO_EXIT", "BASE_TIMEOUT", "HEAD_TIMEOUT", "OUTPUT_TOO_LARGE", "DIGEST_MISSING"})
+
+
+def _read_gate_file(path: str) -> object:
+    """The raw ``benchmark_gate`` JSON of ``--gate`` (a bounded read; not the whole specialist inputs). ``OSError`` or ``ValueError`` otherwise."""
+    data = _read_bounded(path, _MAX_INPUT_BYTES)
+    if len(data) > _MAX_INPUT_BYTES:
+        raise ValueError("gate file too large")
+    return json.loads(data.decode("utf-8"))
+
+
+def _cmd_compare(args: argparse.Namespace) -> int:
+    """Compare two exports (spec 2.9). Exit 0 if and only if the result is ``IMPROVED``, 1 for any other result, 2 for usage, a raised
+    ``BenchmarkGateError`` or a crash. The ``RESULT: <result> <reason> interpreter_writable=<0|1|n/a> sha256=<hex>`` line is printed AFTER the
+    result file exists, from the file's own bytes. A crash catches ``BenchmarkGateError``, ``OSError``, ``ValueError``, ``RecursionError``,
+    ``Exception`` and ``KeyboardInterrupt`` (a SIGTERM, SIGHUP or SIGINT), prints ``usage error: <CODE or INTERNAL>: <type>`` on stderr (never
+    attacker text), writes nothing of its own and exits 2; sealed exports stay sealed (``cleanup`` restores them)."""
+    try:
+        with _with_signal_handlers():
+            gate = _read_gate_file(args.gate)
+            base = Side(args.base_root, args.base_commit, args.base_bin, args.base_snapshot, args.base_snapshot_sha256, args.base_interpreter_sha256)
+            head = Side(args.head_root, args.head_commit, args.head_bin, args.head_snapshot, args.head_snapshot_sha256, args.head_interpreter_sha256)
+            compare(gate, args.repo, base, head, attempt=args.attempt, out_path=args.out, allow_writable_interpreter=args.allow_writable_interpreter)
+            data = _read_bounded(args.out, _MAX_INPUT_BYTES, nofollow=True)  # the bytes that were written, not the dict in memory
+            if len(data) > _MAX_INPUT_BYTES:
+                raise ValueError("result file too large")
+            written = json.loads(data.decode("ascii"))
+            result, reason = written["result"], written["reason"]
+            writable = {True: "1", False: "0", None: "n/a"}[written["interpreter_writable"]]
+            if result not in COMPARE_RESULTS or COMPARE_RESULT_OF_REASON.get(reason) != result:
+                raise ValueError("result file names an unknown result or reason")
+            print(f"RESULT: {result} {reason} interpreter_writable={writable} sha256={hashlib.sha256(data).hexdigest()}")
+    except (BenchmarkGateError, OSError, ValueError, RecursionError, Exception, KeyboardInterrupt) as exc:
+        print(_crash_message(exc), file=sys.stderr)
+        return 2
+    return 0 if result == "IMPROVED" else 1
+
+
+def _cmd_run_once(args: argparse.Namespace) -> int:
+    """One untimed run of the benchmark (spec 2.9). Exit 0 prints ``digest: <64 hex>`` (what the child printed: NOT evidence); 1 prints the
+    reason on stdout (``<SIDE>_NONZERO_EXIT``, ``<SIDE>_TIMEOUT``, ``OUTPUT_TOO_LARGE``, ``DIGEST_MISSING`` or ``REJECT:<gate code>``) and the
+    escaped detail on stderr (child text: untrusted); 2 for usage or a crash (the crash contract of ``_cmd_compare``)."""
+    try:
+        with _with_signal_handlers():
+            normalized, code = validate_benchmark_gate(_read_gate_file(args.gate))
+            if normalized is None:
+                print(f"REJECT:{code}")
+                return 1
+            outcome = run_benchmark_once(args.root, args.bin, benchmark_target(normalized), timeout_seconds=normalized["per_run_timeout_seconds"], side=args.side)
+            print(f"digest: {outcome['digest']}")
+            return 0
+    except BenchmarkGateError as exc:
+        if exc.code in _RUN_ONCE_REASONS:
+            print(exc.code)
+            print(f"detail: {escape_diagnostic(exc.detail, 200)}", file=sys.stderr)
+            return 1
+        print(_crash_message(exc), file=sys.stderr)
+        return 2
+    except (OSError, ValueError, RecursionError, Exception, KeyboardInterrupt) as exc:
+        print(_crash_message(exc), file=sys.stderr)
+        return 2
+
+
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point: ``validate`` (C4a), ``lint`` (C4b), ``export``, ``fixed-parent`` (C4c-1a) and ``cleanup`` (C4c-1b, C4c-1c) and ``snapshot-venv`` (C4c-2c). Later
-    PRs add ``compare`` and ``run-once`` (C4d) by adding a subparser with ``set_defaults(func=...)``. There is no catch-all
-    here on purpose: C4d owns the exit-code contract for a crash."""
-    parser = argparse.ArgumentParser(prog="benchmark_gate.py", description="Benchmark gate: validate, lint, export, fixed-parent, cleanup, snapshot-venv.")
+    """CLI entry point: ``validate`` (C4a), ``lint`` (C4b), ``export``, ``fixed-parent`` (C4c-1a), ``cleanup`` (C4c-1b, C4c-1c), ``snapshot-venv``
+    (C4c-2c), and ``compare`` and ``run-once`` (C4d-3). The first six let an unexpected exception escape (Python exits 1); ``compare`` and
+    ``run-once`` own the crash contract: every error, ``KeyboardInterrupt`` included, becomes ``usage error: <CODE or INTERNAL>: <type>`` and
+    exit 2 (see ``_cmd_compare``)."""
+    parser = argparse.ArgumentParser(prog="benchmark_gate.py", description="Benchmark gate: validate, lint, export, fixed-parent, cleanup, snapshot-venv, compare, run-once.")
     sub = parser.add_subparsers(dest="command", required=True)
     validate = sub.add_parser("validate", help="validate specialist_inputs.benchmark_gate")
     validate.add_argument("--specialist-inputs", required=True, metavar="FILE")
@@ -5934,6 +6005,20 @@ def main(argv: list[str] | None = None) -> int:
                              "REMOVE_FAILED 'claimed root is locked by another process' = retry later)")
     cleanup.add_argument("--root", required=True, metavar="DIR")
     cleanup.set_defaults(func=_cmd_cleanup)
+    compare_p = sub.add_parser("compare", help="compare two exports of one benchmark (exit 0 IMPROVED, 1 any other result, 2 usage or crash; prints a RESULT line)")
+    for flag in ("gate", "repo", "base-root", "head-root", "base-commit", "head-commit", "base-bin", "head-bin", "base-snapshot", "base-snapshot-sha256",
+                 "base-interpreter-sha256", "head-snapshot", "head-snapshot-sha256", "head-interpreter-sha256", "out"):
+        compare_p.add_argument(f"--{flag}", required=True, metavar="FILE" if flag in ("gate", "out") or flag.endswith("snapshot") else "VALUE",
+                               help="the raw benchmark_gate JSON (bounded read)" if flag == "gate" else "a new result file" if flag == "out" else None)
+    compare_p.add_argument("--attempt", type=int, default=1, metavar="N")
+    compare_p.add_argument("--allow-writable-interpreter", action="store_true")
+    compare_p.set_defaults(func=_cmd_compare)
+    run_once = sub.add_parser("run-once", help="one untimed run of the benchmark (exit 0 digest, 1 reason, 2 usage or crash)")
+    run_once.add_argument("--gate", required=True, metavar="FILE", help="the raw benchmark_gate JSON")
+    run_once.add_argument("--root", required=True, metavar="DIR")
+    run_once.add_argument("--bin", required=True, metavar="DIR", help="the venv's bin directory")
+    run_once.add_argument("--side", choices=("base", "head"), default="head")
+    run_once.set_defaults(func=_cmd_run_once)
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:  # argparse exits 2 on usage errors (and 0 on --help)

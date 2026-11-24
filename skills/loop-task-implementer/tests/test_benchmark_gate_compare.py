@@ -11,10 +11,12 @@ import json
 import os
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
 import tempfile
+import time
 import types
 import venv
 from fractions import Fraction
@@ -1711,7 +1713,6 @@ def test_error_mappings(tmp_path, monkeypatch):
     # the walk's own bounds: entries and depth are TREE_TOO_LARGE, an unreadable directory TREE_UNREADABLE
     for i in range(6):
         (w.export / f"n{i}.txt").write_text("x")
-    real_listing = bg._parse_listing
     monkeypatch.setattr(bg, "_MAX_TREE_ENTRIES", 12)  # the listing (about 11 with directories) fits, the walk's 6 extra entries do not
     with pytest.raises(bg.BenchmarkGateError) as e:
         w.verify()
@@ -3962,3 +3963,408 @@ def test_gate_sha256_equals_what_validate_prints_for_the_same_gate(bcase, tmp_pa
     assert done.stdout.splitlines() == ["OK", f"gate_sha256: {result['gate_sha256']}"]
     normalized, _ = bg.validate_benchmark_gate(c.gate)
     assert result["gate_sha256"] == bg.gate_sha256(normalized)
+
+
+# --- T5b: the CLI (`compare`, `run-once`), the crash contract and the RESULT line ---
+# The in-process rows drive ``bg.main`` with ``bg.compare`` replaced by ``_compare_impl`` plus the test seams (a real CLI process has no
+# seams); the process rows run the real script. One ``compare`` per fixture: a second call on the same exports meets the step-4 untracked-file check.
+
+def _cli_compare_args(c, gate_path, out, *extra):
+    return ["compare", "--gate", str(gate_path), "--repo", str(c.world.repo),
+            "--base-root", c.base.root, "--head-root", c.head.root, "--base-commit", c.base.commit, "--head-commit", c.head.commit,
+            "--base-bin", c.base.bin_dir, "--head-bin", c.head.bin_dir,
+            "--base-snapshot", c.base.snapshot, "--base-snapshot-sha256", c.base.snapshot_sha256, "--base-interpreter-sha256", c.base.interpreter_sha256,
+            "--head-snapshot", c.head.snapshot, "--head-snapshot-sha256", c.head.snapshot_sha256, "--head-interpreter-sha256", c.head.interpreter_sha256,
+            "--out", str(out), *extra]
+
+
+def _seamed_compare(c):
+    """``bg.compare`` as the CLI calls it, plus the case's seams (the default seams need a real interpreter)."""
+    real = bg._compare_impl
+
+    def compare(gate, repo, base, head, **kw):
+        return real(gate, repo, base, head, argv_builder=fake_trace_builder, min_base_ns=0, load_probe=c.probe, interpreter_of=c.interp,
+                    order_salt=c.salt, **kw)
+    c.mp.setattr(bg, "compare", compare)
+
+
+def _gate_file(c):
+    path = c.tmp / "gate.json"
+    path.write_text(json.dumps(c.gate))
+    return path
+
+
+RESULT_LINE = re.compile(r"RESULT: ([A-Z_]+) ([A-Z_]+) interpreter_writable=(0|1|n/a) sha256=([0-9a-f]{64})")
+
+
+def parse_compare_outcome(returncode: int, stdout: str, file_bytes: bytes | None) -> int:
+    """The Orchestrator's reading of one ``compare`` run (spec 2.9): the exit code it may act on. An exit 0 or 1 counts only with a RESULT line
+    whose sha256 is that of the file's bytes and whose result and reason match the parsed file (and the exit agrees with the result);
+    anything else, including Python's own exit 1 for an uncaught exception, is exit 2 (\"ignore the file\")."""
+    if returncode not in (0, 1) or file_bytes is None:
+        return 2
+    lines = [m for m in map(RESULT_LINE.fullmatch, stdout.splitlines()) if m]
+    if len(lines) != 1 or lines[0].group(4) != hashlib.sha256(file_bytes).hexdigest():
+        return 2
+    try:
+        parsed = json.loads(file_bytes)
+    except ValueError:
+        return 2
+    if (parsed.get("result"), parsed.get("reason")) != (lines[0].group(1), lines[0].group(2)) or bg.COMPARE_RESULT_OF_REASON.get(parsed["reason"]) != parsed["result"]:
+        return 2
+    return 0 if parsed["result"] == "IMPROVED" and returncode == 0 else 1 if parsed["result"] != "IMPROVED" and returncode == 1 else 2
+
+
+def _writable_token(value):
+    return {True: "1", False: "0", None: "n/a"}[value]
+
+
+def _run_main(capsys, argv):
+    code = bg.main(argv)
+    captured = capsys.readouterr()
+    return code, captured.out, captured.err
+
+
+def _stub_both(c, measure):
+    _stub(c, "trace_paired", TRACE_OK)
+    _stub(c, "measure_paired", measure)
+
+
+def _read_out(path):
+    return Path(path).read_bytes() if os.path.lexists(path) else None
+
+
+def _bad_gate(c):
+    c.gate = {**c.gate, "warmup_runs": 0}
+
+
+def _no_flag_but_not_writable(c):
+    c.allow = False
+    c.pin_mods.update(base=lambda p: p._replace(writable=False), head=lambda p: p._replace(writable=False))
+
+
+def _tampered_pin(c):
+    c.base = c.base._replace(interpreter_sha256="0" * 64)
+
+
+CLI_ROWS = {
+    "improved": (HALVED, None, 0, "IMPROVED", "IMPROVED_CLEAR", "1"),
+    "improved-not-writable": (HALVED, _no_flag_but_not_writable, 0, "IMPROVED", "IMPROVED_CLEAR", "0"),
+    "not-improved": (_meas([100] * 6, [120] * 6), None, 1, "NOT_IMPROVED", "BELOW_HALF_THRESHOLD", "1"),
+    "inconclusive": (_meas([100] * 6, [93] * 6), None, 1, "INCONCLUSIVE", "BORDERLINE", "1"),
+    "rejected-step4": (HALVED, _tampered_pin, 1, "REJECTED", "ISOLATION_REJECTED", None),
+    "rejected-step2-gate": (HALVED, _bad_gate, 1, "REJECTED", "GATE_REJECTED", "n/a"),
+}
+
+
+@posix_only
+@pytest.mark.parametrize("name", sorted(CLI_ROWS))
+def test_cli_result_line_and_exit_codes(tmp_path, monkeypatch, capsys, name):
+    measure, prep, exit_code, result, reason, writable = CLI_ROWS[name]
+    c = _bench_case(tmp_path, monkeypatch)
+    if prep is not None:
+        prep(c)
+    _stub_both(c, measure)
+    _seamed_compare(c)
+    out = c.out()
+    code, stdout, stderr = _run_main(capsys, _cli_compare_args(c, _gate_file(c), out, *(["--allow-writable-interpreter"] if c.allow else [])))
+    data = Path(out).read_bytes()  # the file exists before (and without) any reading of the line
+    assert code == exit_code and stderr == ""
+    parsed = json.loads(data)
+    assert (parsed["result"], parsed["reason"]) == (result, reason)
+    expected = _writable_token(parsed["interpreter_writable"]) if writable is None else writable
+    assert stdout == f"RESULT: {result} {reason} interpreter_writable={expected} sha256={hashlib.sha256(data).hexdigest()}\n"  # the closed sets, one line
+    assert parse_compare_outcome(code, stdout, data) == exit_code  # a reader that hashes the file bytes agrees
+
+
+@posix_only
+def test_cli_exit_2_for_a_usage_error_prints_no_result_and_a_process_row_matches(tmp_path, monkeypatch, capsys):
+    c = _bench_case(tmp_path, monkeypatch)
+    out = c.out()
+    # an out file that exists is a caller fault: a raised error, exit 2, no RESULT line, and the file is not ours to read
+    Path(out).write_text("planted")
+    done = subprocess.run([sys.executable, str(SCRIPT), *_cli_compare_args(c, _gate_file(c), out, "--allow-writable-interpreter")],
+                          capture_output=True, text=True, timeout=300)
+    assert done.returncode == 2 and done.stdout == "" and re.fullmatch(r"usage error: [A-Z_]+: BenchmarkGateError\n", done.stderr), done
+    assert Path(out).read_text() == "planted" and parse_compare_outcome(done.returncode, done.stdout, b"planted") == 2
+
+
+@posix_only
+def test_cli_process_with_default_seams_ends_at_the_gate_with_a_result_line(tmp_path, monkeypatch):
+    c = _bench_case(tmp_path, monkeypatch)
+    _bad_gate(c)  # ends at step 2, before any interpreter is probed: the default seams are enough
+    out = c.out()
+    done = subprocess.run([sys.executable, str(SCRIPT), *_cli_compare_args(c, _gate_file(c), out)], capture_output=True, text=True, timeout=300)
+    data = Path(out).read_bytes()
+    assert done.returncode == 1 and done.stderr == "", done
+    assert done.stdout == f"RESULT: REJECTED GATE_REJECTED interpreter_writable=n/a sha256={hashlib.sha256(data).hexdigest()}\n"
+    assert parse_compare_outcome(done.returncode, done.stdout, data) == 1
+    assert json.loads(data)["stage"] == "pre_overlay"
+
+
+@posix_only
+def test_exit_1_without_a_valid_result_line_is_not_a_result(tmp_path):
+    good = (json.dumps({"result": "NOT_IMPROVED", "reason": "BELOW_HALF_THRESHOLD"}) + "\n").encode()
+    sha = hashlib.sha256(good).hexdigest()
+    line = f"RESULT: NOT_IMPROVED BELOW_HALF_THRESHOLD interpreter_writable=1 sha256={sha}\n"
+    assert parse_compare_outcome(1, line, good) == 1
+    assert parse_compare_outcome(1, "", good) == 2  # no line
+    assert parse_compare_outcome(1, "Traceback (most recent call last):\n", good) == 2  # Python's uncaught exception exits 1
+    assert parse_compare_outcome(1, line, good + b" ") == 2  # another sha
+    assert parse_compare_outcome(1, line, None) == 2  # no file
+    assert parse_compare_outcome(1, line.replace("BELOW_HALF_THRESHOLD", "NOISY"), good) == 2  # the line disagrees with the file
+    assert parse_compare_outcome(1, line + line, good) == 2  # two lines
+    assert parse_compare_outcome(0, line, good) == 2  # exit 0 only for IMPROVED
+    assert parse_compare_outcome(2, line, good) == 2
+    improved = (json.dumps({"result": "IMPROVED", "reason": "IMPROVED_CLEAR"}) + "\n").encode()
+    line0 = f"RESULT: IMPROVED IMPROVED_CLEAR interpreter_writable=0 sha256={hashlib.sha256(improved).hexdigest()}\n"
+    assert parse_compare_outcome(0, line0, improved) == 0 and parse_compare_outcome(1, line0, improved) == 2
+    crash = subprocess.run([sys.executable, "-c", "raise RuntimeError('boom')"], capture_output=True, text=True, timeout=60)
+    assert crash.returncode == 1 and parse_compare_outcome(crash.returncode, crash.stdout, good) == 2
+
+
+INJECTED = [(RuntimeError("EVIL\x1b[31m secret"), "INTERNAL", "RuntimeError"), (OSError(13, "EVIL\x1b[31m denied"), "INTERNAL", "PermissionError"),
+            (ValueError("EVIL"), "INTERNAL", "ValueError"), (RecursionError("EVIL"), "INTERNAL", "RecursionError"),
+            (Exception("EVIL"), "INTERNAL", "Exception"), (KeyboardInterrupt(), "INTERNAL", "KeyboardInterrupt"),
+            (bg.BenchmarkGateError("MEASURE_FAILED", "EVIL\x1b[31m"), "MEASURE_FAILED", "BenchmarkGateError"),
+            (bg.BenchmarkGateError("EVIL_CODE", "EVIL"), "INTERNAL", "BenchmarkGateError")]
+
+
+@posix_only
+@pytest.mark.parametrize("error,code_name,type_name", INJECTED, ids=lambda v: type(v).__name__ if isinstance(v, BaseException) else None)
+def test_injected_runtime_error_is_exit_2_with_no_json(tmp_path, monkeypatch, capsys, error, code_name, type_name):
+    c = _bench_case(tmp_path, monkeypatch)
+    _seamed_compare(c)
+
+    def boom(*args, **kwargs):
+        raise error
+    monkeypatch.setattr(bg, "_compare_runs", boom)  # steps 1 to 9 are real: the exports are sealed when the injected error arrives
+    before = [signal.getsignal(n) for n in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)]
+    out = c.out()
+    code, stdout, stderr = _run_main(capsys, _cli_compare_args(c, _gate_file(c), out, "--allow-writable-interpreter"))
+    assert code == 2 and stdout == "" and stderr == f"usage error: {code_name}: {type_name}\n"  # never the attacker's text
+    assert not os.path.lexists(out) and os.listdir(c.out_dir) == []  # writes nothing
+    assert [signal.getsignal(n) for n in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)] == before
+    assert all(not os.stat(root).st_mode & 0o200 for root in c.roots)  # sealed stays sealed
+    monkeypatch.undo()
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "tmp"))
+    monkeypatch.setattr(bg, "_pid_alive", lambda pid: False)  # the exporting process has exited, as it has when the Orchestrator cleans up
+    assert bg.cleanup_root(str(c.world.dispatch)) == "REMOVED"  # cleanup restores the sealed exports and removes the root
+
+
+@posix_only
+def test_a_missing_or_bad_gate_file_is_exit_2_not_a_traceback(tmp_path, monkeypatch, capsys):
+    c = _bench_case(tmp_path, monkeypatch)
+    _seamed_compare(c)
+    out = c.out()
+    code, stdout, stderr = _run_main(capsys, _cli_compare_args(c, tmp_path / "nope.json", out))
+    assert (code, stdout, stderr) == (2, "", "usage error: INTERNAL: FileNotFoundError\n")
+    (tmp_path / "bad.json").write_text("{not json")
+    code, stdout, stderr = _run_main(capsys, _cli_compare_args(c, tmp_path / "bad.json", out))
+    assert (code, stdout) == (2, "") and stderr.startswith("usage error: INTERNAL: ") and not os.path.lexists(out)
+    (tmp_path / "big.json").write_text(" " * (bg._MAX_INPUT_BYTES + 1))
+    code, stdout, stderr = _run_main(capsys, _cli_compare_args(c, tmp_path / "big.json", out))
+    assert (code, stdout) == (2, "") and not os.path.lexists(out)
+
+
+_SIGTERM_DRIVER = r'''
+import importlib.util, json, os, sys
+script, prefix, roots_json, pidfile, *argv = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("bg_driver", script)
+bg = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = bg
+spec.loader.exec_module(bg)
+real_prefix = os.path.realpath(prefix)
+pyx = "python%d.%d" % sys.version_info[:2]
+roots = json.loads(roots_json)
+CHILD = ("import os, subprocess, time\n"
+         "p = subprocess.Popen(['sleep', '300'])\n"
+         "open(%r + '.tmp', 'w').write(str(p.pid)); os.replace(%r + '.tmp', %r)\n"
+         "time.sleep(300)\n") % (pidfile, pidfile, pidfile)
+
+
+def probe(python, env):
+    return "\n".join([real_prefix, os.path.join(real_prefix, "lib", pyx, "os.py"), real_prefix]) + "\n"
+
+
+def interpreter_of(bin_dir):
+    return bg.interpreter_pin(bin_dir, outside=roots, probe=probe)
+
+
+real = bg._compare_impl
+
+
+def compare(gate, repo, base, head, **kw):
+    return real(gate, repo, base, head, argv_builder=lambda side, bin_dir, root, target: [sys.executable, "-c", CHILD], min_base_ns=0,
+                load_probe=lambda: (0.1, 4), interpreter_of=interpreter_of, order_salt="ab12", **kw)
+
+
+bg.compare = compare
+sys.exit(bg.main(argv))
+'''
+
+_SLEEPING_BENCH = """import os, subprocess
+
+
+def test_bench():
+    p = subprocess.Popen([{sleep!r}, "300"])
+    open({pid!r} + ".tmp", "w").write(str(p.pid))
+    os.replace({pid!r} + ".tmp", {pid!r})
+    p.wait()
+"""
+
+
+def _wait_for_pid(pidfile: Path, proc, deadline=240.0) -> int:
+    end = time.monotonic() + deadline
+    while time.monotonic() < end:
+        if pidfile.exists() and pidfile.read_text().strip():
+            return int(pidfile.read_text())
+        if proc.poll() is not None:
+            raise AssertionError(f"the CLI exited early: {proc.communicate()}")
+        time.sleep(0.05)
+    raise AssertionError("the child never wrote its grandchild's pid")
+
+
+def _pid_is_gone(pid: int, deadline=15.0) -> bool:
+    end = time.monotonic() + deadline
+    while time.monotonic() < end:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def _real_pytest_bin(tmp_path: Path) -> Path:
+    """A real, pip-less venv whose ``.pth`` makes this interpreter's pytest importable (the pattern of ``pytest_venv`` in test_benchmark_gate_trace.py)."""
+    root = tmp_path / "pyvenv"
+    venv.create(root, with_pip=False, symlinks=True)
+    sites = {os.path.dirname(os.path.dirname(sys.modules[name].__file__)) for name in ("pytest", "_pytest", "pluggy", "iniconfig", "packaging")
+             if name in sys.modules}
+    site = next((root / "lib").glob("python3*/site-packages"))
+    (site / "zz_pytest.pth").write_text("\n".join(sorted(sites)) + "\n")
+    return root / "bin"
+
+
+def _once_world(tmp_path: Path, source: str, gate: dict | None = None):
+    root = tmp_path / "once-root"
+    (root / "benchmarks").mkdir(parents=True)
+    (root / BENCH).write_text(source)
+    gate_path = tmp_path / "once-gate.json"
+    gate_path.write_text(json.dumps(gate or GATE))
+    return root, _real_pytest_bin(tmp_path), gate_path
+
+
+@posix_only
+@pytest.mark.parametrize("which", ["compare", "run-once"])
+def test_sigterm_kills_the_childs_group_and_exits_2(tmp_path, monkeypatch, which):
+    pidfile = tmp_path / "grandchild.pid"
+    if which == "compare":
+        c = _bench_case(tmp_path, monkeypatch)
+        out = Path(c.out())
+        driver = tmp_path / "driver.py"
+        driver.write_text(_SIGTERM_DRIVER)
+        argv = [sys.executable, str(driver), str(SCRIPT), str(c.world.prefix), json.dumps(list(c.roots)), str(pidfile),
+                *_cli_compare_args(c, _gate_file(c), out, "--allow-writable-interpreter")]
+    else:
+        out = tmp_path / "never.json"
+        root, bin_dir, gate_path = _once_world(tmp_path, _SLEEPING_BENCH.format(sleep=shutil.which("sleep") or "/bin/sleep", pid=str(pidfile)))
+        argv = [sys.executable, str(SCRIPT), "run-once", "--gate", str(gate_path), "--root", str(root), "--bin", str(bin_dir)]
+    proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True,
+                            env={**os.environ, "TMPDIR": str(tmp_path / "tmp")})  # the exports live under the redirected fixed parent
+    try:
+        grandchild = _wait_for_pid(pidfile, proc)
+        proc.send_signal(signal.SIGTERM)
+        stdout, stderr = proc.communicate(timeout=60)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.communicate()
+    assert proc.returncode == 2, (proc.returncode, stdout, stderr)  # not -15: the handler ran, the cleanup finished
+    assert stdout == "" and stderr == "usage error: INTERNAL: KeyboardInterrupt\n"
+    assert not out.exists()  # no JSON
+    assert _pid_is_gone(grandchild)  # the child's group is gone
+
+
+DIGEST_BENCH = "import hashlib\n\n\ndef test_bench():\n    print('BENCH_RESULT_DIGEST: ' + hashlib.sha256(b'x').hexdigest())\n"
+X_DIGEST = hashlib.sha256(b"x").hexdigest()
+
+
+def _cli(*argv, timeout=300):
+    return subprocess.run([sys.executable, str(SCRIPT), *argv], capture_output=True, text=True, timeout=timeout)
+
+
+@posix_only
+def test_run_once_cli(tmp_path, monkeypatch, capsys):
+    root, bin_dir, gate = _once_world(tmp_path, DIGEST_BENCH)
+    base_args = ["run-once", "--gate", str(gate), "--root", str(root), "--bin", str(bin_dir)]
+    done = _cli(*base_args)  # --side defaults to head; exit 0 prints the digest the child printed
+    assert (done.returncode, done.stdout, done.stderr) == (0, f"digest: {X_DIGEST}\n", ""), done
+    assert _cli(*base_args, "--side", "base").stdout == f"digest: {X_DIGEST}\n"
+    # exit 1 prints the reason and the escaped detail on stderr
+    (root / BENCH).write_text("def test_bench():\n    raise SystemExit(3)\n")
+    for extra, reason in (([], "HEAD_NONZERO_EXIT"), (["--side", "head"], "HEAD_NONZERO_EXIT"), (["--side", "base"], "BASE_NONZERO_EXIT")):
+        done = _cli(*base_args, *extra)
+        assert (done.returncode, done.stdout) == (1, f"{reason}\n") and done.stderr.startswith("detail: "), done
+    (root / BENCH).write_text("def test_bench():\n    pass\n")
+    done = _cli(*base_args)
+    assert (done.returncode, done.stdout) == (1, "DIGEST_MISSING\n") and done.stderr.startswith("detail: ")
+    # a gate that the validator rejects: REJECT:<code>, nothing run (warmup_runs 0 is BOUNDS_REJECTED)
+    bad = tmp_path / "bad-gate.json"
+    bad.write_text(json.dumps({**GATE, "warmup_runs": 0}))
+    done = _cli("run-once", "--gate", str(bad), "--root", str(root), "--bin", str(bin_dir))
+    assert (done.returncode, done.stdout) == (1, "REJECT:BOUNDS_REJECTED\n")
+    # exit 2: usage or a caller fault, nothing on stdout
+    missing = _cli("run-once", "--gate", str(gate), "--root", str(tmp_path / "no-such-root"), "--bin", str(bin_dir))
+    assert missing.returncode == 2 and missing.stdout == "" and re.fullmatch(r"usage error: MEASURE_ARGS_INVALID: BenchmarkGateError\n", missing.stderr), missing
+    nogate = _cli("run-once", "--gate", str(tmp_path / "none.json"), "--root", str(root), "--bin", str(bin_dir))
+    assert (nogate.returncode, nogate.stdout, nogate.stderr) == (2, "", "usage error: INTERNAL: FileNotFoundError\n")
+    # injected library outcomes (the real ones need a 10 s timeout or a 1 GiB file): the code on stdout, the escaped detail on stderr, exit 1
+    for code in ("HEAD_TIMEOUT", "BASE_TIMEOUT", "OUTPUT_TOO_LARGE", "DIGEST_MISSING"):
+        def raising(*a, _code=code, **k):
+            raise bg.BenchmarkGateError(_code, "child said \x1b[31mEVIL\nline")
+        monkeypatch.setattr(bg, "run_benchmark_once", raising)
+        got = _run_main(capsys, base_args)
+        assert got[:2] == (1, f"{code}\n") and got[2] == "detail: child said ?[31mEVIL line\n", (code, got)
+    for code in ("MEASURE_FAILED", "MEASURE_ARGS_INVALID", "UNSUPPORTED_PLATFORM"):  # a harness fault is not a verdict
+        monkeypatch.setattr(bg, "run_benchmark_once", lambda *a, _code=code, **k: (_ for _ in ()).throw(bg.BenchmarkGateError(_code, "EVIL")))
+        assert _run_main(capsys, base_args) == (2, "", f"usage error: {code}: BenchmarkGateError\n")
+    monkeypatch.setattr(bg, "run_benchmark_once", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("EVIL")))
+    assert _run_main(capsys, base_args) == (2, "", "usage error: INTERNAL: RuntimeError\n")
+    monkeypatch.setattr(bg, "run_benchmark_once", lambda *a, **k: (_ for _ in ()).throw(KeyboardInterrupt()))
+    assert _run_main(capsys, base_args) == (2, "", "usage error: INTERNAL: KeyboardInterrupt\n")
+
+
+COMPARE_FLAGS = ["--gate", "--repo", "--base-root", "--head-root", "--base-commit", "--head-commit", "--base-bin", "--head-bin", "--base-snapshot",
+                 "--base-snapshot-sha256", "--base-interpreter-sha256", "--head-snapshot", "--head-snapshot-sha256", "--head-interpreter-sha256", "--out"]
+
+
+@posix_only
+def test_cli_arguments_are_the_spec_ones(monkeypatch, capsys):
+    seen = []
+    monkeypatch.setattr(bg, "_cmd_compare", lambda args: seen.append(args) or 0)
+    monkeypatch.setattr(bg, "_cmd_run_once", lambda args: seen.append(args) or 0)
+    full = [part for flag in COMPARE_FLAGS for part in (flag, f"v{flag[2:]}")]
+    assert bg.main(["compare", *full]) == 0
+    args = seen.pop()
+    assert sorted(vars(args)) == sorted(["command", "func", "attempt", "allow_writable_interpreter"] + [f[2:].replace("-", "_") for f in COMPARE_FLAGS])
+    assert args.attempt == 1 and args.allow_writable_interpreter is False and args.out == "vout" and args.gate == "vgate"
+    assert bg.main(["compare", *full, "--attempt", "2", "--allow-writable-interpreter"]) == 0
+    args = seen.pop()
+    assert args.attempt == 2 and args.allow_writable_interpreter is True
+    capsys.readouterr()
+    for flag in COMPARE_FLAGS:  # each required
+        rest = list(full)
+        index = rest.index(flag)
+        del rest[index:index + 2]
+        assert bg.main(["compare", *rest]) == 2 and seen == [], flag
+    for bad in (["--attempt", "x"], ["--allow-writable-interpreter", "yes"], ["--ini", "x.ini"], ["--side", "head"]):
+        assert bg.main(["compare", *full, *bad]) == 2 and seen == [], bad
+    assert bg.main(["run-once", "--gate", "g", "--root", "r", "--bin", "b"]) == 0
+    args = seen.pop()
+    assert sorted(vars(args)) == ["bin", "command", "func", "gate", "root", "side"] and args.side == "head"  # no ini option
+    assert bg.main(["run-once", "--gate", "g", "--root", "r", "--bin", "b", "--side", "base"]) == 0 and seen.pop().side == "base"
+    for rest in (["--root", "r", "--bin", "b"], ["--gate", "g", "--bin", "b"], ["--gate", "g", "--root", "r"],
+                 ["--gate", "g", "--root", "r", "--bin", "b", "--side", "both"], ["--gate", "g", "--root", "r", "--bin", "b", "--ini", "i"]):
+        assert bg.main(["run-once", *rest]) == 2 and seen == [], rest
