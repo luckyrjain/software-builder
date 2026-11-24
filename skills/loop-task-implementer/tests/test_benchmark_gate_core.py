@@ -959,8 +959,8 @@ def test_cli_usage_errors_exit_2(tmp_path, capsys):
 # Everything the module may import at import time. Platform-specific modules (resource, fcntl, termios, ...) must
 # be imported lazily inside the function that needs them, so the module imports on every platform.
 _TOP_LEVEL_IMPORT_ALLOWLIST = {
-    "__future__", "argparse", "ast", "codecs", "dis", "errno", "fractions", "hashlib", "io", "json", "math",
-    "os", "pathlib", "posixpath", "re", "shutil", "stat", "subprocess", "sys", "tempfile", "time", "tokenize", "types",
+    "__future__", "argparse", "ast", "codecs", "contextlib", "dis", "errno", "fractions", "hashlib", "io", "json", "math",
+    "os", "pathlib", "posixpath", "re", "shutil", "signal", "stat", "subprocess", "sys", "tempfile", "time", "tokenize", "types",
     "threading", "typing", "unicodedata", "warnings",
 }
 
