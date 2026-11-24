@@ -1345,3 +1345,151 @@ def test_run_benchmark_once_scratch_is_per_run_and_removed(tmp_path, monkeypatch
         assert os.path.dirname(ini) == scratch and env["HOME"].startswith(scratch)
         assert not os.path.exists(scratch) and not os.path.exists(work)
     assert seen[0][1] != seen[1][1]
+
+
+# --- C4d-3 T5a: signal masking around Popen, child restore, CLI handler helper -------------------------------------------------
+
+_SIGNALS = ("SIGTERM", "SIGHUP", "SIGINT")
+
+
+def _signal_numbers():
+    import signal
+    return [getattr(signal, name) for name in _SIGNALS]
+
+
+def _live_pids(pidfile, deadline=10.0):
+    end = time.monotonic() + deadline
+    while time.monotonic() < end:
+        if pidfile.exists() and pidfile.read_text().strip():
+            return int(pidfile.read_text())
+        time.sleep(0.02)
+    raise AssertionError("the child never wrote its grandchild's pid")
+
+
+def _gone(pid, deadline=10.0):
+    end = time.monotonic() + deadline
+    while time.monotonic() < end:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+@posix_only
+def test_child_signals_are_default_and_mask_is_empty(tmp_path, monkeypatch):
+    import json
+    import signal
+    numbers = _signal_numbers()
+    masks = []
+    real_popen = subprocess.Popen
+
+    def spy(*args, **kwargs):  # the parent's state at the moment of the call
+        masks.append(signal.pthread_sigmask(signal.SIG_BLOCK, []))
+        return real_popen(*args, **kwargs)
+    monkeypatch.setattr(bg.subprocess, "Popen", spy)
+    child = ("import json, signal as s; print(json.dumps([s.getsignal(s.SIGTERM) == s.SIG_DFL, s.getsignal(s.SIGHUP) == s.SIG_DFL, "
+             "s.getsignal(s.SIGINT) != s.SIG_IGN, sorted(int(n) for n in s.pthread_sigmask(s.SIG_BLOCK, []))]))")
+    old = [signal.signal(number, signal.SIG_IGN) for number in numbers]  # a parent that ignores them (as under nohup)
+    try:
+        code, _elapsed, stdout, _tail, _oversize = bg._run_once([sys.executable, "-c", child], str(tmp_path), {}, 30.0)
+        after = signal.pthread_sigmask(signal.SIG_BLOCK, [])
+    finally:
+        for number, handler in zip(numbers, old):
+            signal.signal(number, handler)
+    assert code == 0
+    assert set(numbers) <= set(masks[0])  # masked while Popen runs
+    assert json.loads(stdout) == [True, True, True, []]  # the child has defaults and an empty mask
+    assert not set(numbers) & set(after)  # unmasked again in the parent
+
+
+@posix_only
+def test_signal_during_a_run_kills_the_childs_process_group(tmp_path):
+    import signal
+    import threading
+    pidfile = tmp_path / "grandchild.pid"
+    child = (f"import subprocess, sys, time; p = subprocess.Popen(['sleep', '60']); open({str(pidfile)!r}, 'w').write(str(p.pid)); "
+             "time.sleep(60)")
+    interrupts = []
+
+    def sender():
+        _live_pids(pidfile)
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.sleep(0.2)
+        os.kill(os.getpid(), signal.SIGTERM)  # the second is ignored
+        os.kill(os.getpid(), signal.SIGHUP)
+
+    thread = threading.Thread(target=sender)
+    before = [signal.getsignal(number) for number in _signal_numbers()]
+    with bg._with_signal_handlers():
+        thread.start()
+        try:
+            bg._run_once([sys.executable, "-c", child], str(tmp_path), {}, 60.0)
+        except KeyboardInterrupt:
+            interrupts.append(1)
+        thread.join(timeout=10)  # the sender's later signals arrive while the handlers still ignore them
+        assert not thread.is_alive()
+        time.sleep(0.1)
+    assert interrupts == [1]
+    assert _gone(int(pidfile.read_text()))
+    assert [signal.getsignal(number) for number in _signal_numbers()] == before
+
+
+@posix_only
+def test_handlers_are_restored_in_finally():
+    import signal
+    numbers = _signal_numbers()
+
+    def snapshot():
+        return [signal.getsignal(number) for number in numbers]
+    before = snapshot()
+    with bg._with_signal_handlers():
+        assert snapshot() != before
+    assert snapshot() == before  # normal return
+    with pytest.raises(ValueError):
+        with bg._with_signal_handlers():
+            raise ValueError("boom")
+    assert snapshot() == before  # an exception
+    with pytest.raises(KeyboardInterrupt):
+        with bg._with_signal_handlers():
+            os.kill(os.getpid(), signal.SIGTERM)  # the first signal sets SIG_IGN for the rest
+            time.sleep(1)
+    assert snapshot() == before  # KeyboardInterrupt from a signal, after the handlers were replaced by SIG_IGN
+
+
+@posix_only
+def test_library_caller_on_another_thread_gets_no_handlers(tmp_path, monkeypatch):
+    import inspect
+    import signal
+    import threading
+    numbers = _signal_numbers()
+    seen = {}
+    real_popen = subprocess.Popen
+
+    def spy(*args, **kwargs):
+        seen["during"] = [signal.getsignal(number) for number in numbers]
+        return real_popen(*args, **kwargs)
+    monkeypatch.setattr(bg.subprocess, "Popen", spy)
+    before = [signal.getsignal(number) for number in numbers]
+
+    def work():
+        try:
+            seen["result"] = bg._run_once([sys.executable, "-c", "pass"], str(tmp_path), {}, 30.0)
+        except BaseException as exc:  # reported to the test thread
+            seen["error"] = exc
+        try:
+            with bg._with_signal_handlers():
+                seen["installed"] = True
+        except RuntimeError as exc:
+            seen["refused"] = exc
+    thread = threading.Thread(target=work)
+    thread.start()
+    thread.join(timeout=30)
+    assert "error" not in seen, seen.get("error")
+    assert seen["result"][0] == 0  # the preexec_fn works off the main thread
+    assert seen["during"] == before  # _run_once installs no handler
+    assert [signal.getsignal(number) for number in numbers] == before
+    assert "refused" in seen and "installed" not in seen  # the helper is main thread only and says so, changing nothing
+    for function in (bg._run_once, bg.compare):  # neither installs the helper itself
+        assert "_with_signal_handlers" not in inspect.getsource(function)

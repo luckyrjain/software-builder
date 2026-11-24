@@ -36,6 +36,7 @@ from __future__ import annotations
 import argparse
 import ast
 import codecs
+import contextlib
 import dis
 import errno
 import hashlib
@@ -46,6 +47,7 @@ import os
 import posixpath
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -4264,6 +4266,33 @@ def _kill_group(pgid: int) -> None:
         pass
 
 
+_GUARDED_SIGNALS = (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)
+
+
+@contextlib.contextmanager
+def _with_signal_handlers():
+    """For CLI commands (main thread only; ``compare`` and ``_run_once`` do not install it): SIGTERM, SIGHUP and SIGINT raise
+    ``KeyboardInterrupt``, and the first one sets ``SIG_IGN`` for all three so a second cannot interrupt the cleanup. The previous
+    handlers are restored in a ``finally``. A library caller on another thread must not use this (``signal.signal`` works only on the
+    main thread), so it raises ``RuntimeError`` before changing anything."""
+    if threading.current_thread() is not threading.main_thread():
+        raise RuntimeError("signal handlers can be installed only from the main thread")
+
+    def interrupt(_signum, _frame):
+        for number in _GUARDED_SIGNALS:
+            signal.signal(number, signal.SIG_IGN)
+        raise KeyboardInterrupt
+
+    old: list = []
+    try:
+        for number in _GUARDED_SIGNALS:
+            old.append((number, signal.signal(number, interrupt)))
+        yield
+    finally:
+        for number, handler in old:
+            signal.signal(number, handler or signal.SIG_DFL)  # None: a handler Python did not install
+
+
 def _run_once(argv: list[str], cwd: str, env: dict[str, str], timeout: float) -> tuple[int | None, int, bytes, bytes, bool]:
     """One child run: ``(exit code or None if killed by the watchdog, wall nanoseconds, stdout, stderr tail, output hit the size limit)``.
     A blocking ``wait`` with a watchdog ``Timer`` (cancelled and joined after the wait, so a late fire cannot ``killpg`` a reused pgid),
@@ -4271,17 +4300,28 @@ def _run_once(argv: list[str], cwd: str, env: dict[str, str], timeout: float) ->
     file whose size equals the limit."""
     import resource  # imported here, in the parent, not between fork and exec
 
-    def fsize_limit() -> None:  # runs in the child between fork and exec; touches nothing but `resource`
+    def child_setup() -> None:  # runs in the child between fork and exec; touches nothing but `signal` and `resource`
+        for number in _GUARDED_SIGNALS:
+            signal.signal(number, signal.SIG_DFL)  # an ignored signal would be inherited across exec
+        signal.pthread_sigmask(signal.SIG_SETMASK, ())  # the parent's mask (below) would be inherited across exec too
         resource.setrlimit(resource.RLIMIT_FSIZE, (_RUN_FSIZE_LIMIT, _RUN_FSIZE_LIMIT))
 
     timed_out = threading.Event()
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         started = time.perf_counter_ns()
+        # SIGTERM, SIGHUP and SIGINT are blocked from before the fork until the `try` below is entered, so a signal cannot arrive
+        # after the child exists but before its group is guarded; the pending signal is delivered at the unmask, inside the `try`.
+        # The mask is per thread: this window is safe only while the process is SINGLE-THREADED (a contract of this function, not
+        # asserted; `preexec_fn` is thread-unsafe for the same reason).
+        old_mask = signal.pthread_sigmask(signal.SIG_BLOCK, _GUARDED_SIGNALS)
         try:
             proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=err, close_fds=True,
-                                    start_new_session=True, preexec_fn=fsize_limit)  # preexec_fn is thread-unsafe: single-threaded here
-        except (OSError, subprocess.SubprocessError) as exc:
-            raise _SpawnFailed(str(exc), exc.errno if isinstance(exc, OSError) else None) from exc  # a SubprocessError has no errno
+                                    start_new_session=True, preexec_fn=child_setup)
+        except BaseException as exc:
+            signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)
+            if isinstance(exc, (OSError, subprocess.SubprocessError)):
+                raise _SpawnFailed(str(exc), exc.errno if isinstance(exc, OSError) else None) from exc  # a SubprocessError has no errno
+            raise
 
         def fire() -> None:
             timed_out.set()
@@ -4289,6 +4329,7 @@ def _run_once(argv: list[str], cwd: str, env: dict[str, str], timeout: float) ->
 
         watchdog = threading.Timer(timeout, fire)
         try:  # from here on the child exists: whatever goes wrong (even a failed thread start or Ctrl-C), its group dies
+            signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)  # a pending signal is delivered here, inside the try
             watchdog.start()
             code = proc.wait()
             elapsed = time.perf_counter_ns() - started
