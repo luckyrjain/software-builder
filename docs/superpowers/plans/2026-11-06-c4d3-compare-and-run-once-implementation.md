@@ -177,7 +177,7 @@ says so (the whole C4d-1/2 suite); no un-coded exception out of the CLI; honest 
   - `test_result_assembly_from_a_synthetic_verdict` (build a `_Verdict`, assemble: exact key set of 2.8 (every key present, absent ones `null`), `schema ==
     "software-builder-bench-compare-v1"`, `json.dumps(..., ensure_ascii=True)` is ASCII, floats not Fractions; kills a missing key and a non-ASCII leak).
   - `test_attacker_text_appears_only_in_untrusted_text_and_is_capped` (a verdict with 30 hostile strings, backticks, newlines, a NUL: the list has 20 entries, each escaped and
-    length-capped; `detail` stays a closed token plus integers; `python` and `interpreter_home` go through `escape_diagnostic(.., 200)`).
+    length-capped; `detail` stays exactly one closed token of its reason's row in `COMPARE_REASONS` (no integers); `python` and `interpreter_home` go through `escape_diagnostic(.., 200)`).
   - `test_out_path_rejections` (step-1 `_validate_out_path`: relative, directory missing, directory not owned or group/other-writable, under either root, bin, venv, snapshot or
     the dispatch root by `realpath` (a symlinked directory too), `lexists` true; each `MEASURE_ARGS_INVALID`; kills each missing predicate).
   - `test_dirfd_writer_creates_exclusively_and_checks_identities` (writer links a random temp into the name, unlinks the temp in a `finally`, checks `os.stat(out_path,

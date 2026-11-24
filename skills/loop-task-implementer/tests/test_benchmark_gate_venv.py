@@ -811,11 +811,13 @@ def test_bad_root_arguments_are_caller_errors(world, export, others):
 
 
 @pytest.mark.parametrize("line", ["{alias}/export/src\n", "../../../../export/src\n", "{real}/export/src\n"])
-def test_paths_through_a_symlinked_parent_are_judged_by_where_they_point(world, tmp_path, line):
-    """macOS: the temp directory is `/var/...` -> `/private/var/...`; a caller may hold the venv and the export by the alias."""
+def test_paths_through_a_symlinked_parent_are_judged_by_where_they_point(world, tmp_path, line, monkeypatch):
+    """macOS: the temp directory is `/var/...` -> `/private/var/...`; a caller may hold the venv and the export by the alias. The alias is
+    a link of the TRUSTED uid here (the test stands in for root's `/var`): a link the user owns is refused, see the test below."""
     snapshot(world)
     alias = tmp_path.parent / (tmp_path.name + "-alias")
     os.symlink(tmp_path, alias)
+    monkeypatch.setattr(bg, "_TRUSTED_LINK_UID", os.getuid())
     try:
         bin_alias, export_alias = str(alias / "venv" / "bin"), str(alias / "export")
         (world[2] / "x.pth").write_text(line.format(alias=alias, real=tmp_path))
@@ -824,17 +826,57 @@ def test_paths_through_a_symlinked_parent_are_judged_by_where_they_point(world, 
         os.unlink(alias)
 
 
-def test_a_path_outside_the_export_is_still_refused_through_a_symlinked_parent(world, tmp_path):
+@pytest.mark.parametrize("line", ["{alias}/export/src\n", "../../../../export/src\n"])
+def test_a_pth_path_through_a_link_the_user_owns_is_refused(world, tmp_path, line):
+    """A head child (same uid) could repoint such a link after the check and leave it; the spawn guard re-checks resolved paths only."""
     snapshot(world)
-    alias = tmp_path.parent / (tmp_path.name + "-alias2")
+    alias = tmp_path.parent / (tmp_path.name + "-useralias")
     os.symlink(tmp_path, alias)
     try:
-        (world[2] / "x.pth").write_text(f"{alias}/venv\n")
+        (world[2] / "x.pth").write_text(line.format(alias=alias))
         with pytest.raises(Err) as info:
             bg.check_venv(str(alias / "venv" / "bin"), str(world[4]), str(alias / "export"), ())
         assert info.value.code == "VENV_HOOK_REJECTED"
     finally:
         os.unlink(alias)
+
+
+def _finder(target):
+    return f"MAPPING = {{'pkg': {target!r}}}\nNAMESPACES = {{}}\n".encode()
+
+
+def test_a_finder_target_through_a_user_owned_link_is_refused_and_through_a_trusted_one_accepted(tmp_path, monkeypatch):
+    real = Path(os.path.realpath(tmp_path)) / "real"
+    (real / "export" / "src" / "pkg").mkdir(parents=True)
+    alias = Path(os.path.realpath(tmp_path)) / "alias"
+    os.symlink(real, alias)
+    export = str(real / "export")
+    through = str(alias / "export" / "src" / "pkg")
+    assert bg._finder_problem(_finder(str(real / "export" / "src" / "pkg")), export) is None  # the resolved path: accepted
+    assert bg._finder_problem(_finder(through), export) == "a finder target resolves outside the export"  # the user owns the link
+    monkeypatch.setattr(bg, "_TRUSTED_LINK_UID", os.getuid())  # a root-owned link (macOS `/var`), simulated
+    assert bg._finder_problem(_finder(through), export) is None
+    monkeypatch.undo()
+    assert bg._finder_problem(_finder(through), export) is not None  # and back to refused
+
+
+def test_a_nested_user_owned_link_behind_a_trusted_one_is_still_refused(tmp_path, monkeypatch):
+    base = Path(os.path.realpath(tmp_path))
+    (base / "real" / "export" / "src").mkdir(parents=True)
+    os.symlink(base / "real", base / "user")           # user-owned, reached through the trusted one below
+    os.symlink(base / "user", base / "trusted")        # "root-owned": the first hop only
+    real_lstat = os.lstat
+
+    def lstat(path, *a, **k):
+        st = real_lstat(path, *a, **k)
+        if os.fspath(path) != str(base / "trusted"):
+            return st
+        return os.stat_result((st.st_mode, st.st_ino, st.st_dev, st.st_nlink, 0, st.st_gid, st.st_size, int(st.st_atime), int(st.st_mtime),
+                               int(st.st_ctime)))
+    monkeypatch.setattr(bg.os, "lstat", lstat)
+    assert bg._only_trusted_aliases(str(base / "trusted" / "export" / "src")) is False  # the second hop is the user's
+    assert bg._only_trusted_aliases(str(base / "real" / "export" / "src")) is True      # no link at all
+    assert bg._only_trusted_aliases(str(base / "real" / "missing" / "x")) is True       # a missing component ends the walk
 
 
 @pytest.mark.parametrize("lib", ["lib", "lib64"])

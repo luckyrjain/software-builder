@@ -1843,3 +1843,44 @@ def test_trace_paired_and_measure_paired_use_the_same_temporary_directory_prefix
                       base_commit="1" * 40, head_commit="2" * 40, benchmark_sha256="3" * 64, min_base_ns=0)
     assert trace_prefixes == ["bench-run-", "bench-run-"] and prefixes == ["bench-run-"]
     assert all(os.path.basename(work).startswith("bench-run-") for work in homes)  # each home's parent sits directly under a bench-run-* work directory
+
+
+@posix_only
+def test_the_spawn_guard_runs_before_each_trace_spawn(tmp_path, monkeypatch):
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch)
+    order = []
+    real = bg._run_once
+
+    def spy(*args, **kwargs):
+        order.append("spawn")
+        return real(*args, **kwargs)
+    monkeypatch.setattr(bg, "_run_once", spy)
+    assert run(spawn_guard=lambda side, root: order.append("guard " + side))["base"] == 5
+    assert order == ["guard base", "spawn", "guard head", "spawn"]
+
+
+@posix_only
+def test_an_identity_change_out_of_trace_paired_is_not_a_gate_error_and_carries_the_documented_attributes(tmp_path, monkeypatch):
+    monkeypatch.setenv("TMPDIR", str(tmp_path / "tmp"))
+    (tmp_path / "tmp").mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", None)
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch)
+    calls = []
+
+    def guard(side, root):
+        calls.append(side)
+        if side == "head":
+            raise bg._IdentityChanged("head root: directory replaced", side)
+    with pytest.raises(bg._IdentityChanged) as caught:
+        run(spawn_guard=guard)
+    error = caught.value
+    assert not isinstance(error, bg.BenchmarkGateError)
+    assert (error.code, error.side, error.phase, error.kind, error.partial, error.trace) == ("MEASURE_FAILED", "head", "trace", "harness", None, None)
+    assert len(fake.calls) == 1  # the base child ran; the head child never started
+    assert list((tmp_path / "tmp").iterdir()) == []
+
+
+@posix_only
+def test_a_trace_run_without_a_guard_is_unchanged(tmp_path, monkeypatch):
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch)
+    assert run(spawn_guard=None)["base"] == 5 and len(fake.calls) == 2

@@ -242,7 +242,7 @@ def test_scratch_directories_are_removed(tmp_path, monkeypatch):
 
 @posix_only
 def test_an_unknown_execute_failure_kind_is_an_assertion_error(tmp_path, monkeypatch):
-    def execute(side, argv, root, scratch, env, timeout, fail):
+    def execute(side, argv, root, scratch, env, timeout, fail, guard=None):
         raise fail("mystery", "x")
 
     monkeypatch.setattr(bg, "_execute", execute)
@@ -1534,3 +1534,69 @@ def test_a_keyboard_interrupt_while_the_watchdog_is_cancelled_still_kills_the_gr
     else:
         os.kill(pid, 9)
         raise AssertionError("the grandchild survived: the group kill was skipped")
+
+
+# --- the spawn guard (spec 2.5, "Directory identity") ------------------------------------------------------------------------
+
+def _guarded_script(marker):
+    return f"""
+        import sys
+        with open({str(marker)!r}, "a") as handle:
+            handle.write("spawn " + sys.argv[1] + "\\n")
+        print("BENCH_RESULT_DIGEST: {DIGEST}")
+    """
+
+
+@posix_only
+def test_the_spawn_guard_runs_before_every_spawn_warmup_and_timed(tmp_path):
+    marker = tmp_path / "marker"
+    sides = []
+
+    def guard(side, root):
+        sides.append(side)
+        with open(marker, "a") as handle:
+            handle.write("guard " + side + "\n")
+    measure(tmp_path, _guarded_script(marker), spawn_guard=guard, repeats=4)
+    lines = marker.read_text().splitlines()
+    assert len(lines) == 2 * (2 + 8)  # one warmup round and four timed rounds of two spawns, each preceded by its guard call
+    for index in range(0, len(lines), 2):
+        side = lines[index].split()[1]
+        assert lines[index] == f"guard {side}" and lines[index + 1] == f"spawn {side}"
+    assert sides[:2] == ["base", "head"]
+
+
+@posix_only
+@pytest.mark.parametrize("raise_at,phase,partial_rounds", [(0, "warmup", None), (1, "warmup", None), (2, "timed", 0), (7, "timed", 2)])
+def test_an_identity_change_out_of_measure_paired_is_not_a_gate_error_and_carries_the_documented_attributes(tmp_path, monkeypatch, raise_at,
+                                                                                                         phase, partial_rounds):
+    monkeypatch.setenv("TMPDIR", str(tmp_path / "tmp"))
+    (tmp_path / "tmp").mkdir()
+    import tempfile
+    monkeypatch.setattr(tempfile, "tempdir", None)
+    marker = tmp_path / "marker"
+    calls = []
+
+    def guard(side, root):
+        calls.append(side)
+        if len(calls) - 1 == raise_at:
+            raise bg._IdentityChanged("dispatch root: directory replaced", side)
+    with pytest.raises(bg._IdentityChanged) as caught:
+        measure(tmp_path, _guarded_script(marker), spawn_guard=guard, repeats=4)
+    error = caught.value
+    assert not isinstance(error, bg.BenchmarkGateError)  # no `except BenchmarkGateError` can swallow or remap it
+    assert (error.code, error.side, error.phase, error.kind, error.trace) == ("MEASURE_FAILED", calls[-1], phase, "harness", None)
+    if partial_rounds is None:
+        assert error.partial is None
+    else:
+        assert error.partial["order"] == bg.run_order(BASE, HEAD, BENCH, 1, 4) and len(error.partial["base_ns"]) == partial_rounds
+        assert len(error.partial["head_ns"]) == partial_rounds
+    assert len(marker.read_text().splitlines() if marker.exists() else []) == raise_at  # nothing was spawned after (or by) the guard that raised
+    assert list((tmp_path / "tmp").iterdir()) == []  # the scratch and work directories are gone
+
+
+@posix_only
+def test_an_identity_change_is_not_swallowed_by_the_harness_fault_handler(tmp_path):
+    def guard(side, root):
+        raise bg._IdentityChanged("x", side)
+    with pytest.raises(bg._IdentityChanged):
+        measure(tmp_path, OK_CHILD, spawn_guard=guard)

@@ -22,7 +22,8 @@ the measurement harness and the trace (``measure_paired``, ``trace_paired``); ``
 Calling order. The Orchestrator provisions HEAD FIRST (spec 2.5): for each side it creates the venv, runs ``snapshot-venv`` (which prints
 ``snapshot_sha256`` and ``interpreter_sha256``) BEFORE that side's install, then installs; it creates the base export and venv only after the
 head install has finished. Each export comes from ``export_tree`` (the dispatch root's marker pid defaults to the exporting process, so pass
-``--owner-pid`` when ``cleanup`` will run from another process). It then calls ``compare`` ONCE per pair of fresh exports. ``compare`` runs
+``--owner-pid`` when ``cleanup`` will run from another process). It then calls ``compare`` once per pair of fresh exports; the same exports may be reused only for the triples in
+``COMPARE_RETRYABLE_ON_SAME_EXPORTS`` (see "Reading the outcome"), every other outcome needs fresh exports. ``compare`` runs
 ``is_ancestor``, then the isolation checks of both sides (roots, interpreter pin, snapshots, ``check_venv``, ``dependency_parity``,
 ``verify_export_against_commit``), ``diff_checks`` and the host-load check, all before any export is modified; then ``repo_top_levels`` of the
 base export (after the install, so ``build/`` and ``dist/`` can join the lint allowlist: harmless, disclosed) and ``overlay_benchmark_file``;
@@ -44,11 +45,11 @@ wrote, never from a re-read of the file; a file rewritten afterwards no longer m
 Reading the outcome (the contract of ``_cmd_compare``): exit 0 is ``IMPROVED`` and nothing else; exit 1 is any other result, but an exit 1
 WITHOUT a valid ``RESULT:`` line counts as exit 2; exit 2 (usage error, a raised ``BenchmarkGateError``, a crash) means any file at ``--out``
 is to be IGNORED (the file can exist: ``compare`` writes it before the CLI validates the in-memory result). Retry on the same exports is keyed
-on (reason, stage, detail), not on the reason alone: ``HOST_BUSY_START`` (reason) is retryable on the same exports, and so is
+on (reason, stage, detail), not on the reason alone, and ``COMPARE_RETRYABLE_ON_SAME_EXPORTS`` is the complete list: ``HOST_BUSY_START`` (reason) is retryable on the same exports, and so is
 ``INTERPRETER_WRITABLE`` (detail of ``ISOLATION_REJECTED``) ONLY when a human sets ``--allow-writable-interpreter``: it must NEVER be
 auto-retried with the flag. Every other ``ISOLATION_REJECTED`` at ``pre_overlay`` (``INTERPRETER_CHANGED``, ``INTERPRETER_DIFFERS``,
 ``SNAPSHOT_CHANGED``, ``DEPENDENCY_PARITY``, ``TRACKED_FILE_DIFFERS``, ...) is NOT: the pins precede the install, so it needs fresh provisioning
-(the other rows are in spec 2.3).
+(the other rows are in spec 2.3). Tamper signals: ``ISOLATION_REJECTED``/``EXPORT_CHANGED`` at stage ``ran`` is also what the spawn guard gives when a directory was replaced before a spawn (no measured fields): a human matter, never retried.
 
 The Orchestrator's wait is a provisioning-side budget and is NOT enforced by any deadline inside ``compare``: at least the gate cap (1800 s of
 child time) plus allowances for the git work and the hashing. ``_GIT_TIMEOUT_SECONDS`` (300 s) bounds EACH git invocation, and ``compare``
@@ -61,7 +62,10 @@ so C4e must pin the EXPECTED ``harness_sha256`` and compare it with the result's
 written into a writable interpreter prefix between the pin and ``compare`` changes the pin's hash and gives ``INTERPRETER_CHANGED``
 (``INTERPRETER_DIFFERS`` is a different fault: two sides on different interpreters, an interpreter inside a venv or an export, or a start-up
 probe that disagrees); both are ``REJECTED``, stage ``pre_overlay``, and NOT retryable on the same exports (see "Reading the outcome"). (3) The trace needs ``sys.monitoring``: a project venv older than CPython 3.12
-yields ``no_monitoring``, hence ``INCONCLUSIVE``/``TRACE_UNAVAILABLE``, and can never reach ``IMPROVED``.
+yields ``no_monitoring``, hence ``INCONCLUSIVE``/``TRACE_UNAVAILABLE``, and can never reach ``IMPROVED``. (4) The interpreter's own path chain
+(the ``home`` of ``pyvenv.cfg``, symlink hops to the real prefix, the parent of the prefix) is pinned by content, not guarded by directory
+identity: a user-writable hop in front of a prefix that is not user-owned could be repointed by a head child between runs (a writable prefix
+is already refused as ``INTERPRETER_WRITABLE``, so this needs that unusual layout); the human acceptance of every ``IMPROVED`` remains the control.
 
 Limits of the trace: it is a narrow tripwire, not a proof of equal work. For the typical benchmark, which makes one library call and prints a
 digest, the executed-line count is a small constant on both sides, so equality proves nothing; the trace discriminates only when the test body
@@ -1011,14 +1015,29 @@ class BenchmarkGateError(Exception):
         return f"{self.code}: {self.detail}" if self.detail else self.code
 
 
-class _IdentityChanged(BenchmarkGateError):
-    """Raised by the spawn guard of ``_execute`` (spec 2.5, "per-spawn identity check"): a directory a child is about to run in or from is
-    no longer the one step 9 recorded. Its code is ``MEASURE_FAILED``, so a library caller of ``measure_paired`` or ``trace_paired`` that
-    passes a guard sees a harness fault; ``compare`` catches this class BEFORE its tables and ends with ``ISOLATION_REJECTED``/
-    ``EXPORT_CHANGED`` (stage ``ran``): no child was started, and nothing is measured."""
+class _IdentityChanged(Exception):
+    """Raised by the spawn guard of ``_execute`` (spec 2.5, "Directory identity"): a directory a child is about to run in or from is no
+    longer the one step 9 recorded (or a recorded path no longer resolves to itself). Deliberately NOT a ``BenchmarkGateError``: no generic
+    ``except BenchmarkGateError`` (a verdict mapper, a CLI wrapper, ``measure_paired``'s own harness-fault handler) can swallow it or turn it
+    into a ``MEASURE_FAILED``; only ``compare`` handles it, and it ends with ``ISOLATION_REJECTED``/``EXPORT_CHANGED`` (stage ``ran``) with
+    nothing measured. It carries ``code`` (``MEASURE_FAILED``, for a library caller that logs it), ``detail`` and the same attributes as the
+    errors of ``measure_paired`` and ``trace_paired``: ``side`` (the side about to be spawned), ``phase`` (``trace``; ``warmup`` or
+    ``timed``), ``kind`` (``harness``), ``partial`` (the completed timed rounds when ``phase`` is ``timed``, else ``None``) and ``trace``
+    (``None``). The guard sets ``side``; the function that called ``_execute`` fills the rest. A guard that finds nothing returns silently."""
 
-    def __init__(self, detail: str) -> None:
-        super().__init__("MEASURE_FAILED", detail)
+    code = "MEASURE_FAILED"
+
+    def __init__(self, detail: str, side: str | None = None) -> None:
+        super().__init__(detail)
+        self.detail = detail
+        self.side: str | None = side
+        self.phase: str | None = None
+        self.kind: str | None = "harness"
+        self.partial: dict | None = None
+        self.trace: dict | None = None
+
+    def __str__(self) -> str:
+        return f"{self.code}: {self.detail}"
 
 
 # --- the fixed parent, the dispatch-unique root and its marker ----------------------------------------------------
@@ -1031,8 +1050,11 @@ def fixed_parent() -> Path:
     and `cleanup` refuse (`DEST_REJECTED` / `NOT_UNDER_FIXED_PARENT`): a safe refusal, not a takeover. Absolute even for a
     relative `TMPDIR`. `tempfile.gettempdir()` caches its answer, so the path is fixed for the life of a process; separate
     CLI invocations must share one `TMPDIR`. CLI: `fixed-parent`. Residual: the parent is validated
-    BY PATH above the dispatch root; a same-uid process can redirect it between check and use, gaining no capability (it can
-    already write, chmod and delete those directories). Everything below a root is handled by descriptor."""
+    BY PATH above the dispatch root; a same-uid process can redirect it between check and use. For `export`/`cleanup` that gains
+    nothing it did not have (it can already write, chmod and delete those directories); for `compare` it is NOT harmless in general: a
+    head child could repoint a user-owned link in a path the later children are spawned through, which is why `compare` records and
+    re-checks the RESOLVED directories before every spawn (`_spawn_guard`) and the venv checks refuse a `.pth` or finder path that goes
+    through a link the user owns. Everything below a root is handled by descriptor."""
     suffix = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
     return Path(os.path.abspath(tempfile.gettempdir())) / (_ROOT_PARENT_NAME + suffix)
 
@@ -3226,6 +3248,51 @@ def _load_venv_snapshot(path: object, real_root: str) -> dict[str, dict]:
     return entries
 
 
+_TRUSTED_LINK_UID = 0  # the uid whose symlinks a path string may go through (root: macOS `/var` -> `/private/var`); a test seam
+
+
+def _only_trusted_aliases(path: str) -> bool:
+    """True when every symlink met while resolving the absolute lexical `path` (each hop followed, nested ones too) is owned by
+    ``_TRUSTED_LINK_UID``. A path string that goes through a link the user owns is refused by the venv checks: a head child (same uid)
+    could repoint that link after the check and leave it there, and the spawn guard only re-checks resolved paths. A missing component
+    ends the walk as accepted (nothing below it can be a link)."""
+    todo = path.split("/")[:0:-1]  # components, last first (so `pop` yields them in order)
+    current, hops = "/", 0
+    while todo:
+        part = todo.pop()
+        if part in ("", "."):
+            continue
+        if part == "..":
+            current = os.path.dirname(current)
+            continue
+        candidate = os.path.join(current, part)
+        try:
+            info = os.lstat(candidate)
+        except FileNotFoundError:
+            return True
+        except OSError:
+            return False
+        if not stat.S_ISLNK(info.st_mode):
+            current = candidate
+            continue
+        hops += 1
+        if info.st_uid != _TRUSTED_LINK_UID or hops > 40:
+            return False
+        try:
+            target = os.readlink(candidate)
+        except OSError:
+            return False
+        if os.path.isabs(target):
+            current = "/"
+        todo.extend(target.split("/")[::-1])
+    return True
+
+
+def _alias_accepted(lexical: str) -> bool:
+    """A lexical path that differs from its own realpath is accepted only through trusted (root-owned) links."""
+    return lexical == os.path.realpath(lexical) or _only_trusted_aliases(lexical)
+
+
 def _inside(path: str, root: str) -> bool:
     return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
 
@@ -3483,7 +3550,8 @@ def _pth_problem(site: str, data: bytes, export_root: str, export_aliases: tuple
         # BOTH: CPython puts the lexical `abspath` (`..` collapsed without resolving symlinks) on `sys.path`, and the directory it
         # names may itself reach elsewhere through a link; a symlink inside the export plus `..` makes the two differ
         lexical = os.path.abspath(joined)  # compared with the root as given too: the venv path (so `site`) may go through a symlink (macOS /var -> /private/var)
-        if not (any(_inside(lexical, root) for root in (export_root, *export_aliases)) and _inside(os.path.realpath(joined), export_root)):
+        if not (any(_inside(lexical, root) for root in (export_root, *export_aliases)) and _inside(os.path.realpath(joined), export_root)
+                and _alias_accepted(lexical)):
             return f"path outside the export: {escape_diagnostic(line, 60)}"
     return None
 
@@ -3671,7 +3739,7 @@ def _finder_problem(source: bytes, export_real: str) -> str | None:
     for target in targets:
         if type(target) is not str or not target or "\0" in target or not os.path.isabs(target):
             return "a finder target is not an absolute path"
-        if not _inside(os.path.realpath(target), export_real):
+        if not _inside(os.path.realpath(target), export_real) or not _alias_accepted(os.path.abspath(target)):
             return "a finder target resolves outside the export"
     return None
 
@@ -4366,7 +4434,8 @@ def _guarded_signals() -> tuple:
 
 @contextlib.contextmanager
 def _with_signal_handlers():
-    """For CLI commands (main thread only; ``compare`` and ``_run_once`` do not install it): SIGTERM, SIGHUP and SIGINT raise
+    """For CLI commands (main thread only; every CLI command installs it: ``compare``, ``run-once`` and ``cleanup``; the library functions
+    ``compare`` and ``_run_once`` do not): SIGTERM, SIGHUP and SIGINT raise
     ``KeyboardInterrupt``, and the first one sets ``SIG_IGN`` for all three so a second cannot interrupt the cleanup. The previous
     handlers are restored in a ``finally``. A library caller on another thread must not use this (``signal.signal`` works only on the
     main thread), so it raises ``RuntimeError`` before changing anything."""
@@ -4507,18 +4576,18 @@ def _prepare_run(side: str, bin_dir: str, work: str, ini_path: str | None = None
 
 
 def _execute(side: str, argv: list[str], root: str, scratch: str, env: dict[str, str], timeout_seconds: float,
-             fail: Callable[[str, str], BenchmarkGateError], guard: Callable[[str], None] | None = None) -> tuple[int, bytes]:
+             fail: Callable[[str, str], BenchmarkGateError], guard: Callable[[str, str], None] | None = None) -> tuple[int, bytes]:
     """Run once, always remove ``scratch``, and raise ``fail(kind, detail)`` for a spawn failure, oversize output, timeout or nonzero exit
     (kinds ``spawn``, ``oversize``, ``timeout``, ``nonzero``, checked in that order; ``spawn`` only for a provisioning errno of the side,
     ``_SPAWN_PROVISIONING_ERRNOS``). A host spawn fault (``EAGAIN``, ``ENOMEM``, a failed ``preexec_fn``) raises ``RuntimeError``, which the
     callers turn into ``MEASURE_FAILED``. Returns ``(elapsed_ns, stdout)``; the exit code and stderr are not returned (only a failure's
     detail shows the stderr tail). ``fail`` is the caller's error factory: ``measure_paired`` and ``run_benchmark_once`` map the kind to
-    a code and keep it in ``error.kind``; ``trace_paired`` makes every kind a ``TRACE_MISMATCH``. ``guard(side)``, when given, runs
+    a code and keep it in ``error.kind``; ``trace_paired`` makes every kind a ``TRACE_MISMATCH``. ``guard(side, root)``, when given, runs
     immediately before the spawn (the scratch is still removed if it raises): ``compare`` uses it to check that the directories the child
     runs in are still the ones step 9 recorded."""
     try:
         if guard is not None:
-            guard(side)
+            guard(side, root)
         code, elapsed, stdout, tail, oversize = _run_once(argv, root, env, float(timeout_seconds))
     except _SpawnFailed as exc:
         if exc.errno in _SPAWN_PROVISIONING_ERRNOS:  # no <bin>/python, not executable, a missing cwd: the side was not provisioned
@@ -4612,7 +4681,7 @@ def _check_sides(base_root: object, head_root: object, base_bin: object, head_bi
 def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, target: str, *, repeats: int, timeout_seconds: float,
                    base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int = 1, warmup: int = 1,
                    min_base_ns: int = _MIN_BASE_NS, argv_builder=None, ini_path: str | None = None, order_salt: str | None = None,
-                   spawn_guard: Callable[[str], None] | None = None) -> dict:
+                   spawn_guard: Callable[[str, str], None] | None = None) -> dict:
     """Run ``warmup`` untimed rounds, then ``repeats`` timed rounds; every round runs both sides once, base first in warmup and in the
     order ``run_order`` gives afterwards. Returns ``{"order", "base_ns", "head_ns", "digest", "argv"}``: ``base_ns[i]`` and ``head_ns[i]``
     are the wall nanoseconds of timed round ``i`` (positive ints, ready for ``evaluate_paired_samples``), ``digest`` the one digest every
@@ -4628,7 +4697,13 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
     nondeterministic on both sides is therefore reported as a mismatch there); from then on a run without a digest or with another one is
     ``DIGEST_UNSTABLE``; the digests of ALL runs (warmup included) must be one value at the end. ``WORKLOAD_TOO_SHORT`` needs the timed
     rounds and names the measured median. ``argv_builder(side, bin_dir, root, target) -> argv`` is the test seam; the default is
-    ``pytest_argv``. ``order_salt`` is ``run_order``'s ``salt`` (``None``: unsalted; ``compare`` always passes one). ``phase`` here is only ``"warmup"`` or ``"timed"``; the paired trace run is ``trace_paired``, a separate function."""
+    ``pytest_argv``. ``order_salt`` is ``run_order``'s ``salt`` (``None``: unsalted; ``compare`` always passes one). ``phase`` here is only ``"warmup"`` or ``"timed"``; the paired trace run is ``trace_paired``, a separate function.
+
+    ``spawn_guard(side, root)`` (``None``: no guard; ``compare`` always passes one) is called immediately before EVERY spawn (warmup and timed), with the side and the root the child will run in and
+    returns silently or raises ``_IdentityChanged``. That exception is NOT a ``BenchmarkGateError`` (so no handler of one can swallow it) and
+    is propagated unchanged after the scratch and work directories are removed; no further child is started. It carries ``side`` (the side
+    about to be spawned), ``phase`` (``"warmup"`` or ``"timed"``), ``kind`` ``"harness"`` and ``partial`` (the completed timed rounds once
+    ``phase == "timed"``, else ``None``), the same semantics as an error of this function."""
     if os.name != "posix":
         raise BenchmarkGateError("UNSUPPORTED_PLATFORM", "the harness needs POSIX process groups")
     order = run_order(base_commit, head_commit, benchmark_sha256, attempt, repeats, salt=order_salt)
@@ -4671,7 +4746,12 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
                     error.kind = kind  # compare's verdict mapping needs the kind, not only the code (a spawn and a nonzero exit share a code)
                     return error
 
-                elapsed, stdout = _execute(side, argv, root, scratch, env, timeout_seconds, adapt, **({} if spawn_guard is None else {"guard": spawn_guard}))
+                try:
+                    elapsed, stdout = _execute(side, argv, root, scratch, env, timeout_seconds, adapt, guard=spawn_guard)
+                except _IdentityChanged as changed:  # not a BenchmarkGateError: it passes the handler below; give it the attributes of the others
+                    changed.side, changed.phase, changed.kind = side, phase, "harness"
+                    changed.partial = {"order": order, "base_ns": list(base_ns), "head_ns": list(head_ns)} if phase == "timed" else None
+                    raise
                 return elapsed, _digest_of(stdout)
 
             def record(side: str, phase: str, digest: str | None, first_round: bool) -> None:
@@ -4811,7 +4891,7 @@ def _trace_result(raw: bytes | None, nonce: str) -> _TraceResult | None:
 
 
 def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, target: str, *, timeout_seconds: float,
-                 argv_builder=None, ini_path: str | None = None, spawn_guard: Callable[[str], None] | None = None) -> dict:
+                 argv_builder=None, ini_path: str | None = None, spawn_guard: Callable[[str, str], None] | None = None) -> dict:
     """One untimed, traced run per side (base, then head) and a comparison of what the harness-owned plugin counted in the test body.
     Returns ``{"base": int, "head": int, "interpreter": "<version> <impl>", "argv": {"base": [...], "head": [...]},
     "body_has_control_flow": bool}`` (the last is advisory: computed from the base root's benchmark file before the first run).
@@ -4827,7 +4907,11 @@ def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, t
     ``interpreters_differ``, ``counts_differ``, ``unavailable``) also carries ``trace``: ``{"base": {"kind": "lines"|"unavailable", "value":
     int count | str token, "interpreter": "<ver> <impl>"}, "head": {...}, "argv": {"base": [...], "head": [...]}, "body_has_control_flow":
     bool}``; ``trace`` is ``None`` for an error raised during a side's run. The run's timeout is ``_TRACE_TIMEOUT_FACTOR * timeout_seconds``. The digest is not checked and stdout is not parsed.
-    ``argv_builder(side, bin_dir, root, target) -> argv`` is the test seam."""
+    ``argv_builder(side, bin_dir, root, target) -> argv`` is the test seam.
+
+    ``spawn_guard(side, root)`` (``None``: no guard; ``compare`` always passes one) is called immediately before EVERY spawn (with the side and the root the child will run in) and returns silently or
+    raises ``_IdentityChanged``: not a ``BenchmarkGateError``, propagated unchanged after the side's work directory is removed, with ``side``
+    (the side about to be spawned), ``phase`` ``"trace"``, ``kind`` ``"harness"``, ``partial`` ``None`` and ``trace`` ``None``."""
     if os.name != "posix":
         raise BenchmarkGateError("UNSUPPORTED_PLATFORM", "the harness needs POSIX process groups")
     _check_timeout(timeout_seconds)
@@ -4856,8 +4940,11 @@ def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, t
                     detail += f" ({_TRACE_TIMEOUT_FACTOR}x the per-run timeout)"
                 return fail("TRACE_MISMATCH", f"{kind}: {detail}", kind, side)
 
-            _execute(side, argv, root, scratch, env, _TRACE_TIMEOUT_FACTOR * timeout_seconds, adapt,
-                     **({} if spawn_guard is None else {"guard": spawn_guard}))
+            try:
+                _execute(side, argv, root, scratch, env, _TRACE_TIMEOUT_FACTOR * timeout_seconds, adapt, guard=spawn_guard)
+            except _IdentityChanged as changed:
+                changed.side, changed.phase, changed.kind, changed.partial = side, "trace", "harness", None
+                raise
             if os.path.lexists(out_path + ".failed"):
                 raise fail("TRACE_MISMATCH", "plugin reported failure", "plugin_failed", side)
             result = _trace_result(_read_regular_file(out_path, _TRACE_RESULT_MAX, True), nonce)
@@ -4906,7 +4993,7 @@ def run_benchmark_once(root: str, bin_dir: str, target: str, *, timeout_seconds:
     ``measure_paired`` (own scratch and ini, removed afterwards). Returns ``{"digest", "argv"}``; the digest is what the child printed and
     is NOT evidence. Nothing in ``root`` is sealed, hashed or written by this function. Raises ``BenchmarkGateError``: ``MEASURE_ARGS_INVALID``,
     ``UNSUPPORTED_PLATFORM``, ``<SIDE>_NONZERO_EXIT`` (also a spawn failure), ``<SIDE>_TIMEOUT``, ``OUTPUT_TOO_LARGE``, ``DIGEST_MISSING``
-    (each with ``side`` and ``kind`` set) or ``MEASURE_FAILED`` (a harness fault)."""
+    (each with ``side`` set; ``kind`` is the ``_execute`` kind, ``None`` for ``DIGEST_MISSING``) or ``MEASURE_FAILED`` (a harness fault)."""
     if os.name != "posix":
         raise BenchmarkGateError("UNSUPPORTED_PLATFORM", "the harness needs POSIX process groups")
     if side not in ("base", "head"):
@@ -5006,6 +5093,16 @@ COMPARE_REASONS = {
 COMPARE_RESULT_OF_REASON = {reason: row[0] for reason, row in COMPARE_REASONS.items()}
 # The tokens a result's `detail` can start with: only what really is a detail (not every reason or refusal name).
 COMPARE_DETAIL_TOKENS = tuple(dict.fromkeys(token for _, _, details in COMPARE_REASONS.values() for token in details if token))
+
+# THE retry rule, machine-readable (spec 2.3, "Retry on the same exports"): the `(reason, stage, detail)` triples of a `compare` result for
+# which a second `compare` on the SAME exports (always with a new `out_path`) can give another outcome: a busy host is waited out, and a
+# writable interpreter is accepted by a human who sets `--allow-writable-interpreter` (never by an automatic retry). Nothing else is
+# retryable on the same exports: every other outcome is a function of the exports, the venvs and their pins (all minted once, before the
+# install), so only fresh provisioning can change it.
+COMPARE_RETRYABLE_ON_SAME_EXPORTS = frozenset({
+    ("HOST_BUSY_START", _PRE, ""),
+    ("ISOLATION_REJECTED", _PRE, "INTERPRETER_WRITABLE"),
+})
 
 
 def _detail_allowed(detail: object, allowed: tuple[str, ...]) -> bool:
@@ -5281,7 +5378,7 @@ def _host_load(load_probe: Callable[[], tuple]) -> tuple | None:
 
 
 def _check_snapshots(base: Side, head: Side, stage: str) -> None:
-    """Each side's snapshot file must hash to its pin (`SNAPSHOT_CHANGED`); steps 4 and 9 (and 12 in T4a1) share this."""
+    """Each side's snapshot file must hash to its pin (`SNAPSHOT_CHANGED`); steps 4 and 9 (and 12) share this."""
     for label, side in (("base", base), ("head", head)):
         try:
             data = _read_bounded(side.snapshot, _MAX_INPUT_BYTES * 8, nofollow=True)
@@ -5445,11 +5542,11 @@ class _Baseline(NamedTuple):
     exports: tuple[str, str]               # `fingerprint_tree` of each export (`_MAX_TREE_ENTRIES`)
     venvs: tuple[str, str]                 # `fingerprint_tree` of each venv root (`_VENV_FINGERPRINT_LIMIT`)
     snapshots: tuple[tuple, tuple]         # a stat record of each snapshot file
-    dispatch: tuple[tuple, tuple]          # (sorted names of the dispatch root, ((name, (dev, ino, size, ctime_ns)), ...) for every non-export entry)
+    dispatch: tuple[tuple, tuple]          # (sorted names of the dispatch root, ((".", (dev, ino, ctime_ns)) for the root itself, then (name, (dev, ino, size, ctime_ns)) for every non-export entry))
     cfg_sha256: tuple[str, str]            # sha256 of each venv's `pyvenv.cfg`
     real_python: tuple[str, str]           # the interpreter each side resolved to at step 4
     bins: tuple[str, str]                  # the resolved `bin_dir` of each side (what the children run, passed on instead of resolving again)
-    identities: tuple                      # `(resolved path, st_dev, st_ino)` of the dispatch root, both exports, both bin dirs, both venv roots
+    identities: tuple                      # `(resolved path, st_dev, st_ino, label, ctime_ns or None)` of the dispatch root, both exports, both bin dirs, both venv roots (ctime only for the roots the harness never modifies after sealing)
 
 
 class _Prepared(NamedTuple):
@@ -5570,7 +5667,13 @@ def _dispatch_state(roots: tuple[str, str], fallback: str, stage: str) -> tuple:
     dispatch = os.path.dirname(roots[0])
     export_names = {os.path.basename(root) for root in roots}
     try:
-        names = sorted(os.listdir(dispatch))
+        names = []
+        with os.scandir(dispatch) as listing:  # bounded: a hostile run could fill the dispatch root with entries
+            for entry in listing:
+                names.append(entry.name)
+                if len(names) > _MAX_TREE_ENTRIES:
+                    raise _isolation("FINGERPRINT_FAILED", ["dispatch root: too many entries"], stage)
+        names.sort()
         own = os.lstat(dispatch)  # the dispatch root itself: a rename-and-restore of it moves its ctime
         entries = [(".", (own.st_dev, own.st_ino, own.st_ctime_ns))]
         for name in names:
@@ -5601,9 +5704,12 @@ def _snapshot_records(base: Side, head: Side, stage: str) -> tuple[tuple, tuple]
         raise _isolation("SNAPSHOT_CHANGED", [_describe(exc)], stage) from exc
 
 
-def _identity_of(path: str, label: str, stage: str) -> tuple[str, int, int]:
-    """`(resolved path, st_dev, st_ino)` of a directory the children run in or from; it must be a real directory (not a symlink) whose own
-    path is already resolved, else `ISOLATION_REJECTED`/`HASH_UNREADABLE` (nothing a child could have done yet: step 9)."""
+def _identity_of(path: str, label: str, stage: str, *, sealed: bool = False) -> tuple[str, int, int, str, int | None]:
+    """`(resolved path, st_dev, st_ino, label, st_ctime_ns or None)` of a directory the children run in or from; it must be a real directory
+    (not a symlink) whose own path is already resolved, else `ISOLATION_REJECTED`/`HASH_UNREADABLE` (nothing a child could have done yet:
+    step 9). The ctime is kept only for `sealed` directories (the two export roots and the dispatch root): the harness never modifies
+    those after sealing (their entries are only read), so a rename-and-restore or an entry added or removed moves it. The bin and venv
+    roots are NOT sealed: pip, `pyvenv.cfg` readers and the interpreter may legitimately touch them, so they stay `(dev, ino)`."""
     resolved = os.path.realpath(path)
     try:
         st = os.lstat(resolved)
@@ -5611,22 +5717,31 @@ def _identity_of(path: str, label: str, stage: str) -> tuple[str, int, int]:
         raise _isolation("HASH_UNREADABLE", [f"{label}: {_describe(exc)}"], stage) from exc
     if not stat.S_ISDIR(st.st_mode):
         raise _isolation("HASH_UNREADABLE", [f"{label}: not a directory"], stage)
-    return resolved, st.st_dev, st.st_ino
+    return resolved, st.st_dev, st.st_ino, label, (st.st_ctime_ns if sealed else None)
 
 
-def _spawn_guard(identities: tuple) -> Callable[[str], None]:
-    """The guard `_execute` calls before every child: each recorded directory must still resolve to itself (no symlink or renamed ancestor
-    in its path) and still be the same inode. A dispatch root swapped for a planted copy (and put back later, inodes and all) shows here at
-    the next spawn. Raises `_IdentityChanged`; `compare` turns it into `ISOLATION_REJECTED`/`EXPORT_CHANGED`, stage `ran`."""
-    def guard(_side: str) -> None:
-        for path, dev, ino in identities:
+def _spawn_guard(identities: tuple) -> Callable[[str, str], None]:
+    """The guard `_execute` calls before every child (arguments: the side about to be spawned and the root it will run in): the root must be
+    the recorded one (so the path the harness resolved for the spawn is the step-9 path: fail closed), and each recorded directory must still resolve to
+    itself (no symlink or renamed ancestor in its path), still be the same inode and, for a sealed directory, still have its recorded ctime.
+    A dispatch root swapped for a planted copy (and put back later, inodes and all) shows here at the next spawn, or at step 12 (ctime).
+    Raises `_IdentityChanged` (its text starts with the label, so a length cap cannot cut it); `compare` turns it into
+    `ISOLATION_REJECTED`/`EXPORT_CHANGED`, stage `ran`."""
+    roots = {label: path for path, _dev, _ino, label, _ctime in identities}
+
+    def guard(side: str, root: str) -> None:
+        recorded = roots.get(f"{side} root")
+        if recorded is not None and root != recorded:
+            raise _IdentityChanged(f"{side} root: the child would run in {root}, not the recorded {recorded}", side)
+        for path, dev, ino, label, ctime in identities:
             try:
                 now = os.lstat(path)
-                same = os.path.realpath(path) == path and (now.st_dev, now.st_ino) == (dev, ino)
+                same = (os.path.realpath(path) == path and (now.st_dev, now.st_ino) == (dev, ino)
+                        and (ctime is None or now.st_ctime_ns == ctime))
             except OSError:
                 same = False
             if not same:
-                raise _IdentityChanged(f"a directory the children run in was replaced: {path}")
+                raise _IdentityChanged(f"{label}: directory replaced or modified before the {side} spawn: {path}", side)
     return guard
 
 
@@ -5635,7 +5750,8 @@ def _baseline_fingerprints(base: Side, head: Side, roots: tuple[str, str], real_
     `ISOLATION_REJECTED` (`FINGERPRINT_FAILED` over a limit, else the side's own change token)."""
     labels = ("base", "head")
     bins = tuple(os.path.realpath(side.bin_dir) for side in (base, head))
-    identities = tuple(_identity_of(path, label, stage) for path, label in (
+    sealed_labels = ("dispatch root", "base root", "head root")
+    identities = tuple(_identity_of(path, label, stage, sealed=label in sealed_labels) for path, label in (
         (os.path.dirname(roots[0]), "dispatch root"), (roots[0], "base root"), (roots[1], "head root"), (bins[0], "base bin"), (bins[1], "head bin"),
         *((root, f"{label} venv") for label, root in zip(labels, _venv_roots(base, head)))))
     exports = tuple(_fingerprint_or_verdict(root, _MAX_TREE_ENTRIES, "HASH_UNREADABLE", label, stage) for label, root in zip(labels, roots))
@@ -5738,7 +5854,7 @@ _MEASURE_NOT_A_VERDICT = frozenset({"UNSUPPORTED_PLATFORM", "OUTPUT_TOO_LARGE"})
 
 
 class _RunOutcome(NamedTuple):
-    """What steps 10 and 11 leave for step 13 (T4b) to merge, after step 12 found nothing."""
+    """What steps 10 and 11 leave for step 13 to merge, after step 12 found nothing."""
     trace: dict | None             # the normalised trace of 2.8, None when no trace result was seen
     pending: _Verdict | None       # the `counts_differ` TRACE_MISMATCH (T5), not yet raised
     measured: dict | None          # `measure_paired`'s return value when it succeeded
@@ -5797,9 +5913,27 @@ def _map_measure_error(error: BenchmarkGateError) -> _Verdict:
     return _Verdict(COMPARE_RESULT_OF_REASON[reason], reason, kind or "", kind=kind, stage=_RAN, extra=extra)
 
 
+def _replaced_after_invalid(error: BenchmarkGateError, guard: Callable[[str, str], None], root: str) -> _Verdict | None:
+    """A `MEASURE_ARGS_INVALID` out of `trace_paired`/`measure_paired` is a caller fault, unless a child replaced a directory the argument
+    checks look at (it renamed its export root or venv bin, or symlinked one side to the other): the checks then fail BEFORE any spawn and
+    so before the spawn guard. Run the guard again: if it objects, the outcome is `ISOLATION_REJECTED`/`EXPORT_CHANGED` (stage `ran`), the
+    same as the guard's own; if it is silent the error stands (None) and the caller maps it as before (a raise, exit 2)."""
+    if error.code != "MEASURE_ARGS_INVALID":
+        return None
+    try:
+        guard("base", root)
+    except _IdentityChanged as changed:
+        return _isolation("EXPORT_CHANGED", [changed.detail], _RAN)
+    return None
+
+
 def _compare_runs(prepared: _Prepared, repo: object, base: Side, head: Side, checked: _Checked, *, run: _Run, argv_builder=None,
                   min_base_ns: int = _MIN_BASE_NS, interpreter_of: Callable[[str], InterpreterPin] | None = None) -> _RunOutcome:
-    """Steps 10 to 12 (step 13, `_merge_outcome`, merges what is returned). A `BenchmarkGateError` (a raise of 2.7: T1, M4, any 2.1 raise) propagates and step 12 does not run.
+    """Steps 10 to 12 (step 13, `_merge_outcome`, merges what is returned). A `BenchmarkGateError` raised by a run (a raise of 2.7: T1, M4,
+    any 2.1 raise) propagates and step 12 does not run, EXCEPT a `MEASURE_ARGS_INVALID` while a directory the children use was replaced
+    (a child that renamed its export root or symlinked one side to the other makes the argument checks fail): the spawn guard is run again,
+    and if it objects that is `_IdentityChanged`'s outcome, not a caller fault. An `_IdentityChanged` (the spawn guard, before a spawn)
+    is caught here, ends the runs with `ISOLATION_REJECTED`/`EXPORT_CHANGED` (stage `ran`) and step 12 DOES run (it wins with its own finding).
     Every other path started a child (a T3 spawn too, even if none ran), so step 12 runs: its `ISOLATION_REJECTED` (or `EXPORT_REJECTED`, stage `ran`) beats everything. Then
     the at-once trace results (items 2) and a measure-raised REJECTED/NOT_IMPROVED (item 3) are raised as `_Verdict`; what is left for the
     precedence list (pending trace mismatch, measure INCONCLUSIVE, success: items 4 to 6) is returned."""
@@ -5807,6 +5941,8 @@ def _compare_runs(prepared: _Prepared, repo: object, base: Side, head: Side, che
     common["trace_mismatch_seen"] = False
     sides = (prepared.roots[0], prepared.roots[1], *prepared.baseline.bins)  # the step-9 resolved paths, not resolved again after a child ran
     guard = _spawn_guard(prepared.baseline.identities)
+    if not set(sides) <= {path for path, *_ in prepared.baseline.identities}:  # local invariant: only recorded (step-9 resolved) paths are spawned
+        raise BenchmarkGateError("MEASURE_FAILED", "internal invariant: a path to be spawned from was not recorded at step 9")
     ending: _Verdict | None = None
     pending: _Verdict | None = None
     trace: dict | None = None
@@ -5814,22 +5950,26 @@ def _compare_runs(prepared: _Prepared, repo: object, base: Side, head: Side, che
     measure_verdict: _Verdict | None = None
     # 10: the paired trace run
     try:
+        guard("base", sides[0])  # nothing may have been replaced since step 9
         traced = trace_paired(*sides, prepared.target, timeout_seconds=gate["per_run_timeout_seconds"], argv_builder=argv_builder,
                               spawn_guard=guard)
         trace = _normalise_trace(traced)
     except _IdentityChanged as error:  # a directory was replaced between runs: nothing more is run or measured (step 12 still runs)
         ending = _isolation("EXPORT_CHANGED", [error.detail], _RAN)
     except BenchmarkGateError as error:
-        mapped = _map_trace_error(error)
-        trace = _normalise_trace(error.trace)
-        if mapped.kind == "counts_differ":
-            pending = mapped  # T5: the measurement still runs
-        else:
-            ending = mapped
+        ending = _replaced_after_invalid(error, guard, sides[0])
+        if ending is None:
+            mapped = _map_trace_error(error)
+            trace = _normalise_trace(error.trace)
+            if mapped.kind == "counts_differ":
+                pending = mapped  # T5: the measurement still runs
+            else:
+                ending = mapped
     common["trace"] = trace
     # 11: the paired measurement, unless the trace already ended it
     if ending is None:
         try:
+            guard("base", sides[0])  # before measure_paired's own argument checks: a child of the trace run may have replaced a directory
             measured = measure_paired(*sides, prepared.target, repeats=gate["repeats"], timeout_seconds=gate["per_run_timeout_seconds"],
                                       base_commit=base.commit, head_commit=head.commit, benchmark_sha256=prepared.benchmark_sha256,
                                       attempt=checked.attempt, warmup=gate["warmup_runs"], min_base_ns=min_base_ns, argv_builder=argv_builder,
@@ -5839,13 +5979,19 @@ def _compare_runs(prepared: _Prepared, repo: object, base: Side, head: Side, che
             if pending is not None:
                 ending.extra["trace_mismatch_seen"] = True
         except BenchmarkGateError as error:
-            mapped = _map_measure_error(error)
-            if mapped.result == "INCONCLUSIVE":  # M3: item 4 (a pending mismatch stands) or item 5; step 13 decides
-                measure_verdict = mapped
-            else:  # item 3
+            replaced = _replaced_after_invalid(error, guard, sides[0])
+            if replaced is not None:
+                ending = replaced
                 if pending is not None:
-                    mapped.extra["trace_mismatch_seen"] = True
-                ending = mapped
+                    ending.extra["trace_mismatch_seen"] = True
+            else:
+                mapped = _map_measure_error(error)
+                if mapped.result == "INCONCLUSIVE":  # M3: item 4 (a pending mismatch stands) or item 5; step 13 decides
+                    measure_verdict = mapped
+                else:  # item 3
+                    if pending is not None:
+                        mapped.extra["trace_mismatch_seen"] = True
+                    ending = mapped
     # 12: beats everything but a raise
     finding = _post_run_check(prepared, repo, base, head, interpreter_of=interpreter_of)
     if finding is not None:
@@ -5950,7 +6096,7 @@ def compare(gate: object, repo: object, base: Side, head: Side, *, attempt: obje
     writable by the same user) and prefer a non-writable interpreter (a stray ``.pyc`` written into a writable interpreter prefix between the
     pin and ``compare`` gives ``INTERPRETER_CHANGED``; ``INTERPRETER_DIFFERS`` is a different fault: two interpreters, one inside a venv or an
     export, or a probe mismatch); and a project venv older than CPython 3.12 has no ``sys.monitoring``, so its trace is ``TRACE_UNAVAILABLE`` and
-    it can never reach ``IMPROVED``. Retry on the same exports is keyed on (reason, stage, detail): only ``HOST_BUSY_START`` and
+    it can never reach ``IMPROVED``. Retry on the same exports is keyed on (reason, stage, detail) and ``COMPARE_RETRYABLE_ON_SAME_EXPORTS`` is the complete list: only ``HOST_BUSY_START`` and
     ``INTERPRETER_WRITABLE`` (the latter only when a human sets the flag) can be retried on the same exports; every other
     ``ISOLATION_REJECTED`` at ``pre_overlay`` (``INTERPRETER_CHANGED``, ``INTERPRETER_DIFFERS``, ``SNAPSHOT_CHANGED``, ``DEPENDENCY_PARITY``,
     ``TRACKED_FILE_DIFFERS``, ...) is not (spec 2.3). The returned dict (a `_WrittenResult`: a ``dict`` subclass that also carries

@@ -32,6 +32,10 @@ rest, and section 9 below, go to the C4e docs write-back).
   the step-9 baseline and re-checked before EVERY spawn (2.5, "Directory identity"); the dispatch root's ctime joins the dispatch state; the runs get
   the step-9 resolved roots and bins; `_result_dict` allowlists `kind`, `trace_fault`, `side`, `phase`, `host_check`, `benchmark_origin`; the result
   file is linked with `follow_symlinks=False`.
+- round 3 (implementation review, wording only): the retry column of 2.3 means "the same-exports retry can change the outcome" and the rule is the
+  machine-readable `COMPARE_RETRYABLE_ON_SAME_EXPORTS`; the spawn guard also takes the root it spawns in, keeps the sealed roots' ctime, runs again when an
+  argument check fails after a child ran, and its exception is not a `BenchmarkGateError`; a `.pth`/finder path through a link the user owns is refused;
+  the dispatch listing is bounded.
 
 ## 1. Premise check (read against `2dc72667`)
 
@@ -110,22 +114,28 @@ step 1. Helpers: `_compare_checks` (steps 1 to 6), `_compare_prepare` (7 to 9; f
   `evaluate_paired_samples` reason is mapped or deliberately raised.
 - `ISOLATION_DETAILS`: `ROOT_HAS_GIT`, `BIN_NOT_ISOLATED`, `NOT_PROVISIONED`, `INTERPRETER_DIFFERS`, `INTERPRETER_WRITABLE`, `HARNESS_FILE_UNDER_ROOT`,
   `TRACKED_FILE_DIFFERS`, `UNTRACKED_PYTHON_FILE`, `DEPENDENCY_PARITY`, `BENCHMARK_BYTES_DIFFER`, `VENV_NOT_ISOLATED`, `VENV_HOOK_REJECTED`,
-  `SNAPSHOT_CHANGED`, `INTERPRETER_CHANGED`, `EXPORT_CHANGED`, `VENV_CHANGED`, `HASH_UNREADABLE`, `FINGERPRINT_FAILED`.
-- `COMPARE_DETAIL_TOKENS`: an explicit tuple, the union of the gate codes (listed literally), `ISOLATION_DETAILS`, `VIOLATION_CODES`,
-  `OVERLAY_REFUSAL_CODES`, `DIFF_REFUSAL_CODES`, the git/tree/seal codes, `TRACE_FAILURE_KINDS`, the measure kinds and reasons. `detail` is one token
-  plus integers. For `LINT_REJECTED` it is the **first** violation code in `VIOLATION_CODES` order and the full list goes to `untrusted_text`.
+  `SNAPSHOT_CHANGED`, `INTERPRETER_CHANGED`, `EXPORT_CHANGED`, `VENV_CHANGED`, `HASH_UNREADABLE`, `FINGERPRINT_FAILED`. The spawn guard (2.5, "Directory
+  identity") also emits `ISOLATION_REJECTED`/`EXPORT_CHANGED` at stage `ran` with no measured field; C4e routes it as tamper, to a human.
+- `COMPARE_REASONS`: THE table, `reason -> (result, stages, details)`; `COMPARE_RESULT_OF_REASON` and `COMPARE_DETAIL_TOKENS` are derived from it (the
+  union of the details of every row: the gate codes, `ISOLATION_DETAILS`, `VIOLATION_CODES`,
+  `OVERLAY_REFUSAL_CODES`, `DIFF_REFUSAL_CODES`, the git/tree/seal codes, `TRACE_FAILURE_KINDS`, the measure kinds), not an independent literal. `detail` is exactly one
+  token from the reason's own closed set in `COMPARE_REASONS` (round 2: no integer tail; `_result_dict` rejects anything else). For `LINT_REJECTED` it is the **first** violation code in `VIOLATION_CODES` order and the full list goes to `untrusted_text`.
   `kind` (a result key) is the `_execute`/trace kind that produced the result, else null.
 - **Step to stage table** (`stage` in `pre_overlay`, `overlaid`, `ran`; pinned by a test that asserts the stage of every step-ending):
 
+"Retry on the same exports" means: a second `compare` on the SAME exports, always with a new `out_path`, **can give another outcome**. The rule is the
+module constant `COMPARE_RETRYABLE_ON_SAME_EXPORTS` (a set of `(reason, stage, detail)` triples, validated against `COMPARE_REASONS` by a test); every row below
+is "no" unless it names a triple of that constant. Step-7 refusals are content-determined (the same files refuse again), so they are "no".
+
 | Step | Stage | Retry on the same exports |
 |---|---|---|
-| 1, 2, 4, 5, 6 | `pre_overlay` | by `(reason, stage, detail)`, always with a new `out_path`: **retryable on the same exports** are `HOST_BUSY_START` (waited out) and `INTERPRETER_WRITABLE` only when a human sets `--allow-writable-interpreter`; every other `ISOLATION_REJECTED` at `pre_overlay` (`INTERPRETER_CHANGED`, `INTERPRETER_DIFFERS`, `SNAPSHOT_CHANGED`, `DEPENDENCY_PARITY`, `TRACKED_FILE_DIFFERS`, ...) is **not**: the pins are minted before the install and never re-minted after one, so it needs fresh provisioning. `INTERPRETER_CHANGED` is what a stray `.pyc` in the interpreter prefix gives; `INTERPRETER_DIFFERS` comes from two different interpreters, an interpreter inside a venv or export, or a failed start-up probe |
+| 1, 2, 4, 5, 6 | `pre_overlay` | by `(reason, stage, detail)`: **retryable on the same exports** are `HOST_BUSY_START` (waited out) and `INTERPRETER_WRITABLE` only when a human sets `--allow-writable-interpreter`; every other `ISOLATION_REJECTED` at `pre_overlay` (`INTERPRETER_CHANGED`, `INTERPRETER_DIFFERS`, `SNAPSHOT_CHANGED`, `DEPENDENCY_PARITY`, `TRACKED_FILE_DIFFERS`, ...) is **not**: the pins are minted before the install and never re-minted after one, so it needs fresh provisioning. `INTERPRETER_CHANGED` is what a stray `.pyc` in the interpreter prefix gives; `INTERPRETER_DIFFERS` comes from two different interpreters, an interpreter inside a venv or export, or a failed start-up probe |
 | 3 | raises | n/a |
-| 7 refusals (the overlay leaves nothing it created) | `pre_overlay` | yes |
+| 7 refusals (the overlay leaves nothing it created) | `pre_overlay` | no: content-determined, so the same exports refuse again (they are left unsealed and unmodified, but nothing about a retry changes the outcome) |
 | 7 success, 8, 9 | `overlaid` | no: fresh exports, new install, snapshot and origin |
-| 10, 11, 12, 13 (incl. `HOST_BUSY_END`, `TRACE_UNAVAILABLE`, step-12 `ISOLATION_REJECTED`; also a T3 spawn even if no child ran) | `ran` | no: fresh exports |
+| 10, 11, 12, 13 (incl. `HOST_BUSY_END`, `TRACE_UNAVAILABLE`, step-12 `ISOLATION_REJECTED`, the spawn guard's `ISOLATION_REJECTED`/`EXPORT_CHANGED` with no measured fields; also a T3 spawn even if no child ran) | `ran` | no: fresh exports |
 
-C4e keys the retry on `(reason, stage, detail)` and records every `compare` result of a dispatch, showing the count at the acceptance screen (fresh-export
+C4e keys the retry on `COMPARE_RETRYABLE_ON_SAME_EXPORTS` (`(reason, stage, detail)`) and records every `compare` result of a dispatch, showing the count at the acceptance screen (fresh-export
 retries give a bimodal head repeated draws). Fresh exports means a fresh head-first provisioning (2.5).
 
 ### 2.4 Pipeline
@@ -233,14 +243,24 @@ fingerprints (`EXPORT_CHANGED`/`HASH_UNREADABLE`), `check_venv` and the venv fin
 `FINGERPRINT_FAILED`, which the Builder cannot fix.
 
 **Directory identity (security round 2).** Children are spawned by path (`cwd=<root>`, `<bin>/python`), so a path swap between runs could run a planted
-tree and restore the original afterwards with every inode inside unchanged. The step-9 baseline therefore records `(resolved path, st_dev, st_ino)` of the
-dispatch root, both exports, both resolved bin directories and both venv roots, and `_dispatch_state` adds the dispatch root's own `(dev, ino, ctime_ns)`
-(a rename-and-restore moves its ctime, which step 12 sees). `trace_paired` and `measure_paired` receive the step-9 resolved roots and bins (not resolved
-again after a child ran) and a `spawn_guard` that `_execute` calls before every spawn: each recorded path must still be its own `realpath` and the same
-inode, else `_IdentityChanged` (code `MEASURE_FAILED` for a library caller). `compare` maps it, conservatively, to **`ISOLATION_REJECTED`/`EXPORT_CHANGED`,
+tree and restore the original afterwards with every inode inside unchanged. A `.pth` line or editable-finder target whose lexical string goes through a
+symlink is accepted only when every link on the way is owned by root (macOS `/var` -> `/private/var`); a link the user owns could be repointed by a head child
+between runs, and the guard only re-checks resolved paths. The step-9 baseline therefore records `(resolved path, st_dev, st_ino, label, ctime_ns or None)` of the
+dispatch root, both exports, both resolved bin directories and both venv roots (the ctime only for the dispatch root and the two sealed export roots, which the
+harness never modifies after sealing; the bins and venv roots are not sealed, so they stay `(dev, ino)`), and `_dispatch_state` adds the dispatch root's own
+`(dev, ino, ctime_ns)` and is bounded by `_MAX_TREE_ENTRIES` (over it: `FINGERPRINT_FAILED`, a verdict). A rename-and-restore moves the ctime, which the guard
+sees at the next spawn and step 12 sees at the end. `trace_paired` and `measure_paired` receive the step-9 resolved roots and bins (not resolved
+again after a child ran) and a `spawn_guard(side, root)` that `_execute` calls before every spawn (also once before `trace_paired` and once before `measure_paired`): the root must be the
+recorded one, and each recorded path must still be its own `realpath`, the same inode (and ctime where recorded), else `_IdentityChanged`, whose text starts with
+the label. `_IdentityChanged` derives from `Exception`, not from `BenchmarkGateError` (decision: no generic `except BenchmarkGateError` can swallow it or remap
+it to `MEASURE_FAILED`; `compare`'s `except _IdentityChanged` comes first); it carries `code` `MEASURE_FAILED`, `side`, `phase` (`trace`, `warmup` or `timed`), `kind`
+`harness`, `partial` (the completed timed rounds once `phase` is `timed`) and `trace` `None`, the same semantics out of `measure_paired` and `trace_paired`. A
+`MEASURE_ARGS_INVALID` out of either function (a child that renamed its export root, or symlinked one side to the other, makes the argument checks fail before
+any spawn) runs the guard again: if it objects, the outcome is the guard's, otherwise the error stands (exit 2). `compare` maps it, conservatively, to **`ISOLATION_REJECTED`/`EXPORT_CHANGED`,
 stage `ran`** with no further run and no measured field, and step 12 still runs and wins with its own finding (precedence item 1). It never becomes a
-measured verdict. Test row: the planted-dispatch swap during the trace, during measurement (restored at the last head run) and not restored, each with
-step 12 live and with step 12 stubbed out.
+measured verdict. Test rows: the planted-dispatch swap during the head trace, the head warmup, the head timed runs and the base trace (left in place), each with step 12 live
+(`HASH_UNREADABLE`: the head root is then a symlink, refused by `hash_export`) and stubbed out (`EXPORT_CHANGED`); a swap-and-restore inside ONE run (the guard's ctime
+at the next spawn, step 12 through the dispatch state) and inside the LAST head run (step 12 alone).
 
 **2.5b Work directory (closes the round-2 blocker).** No mutable harness state crosses a child boundary. `_prepare_run(side, bin_dir, work,
 ini_path=None) -> (scratch, env, ini)` (the `counter` argument goes) makes the scratch with `tempfile.mkdtemp(dir=work)`, writes that run's
@@ -270,7 +290,9 @@ window is safe only while the process is single-threaded, which `_run_once`'s co
 not writes elsewhere (absolute `/tmp` or `/dev/shm` state a head run leaves for a later run), not a change undone inside one ctime tick on a coarse
 filesystem, not an escaped `setsid` daemon (page-cache effects included); the interpreter pin covers the files listed and is exact only for a
 non-writable interpreter; a bytecode or file planted into a writable interpreter by a *child during a run* is caught only by the end-of-run pin, not
-if restored; third-party content that is identical and RECORD-consistent on both sides is not judged. **The human acceptance of every `IMPROVED` is
+if restored; the interpreter's own path chain (the `home` of `pyvenv.cfg`, symlink hops to the real prefix, the parent of the prefix) is pinned by content
+and not guarded by directory identity, so a user-writable hop in front of a prefix that is not user-owned (a layout `INTERPRETER_WRITABLE` does not refuse)
+could be repointed by a head child between runs; third-party content that is identical and RECORD-consistent on both sides is not judged. **The human acceptance of every `IMPROVED` is
 the control that remains.** The run order is public but salted (`order_salt`; the recorded `order` reproduces a run). A SIGKILLed `compare` leaves a
 running child until its own timeout.
 
@@ -480,7 +502,8 @@ precedes the ancestry check, which raises. 5. A pending `TRACE_MISMATCH` after `
 makes every trace fault `TRACE_MISMATCH`; both are non-pass; `trace_fault` carries the escalation signal; C4e to confirm). 6. New reasons
 `DIFF_UNCHECKABLE`, `EXPORT_REJECTED`, `BASE_/HEAD_OUTPUT_TOO_LARGE`; the `TRACE_UNAVAILABLE` row; `NOT_PROVISIONED` and the other
 `ISOLATION_DETAILS`. 7. Result fields `stage`, `untrusted_text`, `trace_mismatch_seen`, `trace_fault`, `order_salt`, `interpreter_*`; retry keyed on
-`(reason, stage)`; `detail` is a closed vocabulary (parent: free-form escaped). 8. **Head provisioned first, base created after**, the provisioning
+`(reason, stage, detail)` (the constant `COMPARE_RETRYABLE_ON_SAME_EXPORTS`); the spawn guard's `ISOLATION_REJECTED`/`EXPORT_CHANGED` at stage `ran` with no
+measured fields (C4e routes it as tamper, to a human); `detail` is a closed vocabulary (parent: free-form escaped). 8. **Head provisioned first, base created after**, the provisioning
 contract of 2.5, snapshot and interpreter pins minted pre-install, `--allow-writable-interpreter`, `verify_export_against_commit`,
 `dependency_parity`, the ctime fingerprint, per-run scratch and ini, no pycache prefix. 9. `out_path` written by dir-fd link after step 12 with the
 file's sha256 in the `RESULT:` line (parent: temp file then rename). 10. `repo_top_levels` taken after the install. 11. Seeded order gains a random

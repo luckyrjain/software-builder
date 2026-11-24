@@ -591,7 +591,8 @@ lint-mysql-to-postgres-sql:
 lint-loop-task-implementer: lint-loop-task-implementer-skill lint-loop-task-implementer-scripts
 
 # Mirrors lint-pr-review-scripts: the skill ships a validator, so its own tests are
-# co-located with it and run from the target that lints it.
+# co-located with it and run from the target that lints it. Parallel via PYTEST_XDIST_FLAG with
+# `--dist loadgroup`: the rows marked xdist_group("real-timing") (real pytest children, real pip) share one worker and never overlap.
 lint-loop-task-implementer-scripts:
 	@echo "py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/validate_loop_lifecycle.py"
 	@echo "py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/run_log.py"
@@ -602,7 +603,7 @@ lint-loop-task-implementer-scripts:
 	python3 -m py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/validate_loop_lifecycle.py || exit 1; \
 	python3 -m py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/run_log.py || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest $(SKILLS_DIR)/loop-task-implementer/tests/ -q || exit 1; \
+		python3 -m pytest $(PYTEST_XDIST_FLAG) $(if $(PYTEST_XDIST_FLAG),--dist loadgroup) $(SKILLS_DIR)/loop-task-implementer/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run script tests" >&2; \
 		exit 1; \

@@ -12,8 +12,10 @@ on the same exports meets the step-4 untracked-file check. Design: docs/superpow
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.util
+import inspect
 import json
 import os
 import re
@@ -195,7 +197,7 @@ def test_result_assembly_from_a_synthetic_verdict():
     assert result["improvement"] == 0.25 and result["ratios"] == [0.75, 0.9] and result["mad_over_median"] == 0.125
     text = json.dumps(result, ensure_ascii=True, allow_nan=False)
     assert text.isascii() and json.loads(text)["ratios"] == [0.75, 0.9]
-    assert bg._result_bytes(result) == (text + "\n").encode("ascii") or json.loads(bg._result_bytes(result)) == json.loads(text)
+    assert bg._result_bytes(result) == (text + "\n").encode("ascii")
 
 
 def test_result_assembly_rejects_internal_inconsistencies():
@@ -800,7 +802,7 @@ def test_pin_accepts_homebrew_uv_and_clt_layouts(world):
         pin = bg.interpreter_pin(side.bin, probe=_stub_probe(world.prefix))
         assert isinstance(pin, bg.InterpreterPin) and len(pin.sha256) == 64 and pin.real_python == os.path.realpath(world.prefix / "bin" / PYX)
         pins[name] = pin
-    assert pins["base"] == pins["head"] or pins["base"].sha256 == pins["head"].sha256  # same interpreter, same pin
+    assert pins["base"] == pins["head"]  # same interpreter, same pin (every field: sha256, writable flag, real path)
 
 
 @posix_only
@@ -1199,6 +1201,7 @@ def test_console_scripts_at_different_paths_pass(tmp_path):
 
 
 @posix_only
+@pytest.mark.xdist_group("real-timing")  # real timing and real pip: never overlapping another real-timing row under xdist (`--dist loadgroup`)
 def test_two_real_pip_venvs_pass(tmp_path):
     sides = []
     for name in ("base", "head"):
@@ -2366,7 +2369,7 @@ def test_host_busy_start_leaves_nothing_sealed_and_a_retry_succeeds_on_the_same_
     _ends(result, "HOST_BUSY_START", stage="pre_overlay")
     assert result["host_check"] == "start_only" and result["loadavg"] == {"start": 0.71, "end": None}
     assert result["cpu_count"] == {"start": 1, "end": None}
-    assert case.spy == ["interpreter_of", "interpreter_of"] or "seal_export" not in case.spy
+    assert case.spy == ["interpreter_of", "interpreter_of"]  # the two pins of step 4, and nothing sealed, overlaid or run
     assert [bg.fingerprint_tree(case.base.root, limit=10_000), bg.fingerprint_tree(case.head.root, limit=10_000)] == fingerprints
     assert os.stat(case.base.root).st_mode & stat.S_IWUSR and os.stat(os.path.join(case.head.root, "README.md")).st_mode & stat.S_IWUSR
     case.probe = QUIET
@@ -2800,6 +2803,13 @@ def _s12_edit(c):
     (Path(c.roots[1]) / "README.md").write_text("tampered\n")
 
 
+def _s12_edit_file_only(c):
+    """`_s12_edit` without touching the export root's own mode (its ctime): a file edit leaves the spawn guard silent."""
+    path = Path(c.roots[1]) / "README.md"
+    _unseal(path)
+    path.write_text("tampered\n")
+
+
 def _s12_tamper_restore(c):
     path = Path(c.roots[1]) / "README.md"
     before = os.stat(path)
@@ -3186,7 +3196,9 @@ def test_row_T1_and_M4_raise(bcase, where, code, kind):
     c.spies("_post_run_check")
     if where == "measure_paired":
         _stub(c, "trace_paired", TRACE_OK)
-    _stub(c, where, _err(code, kind), hook=_s12_edit)  # the child "edited an export", and still a raise beats the step-12 result
+    # the child "edited an export", and still a raise beats the step-12 result. For MEASURE_ARGS_INVALID the spawn guard is run again (a replaced
+    # directory is a verdict, see the tests of `_replaced_after_invalid`), so that row edits a file only: the guard is silent and the raise stands
+    _stub(c, where, _err(code, kind), hook=_s12_edit_file_only if code == "MEASURE_ARGS_INVALID" else _s12_edit)
     with pytest.raises(bg.BenchmarkGateError) as e:
         c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
     assert e.value.code == code
@@ -4729,13 +4741,13 @@ def _real_compare(tmp_path: Path, monkeypatch, mode: str):
 
 
 @posix_only
+@pytest.mark.xdist_group("real-timing")
 def test_real_improved_overlay_origin(tmp_path, monkeypatch):
     c, result, seen = _real_compare(tmp_path, monkeypatch, "new")
-    _ran(result, "IMPROVED_CLEAR")
-    assert result["result"] == "IMPROVED" and result["kind"] is None and result["benchmark_origin"] == "BUILDER_AUTHORED"  # exit-0 class: IMPROVED
-    # a lower bound, not equality: removing half the work cannot give more than 0.5, and a quiet machine gave 0.45 to 0.49 (T6 calibration); 0.25 is
-    # about half of that, above the gate's own 0.10 (never loosened) and far from anything noise alone would make
-    assert result["improvement"] >= 0.25 and len(result["ratios"]) == 6 and result["n"] == 6
+    noisy = result["result"] == "INCONCLUSIVE" and result["reason"] in ("NOISY", "INCONSISTENT", "BORDERLINE")  # the host, not the harness
+    # every property that does not depend on a measured duration is asserted first, noisy host or not
+    assert result["stage"] == "ran" and result["kind"] is None and result["benchmark_origin"] == "BUILDER_AUTHORED"
+    assert len(result["ratios"]) == 6 and result["n"] == 6
     fixture_writable = any(bg.interpreter_pin(side.bin, outside=c.roots).writable for side in c.world.sides.values())
     assert result["host_check"] == "checked" and result["interpreter_writable"] is fixture_writable and result["order_salt"] == "ab12"
     # JSON with every 2.8 key, equal to what was returned
@@ -4752,9 +4764,17 @@ def test_real_improved_overlay_origin(tmp_path, monkeypatch):
     # every fingerprint is unchanged after the children ran (recomputed here, independently of step 12)
     assert bg._baseline_fingerprints(c.base, c.head, c.roots, prepared.baseline.real_python, "ran") == prepared.baseline
     assert bg.hash_export(c.roots[0]) == prepared.h0[0] and bg.hash_export(c.roots[1]) == prepared.h0[1]
+    if noisy:
+        pytest.skip(f"host too noisy for the timing assertion ({result['reason']}); every non-timing property above held")
+    _ran(result, "IMPROVED_CLEAR")
+    assert result["result"] == "IMPROVED"  # exit-0 class: IMPROVED
+    # a lower bound, not equality: removing half the work cannot give more than 0.5, and a quiet machine gave 0.45 to 0.49 (T6 calibration); 0.25 is
+    # about half of that, above the gate's own 0.10 (never loosened) and far from anything noise alone would make
+    assert result["improvement"] >= 0.25
 
 
 @posix_only
+@pytest.mark.xdist_group("real-timing")
 def test_real_not_improved_pre_existing_benchmark(tmp_path, monkeypatch):
     # identical code on both sides: the exact reason (BELOW_HALF_THRESHOLD, NOISY or BORDERLINE) depends on the machine's noise, so only what
     # can never happen is pinned here (not IMPROVED); the exact-reason rows are the stubbed ENDING_ROWS
@@ -5044,8 +5064,11 @@ def test_the_cli_fails_closed_when_compare_returns_no_hash_of_what_it_wrote(tmp_
 
 def test_the_public_docstrings_state_the_reading_contract():
     doc = bg.__doc__ + bg._cmd_compare.__doc__ + bg.main.__doc__
-    for phrase in ("counts as exit 2", "IGNORED", "NEVER be auto-retried", "(reason, stage, detail)", "INTERPRETER_CHANGED", "Disclosed residuals"):
+    for phrase in ("counts as exit 2", "IGNORED", "NEVER be auto-retried", "COMPARE_RETRYABLE_ON_SAME_EXPORTS", "INTERPRETER_CHANGED", "Disclosed residuals"):
         assert phrase in doc or phrase.lower() in doc.lower(), phrase
+    for reason, _stage, detail in bg.COMPARE_RETRYABLE_ON_SAME_EXPORTS:  # the prose names exactly what the constant lists
+        assert reason in bg.compare.__doc__ and (detail in bg.compare.__doc__ or not detail)
+    assert "interpreter's own path chain" in bg.__doc__  # the disclosed residual of the pinned-by-content interpreter path
     assert "before the interpreter is pinned" not in bg.__doc__ and "section 9" not in bg.__doc__ and "section 9" not in bg.compare.__doc__
     assert "writes nothing of its own" not in bg._cmd_compare.__doc__
 
@@ -5054,32 +5077,125 @@ def test_the_public_docstrings_state_the_reading_contract():
 
 SWAP_CHILD = r'''
 import os, sys, shutil, time
-side, disp, moved, junk, state, log, swap_at, restore_at, digest, lines = sys.argv[1:11]
-swap_at, restore_at = int(swap_at), int(restore_at)
+side, disp, moved, junk, state, log, actor, swap_at, mode, digest, lines = sys.argv[1:12]
+swap_at = int(swap_at)
 
-def toggle():
-    n = int(open(state).read()) if os.path.exists(state) else 0
-    open(state, "w").write(str(n + 1))
-    if n == swap_at:   # swap the dispatch root for a planted copy (the other entries are symlinked back)
-        os.rename(disp, moved)
-        os.mkdir(disp)
-        shutil.copytree(os.path.join(moved, "base"), os.path.join(disp, "base"), symlinks=True)
-        os.chmod(os.path.join(disp, "base"), 0o755)
-        open(os.path.join(disp, "base", "PLANTED"), "w").write("x")
-        for name in os.listdir(moved):
-            if name != "base":
-                os.symlink(os.path.join(moved, name), os.path.join(disp, name))
-    elif n == restore_at:   # put the original back: every inode inside is the original again
+def swap():
+    os.rename(disp, moved)   # swap the dispatch root for a planted copy (the other entries are symlinked back)
+    os.mkdir(disp)
+    shutil.copytree(os.path.join(moved, "base"), os.path.join(disp, "base"), symlinks=True)
+    os.chmod(os.path.join(disp, "base"), 0o755)
+    open(os.path.join(disp, "base", "PLANTED"), "w").write("x")
+    for name in os.listdir(moved):
+        if name != "base":
+            os.symlink(os.path.join(moved, name), os.path.join(disp, name))
+    if mode == "inline":   # this SAME run puts the original back: every inode inside is the original again
         os.rename(disp, junk)
         os.rename(moved, disp)
 
 planted = os.path.exists(os.path.join(os.getcwd(), "PLANTED"))
-if side == "base":
-    if planted:
-        time.sleep(0.2)  # the planted base is slower: it would make the head look faster
-    open(log, "a").write("base saw PLANTED=%s\n" % planted)
-else:
-    toggle()
+open(log, "a").write("%s saw PLANTED=%s\n" % (side, planted))
+if side == actor:
+    n = int(open(state).read()) if os.path.exists(state) else 0
+    open(state, "w").write(str(n + 1))
+    if n == swap_at:
+        swap()
+elif planted:
+    time.sleep(0.2)  # the planted base is slower: it would make the head look faster
+print("BENCH_RESULT_DIGEST: " + digest)
+out, nonce = os.environ.get("BENCH_TRACE_OUT"), os.environ.get("BENCH_TRACE_NONCE")
+if out and nonce and os.environ.get("BENCH_TRACE_FILE"):
+    v = sys.version_info
+    with open(out, "w") as f:
+        f.write("BENCH_TRACE_LINES: %s %d.%d.%d %s %s\n" % (lines, v[0], v[1], v[2], sys.implementation.name, nonce))
+'''
+
+
+def _swap_builder(tmp_path, actor, swap_at, mode):
+    state, log = str(tmp_path / "state.txt"), str(tmp_path / "log.txt")
+
+    def builder(side, bin_dir, root, target):
+        disp = os.path.dirname(root)
+        return [sys.executable, "-c", SWAP_CHILD, side, disp, disp + ".x", disp + ".junk", state, log, actor, str(swap_at), mode, FAKE_DIGEST, "7"]
+    return builder, log
+
+
+def _no_run_in_the_planted_tree(log):
+    assert "PLANTED=True" not in (open(log).read() if os.path.exists(log) else "")
+
+
+@posix_only
+@pytest.mark.parametrize("actor,swap_at", [("head", 0), ("head", 1), ("head", 2), ("base", 0)],
+                         ids=["swapped-in-head-trace", "swapped-in-head-warmup", "swapped-in-head-timed", "swapped-in-base-trace"])
+@pytest.mark.parametrize("blind", [False, True], ids=["step12", "step12-blind"])
+def test_a_swapped_dispatch_root_is_isolation_rejected_and_never_measured(tmp_path, monkeypatch, actor, swap_at, blind):
+    """The swap is left in place. `blind` stubs step 12 out: the spawn guard alone must end the run with `EXPORT_CHANGED`. With step 12 live
+    the swapped tree is refused by step 12's own finding: the head export is now a symlink into the moved tree, and `hash_export` opens its
+    root with O_NOFOLLOW (ELOOP, `[Errno 62]` on macOS), which is `HASH_UNREADABLE`; the base-trace row swaps a planted base in, whose head is
+    again a symlink. (Not a loop in the fixture: the refusal of a symlinked root is the property.)"""
+    c = _bench_case(tmp_path, monkeypatch)
+    if blind:
+        monkeypatch.setattr(bg, "_post_run_check", lambda *a, **k: None)
+    builder, log = _swap_builder(tmp_path, actor, swap_at, "keep")
+    result = c.impl(argv_builder=builder, min_base_ns=0)
+    _ends(result, "ISOLATION_REJECTED", "EXPORT_CHANGED" if blind else "HASH_UNREADABLE", stage="ran")
+    assert result["result"] == "REJECTED" and result["improvement"] is None and result["base_ns"] is None and result["ratios"] is None
+    _no_run_in_the_planted_tree(log)
+    assert json.loads(Path(c.last_out).read_text()) == result
+
+
+@posix_only
+def test_the_real_trace_paired_forwards_the_guard_to_execute(tmp_path, monkeypatch):
+    """The BASE trace child swaps the dispatch root: the HEAD trace child must never start in the planted tree. Only the real `trace_paired`
+    (not a stub) can fail this; a `trace_paired` that does not pass its `spawn_guard` on to `_execute` runs the head child in the plant."""
+    c = _bench_case(tmp_path, monkeypatch)
+    monkeypatch.setattr(bg, "_post_run_check", lambda *a, **k: None)  # the guard alone
+    builder, log = _swap_builder(tmp_path, "base", 0, "keep")
+    result = c.impl(argv_builder=builder, min_base_ns=0)
+    _ends(result, "ISOLATION_REJECTED", "EXPORT_CHANGED", stage="ran")
+    assert open(log).read() == "base saw PLANTED=False\n"  # one spawn: the head trace child never ran, planted or not
+    assert result["trace"] is None and result["partial"] is None
+
+
+@posix_only
+@pytest.mark.parametrize("blind", [False, True], ids=["step12", "step12-blind"])
+def test_a_swap_and_restore_inside_one_run_is_caught_by_the_ctime_of_the_dispatch_root(tmp_path, monkeypatch, blind):
+    """One head run swaps the dispatch root and puts the original back itself, so every inode is the original again. A guard that compared
+    (dev, ino) only would not see it; the sealed roots' ctime does, at the next spawn, and step 12 does through the dispatch state."""
+    c = _bench_case(tmp_path, monkeypatch)
+    if blind:
+        monkeypatch.setattr(bg, "_post_run_check", lambda *a, **k: None)
+    builder, log = _swap_builder(tmp_path, "head", 0, "inline")
+    result = c.impl(argv_builder=builder, min_base_ns=0)
+    _ends(result, "ISOLATION_REJECTED", "EXPORT_CHANGED", stage="ran")
+    assert any("dispatch root" in text for text in result["untrusted_text"]), result["untrusted_text"]
+    _no_run_in_the_planted_tree(log)
+
+
+@posix_only
+def test_a_swap_and_restore_inside_the_last_head_run_is_caught_by_step_12_alone(tmp_path, monkeypatch):
+    """No spawn follows the last head run, so the guard never sees it: step 12's dispatch state (the root's ctime) is the only check."""
+    c = _bench_case(tmp_path, monkeypatch)
+    gate, _ = bg.validate_benchmark_gate(c.gate)
+    last = 1 + gate["warmup_runs"] + gate["repeats"] - 1  # head spawns: the trace run, the warmups, the timed rounds
+    builder, log = _swap_builder(tmp_path, "head", last, "inline")
+    result = c.impl(argv_builder=builder, min_base_ns=0)
+    _ends(result, "ISOLATION_REJECTED", "EXPORT_CHANGED", stage="ran")
+    assert any("dispatch root" in text for text in result["untrusted_text"]), result["untrusted_text"]
+    assert result["improvement"] is None and result["base_ns"] is None
+    _no_run_in_the_planted_tree(log)
+
+
+REPLACE_ROOT_CHILD = r'''
+import os, sys
+side, how, state, digest, lines = sys.argv[1:6]
+root = os.getcwd()   # the head export root: the child replaces its own root
+if side == "head" and not os.path.exists(state):
+    open(state, "w").write("1")
+    gone = root + ".gone"
+    os.rename(root, gone)
+    if how == "symlink-to-base":
+        os.symlink(os.path.join(os.path.dirname(root), "base"), root)
 print("BENCH_RESULT_DIGEST: " + digest)
 out, nonce = os.environ.get("BENCH_TRACE_OUT"), os.environ.get("BENCH_TRACE_NONCE")
 if out and nonce and os.environ.get("BENCH_TRACE_FILE"):
@@ -5090,24 +5206,51 @@ if out and nonce and os.environ.get("BENCH_TRACE_FILE"):
 
 
 @posix_only
-@pytest.mark.parametrize("swap_at,restore_at", [(0, 99), (1, 7), (2, 99)], ids=["during-trace", "during-measure-restored", "measure-not-restored"])
+@pytest.mark.parametrize("how", ["rename", "symlink-to-base"])
 @pytest.mark.parametrize("blind", [False, True], ids=["step12", "step12-blind"])
-def test_a_swapped_dispatch_root_is_isolation_rejected_and_never_measured(tmp_path, monkeypatch, swap_at, restore_at, blind):
-    """`blind` stubs step 12 out: the spawn guard alone must end the run (the swap is undone by the child in the restored rows)."""
+def test_a_head_child_that_replaces_its_own_root_in_the_trace_run_is_a_verdict_not_a_caller_fault(tmp_path, monkeypatch, how, blind):
+    """The argument checks of `measure_paired` (`_check_sides`) fail on such a tree before any spawn, so before the spawn guard: that must
+    not be exit 2 with no verdict. The outcome is the guard's, `ISOLATION_REJECTED`/`EXPORT_CHANGED` (stage `ran`); step 12 (live) wins
+    with its own finding (`HASH_UNREADABLE`)."""
     c = _bench_case(tmp_path, monkeypatch)
     if blind:
         monkeypatch.setattr(bg, "_post_run_check", lambda *a, **k: None)
-    state, log = str(tmp_path / "state.txt"), str(tmp_path / "log.txt")
+    state = str(tmp_path / "state.txt")
 
     def builder(side, bin_dir, root, target):
-        disp = os.path.dirname(root)
-        return [sys.executable, "-c", SWAP_CHILD, side, disp, disp + ".x", disp + ".junk", state, log, str(swap_at), str(restore_at), FAKE_DIGEST, "7"]
-    result = c.impl(argv_builder=builder, min_base_ns=0)
-    _ends(result, "ISOLATION_REJECTED", stage="ran")
-    assert result["detail"] == "EXPORT_CHANGED" if blind else result["detail"] in ("EXPORT_CHANGED", "HASH_UNREADABLE")
-    assert result["result"] == "REJECTED" and result["improvement"] is None and result["base_ns"] is None and result["ratios"] is None
-    assert "PLANTED=True" not in (open(log).read() if os.path.exists(log) else "")  # no child ever ran in the planted tree
+        return [sys.executable, "-c", REPLACE_ROOT_CHILD, side, how, state, FAKE_DIGEST, "7"]
+    result = c.impl(argv_builder=builder, min_base_ns=0)  # must not raise MEASURE_ARGS_INVALID
+    # blind: the guard's verdict; live: step 12 refuses first (the head export root is gone or a symlink: `hash_export` opens it O_NOFOLLOW)
+    _ends(result, "ISOLATION_REJECTED", "EXPORT_CHANGED" if blind else "HASH_UNREADABLE", stage="ran")
+    assert result["improvement"] is None and result["base_ns"] is None
     assert json.loads(Path(c.last_out).read_text()) == result
+
+
+@posix_only
+def test_a_measure_args_invalid_with_nothing_replaced_stays_a_raise(bcase, monkeypatch):
+    """The guard is silent: a real caller fault (here a stubbed `measure_paired`) is still exit 2 material, not an `EXPORT_CHANGED`."""
+    c = bcase
+    monkeypatch.setattr(bg, "trace_paired", lambda *a, **k: TRACE_OK)
+
+    def invalid(*a, **k):
+        raise bg.BenchmarkGateError("MEASURE_ARGS_INVALID", "x")
+    monkeypatch.setattr(bg, "measure_paired", invalid)
+    with pytest.raises(bg.BenchmarkGateError) as caught:
+        c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+    assert caught.value.code == "MEASURE_ARGS_INVALID"
+
+
+@posix_only
+def test_a_trace_args_invalid_after_a_replaced_directory_is_a_verdict_and_otherwise_a_raise(bcase, monkeypatch):
+    c = bcase
+    monkeypatch.setattr(bg, "measure_paired", lambda *a, **k: MEASURE_OK)
+
+    def invalid(*a, **k):
+        raise bg.BenchmarkGateError("MEASURE_ARGS_INVALID", "x")
+    monkeypatch.setattr(bg, "trace_paired", invalid)
+    with pytest.raises(bg.BenchmarkGateError) as caught:  # silent guard: unchanged behaviour
+        c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+    assert caught.value.code == "MEASURE_ARGS_INVALID"
 
 
 @posix_only
@@ -5116,7 +5259,7 @@ def test_the_baseline_records_every_directory_identity_and_the_dispatch_root_cti
     prepared = c.prepare()
     b = prepared.baseline
     dispatch = os.path.dirname(c.roots[0])
-    recorded = {path: (dev, ino) for path, dev, ino in b.identities}
+    recorded = {path: (dev, ino) for path, dev, ino, _label, _ctime in b.identities}
     assert set(recorded) == {dispatch, c.roots[0], c.roots[1], *b.bins, *map(os.path.realpath, bg._venv_roots(c.base, c.head))}
     for path, (dev, ino) in recorded.items():
         st = os.lstat(path)
@@ -5125,12 +5268,12 @@ def test_the_baseline_records_every_directory_identity_and_the_dispatch_root_cti
     st = os.lstat(dispatch)
     assert own == (st.st_dev, st.st_ino, st.st_ctime_ns)
     guard = bg._spawn_guard(b.identities)
-    guard("base")  # nothing changed: silent
+    guard("base", c.roots[0])  # nothing changed: silent
     os.rename(dispatch, dispatch + ".moved")
     try:
         with pytest.raises(bg._IdentityChanged) as e:
-            guard("head")
-        assert e.value.code == "MEASURE_FAILED"
+            guard("head", c.roots[1])
+        assert e.value.code == "MEASURE_FAILED" and e.value.detail.startswith("dispatch root: ")
     finally:
         os.rename(dispatch + ".moved", dispatch)
     # restored (inodes equal again): the dispatch root's ctime moved, which step 12 sees
@@ -5178,3 +5321,109 @@ def test_the_result_is_linked_without_following_symlinks(tmp_path, monkeypatch):
     digest = bg._write_result(str(out), (dir_stat.st_dev, dir_stat.st_ino), "r.json", b"{}\n")
     assert out.read_bytes() == b"{}\n" and digest == hashlib.sha256(b"{}\n").hexdigest()
     assert real in os.supports_follow_symlinks and seen and seen[0]["follow_symlinks"] is False
+
+
+# --- round 3: the retry rule as data, the gate-code drift, the bounded dispatch listing, the guard's text and root ---
+
+def test_the_retry_rule_is_one_machine_readable_constant_and_agrees_with_the_reason_table():
+    assert bg.COMPARE_RETRYABLE_ON_SAME_EXPORTS == {("HOST_BUSY_START", "pre_overlay", ""),
+                                                    ("ISOLATION_REJECTED", "pre_overlay", "INTERPRETER_WRITABLE")}
+    for reason, stage, detail in bg.COMPARE_RETRYABLE_ON_SAME_EXPORTS:
+        result, stages, details = bg.COMPARE_REASONS[reason]
+        assert stage in stages and detail in details and stage == "pre_overlay"  # a result that exists, before anything was overlaid or run
+    # only the first two steps' outcomes can change on the same exports: no step-7 refusal (content), nothing at overlaid or ran
+    assert not {reason for reason, _, _ in bg.COMPARE_RETRYABLE_ON_SAME_EXPORTS} & {"OVERLAY_REJECTED", "BENCHMARK_MODIFIED", "LINT_REJECTED",
+                                                                                    "PROTECTED_PATH_CHANGED", "BENCHMARK_AWARE_CODE"}
+
+
+@posix_only
+def test_the_two_retryable_results_are_what_compare_gives_for_them(case):
+    case.probe = lambda: (1.41, 2)
+    busy = case.impl()
+    assert (busy["reason"], busy["stage"], busy["detail"]) in bg.COMPARE_RETRYABLE_ON_SAME_EXPORTS
+
+
+def test_every_gate_rejection_code_validate_benchmark_gate_can_return_is_in_the_compare_table():
+    """A new code in the validator must reach `_result_dict` as a known detail, not as a ValueError (exit 2)."""
+    tree = ast.parse(Path(bg.__file__).read_text())
+    codes = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name in ("validate_benchmark_gate", "validate_benchmark_command"):
+            for inner in ast.walk(node):
+                if (isinstance(inner, ast.Return) and isinstance(inner.value, ast.Tuple) and len(inner.value.elts) == 2
+                        and isinstance(inner.value.elts[0], ast.Constant) and inner.value.elts[0].value is None
+                        and isinstance(inner.value.elts[1], ast.Constant)):
+                    codes.add(inner.value.elts[1].value)
+    assert codes == set(bg._GATE_REJECTION_CODES) == set(bg.COMPARE_REASONS["GATE_REJECTED"][2])
+    for code in codes:
+        bg._result_dict(bg._Verdict("REJECTED", "GATE_REJECTED", code, stage="pre_overlay"), {})
+
+
+@posix_only
+def test_the_dispatch_listing_is_bounded(bcase, monkeypatch):
+    c = bcase
+    dispatch = os.path.dirname(c.roots[0])
+    for index in range(5):
+        Path(dispatch, f"extra{index}").write_text("x")
+    monkeypatch.setattr(bg, "_MAX_TREE_ENTRIES", 4)
+    with pytest.raises(bg._Verdict) as caught:
+        bg._dispatch_state(c.roots, "HASH_UNREADABLE", "pre_overlay")
+    assert (caught.value.reason, caught.value.detail, caught.value.stage) == ("ISOLATION_REJECTED", "FINGERPRINT_FAILED", "pre_overlay")
+    monkeypatch.setattr(bg, "_MAX_TREE_ENTRIES", 100_000)
+    assert bg._dispatch_state(c.roots, "HASH_UNREADABLE", "pre_overlay")  # the same tree under the real bound
+
+
+@posix_only
+def test_the_guard_text_starts_with_the_label_and_the_identity_keeps_it(bcase):
+    c = bcase
+    prepared = c.prepare()
+    identities = prepared.baseline.identities
+    assert [label for _, _, _, label, _ in identities] == ["dispatch root", "base root", "head root", "base bin", "head bin", "base venv", "head venv"]
+    sealed = {label: ctime is not None for _, _, _, label, ctime in identities}
+    assert sealed == {"dispatch root": True, "base root": True, "head root": True, "base bin": False, "head bin": False, "base venv": False,
+                      "head venv": False}
+    guard = bg._spawn_guard(identities)
+    guard("base", c.roots[0])
+    with pytest.raises(bg._IdentityChanged) as caught:  # the sealed root's ctime moves when its mode does
+        os.chmod(c.roots[1], 0o755)
+        try:
+            guard("head", c.roots[1])
+        finally:
+            os.chmod(c.roots[1], 0o555)
+    assert caught.value.detail.startswith("head root: ") and caught.value.side == "head"
+    assert caught.value.detail[:200] == caught.value.detail[:200].lstrip() and len(bg.escape_diagnostic(caught.value.detail, 200)) <= 200 + 3
+
+
+@posix_only
+def test_the_guard_refuses_a_spawn_from_a_path_other_than_the_recorded_root(bcase, tmp_path):
+    c = bcase
+    guard = bg._spawn_guard(c.prepare().baseline.identities)
+    guard("head", c.roots[1])
+    with pytest.raises(bg._IdentityChanged, match="head root: "):
+        guard("head", str(tmp_path))  # a root that is not the step-9 one, even if it exists and nothing recorded changed
+    with pytest.raises(bg._IdentityChanged):
+        guard("head", c.roots[0])
+
+
+@posix_only
+def test_compare_refuses_to_spawn_from_an_unrecorded_path_as_an_invariant(bcase, monkeypatch):
+    c = bcase
+    real = bg._compare_prepare
+
+    def without_a_bin(*args, **kwargs):
+        prepared = real(*args, **kwargs)
+        identities = tuple(entry for entry in prepared.baseline.identities if entry[3] != "base bin")
+        return prepared._replace(baseline=prepared.baseline._replace(identities=identities))
+    monkeypatch.setattr(bg, "_compare_prepare", without_a_bin)
+    with pytest.raises(bg.BenchmarkGateError) as caught:
+        c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+    assert caught.value.code == "MEASURE_FAILED" and "internal invariant" in caught.value.detail
+
+
+def test_an_identity_change_is_not_a_gate_error_so_no_generic_handler_can_swallow_it():
+    """Why `_IdentityChanged` derives from `Exception`: `compare` is the only place that converts it, and its `except` for it comes first."""
+    assert issubclass(bg._IdentityChanged, Exception) and not issubclass(bg._IdentityChanged, bg.BenchmarkGateError)
+    source = inspect.getsource(bg._compare_runs)
+    assert source.index("except _IdentityChanged") < source.index("except BenchmarkGateError")
+    error = bg._IdentityChanged("x", "head")
+    assert (error.code, error.detail, error.side, error.phase, error.kind, error.partial, error.trace) == ("MEASURE_FAILED", "x", "head", None, "harness", None, None)
