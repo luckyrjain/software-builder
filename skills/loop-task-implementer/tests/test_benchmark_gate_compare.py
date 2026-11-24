@@ -53,11 +53,11 @@ INCONCLUSIVE = "UNSUPPORTED_PLATFORM HOST_BUSY_START HOST_BUSY_END TRACE_UNAVAIL
 # --- the docstring's residuals and spec 2.5 say the same thing ---
 
 SPEC_C4D3 = Path(__file__).resolve().parents[3] / "docs" / "superpowers" / "specs" / "2026-11-06-c4d3-compare-and-run-once-design.md"
-# The stable labels `[R<n>:<word>]` of the nine residuals: the module docstring is their single source and spec 2.5 carries the same labels. The test
+# The stable labels `[R<n>:<word>]` of the twelve residuals: the module docstring is their single source and spec 2.5 carries the same labels. The test
 # compares numbers and these short labels only, never prose, so re-wrapping or rewording a paragraph cannot break it.
 RESIDUAL_LABELS = {1: "setsid", 2: "harness-file", 3: "py312", 4: "path-chain", 5: "outside-state", 6: "ctime-tick", 7: "writable-interpreter",
-                   8: "sigkill", 9: "third-party"}
-_LABEL_RE = re.compile(r"\[R(\d):([a-z0-9-]+)\]")
+                   8: "sigkill", 9: "third-party", 10: "prefix-ancestors-libs", 11: "finder-and-bin", 12: "non-code-inputs"}
+_LABEL_RE = re.compile(r"\[R(\d+):([a-z0-9-]+)\]")
 
 
 def _spec_text():
@@ -72,15 +72,38 @@ def _labels(text):
     return {int(number): word for number, word in _LABEL_RE.findall(text)}
 
 
-def test_every_residual_label_of_the_module_docstring_is_in_spec_2_5():
-    doc = bg.__doc__
-    section = doc[doc.index("Known residuals of ``compare``"):doc.index("Limits of the trace:")]
-    spec = _spec_text()
-    block = spec[spec.index("**Disclosed residuals"):spec.index("### 2.6 Host checks")]
-    found_in_doc = _LABEL_RE.findall(section)
+def _residual_block(spec):
+    """Spec 2.5's residual list, sliced by regexes with `\\s+` between words so a re-wrap cannot move an anchor."""
+    start = re.search(r"\*\*Disclosed\s+residuals", spec)
+    end = re.search(r"^###\s+2\.6\s", spec, re.M)
+    assert start and end and start.start() < end.start()
+    return spec[start.start():end.start()]
+
+
+def _assert_labels_match(doc, spec):
+    """The docstring is searched for the stable labels alone (no prose anchor): `[R<n>:<word>]` appears only in the residual list."""
+    block = _residual_block(spec)
+    found_in_doc = _LABEL_RE.findall(doc)
     found_in_spec = _LABEL_RE.findall(block)
-    assert len(found_in_doc) == len(found_in_spec) == 9  # each label once: no duplicates, none missing
-    assert _labels(section) == _labels(block) == RESIDUAL_LABELS
+    assert len(found_in_doc) == len(found_in_spec) == 12  # each label once: no duplicates, none missing
+    assert _labels(doc) == _labels(block) == RESIDUAL_LABELS
+
+
+def test_every_residual_label_of_the_module_docstring_is_in_spec_2_5():
+    _assert_labels_match(bg.__doc__, _spec_text())
+
+
+@pytest.mark.parametrize("width", [37, 61, 83, 140])
+def test_the_label_check_survives_a_rewrap_of_the_docstring_and_the_spec(width):
+    """Join every line, then split again at other points (`textwrap` at `width`, no word broken): the check still passes; so does a re-wrapped spec."""
+    import textwrap
+    def rewrap(text):
+        paragraphs = re.split(r"\n\s*\n", text)
+        return "\n\n".join(textwrap.fill(" ".join(p.split()), width=width, break_long_words=False, break_on_hyphens=False) for p in paragraphs)
+    spec = _spec_text()
+    lines_spec = "\n".join(line if line.startswith("#") else textwrap.fill(line, width=width, break_long_words=False, break_on_hyphens=False)
+                           for line in spec.splitlines())
+    _assert_labels_match(rewrap(bg.__doc__), lines_spec)
 
 
 def test_the_compare_docstring_points_at_the_module_docstring_instead_of_copying_the_residuals():
@@ -97,12 +120,26 @@ def test_the_spec_skip_rule_fails_in_a_checkout_without_the_spec(tmp_path, monke
         _spec_text()
 
 
+def _normal(text):
+    """Lower-case, no backticks, one space between words: a re-wrap or a changed code span cannot break a keyword match."""
+    return " ".join(text.replace("`", "").lower().split())
+
+
+# One keyword per provisioning item (spec 2.5 items 3, 4, 5, 6, 7, 9): the three places carry the same item set.
+PROVISIONING_KEYWORDS = ("pip_config_file", "pip_no_cache_dir", "home", "no network", "census", "euid", "expected harness_sha256", "cpython >= 3.12")
+
+
 def test_the_provisioning_contract_and_the_c4e_write_back_list_name_the_two_pins():
     spec = _spec_text()
-    contract = spec[spec.index("**Provisioning contract for C4e"):spec.index("**Interpreter (T2b1b)")].lower()
-    deviations = spec[spec.index("## 9. Deviations"):].lower()
-    for text in (contract, deviations):
-        assert "expected `harness_sha256`" in text and "cpython >= 3.12" in text
+    contract = spec[re.search(r"\*\*Provisioning\s+contract\s+for\s+C4e", spec).start():re.search(r"\*\*Interpreter\s+\(T2b1b\)", spec).start()]
+    deviations = spec[re.search(r"^##\s+9\.\s+Deviations", spec, re.M).start():]
+    doc = bg.__doc__
+    first = re.search(r"Provisioning\s+contract\s+\(spec", doc).start()
+    docstring = doc[first:first + re.search(r"Reading\s+the\s+outcome\s+\(the\s+contract", doc[first:]).start()]
+    for where, text in (("spec 2.5", contract), ("spec 9.8", deviations), ("module docstring", docstring)):
+        text = _normal(text)
+        for keyword in PROVISIONING_KEYWORDS:
+            assert keyword in text, f"{keyword!r} is missing from {where}"
 
 
 # --- vocabularies ---
@@ -1127,6 +1164,41 @@ def test_over_limit_is_tree_too_large(pin_env, monkeypatch):
     with pytest.raises(bg.BenchmarkGateError) as e:
         _pin(pin_env)
     assert _code(e) == "TREE_TOO_LARGE"
+
+
+@posix_only
+def test_a_euid_0_harness_always_reads_the_interpreter_as_writable_without_real_root(pin_env, monkeypatch):
+    """Documented, not changed (spec 2.5 item 9): as root `writable` is `st_uid == euid or os.access(W_OK)`, true for a read-only interpreter whether
+    it is root-owned (the uid test) or not (root's `os.access`): every compare then ends at INTERPRETER_WRITABLE without the human flag."""
+    if os.geteuid() == 0:
+        pytest.skip("this stands in for root; a real root run is the case itself")
+    prefix = pin_env.prefix
+    for path in [prefix, *prefix.rglob("*")]:
+        if not path.is_symlink():
+            path.chmod(0o555 if path.is_dir() else 0o444)
+    try:
+        real_euid = os.geteuid
+        monkeypatch.setattr(os, "geteuid", lambda: os.getuid() + 12345)
+        assert _pin(pin_env).writable is False  # control: another user's read-only copy is not writable
+        monkeypatch.setattr(os, "geteuid", lambda: 0)
+        assert _pin(pin_env).writable is False  # euid 0 alone changes nothing: the files are the user's and the (real) os.access says no
+        real_access = os.access
+        monkeypatch.setattr(bg.os, "access", lambda path, mode, *a, **k: True if mode & os.W_OK else real_access(path, mode, *a, **k))
+        assert _pin(pin_env).writable is True  # root's os.access(W_OK) is true for a read-only file
+        monkeypatch.setattr(bg.os, "access", real_access)
+        real_lstat = os.lstat
+
+        def root_owned(path, *a, **k):
+            st = real_lstat(path, *a, **k)
+            return os.stat_result((st.st_mode, st.st_ino, st.st_dev, st.st_nlink, 0, st.st_gid, st.st_size, int(st.st_atime), int(st.st_mtime), int(st.st_ctime)))
+        monkeypatch.setattr(bg.os, "lstat", root_owned)
+        assert _pin(pin_env).writable is True  # a root-owned file satisfies st_uid == euid
+        monkeypatch.setattr(os, "geteuid", real_euid)
+    finally:
+        monkeypatch.undo()
+        for path in [prefix, *prefix.rglob("*")]:
+            if not path.is_symlink():
+                path.chmod(0o755 if path.is_dir() else 0o644)
 
 
 @posix_only
@@ -4230,25 +4302,12 @@ def _gate_file(c):
     return path
 
 
-RESULT_LINE = re.compile(r"RESULT: ([A-Z_]+) ([A-Z_]+) interpreter_writable=(0|1|n/a) sha256=([0-9a-f]{64})")
+RESULT_LINE = bg._RESULT_LINE_RE
 
 
-def parse_compare_outcome(returncode: int, stdout: str, file_bytes: bytes | None) -> int:
-    """The Orchestrator's reading of one ``compare`` run (spec 2.9): the exit code it may act on. An exit 0 or 1 counts only with a RESULT line
-    whose sha256 is that of the file's bytes and whose result and reason match the parsed file (and the exit agrees with the result);
-    anything else, including Python's own exit 1 for an uncaught exception, is exit 2 (\"ignore the file\")."""
-    if returncode not in (0, 1) or file_bytes is None:
-        return 2
-    lines = [m for m in map(RESULT_LINE.fullmatch, stdout.splitlines()) if m]
-    if len(lines) != 1 or lines[0].group(4) != hashlib.sha256(file_bytes).hexdigest():
-        return 2
-    try:
-        parsed = json.loads(file_bytes)
-    except ValueError:
-        return 2
-    if (parsed.get("result"), parsed.get("reason")) != (lines[0].group(1), lines[0].group(2)) or bg.COMPARE_RESULT_OF_REASON.get(parsed["reason"]) != parsed["result"]:
-        return 2
-    return 0 if parsed["result"] == "IMPROVED" and returncode == 0 else 1 if parsed["result"] != "IMPROVED" and returncode == 1 else 2
+def parse_compare_outcome(returncode, stdout, file_bytes):
+    """The exit code of the module's reference reader `bg.parse_compare_outcome` (the tuple's first member)."""
+    return bg.parse_compare_outcome(returncode, stdout, file_bytes)[0]
 
 
 def _writable_token(value):
@@ -4981,7 +5040,19 @@ def test_a_real_child_that_rewrites_its_ini_or_plants_a_file_under_work_changes_
 
 # --- T7 pins (spec 4 row 18): the CLI registers both commands, the CLI path uses the default seams, the generated salt is random ---
 
-# --- round 5: the exit-code contract cannot fail open (M3) and the harness pin is reproducible (M1) ---
+# --- I5: the exit-code contract cannot fail open and the harness pin is reproducible ---
+
+def test_the_reference_reader_is_public_stdlib_only_and_returns_the_parsed_file():
+    """`parse_compare_outcome` lives in the module (the reader C4e uses): `(exit_code, parsed)`, and `(2, None)` for anything it must not act on."""
+    body = json.dumps({"result": "IMPROVED", "reason": "IMPROVED_CLEAR", "stage": "ran", "detail": ""}).encode()
+    line = f"RESULT: IMPROVED IMPROVED_CLEAR interpreter_writable=0 sha256={hashlib.sha256(body).hexdigest()}\n"
+    code, parsed = bg.parse_compare_outcome(0, line, body)
+    assert code == 0 and parsed["stage"] == "ran" and parsed["reason"] == "IMPROVED_CLEAR"
+    assert bg.parse_compare_outcome(1, line, body) == (2, None) and bg.parse_compare_outcome(0, "", body) == (2, None)
+    assert bg.parse_compare_outcome(0, line, b"[]") == (2, None)  # a JSON file that is not an object
+    assert bg.parse_compare_outcome(0, line, None) == (2, None)
+    assert "parse_compare_outcome" in bg.main.__doc__ or "parse_compare_outcome" in _spec_text()  # named for C4e (spec 2.9)
+
 
 @posix_only
 def test_compare_help_is_a_bare_exit_0_and_is_not_an_improved():
@@ -5122,7 +5193,7 @@ def test_generated_salt_is_random_and_recorded(bcase, tmp_path, monkeypatch):
         assert result["order"] == again  # the recorded salt reproduces the order
 
 
-# --- round 2: the venv check's size error, step 12's parity mapping, the flag type, the written hash ---
+# --- I2: the venv check's size error, step 12's parity mapping, the flag type, the written hash ---
 
 @posix_only
 def test_step4_check_venv_too_many_hook_candidates_is_isolation_rejected_not_a_raise(case):
@@ -5225,7 +5296,7 @@ def test_the_spec_and_the_docstrings_say_the_expected_harness_digest_comes_from_
         assert "TRUSTED copy" in flat and "harness-sha256" in flat and "previous `compare` result" in flat.replace("``", "`")
 
 
-# --- round 2 (security): the dispatch root is bound by identity, before every spawn ---
+# --- I2 (security): the dispatch root is bound by identity, before every spawn ---
 
 SWAP_CHILD = r'''
 import os, sys, shutil, time
@@ -5565,13 +5636,13 @@ def test_the_result_is_linked_without_following_symlinks(tmp_path, monkeypatch):
     assert real in os.supports_follow_symlinks and seen and seen[0]["follow_symlinks"] is False
 
 
-# --- round 3: the retry rule as data, the gate-code drift, the bounded dispatch listing, the guard's text and root ---
+# --- I5: the retry rule split into two constants, the gate-code drift, the bounded dispatch listing, the guard's text and root ---
 
 def test_the_retry_rule_is_two_machine_readable_constants_and_agrees_with_the_reason_table():
     assert bg.COMPARE_RETRYABLE_AUTOMATIC == {("HOST_BUSY_START", "pre_overlay", "")}
     assert bg.COMPARE_RETRYABLE_WITH_HUMAN_FLAG == {("ISOLATION_REJECTED", "pre_overlay", "INTERPRETER_WRITABLE")}
     assert not bg.COMPARE_RETRYABLE_AUTOMATIC & bg.COMPARE_RETRYABLE_WITH_HUMAN_FLAG
-    assert not hasattr(bg, "COMPARE_RETRYABLE_ON_SAME_EXPORTS")  # one reader per constant: C4e keys on these two
+    assert not hasattr(bg, "COMPARE_RETRYABLE_ON_SAME_EXPORTS")  # no third constant: the constants have no reader in production (only docs, tests and C4e read them); C4e keys on these two
     both = bg.COMPARE_RETRYABLE_AUTOMATIC | bg.COMPARE_RETRYABLE_WITH_HUMAN_FLAG
     for reason, stage, detail in both:
         result, stages, details = bg.COMPARE_REASONS[reason]

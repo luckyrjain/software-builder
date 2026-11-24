@@ -1,4 +1,4 @@
-# C4d-3: `compare`, `run-once` and the verdict mapping (rev 7: design review rounds D1 to D6; implementation review rounds I1 to I5 follow it)
+# C4d-3: `compare`, `run-once` and the verdict mapping (rev 7: design review rounds D1 to D6; implementation review rounds I1 to I6 follow it)
 
 Ticket C4 (performance-review to loop-task-implementer benchmark gate), sub-ticket C4d-3. Base `2dc72667` (C4d-2, #367, merged).
 Parent design (untracked in the main checkout, read there): `docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md`,
@@ -32,7 +32,7 @@ I1 to I5** (after the code existed; each is one commit `C4d-3 round N: fix revie
   interpreter helper named; `pyvenv.cfg` in the baseline fingerprint; `interpreter_writable=n/a`; the editable-finder, bytecode and `.egg-link`
   residuals settled; minors from the Software Architect (CLEAN) applied. Open risk accepted knowingly: no seventh review round.
 
-### Implementation review rounds I1 to I5
+### Implementation review rounds I1 to I6
 
 - I1 (implementation round 1): the `compare` CLI no longer re-reads the result file (the `RESULT:` line, the exit code and `interpreter_writable` come
   from the in-memory result and the sha256 `_write_result` returned; `_compare_impl` returns a `dict` subclass carrying `written_sha256`); the signal
@@ -56,7 +56,11 @@ I1 to I5** (after the code existed; each is one commit `C4d-3 round N: fix revie
 - I5 (implementation round 5): `harness-sha256` subcommand and the rule that the expected digest comes from a TRUSTED copy (2.5 item 6); the retry rule
   split into two constants (2.3); `allow_abbrev=False` and the exit-0-needs-a-RESULT-line reading (2.9); the residuals carry stable labels `[R1]` to
   `[R9]` (2.5); a link is trusted only in a directory only root can change, with one name ("Directory identity"); the euid 0 consequence (2.5, 9); the
-  probe wording (2.4, 2.2); `busy_end` is always probed (2.6); one snapshot size limit.
+  probe wording (2.4, 2.2); `busy_end` is probed on every measured path except `INVALID_INPUT`, which is never replaced and so never probed (2.6); one snapshot size limit.
+- I6 (implementation round 6): a link is trusted only in a ROOT-OWNED directory whose every ancestor is closed too (2.5 "Directory identity"); `snapshot-venv`
+  removes an oversize snapshot it just wrote; the euid-0 consequence (`INTERPRETER_WRITABLE` on every compare) is documented (2.5 item 9, 9.8); residuals
+  `[R10]` to `[R12]` join the list (2.5); the provisioning contract, 9.8 and the module docstring carry the same item set (pinned by a test); the 9.12 wait
+  floor names the probe term; `parse_compare_outcome` is the public reference reader (2.9); the crash contract is stated per subcommand (2.9).
 
 ## 1. Premise check (read against `2dc72667`)
 
@@ -78,7 +82,7 @@ I1 to I5** (after the code existed; each is one commit `C4d-3 round N: fix revie
 | `_PrivateGit` supports sha1 and sha256 repositories | `:1703-1730` |
 | `_write_json_atomic`: O_EXCL on a predictable pid-named temp, then `os.replace` | `:971-985` |
 | `diff_checks` can raise `GIT_OUTPUT_TOO_LARGE`, `TREE_TOO_LARGE`, `GIT_TIMEOUT` on PR content | `:894`, `:2721`, `:2741` |
-| Real venv layouts (macOS, observed in round 5): Homebrew `home = /opt/homebrew/opt/python@3.14/bin` (a symlink path), Xcode CLT `home = /Library/Developer/CommandLineTools/usr/bin` (a shim directory), uv `home` under a symlinked minor-version directory and `version_info` instead of `version`; a pip-installed RECORD row for `../../../bin/pip` hashes differently in two venvs | the reason `home` is resolved by file and parity excludes `../` rows |
+| Real venv layouts (macOS, observed in D5): Homebrew `home = /opt/homebrew/opt/python@3.14/bin` (a symlink path), Xcode CLT `home = /Library/Developer/CommandLineTools/usr/bin` (a shim directory), uv `home` under a symlinked minor-version directory and `version_info` instead of `version`; a pip-installed RECORD row for `../../../bin/pip` hashes differently in two venvs | the reason `home` is resolved by file and parity excludes `../` rows |
 | `_cmd_cleanup` holds the signal-handler pattern; `_run_once` has only a comment "single-threaded here" (`:3534`) | `:4103` |
 | The argv already has `-P`, `--noconftest`, `-p no:cacheprovider` | `:3504-3505` |
 | Reviewer/Orchestrator/Builder workflow files do not exist yet | C4e/C4f |
@@ -140,7 +144,7 @@ step 1. Helpers: `_compare_checks` (steps 1 to 6), `_compare_prepare` (7 to 9; f
 - `COMPARE_REASONS`: THE table, `reason -> (result, stages, details)`; `COMPARE_RESULT_OF_REASON` and `COMPARE_DETAIL_TOKENS` are derived from it (the
   union of the details of every row: the gate codes, `ISOLATION_DETAILS`, `VIOLATION_CODES`,
   `OVERLAY_REFUSAL_CODES`, `DIFF_REFUSAL_CODES`, the git/tree/seal codes, `TRACE_FAILURE_KINDS`, the measure kinds), not an independent literal. `detail` is exactly one
-  token from the reason's own closed set in `COMPARE_REASONS` (round 2: no integer tail; `_result_dict` rejects anything else). For `LINT_REJECTED` it is the **first** violation code in `VIOLATION_CODES` order and the full list goes to `untrusted_text`.
+  token from the reason's own closed set in `COMPARE_REASONS` (D2: no integer tail; `_result_dict` rejects anything else). For `LINT_REJECTED` it is the **first** violation code in `VIOLATION_CODES` order and the full list goes to `untrusted_text`.
   `kind` (a result key) is the `_execute`/trace kind that produced the result, else null.
 - **Step to stage table** (`stage` in `pre_overlay`, `overlaid`, `ran`; pinned by a test that asserts the stage of every step-ending):
 
@@ -191,7 +195,7 @@ repository's pinned requirements (or a wheelhouse), the project **editable only*
 by the build user; a writable one needs `--allow-writable-interpreter` and shows in the `RESULT:` line; (5) a stray-process census around the
 installs is recommended and not enforced here; (5b) `--no-compile` at install, and every `__pycache__` and `.pyc` under the venv's site-packages removed
 after the install and before `compare` (`dependency_parity` rejects bytecode there). The pins of (1) are minted before the install and are never
-re-minted after one: the removal touches only site-packages, which the interpreter pin does not cover; (6) the Orchestrator pins the EXPECTED `harness_sha256` (the harness file is writable by the same user, [R2]) and compares it with the result's. `harness_sha256` is a domain-separated, length-prefixed digest of the module's import-time source and the loaded `validate_task_target.py`: `sha256sum` cannot reproduce it, and the `harness-sha256` subcommand prints it (`harness_sha256: <hex>`, exit 0). The expected value must be taken from a TRUSTED copy of the harness (the pinned release, or `harness-sha256` run in a clean checkout), NEVER from a previous `compare` result (that is circular: a tampered harness would vouch for itself); (7) each project venv must be CPython >= 3.12 (no `sys.monitoring` before it: the trace is `TRACE_UNAVAILABLE` and the run can never reach `IMPROVED`, [R3]); (8) the Orchestrator reads the result file once into bytes, hashes those bytes, compares to `sha256=`, parses the SAME bytes and reads `stage` and `detail` only from them (the `RESULT:` line carries neither; `INTERPRETER_WRITABLE` needs the detail from the file) and checks the line's result and reason against them; (9) when the harness's euid is 0 (a root Orchestrator, e.g. in Docker) every symlink alias is refused (see "Directory identity"): the paths handed to `compare` must have no symlink hop, and a refusal that comes from an alias (a `.pth` or finder path, the venv hook check) is an ENVIRONMENT fault that C4e routes as such, not a Builder fault.
+re-minted after one: the removal touches only site-packages, which the interpreter pin does not cover; (6) the Orchestrator pins the EXPECTED `harness_sha256` (the harness file is writable by the same user, [R2]) and compares it with the result's. `harness_sha256` is a domain-separated, length-prefixed digest of the module's import-time source and the loaded `validate_task_target.py`: `sha256sum` cannot reproduce it, and the `harness-sha256` subcommand prints it (`harness_sha256: <hex>`, exit 0). The expected value must be taken from a TRUSTED copy of the harness (the pinned release, or `harness-sha256` run in a clean checkout), NEVER from a previous `compare` result (that is circular: a tampered harness would vouch for itself); (7) each project venv must be CPython >= 3.12 (no `sys.monitoring` before it: the trace is `TRACE_UNAVAILABLE` and the run can never reach `IMPROVED`, [R3]); (8) the Orchestrator reads the result file once into bytes, hashes those bytes, compares to `sha256=`, parses the SAME bytes and reads `stage` and `detail` only from them (the `RESULT:` line carries neither; `INTERPRETER_WRITABLE` needs the detail from the file) and checks the line's result and reason against them; (9) when the harness's euid is 0 (a root Orchestrator, e.g. in Docker) every symlink alias is refused (see "Directory identity"): the paths handed to `compare` must have no symlink hop, and a refusal that comes from an alias (a `.pth` or finder path, the venv hook check) is an ENVIRONMENT fault that C4e routes as such, not a Builder fault. A euid-0 Orchestrator also gets `ISOLATION_REJECTED`/`INTERPRETER_WRITABLE` on EVERY compare: `writable` is `st_uid == euid or os.access(W_OK)`, true for every root-owned interpreter file and for root's `os.access`, so item (4)'s "non-writable interpreter" cannot be met as root. Root is therefore effectively unsupported unless a human passes `--allow-writable-interpreter` AND the paths have no symlink hop; C4e must run the Orchestrator non-root (behaviour unchanged; a test patches the `geteuid`/stat seams to show the outcome).
 
 **Interpreter (T2b1b), `interpreter_pin(bin_dir) -> InterpreterPin(sha256, writable, real_python)`.** Per side, `pyvenv.cfg` is parsed as `key = value`
 lines (UTF-8, non-ASCII allowed: a user home may contain it; the `command` key and every key other than the four below are ignored); a duplicate of
@@ -217,7 +221,7 @@ C4e shows beside the accept action. **C4e must never auto-retry `INTERPRETER_WRI
 (with the probe) at steps 4, 9 and 12 (`INTERPRETER_CHANGED`); because `__pycache__` is hashed, another process legitimately writing bytecode into a
 writable interpreter can fail an honest run: that is a host-or-tamper signal and C4e sends it to a human, not to the Builder. The harness never takes
 the stdlib path from `home`. The trace result's `interpreter` string is child-derived and is not an identity check. `snapshot-venv` prints the pin; a
-missing or oversized stdlib exits 2 with the code on stderr. Residuals recorded: the ancestors of `<prefix>` are not checked for writability, and shared
+missing or oversized stdlib exits 2 with the code on stderr. Residual [R10]: the ancestors of `<prefix>` are not checked for writability, and shared
 libraries outside `<prefix>` (`libssl`, `libffi` linked by `_ssl`, `_hashlib` under a user-owned Homebrew) are not pinned.
 
 **`verify_export_against_commit(repo, commit, export_root, *, allow=None) -> list[(detail, relpath)]`** (T2b2; returns findings, raises only for
@@ -233,7 +237,7 @@ libraries outside `<prefix>` (`libssl`, `libffi` linked by `_ssl`, `_hashlib` un
   `<root>/*.egg-info` (a `src/pkg.egg-info` holds no module-suffix files and passes anyway; a test pins the src layout), and except the `allow`
   entries (exact relative path, regular file, sha256; nothing else new in the directories the overlay created);
 - `conftest.py` is a `.py` file and is rejected as untracked; the pytest/packaging files are not part of this predicate (the child runs
-  `--noconftest -c <ini>`); non-code untracked inputs (`.env`, `*.json`, `*.cfg`) are not covered; disclosed.
+  `--noconftest -c <ini>`); non-code untracked inputs (`.env`, `*.json`, `*.cfg`) are not covered; disclosed as [R12].
 **Honest-install limits (disclosed here and repeated by C4e):** a build that rewrites tracked files, writes an untracked `_version.py`
 (setuptools_scm, hatch-vcs: exports have no `.git`, so these need a committed version file or a pretend-version variable), or builds extension
 modules in place fails closed. The workaround is committed generated files or out-of-tree builds. A test names each of these file types.
@@ -255,7 +259,7 @@ modules in place fails closed. The workaround is committed generated files or ou
   literals fails) and every target must resolve inside that side's export. A non-editable project install and a dist without RECORD fail closed. A
   test covers a head with an extra dist forged "editable" and a finder that points outside the export.
 `untrusted_text` names the differences. Stance: a PR that changes pins is already `PROTECTED_PATH_CHANGED`; this check catches drift between the two
-resolves and content edits. Residual: the editable finder's own code is trusted by name once its mapping is checked; the venv `bin/` directory
+resolves and content edits. Residual [R11]: the editable finder's own code is trusted by name once its mapping is checked; the venv `bin/` directory
 (`PATH` puts it first) is not verified (the benchmark lint allows no subprocess module; only the library under test could spawn a tool).
 
 **Fingerprint** `fingerprint_tree(root, *, limit) -> str`: sha256 over sorted `(relative path, dev, ino, mode, nlink, size, mtime_ns, ctime_ns)` of
@@ -268,12 +272,12 @@ fingerprints (`EXPORT_CHANGED`/`HASH_UNREADABLE`), `check_venv` and the venv fin
 `dependency_parity`, `verify_export_against_commit` (with the step-9 allowance); the first failure names the detail. A venv over its limit is
 `FINGERPRINT_FAILED`, which the Builder cannot fix.
 
-**Directory identity (security round 2).** Children are spawned by path (`cwd=<root>`, `<bin>/python`), so a path swap between runs could run a planted
+**Directory identity (security, I2).** Children are spawned by path (`cwd=<root>`, `<bin>/python`), so a path swap between runs could run a planted
 tree and restore the original afterwards with every inode inside unchanged. A `.pth` line or editable-finder target whose lexical string goes through a
-symlink is accepted only when every link on the way is trusted (macOS `/var` -> `/private/var`): owned by root, held by a directory that the harness's euid cannot write
-(`os.access`) and that group and other cannot write (`st_mode & 0o022 == 0`, or sticky and root-owned), with `st_nlink == 1`; the owner alone is not enough, because whoever can rename or
+symlink is accepted only when every link on the way is trusted (macOS `/var` -> `/private/var`): owned by root, with `st_nlink == 1`, held by a root-owned directory that the harness's euid cannot write
+(`os.access(W_OK, effective_ids=True)` where supported) and that group and other cannot write (`st_mode & 0o022 == 0`, or sticky and root-owned), and whose every ancestor is likewise closed to the euid and to group and other (a sticky root-owned ancestor such as `/tmp` is acceptable): a directory only root can change, ancestors too. The owner alone is not enough, because whoever can rename or
 unlink a link in its directory replaces it. A link the user owns, or one in a directory the user can write, could be repointed or replaced by a head child between runs, and
-the guard only re-checks resolved paths. When the harness's euid is 0 the head child is root too, so NO alias is trusted (a root Orchestrator must use paths without symlink hops). The step-9 baseline therefore records `(resolved path, st_dev, st_ino, label, ctime_ns or None)` of the
+the guard only re-checks resolved paths. When the harness's euid is 0 the head child is root too, so NO alias is trusted (a root Orchestrator must use paths without symlink hops, and every compare as root also ends at `ISOLATION_REJECTED`/`INTERPRETER_WRITABLE`, 2.5 item 9: root is effectively unsupported unless a human passes `--allow-writable-interpreter` and the paths have no symlink hop; C4e runs the Orchestrator non-root). The step-9 baseline therefore records `(resolved path, st_dev, st_ino, label, ctime_ns or None)` of the
 dispatch root, both exports, both resolved bin directories and both venv roots (the ctime only for the dispatch root and the two sealed export roots, which the
 harness never modifies after sealing; the bins and venv roots are not sealed, so they stay `(dev, ino)`), and `_dispatch_state` adds the dispatch root's own
 `(dev, ino, ctime_ns)` and is bounded by `_MAX_TREE_ENTRIES` (over it: `FINGERPRINT_FAILED`, a verdict). A rename-and-restore moves the ctime, which the guard
@@ -290,7 +294,7 @@ measured verdict. Test rows: the planted-dispatch swap during the head trace, th
 (`HASH_UNREADABLE`: the head root is then a symlink, refused by `hash_export`) and stubbed out (`EXPORT_CHANGED`); a swap-and-restore inside ONE run (the guard's ctime
 at the next spawn, step 12 through the dispatch state) and inside the LAST head run (step 12 alone).
 
-**2.5b Work directory (closes the round-2 blocker).** No mutable harness state crosses a child boundary. `_prepare_run(side, bin_dir, work,
+**2.5b Work directory (closes the D2 blocker).** No mutable harness state crosses a child boundary. `_prepare_run(side, bin_dir, work,
 ini_path=None) -> (scratch, env, ini)` (the `counter` argument goes) makes the scratch with `tempfile.mkdtemp(dir=work)`, writes that run's
 `empty.ini` into it when `ini_path` is `None` (otherwise `ini` is `ini_path`), and returns the ini path for the caller's argv; `_execute` removes the
 scratch afterwards. `trace_paired` takes the same call (its per-side `work` stays). **`measure_paired`** records `(st_dev, st_ino)` of `work` and
@@ -315,7 +319,7 @@ an empty mask), enters `try`, then unmasks; `signal` and `pthread_sigmask` are i
 window is safe only while the process is single-threaded, which `_run_once`'s comment states by contract (not asserted).
 
 **Disclosed residuals (claim no more).** The module docstring of `benchmark_gate.py` ("Known residuals of `compare`") is the single source of the wording; this list keeps the same
-stable labels `[R1]` to `[R9]` (a test compares the numbers and the short labels, not the prose, so re-wrapping cannot break it).
+stable labels `[R1]` to `[R12]` (a test compares the numbers and the short labels, not the prose, so re-wrapping cannot break it).
 1. [R1:setsid] An escaped `setsid` daemon: a head child can leave the process-group kill behind with fork + `setsid`; a stray same-user daemon survives the run
    and nothing detects it (no process census; page-cache effects included).
 2. [R2:harness-file] The harness file is writable by the same user: C4e must pin the EXPECTED `harness_sha256` and compare it with the result's; it should also prefer a
@@ -332,13 +336,18 @@ stable labels `[R1]` to `[R9]` (a test compares the numbers and the short labels
    into a writable interpreter by a *child during a run* is caught only by the end-of-run pin, not if restored.
 8. [R8:sigkill] A SIGKILLed `compare` leaves a running child until its own timeout.
 9. [R9:third-party] Third-party content that is identical and RECORD-consistent on both sides is not judged.
+10. [R10:prefix-ancestors-libs] The ancestors of `<prefix>` (the interpreter's real prefix) are not checked for writability, and shared libraries outside `<prefix>`
+   (`libssl`, `libffi` linked by `_ssl`, `_hashlib` under a user-owned Homebrew) are not pinned.
+11. [R11:finder-and-bin] The editable finder's own code is trusted by name once its mapping is checked, and the venv `bin/` directory (`PATH` puts it first) is not verified
+   (the benchmark lint allows no subprocess module; only the library under test could spawn a tool).
+12. [R12:non-code-inputs] Non-code untracked inputs (`.env`, `*.json`, `*.cfg`) are not covered by `verify_export_against_commit`.
 
 **The human acceptance of every `IMPROVED` is the control that remains.** The run order is public but salted (`order_salt`; the recorded `order`
 reproduces a run).
 
 ### 2.6 Host checks
 Exact arithmetic on `Fraction(str(load1))`: `busy_start = load1 * 10 > 7 * cpu_count` (always probed); `busy_end = (load1 - 1) * 10 > 7 * cpu_count`,
-probed at the end when the start probe worked and the run reached precedence item 6 (it always records `loadavg.end` and `cpu_count.end`), and CHECKED only when `cpu_count >= 3` (`_HOST_BUSY_MIN_CPUS`; below it only the CHECK is skipped, `host_check: "end_skipped_few_cpus"`). A probe that raises or returns a non-finite, negative, `bool` or
+probed at the end when the start probe worked and the run reached precedence item 6 (it records `loadavg.end` and `cpu_count.end` whenever it probed: on every such path except `INVALID_INPUT`, which is never replaced and so never probed), and CHECKED only when `cpu_count >= 3` (`_HOST_BUSY_MIN_CPUS`; below it only the CHECK is skipped, `host_check: "end_skipped_few_cpus"`). A probe that raises or returns a non-finite, negative, `bool` or
 non-real load, or a non-positive `cpu_count`, records `host_check: "skipped_probe_failed"` and skips both checks. `host_check` is `"checked"`,
 `"end_skipped_few_cpus"`, `"start_only"` (the end probe did not run on this path) or `"skipped_probe_failed"`; `loadavg` and `cpu_count` are
 `{"start": ..., "end": ...}` objects (`end` is recorded whenever the end probe ran, also when its CHECK was skipped for few CPUs; null only when the end probe did not run on this path or failed).
@@ -407,8 +416,9 @@ the file are data, none is trusted.
   uncaught-exception exit is also 1). The Orchestrator reads the file once into bytes, hashes those bytes, checks the RESULT sha, parses the same bytes
   and checks the RESULT line's result and reason against them. Exit 2 with a file present means "ignore the file".
 - `harness-sha256` prints `harness_sha256: <hex>` (exit 0; 2 with the code on stderr if the harness cannot be digested). It is how C4e obtains the EXPECTED digest from a TRUSTED
-  copy of the harness (2.5 item 6). `snapshot-venv` fails (exit 2, `VENV_SNAPSHOT_INVALID`) for a snapshot over `_VENV_MAX_SNAPSHOT_BYTES`, the one limit every reader uses.
-- Crash contract: `_cmd_compare` and `_cmd_run_once` catch `BenchmarkGateError`, `OSError`, `ValueError`, `RecursionError`, `Exception` and
+  copy of the harness (2.5 item 6). `snapshot-venv` fails (exit 2, `VENV_SNAPSHOT_INVALID`) for a snapshot over `_VENV_MAX_SNAPSHOT_BYTES`, the one limit every reader uses, and unlinks the oversize file it just wrote (best effort) so a retry on the same `--out` is possible.
+- **Reference reader.** `parse_compare_outcome(returncode, stdout, file_bytes) -> (exit_code, parsed)` in `benchmark_gate.py` (stdlib only) is the reference reader for C4e: it returns the exit code the Orchestrator may act on (0 only for a valid `RESULT: IMPROVED` line whose sha256 matches `file_bytes` and whose result and reason agree with the parsed file; 1 for any other valid result; anything else 2) and the parsed file (`None` when the code is 2). The tests import it from the module.
+- Crash contract: only `compare` and `run-once` own it. An unexpected crash in `harness-sha256`, `snapshot-venv`, `fixed-parent` and the other non-compare subcommands is Python's uncaught exception and exits 1, so C4e must treat ANY non-zero exit of those as a failure. `_cmd_compare` and `_cmd_run_once` catch `BenchmarkGateError`, `OSError`, `ValueError`, `RecursionError`, `Exception` and
   `KeyboardInterrupt`, print `usage error: <CODE or INTERNAL>: <type>` (never attacker text), return 2 and write nothing. Sealed exports stay sealed;
   `cleanup` restores them.
 - `run-once --gate FILE --root DIR --bin DIR [--side base|head]` (default `head`; no ini option). Exit 0 prints `digest: <64 hex>` (child-printed,
@@ -549,7 +559,7 @@ makes every trace fault `TRACE_MISMATCH`; both are non-pass; `trace_fault` carri
 `(reason, stage, detail)` (the constants `COMPARE_RETRYABLE_AUTOMATIC` and `COMPARE_RETRYABLE_WITH_HUMAN_FLAG`: C4e retries the first by itself and the second only on a human's `--allow-writable-interpreter`); the spawn guard's `ISOLATION_REJECTED`/`EXPORT_CHANGED` at stage `ran` with no
 measured fields (C4e routes it as tamper, to a human); `detail` is a closed vocabulary (parent: free-form escaped). 8. **Head provisioned first, base created after**, the provisioning
 contract of 2.5, snapshot and interpreter pins minted pre-install, `--allow-writable-interpreter`, `verify_export_against_commit`,
-`dependency_parity`, the ctime fingerprint, per-run scratch and ini, no pycache prefix; the C4e write-back list also carries: pin the expected `harness_sha256`, taken from a TRUSTED copy of the harness with `harness-sha256` (never from a previous `compare` result), and the project venv must be CPython >= 3.12; remove every `__pycache__` and `.pyc` under the venv's site-packages after the install and before `compare` (2.5 step 5b); install editable only and with `--no-compile`; read the result file ONCE into bytes and hash, parse and read `stage`/`detail` from those same bytes (2.5 item 8); an exit 0 is an `IMPROVED` only with a valid `RESULT: IMPROVED` line whose `sha256=` matches the file (2.9); never degrade `TRACE_UNAVAILABLE` to "measure without the trace" (2.7 T2); show the count of `compare` results of a dispatch at the acceptance screen (2.3); with a root Orchestrator (euid 0) every symlink alias is refused, so route an alias or venv-hook refusal as an environment fault, not a Builder fault (2.5 item 9). 9. `out_path` written by dir-fd link after step 12 with the
+`dependency_parity`, the ctime fingerprint, per-run scratch and ini, no pycache prefix; the C4e write-back list also carries: install with `PYTHONDONTWRITEBYTECODE=1`, a fresh `HOME` and `TMPDIR`, `PIP_CONFIG_FILE=/dev/null` and `PIP_NO_CACHE_DIR=1`, from pinned requirements or a wheelhouse, ideally with no network (2.5 item 3); prefer an interpreter not writable by the build user (2.5 item 4); a stray-process census around the installs, the Orchestrator-side check for the accepted `setsid` residual [R1] (2.5 item 5); run the Orchestrator with a non-zero euid: as root every compare ends at `INTERPRETER_WRITABLE` and every symlink alias is refused (2.5 item 9); pin the expected `harness_sha256`, taken from a TRUSTED copy of the harness with `harness-sha256` (never from a previous `compare` result), and the project venv must be CPython >= 3.12; remove every `__pycache__` and `.pyc` under the venv's site-packages after the install and before `compare` (2.5 step 5b); install editable only and with `--no-compile`; read the result file ONCE into bytes and hash, parse and read `stage`/`detail` from those same bytes (2.5 item 8); an exit 0 is an `IMPROVED` only with a valid `RESULT: IMPROVED` line whose `sha256=` matches the file (2.9); never degrade `TRACE_UNAVAILABLE` to "measure without the trace" (2.7 T2); show the count of `compare` results of a dispatch at the acceptance screen (2.3); with a root Orchestrator (euid 0) every symlink alias is refused, so route an alias or venv-hook refusal as an environment fault, not a Builder fault (2.5 item 9). 9. `out_path` written by dir-fd link after step 12 with the
 file's sha256 in the `RESULT:` line (parent: temp file then rename). 10. `repo_top_levels` taken after the install. 11. Seeded order gains a random
-salt. 12. The Orchestrator's wait is at least the gate cap plus hashing plus 300 s x the git invocations `compare` opens (at least nine contexts). 13. `compare`'s signature: `Side` tuples with the two pins and
+salt. 12. The Orchestrator's wait is at least the gate cap plus hashing plus 300 s x the git invocations `compare` opens (at least nine contexts) plus up to ~20 s per interpreter probe (at least 6: steps 4, 9 and 12, per side). 13. `compare`'s signature: `Side` tuples with the two pins and
 `allow_writable_interpreter` replace the parent's positional `(gate, base_root, head_root, repo, base_commit, head_commit, base_bin, head_bin, ...)`.

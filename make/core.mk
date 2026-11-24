@@ -44,7 +44,7 @@
 # lint-suites moved to `make -j`. Those suites are small enough that make-level
 # parallelism across targets is all the parallelism they need.
 #
-# The one per-skill exception is lint-loop-task-implementer-scripts: its compare test file alone holds ~570 tests and ran about 25 minutes
+# The one per-skill exception is lint-loop-task-implementer-scripts: its compare test file alone holds ~600 tests and ran about 25 minutes
 # serial, so that target takes PYTEST_XDIST_FLAG too (with `--dist loadgroup`). It inherits the oversubscription caveat of the paragraph
 # above, which PYTEST_XDIST_WORKERS (below) is there to cap.
 #
@@ -598,8 +598,8 @@ lint-loop-task-implementer: lint-loop-task-implementer-skill lint-loop-task-impl
 # co-located with it and run from the target that lints it. Parallel via PYTEST_XDIST_FLAG with
 # `--dist loadgroup`: the rows marked xdist_group("real-timing") (real pytest children, real pip) share one worker, so they are serialized only
 # against EACH OTHER: not against the other workers' tests, nor against sibling make targets under `make -j`, so a real-timing row can still
-# see load from them. The real rows are asserted as a speedup ONLY when the host is quiet: a noisy outcome is retried up to 3 times and then
-# skipped (its non-timing assertions run on every attempt).
+# see load from them. The real rows are asserted as a speedup ONLY when the host is quiet: ONE row (`test_real_improved_overlay_origin`) retries a noisy outcome up to 3 times and then
+# skips only its timing assertion (its non-timing assertions run on every attempt); the other real rows are single attempts.
 lint-loop-task-implementer-scripts:
 	@echo "py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/validate_loop_lifecycle.py"
 	@echo "py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/run_log.py"

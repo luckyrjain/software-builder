@@ -35,11 +35,16 @@ at import and at the first load of the validator, whose module body it therefore
 
 Provisioning contract (spec 2.2 and 2.5; the Orchestrator's side, not enforced beyond what ``compare`` checks): each venv is created fresh
 and ``snapshot-venv`` runs BEFORE that side's install: it mints the snapshot and interpreter pins, and a pin is never re-minted after an
-install. The install uses ``--no-compile`` and ``PYTHONDONTWRITEBYTECODE=1`` (a fresh ``HOME`` and ``TMPDIR``, no pip config, no cache) and
-installs the project EDITABLE ONLY (``dependency_parity`` fails closed on a non-editable project install). AFTER the install and before
+install. The install uses ``--no-compile`` and runs with ``PYTHONDONTWRITEBYTECODE=1``, a fresh ``HOME`` and ``TMPDIR``, ``PIP_CONFIG_FILE=/dev/null``
+and ``PIP_NO_CACHE_DIR=1``, from pinned requirements (or a wheelhouse), ideally with no network, and installs the project EDITABLE ONLY (``dependency_parity`` fails closed on a non-editable project install). AFTER the install and before
 ``compare``, every ``__pycache__`` and ``.pyc`` under the venv's site-packages is removed (``dependency_parity`` rejects bytecode there; the
 dependencies then compile on every run on both sides; the interpreter pin does not cover site-packages, so the removal leaves the pins valid).
-An interpreter that is not writable by the user is preferred. After ``compare`` the Orchestrator reads the result file ONCE into bytes, hashes
+An interpreter that is not writable by the build user is preferred (a writable one needs ``--allow-writable-interpreter``, a human's signal, and
+shows in the ``RESULT:`` line). A stray-process census around the installs is recommended and not enforced here: it is the Orchestrator-side check for the
+accepted ``setsid`` residual [R1]. The harness's euid must not be 0: a euid-0 Orchestrator (e.g. Docker as root) gets ``INTERPRETER_WRITABLE`` on EVERY
+compare (root owns, and can write, every interpreter file, so the interpreter is never "non-writable") and every symlink alias is refused, so root is
+effectively unsupported unless a human passes ``--allow-writable-interpreter`` and the paths have no symlink hop; C4e must run the Orchestrator non-root
+(an alias or venv-hook refusal is an ENVIRONMENT fault, not a Builder fault). After ``compare`` the Orchestrator reads the result file ONCE into bytes, hashes
 those bytes and compares the hash to the line's ``sha256=``, parses the SAME bytes, reads ``stage`` and ``detail`` only from those bytes (the
 ``RESULT:`` line carries neither; ``INTERPRETER_WRITABLE`` needs its detail from the file) and checks the line's result and reason against them (the CLI
 prints the line from the in-memory result and the hash of the bytes it wrote, never from a re-read of the file; a file rewritten afterwards no
@@ -65,7 +70,7 @@ child that runs before any benchmark child: steps 4, 9 and 12; spec 2.2 and 9.12
 opens at least nine git contexts (``is_ancestor``, ``diff_checks``, ``_benchmark_origin`` at step 7, and ``verify_export_against_commit`` per
 side at steps 4, 9 and 12), several invocations each; a slow repository can therefore exceed any fixed allowance.
 
-Known residuals of ``compare``: THIS list is the single source; spec 2.5 ("Disclosed residuals") carries the same stable labels ``[R1]`` to ``[R9]`` and
+Known residuals of ``compare``: THIS list is the single source; spec 2.5 ("Disclosed residuals") carries the same stable labels ``[R1]`` to ``[R12]`` and
 a test pins that the labels match (numbers and short labels, not prose).
 [R1:setsid] Escaped ``setsid`` daemon: a head child can leave the process-group kill behind with fork + ``setsid``: a stray same-user daemon survives the run.
 Nothing detects it (there is no process census; page-cache effects included).
@@ -87,6 +92,11 @@ is already refused as ``INTERPRETER_WRITABLE``, so this needs that unusual layou
 interpreter by a child during a run is caught only by the end-of-run pin, not if restored.
 [R8:sigkill] SIGKILL leaves child: a SIGKILLed ``compare`` leaves a running child until its own timeout.
 [R9:third-party] Third-party content: content that is identical and RECORD-consistent on both sides is not judged.
+[R10:prefix-ancestors-libs] Ancestors and shared libraries: the ancestors of ``<prefix>`` (the interpreter's real prefix) are not checked for writability, and shared
+libraries outside ``<prefix>`` (``libssl``, ``libffi`` linked by ``_ssl``, ``_hashlib`` under a user-owned Homebrew) are not pinned.
+[R11:finder-and-bin] Finder code and ``bin/``: the editable finder's own code is trusted by name once its mapping is checked, and the venv ``bin/`` directory (``PATH`` puts it
+first) is not verified (the benchmark lint allows no subprocess module; only the library under test could spawn a tool).
+[R12:non-code-inputs] Non-code untracked inputs (``.env``, ``*.json``, ``*.cfg``) are not covered by ``verify_export_against_commit``.
 
 Limits of the trace: it is a narrow tripwire, not a proof of equal work. For the typical benchmark, which makes one library call and prints a
 digest, the executed-line count is a small constant on both sides, so equality proves nothing; the trace discriminates only when the test body
@@ -3278,25 +3288,52 @@ for _codec in ("utf-8", "utf-8-sig", "ascii"):
     codecs.lookup(_codec)
 
 
+def _euid_can_write(path: str) -> bool:
+    """`os.access(path, W_OK)` by the EFFECTIVE uid where the platform supports it (`effective_ids`), else the plain call; an error is "writable"."""
+    try:
+        if os.access in os.supports_effective_ids:
+            return os.access(path, os.W_OK, effective_ids=True)
+        return os.access(path, os.W_OK)
+    except OSError:
+        return True
+
+
+def _only_root_changes(path: str, info: os.stat_result) -> bool:
+    """Whether the directory at `path` (stat `info`) is closed to the harness's euid and to group and other. Group or other write is accepted only
+    for a sticky directory owned by ``_TRUSTED_LINK_UID`` (`/tmp`: a user can then remove only their own entries)."""
+    if _euid_can_write(path):
+        return False
+    return info.st_mode & 0o022 == 0 or (info.st_mode & stat.S_ISVTX != 0 and info.st_uid == _TRUSTED_LINK_UID)
+
+
 def _link_is_trusted(directory: str, info: os.stat_result) -> bool:
     """Whether the symlink with `lstat` `info`, held by `directory`, can be repointed only by root. Owner uid alone is not enough: whoever can
-    rename or unlink a link in its directory replaces it, whatever the link's owner. So the directory must not be writable by the harness's
-    euid (`os.access`), must not be writable by group or other (`st_mode & 0o022`) unless it is sticky and root-owned, and the link must have
-    exactly one name (`st_nlink == 1`: a second hard link to a root-owned link lives wherever someone else can write)."""
+    rename or unlink a link in its directory replaces it, whatever the link's owner. So the link must be owned by ``_TRUSTED_LINK_UID`` with
+    exactly one name (`st_nlink == 1`: a second hard link to a root-owned link lives wherever someone else can write); the holding directory must
+    be owned by ``_TRUSTED_LINK_UID`` too (a directory the user owns can be chmodded by the user, whatever its mode now), and closed to the euid
+    and to group and other (`_only_root_changes`); and so must EVERY ancestor of the holder (a writable ancestor lets the holder be renamed away
+    and replaced), a sticky root-owned ancestor such as `/tmp` being acceptable. Fail closed on any error."""
     if info.st_uid != _TRUSTED_LINK_UID or info.st_nlink != 1:
         return False
     try:
         held_by = os.stat(directory)
-        if os.access(directory, os.W_OK):
+        if held_by.st_uid != _TRUSTED_LINK_UID or not _only_root_changes(directory, held_by):
             return False
+        ancestor = directory
+        while True:
+            parent = os.path.dirname(ancestor)
+            if parent == ancestor:
+                return True
+            if not _only_root_changes(parent, os.stat(parent)):
+                return False
+            ancestor = parent
     except OSError:
         return False
-    return held_by.st_mode & 0o022 == 0 or (held_by.st_mode & stat.S_ISVTX != 0 and held_by.st_uid == 0)
 
 
 def _only_trusted_aliases(path: str) -> bool:
     """True when every symlink met while resolving the absolute lexical `path` (each hop followed, nested ones too) is trusted
-    (`_link_is_trusted`: owned by ``_TRUSTED_LINK_UID``, in a directory only root can change, with one name), and only when the harness does not
+    (`_link_is_trusted`: owned by ``_TRUSTED_LINK_UID``, with one name, in a root-owned directory only root can change; its ancestors too), and only when the harness does not
     itself run as root: with an effective uid of 0 the head child is root too, so a root-owned link is not distinct from the attacker's and
     EVERY alias is refused (a root Orchestrator, e.g. Docker, must use paths without symlink hops; C4e must route that refusal, like a venv-hook
     refusal through an alias, as an ENVIRONMENT fault, not a Builder fault). A path string that goes through any other link is refused by the venv
@@ -6314,14 +6351,20 @@ def _cmd_snapshot_venv(args: argparse.Namespace) -> int:
     ``snapshot_sha256: <hex>`` (the written file's bytes) and ``interpreter_sha256: <hex>`` (`interpreter_pin`). Exit 0; 2 on any failure,
     with the code on stderr and nothing on stdout. The interpreter pin is computed BEFORE the file is written: `snapshot_venv` refuses an
     existing path, so a pin failure after the write would leave a file that blocks the retry. A snapshot larger than ``_VENV_MAX_SNAPSHOT_BYTES`` (the
-    one limit every reader uses) is a failure, never the hash of a truncated read: no later step could load it."""
+    one limit every reader uses) is a failure, never the hash of a truncated read: no later step could load it; the file this call wrote is then removed (best effort), so a
+    retry on the same ``--out`` is possible."""
+    written = False
     try:
         pin = interpreter_pin(args.bin)
         snapshot_venv(args.bin, args.out)
+        written = True
         data = _read_bounded(args.out, _VENV_MAX_SNAPSHOT_BYTES, nofollow=True)
         if len(data) > _VENV_MAX_SNAPSHOT_BYTES:
             raise BenchmarkGateError("VENV_SNAPSHOT_INVALID", "the snapshot is larger than the limit every later step reads")
     except (BenchmarkGateError, OSError, ValueError) as exc:
+        if written:  # the file this call just created (O_EXCL) is unusable: remove that exact path, or the retry would be blocked by it
+            with contextlib.suppress(OSError):
+                os.unlink(args.out)
         return _fail(exc if isinstance(exc, BenchmarkGateError) else BenchmarkGateError("TREE_UNREADABLE", escape_diagnostic(str(exc), 120)))
     print(f"snapshot_sha256: {hashlib.sha256(data).hexdigest()}")
     print(f"interpreter_sha256: {pin.sha256}")
@@ -6446,11 +6489,39 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
         return 2
 
 
+_RESULT_LINE_RE = re.compile(r"RESULT: ([A-Z_]+) ([A-Z_]+) interpreter_writable=(0|1|n/a) sha256=([0-9a-f]{64})")
+
+
+def parse_compare_outcome(returncode: int, stdout: str, file_bytes: bytes | None) -> tuple[int, dict | None]:
+    """The REFERENCE READER of one ``compare`` run for C4e (spec 2.9; stdlib only): `(exit_code, parsed)`, the exit code the Orchestrator may act
+    on and the parsed result file. `returncode` and `stdout` are the process's; `file_bytes` is the result file read ONCE into bytes (``None``
+    when it does not exist). An exit 0 or 1 counts only with exactly ONE valid ``RESULT:`` line whose ``sha256=`` is the hash of `file_bytes` and
+    whose result and reason equal those of the parsed file (and are a pair of ``COMPARE_RESULT_OF_REASON``), and the exit agrees with the result: 0 only for
+    ``IMPROVED`` (a bare exit 0, such as ``compare --help``, is NOT an ``IMPROVED``), 1 only for any other result. Anything else, including Python's own
+    exit 1 for an uncaught exception, is `(2, None)`: "ignore the file". `stage` and `detail` are to be read from `parsed`, never from the line."""
+    ignore: tuple[int, dict | None] = (2, None)
+    if returncode not in (0, 1) or file_bytes is None:
+        return ignore
+    lines = [m for m in map(_RESULT_LINE_RE.fullmatch, stdout.splitlines()) if m]
+    if len(lines) != 1 or lines[0].group(4) != hashlib.sha256(file_bytes).hexdigest():
+        return ignore
+    try:
+        parsed = json.loads(file_bytes)
+    except ValueError:
+        return ignore
+    if not isinstance(parsed, dict) or (parsed.get("result"), parsed.get("reason")) != (lines[0].group(1), lines[0].group(2)) \
+            or COMPARE_RESULT_OF_REASON.get(parsed["reason"]) != parsed["result"]:
+        return ignore
+    improved = parsed["result"] == "IMPROVED"
+    return (returncode, parsed) if (returncode == 0) == improved else ignore
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point: ``validate`` (C4a), ``lint`` (C4b), ``export``, ``fixed-parent`` (C4c-1a), ``cleanup`` (C4c-1b, C4c-1c), ``snapshot-venv``
-    (C4c-2c), and ``compare`` and ``run-once`` (C4d-3). The first six let an unexpected exception escape (Python exits 1); ``compare`` and
+    (C4c-2c), and ``compare`` and ``run-once`` (C4d-3). Every other subcommand lets an unexpected exception escape (Python exits 1); ``compare`` and
     ``run-once`` own the crash contract: every error, ``KeyboardInterrupt`` included, becomes ``usage error: <CODE or INTERNAL>: <type>`` and
-    exit 2 (see ``_cmd_compare``). ``harness-sha256`` (M1) prints the harness digest. Reading contract for ``compare``: exit 0 is ``IMPROVED`` ONLY with a
+    exit 2 (see ``_cmd_compare``). An unexpected crash in ``harness-sha256``, ``snapshot-venv``, ``fixed-parent`` and the other non-compare
+    subcommands is Python's uncaught exception and exits 1, so a caller must treat ANY non-zero exit of those as a failure. ``harness-sha256`` prints the harness digest. Reading contract for ``compare``: exit 0 is ``IMPROVED`` ONLY with a
     valid ``RESULT: IMPROVED ...`` line whose ``sha256=`` matches the file's bytes (``main`` returns an argparse ``SystemExit`` code unchanged, so
     ``compare --help`` is a bare exit 0 and NOT an ``IMPROVED``); exit 1 without a valid ``RESULT:`` line counts as 2, and exit 2 means
     any result file is to be IGNORED; ``INTERPRETER_WRITABLE`` must never be auto-retried with ``--allow-writable-interpreter``. Every parser has

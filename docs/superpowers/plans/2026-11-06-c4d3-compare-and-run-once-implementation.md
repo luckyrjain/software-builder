@@ -1,11 +1,11 @@
 # C4d-3 `compare`, `run-once` and the verdict mapping: implementation plan
 
-> **Note (round 5): the spec wins over this plan** wherever they differ, and the spec is annotated by round (design D1 to D6, implementation I1 to I5). Known
+> **Note (I5): the spec wins over this plan** wherever they differ, and the spec is annotated by round (design D1 to D6, implementation I1 to I6). Known
 > differences: the spawn guard (`spawn_guard`, called before every spawn, with the recorded directory identities); `_IdentityChanged` (derives from
 > `Exception`, not from `BenchmarkGateError`); `_WrittenResult` and `written_sha256` (the CLI prints the line from the in-memory result and the hash of the
 > bytes written); the retry rule (two constants, `COMPARE_RETRYABLE_AUTOMATIC` and `COMPARE_RETRYABLE_WITH_HUMAN_FLAG`, not one); `harness-sha256`; `allow_abbrev=False`.
 > "Spec question 4" and the `NotImplementedError` scaffold between T3a and T4b are HISTORICAL: the scaffold was removed, `_compare_impl` has none. Commands and
-> paths below that name a machine-local Python are generic: use any Python 3.12+ with PyYAML.
+> commands below that run Python say `python3`; use any Python 3.12+ with PyYAML (no machine-specific interpreter path is part of the plan).
 
 **Goal:** add `compare` (the 13-step pipeline, the result vocabularies, the integrity checks, the result file) and `run-once` to the
 benchmark gate in `skills/loop-task-implementer/scripts/benchmark_gate.py`, plus the CLI crash contract. Library and CLI only; nothing is
@@ -502,7 +502,7 @@ serialized anyway.)
 - **Spec coverage:** 2.1 and 2.3 -> T2a, T3a, T3b, T4a2, T4b; 2.2 -> T2a, T3a; 2.4 steps 1 to 6 -> T3a, 7 to 9 -> T3b, 10 and 11 -> T4a2, 12 -> T4a1, 13 -> T4b; 2.5 interpreter -> T2b1b, parity -> T2b1c, `verify_export_against_commit` -> T2b2, fingerprint -> T2b1a, baseline and step 12 -> T4a1;
   2.5b and "Spawn failures" -> T0b2a, T0b1; "Signals" -> T5a; 2.6 -> T4b; 2.7 -> T4a2, T4b; 2.8 -> T2a; 2.9 -> T2a (writer), T5b (CLI), T1 (`run_benchmark_once`); 2.10 -> T0a; section 3 acceptance rows -> T3a, T3b, T4a1, T4a2, T4b, T6; section 4 rows 1 to 18 -> T2a, T3a/T3b/T4a2, T4b,
   T4a2, T4b, T4a1 and T4a2/T6, T0b2a, T4b, T5b, T0a and T3a, T2b1a, T2b1b, T2b1c, T2b2, T5a/T5b, T1, T6, T2a/T7; "Existing tests changed" -> T0b1, T0b2a, T0a, T2a, T2c, T2b2 as the spec lists; section 5 -> T7.
-- **Placeholders:** none; every task names files, the failing tests with the mutant they kill, the implementation rule and a command. The one scaffold (`NotImplementedError` between T3a and T4b) is declared and has an owner.
+- **Placeholders:** none; every task names files, the failing tests with the mutant they kill, the implementation rule and a command. (Historical: the one scaffold, `NotImplementedError` between T3a and T4b, was declared with an owner and has since been removed; see the note at the top.)
 - **Name consistency:** `Side`, `_Verdict`, `COMPARE_RESULT_OF_REASON`, `ISOLATION_DETAILS`, `COMPARE_DETAIL_TOKENS`, `compare`, `_compare_impl`, `_compare_checks`, `_compare_prepare`, `_compare_runs`, `_Prepared`, `interpreter_pin`, `InterpreterPin`, `dependency_parity`, `fingerprint_tree`,
   `verify_export_against_commit`, `_parse_listing_oids`, `run_benchmark_once`, `_check_one_side`, `benchmark_target`, `_ratio_stats`, `_run_error_code`, `_prepare_run`, `_SpawnFailed`, `_INTERPRETER_LIMIT`, `_VENV_FINGERPRINT_LIMIT`, `_VENV_HASH_BYTES` are used identically in the spec and here.
 
