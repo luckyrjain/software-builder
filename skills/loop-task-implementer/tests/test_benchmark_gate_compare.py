@@ -62,14 +62,15 @@ def test_vocabularies_are_pinned_exactly():
         EXPORT_CHANGED VENV_CHANGED HASH_UNREADABLE FINGERPRINT_FAILED""".split())
     assert bg.COMPARE_STAGES == ("pre_overlay", "overlaid", "ran")
     assert bg.Side._fields == ("root", "commit", "bin_dir", "snapshot", "snapshot_sha256", "interpreter_sha256")
-    union = set("GATE_MISSING KEY_MISSING KEY_UNKNOWN TYPE_REJECTED PATH_REJECTED SYMBOL_REJECTED COMMAND_REJECTED BOUNDS_REJECTED "
-                "BUDGET_REJECTED".split())
-    for part in (bg.ISOLATION_DETAILS, bg.VIOLATION_CODES, bg.OVERLAY_REFUSAL_CODES, bg.DIFF_REFUSAL_CODES, bg.TRACE_FAILURE_KINDS,
-                 bg.MEASURE_REFUSAL_CODES, bg.EXPORT_REFUSAL_CODES,
-                 "COMMIT_INVALID COMMIT_NOT_FOUND REPO_UNREADABLE DEST_REJECTED GIT_FAILED GIT_TOO_OLD GIT_TIMEOUT GIT_OUTPUT_TOO_LARGE "
-                 "TREE_UNREADABLE TREE_TOO_LARGE SEAL_FAILED".split(), tuple(bg.COMPARE_RESULT_OF_REASON)):
-        union.update(part)
-    assert isinstance(bg.COMPARE_DETAIL_TOKENS, tuple) and set(bg.COMPARE_DETAIL_TOKENS) == union
+    # the detail vocabulary is derived from the one production table (`COMPARE_REASONS`), narrowed to what really is a detail
+    derived = tuple(dict.fromkeys(token for _, _, details in bg.COMPARE_REASONS.values() for token in details if token))
+    assert isinstance(bg.COMPARE_DETAIL_TOKENS, tuple) and bg.COMPARE_DETAIL_TOKENS == derived
+    assert {reason: row[0] for reason, row in bg.COMPARE_REASONS.items()} == bg.COMPARE_RESULT_OF_REASON
+    for part in (bg.ISOLATION_DETAILS, bg.VIOLATION_CODES, bg.OVERLAY_REFUSAL_CODES, bg.DIFF_REFUSAL_CODES, bg.EXPORT_REFUSAL_CODES):
+        assert set(part) <= set(bg.COMPARE_DETAIL_TOKENS)
+    for not_a_detail in ("IMPROVED_CLEAR", "HOST_BUSY_END", "NOISY", "GIT_TIMEOUT", "COMMIT_INVALID", "UNSUPPORTED_PLATFORM", "DIGEST_UNSTABLE",
+                         "spawn", "harness"):
+        assert not_a_detail not in bg.COMPARE_DETAIL_TOKENS
 
 
 def test_every_detail_token_is_ascii_and_unique():
@@ -80,10 +81,79 @@ def test_every_detail_token_is_ascii_and_unique():
         assert name not in tokens  # it raises; it is never a result detail
 
 
+def test_compare_reasons_is_one_table_and_the_git_codes_are_not_copied():
+    table = bg.COMPARE_REASONS
+    assert set(table) == set(bg.COMPARE_RESULT_OF_REASON) and len(table) == 30
+    for reason, (result, stages, details) in table.items():
+        assert result in bg.COMPARE_RESULTS and bg.COMPARE_RESULT_OF_REASON[reason] == result
+        assert isinstance(stages, tuple) and stages and set(stages) <= set(bg.COMPARE_STAGES)
+        assert isinstance(details, tuple) and details and len(set(details)) == len(details)  # "" in it means: no detail
+    assert table["ISOLATION_REJECTED"][2] == bg.ISOLATION_DETAILS and table["LINT_REJECTED"][2] == bg.VIOLATION_CODES
+    assert set(table["TRACE_MISMATCH"][2]) == set(bg._TRACE_AT_ONCE_KINDS) | {"counts_differ"}
+    # the git/tree/seal codes come from the error-code vocabulary, not from a second hand-typed list
+    assert set(bg._HOSTILE_TREE_CODES) <= set(bg.GIT_TREE_SEAL_CODES)
+    assert set(table["EXPORT_REJECTED"][2]) == set(bg.EXPORT_REFUSAL_CODES) | set(bg._HOSTILE_TREE_CODES) | set(bg._READ_BENCHMARK_CODES)
+    assert set(table["DIFF_UNCHECKABLE"][2]) <= set(bg._HOSTILE_TREE_CODES) | {"TREE_TOO_LARGE"}
+
+
+def test_ending_rows_agree_with_the_production_table():
+    for name, (_body, _runner, reason, detail, stage) in ENDING_ROWS.items():
+        result, stages, details = bg.COMPARE_REASONS[reason]
+        assert stage in stages, name
+        assert detail is None or detail in details, name
+    for reason, (_result, stages, _details) in bg.COMPARE_REASONS.items():
+        assert {row[4] for row in ENDING_ROWS.values() if row[2] == reason} <= set(stages), reason
+
+
+def test_result_dict_validates_the_detail_and_the_stage_against_the_table():
+    def build(reason, detail, stage="ran"):
+        return bg._result_dict(bg._Verdict(bg.COMPARE_RESULT_OF_REASON[reason], reason, detail, stage=stage), {})
+    assert build("BASE_NONZERO_EXIT", "nonzero")["detail"] == "nonzero"
+    assert build("BASE_NONZERO_EXIT", "nonzero 12 7")["detail"] == "nonzero 12 7"  # the token, then integers
+    assert build("NOISY", "")["detail"] == ""
+    assert build("ISOLATION_REJECTED", "EXPORT_CHANGED", "overlaid")["detail"] == "EXPORT_CHANGED"
+    for reason, detail, stage in [("BASE_NONZERO_EXIT", "EVIL text", "ran"), ("BASE_NONZERO_EXIT", "nonzero x", "ran"),
+                                  ("BASE_NONZERO_EXIT", "nonzero 1.5", "ran"), ("BASE_NONZERO_EXIT", "nonzero  3", "ran"),
+                                  ("BASE_NONZERO_EXIT", "", "ran"), ("NOISY", "nonzero", "ran"), ("NOISY", "IMPROVED_CLEAR", "ran"),
+                                  ("ISOLATION_REJECTED", "GIT_TIMEOUT", "ran"), ("LINT_REJECTED", "nonzero", "overlaid"),
+                                  ("BASE_NONZERO_EXIT", "nonzero", "pre_overlay"), ("LINT_REJECTED", "BANNED_NAME", "ran"),
+                                  ("TRACE_MISMATCH", "harness", "ran"), ("EXPORT_REJECTED", "GIT_TIMEOUT", "pre_overlay"),
+                                  ("NOISY", "\x1b[31m", "ran"), ("NOISY", "\u0663", "ran")]:
+        with pytest.raises(ValueError):
+            build(reason, detail, stage)
+    with pytest.raises(ValueError):
+        build("BASE_NONZERO_EXIT", "nonzero \u0663")  # a non-ASCII digit is not an integer here
+
+
+def test_error_code_and_compare_reason_names_overlap_exactly_here():
+    assert set(bg.ERROR_CODES) & set(bg.COMPARE_REASONS) == set(
+        """BASE_NONZERO_EXIT BASE_TIMEOUT BENCHMARK_AWARE_CODE BENCHMARK_MODIFIED DIGEST_MISMATCH DIGEST_MISSING DIGEST_UNSTABLE HEAD_NONZERO_EXIT
+        HEAD_TIMEOUT PROTECTED_PATH_CHANGED TRACE_MISMATCH TRACE_UNAVAILABLE UNSUPPORTED_PLATFORM WORKLOAD_TOO_SHORT""".split())
+    assert bg.ERROR_CODES[:len(bg.GIT_TREE_SEAL_CODES)] == bg.GIT_TREE_SEAL_CODES
+
+
 def test_error_codes_gain_exactly_base_not_ancestor_appended():
     assert bg.ERROR_CODES[-1] == "BASE_NOT_ANCESTOR" and bg.ERROR_CODES.count("BASE_NOT_ANCESTOR") == 1
     assert bg.ERROR_CODES[-3:-1] == bg.TRACE_REFUSAL_CODES
     assert "BASE_NOT_ANCESTOR" not in bg.CLEANUP_CODES
+
+
+def test_the_module_imports_where_sighup_is_missing():
+    code = ("import importlib.util, signal, sys\n"
+            "del signal.SIGHUP\n"  # a platform without SIGHUP (Windows)
+            "spec = importlib.util.spec_from_file_location('bg_without_sighup', sys.argv[1])\n"
+            "mod = importlib.util.module_from_spec(spec)\n"
+            "sys.modules[spec.name] = mod\n"
+            "spec.loader.exec_module(mod)\n"
+            "print(sorted(int(number) for number in mod._guarded_signals()))\n")
+    done = subprocess.run([sys.executable, "-I", "-c", code, str(SCRIPT)], capture_output=True, text=True, timeout=120)
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == str(sorted([int(signal.SIGTERM), int(signal.SIGINT)]))
+
+
+def test_guarded_signals_here_are_the_three_and_the_helper_is_lazy():
+    assert bg._guarded_signals() == (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)
+    assert not hasattr(bg, "_GUARDED_SIGNALS")  # nothing platform-specific is built at import
 
 
 # --- result assembly ---
@@ -147,9 +217,9 @@ def test_attacker_text_appears_only_in_untrusted_text_and_is_capped():
     assert result["python"] == bg.escape_diagnostic(common["python"], 200) and len(result["python"]) <= 200
     assert result["interpreter_home"] == bg.escape_diagnostic(common["interpreter_home"], 200)
     assert result["python"].isascii() and "`" not in result["python"] and result["interpreter_home"].startswith("'")
-    # hostile text smuggled into the detail is escaped as well, and no other field carries any
-    result = bg._result_dict(bg._Verdict("REJECTED", "ISOLATION_REJECTED", "x\n`y`é", stage="ran"), {})
-    assert result["detail"] == bg.escape_diagnostic("x\n`y`é", 200) and result["untrusted_text"] == []
+    # hostile text smuggled into the detail is refused (the detail is a closed set), so it can never reach the file; no other field carries any
+    with pytest.raises(ValueError):
+        bg._result_dict(bg._Verdict("REJECTED", "ISOLATION_REJECTED", "x\n`y`é", stage="ran"), {})
     assert json.dumps(result, ensure_ascii=True).isascii()
 
 
@@ -1362,6 +1432,19 @@ def test_over_the_hash_budget_is_not_provisioned(tmp_path, monkeypatch):
 
 
 @posix_only
+def test_over_the_hash_budget_after_the_findings_cap_is_still_not_provisioned(tmp_path, monkeypatch):
+    base, head = _honest_pair(tmp_path)
+    total = sum(p.stat().st_size for p in base.site.rglob("*") if p.is_file())
+    for number in range(bg._PARITY_FINDINGS_MAX + 10):  # more findings than the list keeps, all sorted before the big file
+        os.symlink("/nonexistent", head.site / f"aa_link{number:03d}")
+    (head.site / "zz_big.bin").write_bytes(b"x" * 4096)
+    monkeypatch.setattr(bg, "_VENV_HASH_BYTES", total + 100)
+    findings = _parity(base, head)  # not an AssertionError: the over-budget state does not live in the capped list
+    assert _details(findings) == {"NOT_PROVISIONED"} and 1 <= len(findings) <= 2
+    assert all("more than" in text for _, text in findings)
+
+
+@posix_only
 def test_untrusted_text_names_the_differences(tmp_path):
     base, head = _honest_pair(tmp_path)
     nasty = "evil`\n#name|x.py"
@@ -2327,6 +2410,25 @@ def test_compare_is_a_thin_wrapper_over_the_default_seams(world, tmp_path, monke
         bg.compare(case.gate, str(world.repo), case.base, case.head, out_path=out, load_probe=QUIET)
 
 
+@posix_only
+def test_a_verdict_before_the_out_path_was_validated_is_a_harness_fault_not_an_assert(world, tmp_path, monkeypatch):
+    case = Case(world, tmp_path, monkeypatch)
+
+    def ends_early(*args, **kwargs):
+        raise bg._Verdict("INCONCLUSIVE", "UNSUPPORTED_PLATFORM", stage="pre_overlay")  # run.out was never set
+    monkeypatch.setattr(bg, "_compare_checks", ends_early)
+    with pytest.raises(bg.BenchmarkGateError) as caught:
+        case.impl()
+    assert caught.value.code == "MEASURE_FAILED" and "internal invariant" in caught.value.detail
+
+
+def test_a_merge_with_nothing_measured_and_no_verdict_is_a_harness_fault_not_an_assert():
+    outcome = bg._RunOutcome(trace=None, pending=None, measured=None, measure_verdict=None)
+    with pytest.raises(bg.BenchmarkGateError) as caught:
+        bg._merge_outcome(outcome, None, None, None, None)
+    assert caught.value.code == "MEASURE_FAILED" and "internal invariant" in caught.value.detail
+
+
 # --- T3b: steps 7 to 9 (_compare_prepare) ---
 
 BENCH_OK = (b"import hashlib\n\nfrom app.core import f as build\n\n\ndef test_bench():\n    out = build()\n"
@@ -2926,6 +3028,18 @@ def test_step12_a_venv_over_its_limit_is_fingerprint_failed(bcase):
 
 
 @posix_only
+def test_step12_a_venv_with_too_many_hook_candidates_is_venv_changed_not_a_raise(bcase):
+    c = bcase
+    prepared = c.prepare()
+    site = _site(c)
+    for number in range(3):  # a head child adds hook candidates past the limit (it was under it at step 9)
+        (site / f"extra{number}.pth").write_text("")
+    c.mp.setattr(bg, "_VENV_MAX_ENTRIES", 2)
+    v = _p12(c, prepared)  # an integrity error of check_venv at step 12 is a verdict (spec 2.1), not a raised TREE_TOO_LARGE
+    assert (v.result, v.reason, v.detail, v.stage) == ("REJECTED", "ISOLATION_REJECTED", "VENV_CHANGED", "ran")
+
+
+@posix_only
 @pytest.mark.parametrize("code", ["GIT_TIMEOUT", "GIT_FAILED", "REPO_UNREADABLE"])
 def test_step12_git_and_host_faults_raise(bcase, code):
     c = bcase
@@ -3345,6 +3459,22 @@ def test_step12_runs_after_every_path_that_started_a_child(bcase, name):
     _ran(result, "ISOLATION_REJECTED", "EXPORT_CHANGED")
     assert _post12(c) == 1
     assert result["kind"] is None  # step 12's verdict is its own, not the ending it beat
+
+
+@posix_only
+def test_compare_passes_the_gate_and_the_attempt_through_to_both_library_calls(bcase):
+    c = bcase
+    c.gate = {**c.gate, "warmup_runs": 2, "per_run_timeout_seconds": 40, "repeats": 8}  # none of them a default
+    c.attempt = 2
+    result = _go(c, measure=_meas([100] * 8, [50] * 8))
+    _ran(result, "IMPROVED_CLEAR")
+    (trace_kwargs,), (measure_kwargs,) = c.calls  # each stub was called once
+    # the spec's step table: `trace_paired(..., timeout_seconds=per_run_timeout_seconds)` (the 3x of the trace run is trace_paired's own)
+    assert trace_kwargs == {"timeout_seconds": 40, "argv_builder": fake_trace_builder}
+    assert measure_kwargs == {"repeats": 8, "timeout_seconds": 40, "base_commit": c.base.commit, "head_commit": c.head.commit,
+                              "benchmark_sha256": hashlib.sha256(BENCH_OK).hexdigest(), "attempt": 2, "warmup": 2, "min_base_ns": 0,
+                              "argv_builder": fake_trace_builder, "order_salt": "ab12"}
+    assert (result["attempt"], result["repeats"], result["order_salt"]) == (2, 8, "ab12")
 
 
 @posix_only
@@ -4085,6 +4215,50 @@ def test_cli_result_line_and_exit_codes(tmp_path, monkeypatch, capsys, name):
 
 
 @posix_only
+def test_cli_line_and_exit_come_from_the_in_memory_result_not_from_a_rewritten_file(tmp_path, monkeypatch, capsys):
+    c = _bench_case(tmp_path, monkeypatch)
+    _stub_both(c, _meas([100] * 6, [120] * 6))
+    _seamed_compare(c)
+    real_write = bg._write_result
+    honest = {}
+
+    def write_then_forge(out_path, dir_ident, name, data):
+        sha = real_write(out_path, dir_ident, name, data)
+        honest.update(data=data, sha=sha)
+        forged = json.loads(data)
+        forged.update(result="IMPROVED", reason="IMPROVED_CLEAR", interpreter_writable=False)
+        with open(out_path, "r+b") as handle:  # the same inode, rewritten in place by "another process" after the write returned
+            handle.truncate(0)
+            handle.write((json.dumps(forged) + "\n").encode())
+        return sha
+    monkeypatch.setattr(bg, "_write_result", write_then_forge)
+    out = c.out()
+    code, stdout, stderr = _run_main(capsys, _cli_compare_args(c, _gate_file(c), out, *(["--allow-writable-interpreter"] if c.allow else [])))
+    on_disk = Path(out).read_bytes()
+    assert json.loads(on_disk)["result"] == "IMPROVED" and on_disk != honest["data"]  # the forgery really is on disk
+    real = json.loads(honest["data"])
+    assert (real["result"], real["reason"]) == ("NOT_IMPROVED", "BELOW_HALF_THRESHOLD")
+    assert code == 1 and stderr == ""  # the exit code is the honest result's
+    assert honest["sha"] == hashlib.sha256(honest["data"]).hexdigest()
+    assert stdout == (f"RESULT: NOT_IMPROVED BELOW_HALF_THRESHOLD interpreter_writable={_writable_token(real['interpreter_writable'])} "
+                      f"sha256={honest['sha']}\n")  # result, reason, flag and sha: all from memory
+    assert parse_compare_outcome(code, stdout, on_disk) == 2  # an Orchestrator that hashes the file sees the mismatch and ignores it
+
+
+@posix_only
+def test_cli_attempt_reaches_the_measure_call_and_the_result(tmp_path, monkeypatch, capsys):
+    c = _bench_case(tmp_path, monkeypatch)
+    trace_calls = _stub(c, "trace_paired", TRACE_OK)
+    measure_calls = _stub(c, "measure_paired", HALVED)
+    _seamed_compare(c)
+    out = c.out()
+    code, stdout, stderr = _run_main(capsys, _cli_compare_args(c, _gate_file(c), out, "--attempt", "2", "--allow-writable-interpreter"))
+    assert code == 0 and stderr == "" and len(trace_calls) == 1
+    assert [call["attempt"] for call in measure_calls] == [2]
+    assert json.loads(Path(out).read_bytes())["attempt"] == 2
+
+
+@posix_only
 def test_cli_exit_2_for_a_usage_error_prints_no_result_and_a_process_row_matches(tmp_path, monkeypatch, capsys):
     c = _bench_case(tmp_path, monkeypatch)
     out = c.out()
@@ -4525,13 +4699,16 @@ def test_real_improved_overlay_origin(tmp_path, monkeypatch):
 
 @posix_only
 def test_real_not_improved_pre_existing_benchmark(tmp_path, monkeypatch):
+    # identical code on both sides: the exact reason (BELOW_HALF_THRESHOLD, NOISY or BORDERLINE) depends on the machine's noise, so only what
+    # can never happen is pinned here (not IMPROVED); the exact-reason rows are the stubbed ENDING_ROWS
     c, result, seen = _real_compare(tmp_path, monkeypatch, "pre")
-    _ran(result, "BELOW_HALF_THRESHOLD")
-    assert result["result"] == "NOT_IMPROVED" and result["benchmark_origin"] == "PRE_EXISTING"
-    assert result["improvement"] < c.gate.get("min_improvement", 0.10) / 2 and len(result["ratios"]) == 6
+    assert result["result"] in ("NOT_IMPROVED", "INCONCLUSIVE") and result["result"] != "IMPROVED"
+    assert result["reason"] in ("BELOW_HALF_THRESHOLD", "BORDERLINE", "NOISY"), result["reason"]
+    assert result["stage"] == "ran" and result["benchmark_origin"] == "PRE_EXISTING"
+    assert len(result["ratios"]) == 6 and result["n"] == 6
     assert set(result) == set(bg.COMPARE_RESULT_KEYS) and json.loads(Path(c.last_out).read_text()) == result
     assert seen["post"] == [None] and re.fullmatch(r"[0-9a-f]{64}", result["digest"])
-    assert result["trace"]["base"]["value"] == result["trace"]["head"]["value"] > 0
+    assert result["trace"]["base"]["value"] == result["trace"]["head"]["value"] > 0  # equal trace counts on both sides
 
 
 def _child_with(extra: str, payload):

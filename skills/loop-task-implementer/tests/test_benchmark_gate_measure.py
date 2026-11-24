@@ -1495,3 +1495,42 @@ def test_library_caller_on_another_thread_gets_no_handlers(tmp_path, monkeypatch
     assert "refused" in seen and "installed" not in seen  # the helper is main thread only and says so, changing nothing
     for function in (bg._run_once, bg.compare):  # neither installs the helper itself
         assert "_with_signal_handlers" not in inspect.getsource(function)
+
+
+def test_kind_suffix_is_the_one_source_of_the_run_kinds_and_the_run_once_reasons():
+    assert set(bg._KIND_SUFFIX) == set(bg.TRACE_FAILURE_KINDS[:4]) == {"spawn", "oversize", "timeout", "nonzero"}  # the `_execute` kinds
+    assert bg._RUN_FAILURE_KINDS == frozenset(bg._KIND_SUFFIX) - {"spawn"}
+    codes = {bg._run_error_code(side, kind) for side in ("base", "head") for kind in bg._KIND_SUFFIX}
+    assert codes == {"BASE_NONZERO_EXIT", "HEAD_NONZERO_EXIT", "BASE_TIMEOUT", "HEAD_TIMEOUT", "OUTPUT_TOO_LARGE"}
+    assert bg._RUN_ONCE_REASONS == frozenset(codes | {"DIGEST_MISSING"})  # derived: a new kind cannot turn run-once into exit 2
+    for side in ("base", "head"):  # the trace rows (T4) map the kind through the same suffixes
+        for kind in bg._RUN_FAILURE_KINDS:
+            assert f"{side.upper()}_{bg._KIND_SUFFIX[kind]}" in bg.COMPARE_RESULT_OF_REASON
+
+
+@posix_only
+def test_a_keyboard_interrupt_while_the_watchdog_is_cancelled_still_kills_the_group(tmp_path, monkeypatch):
+    pidfile = tmp_path / "grandchild.pid"
+    child = ("import os, subprocess, sys\n"
+             "p = subprocess.Popen(['sleep', '300'])\n"
+             "open(sys.argv[1], 'w').write(str(p.pid))\n")  # the child exits at once; its grandchild stays in the group
+
+    class Interrupted(bg.threading.Timer):
+        def cancel(self):
+            super().cancel()
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(bg.threading, "Timer", Interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        bg._run_once([sys.executable, "-c", child, str(pidfile)], str(tmp_path), {}, 300.0)
+    pid = int(pidfile.read_text())
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    else:
+        os.kill(pid, 9)
+        raise AssertionError("the grandchild survived: the group kill was skipped")
