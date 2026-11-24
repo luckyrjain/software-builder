@@ -20,6 +20,21 @@ import pytest
 _SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 
 
+def skip_old_git(message: str):
+    """A git older than 2.43 skips these tests on a developer machine and FAILS them under CI (the ``CI`` variable): a skip there would hide a
+    whole suite. Production's ``_require_modern_git`` hard-fails either way."""
+    if os.environ.get("CI"):
+        pytest.fail(message)
+    pytest.skip(message)
+def test_skip_old_git_fails_under_ci_and_skips_elsewhere(monkeypatch):
+    monkeypatch.setenv("CI", "true")
+    with pytest.raises(pytest.fail.Exception, match="needed"):
+        skip_old_git("git >= 2.43 is needed")
+    monkeypatch.delenv("CI", raising=False)
+    with pytest.raises(pytest.skip.Exception, match="needed"):
+        skip_old_git("git >= 2.43 is needed")
+
+
 def _load(path: Path, name: str):
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
@@ -88,7 +103,7 @@ def sandbox(tmp_path, monkeypatch):
         found = re.search(r"(\d+)\.(\d+)", shown)
         if exc.code != "GIT_TOO_OLD" or found is None or (int(found[1]), int(found[2])) >= (2, 43):
             raise
-        pytest.skip(f"git >= 2.43 is needed: {exc.detail}")
+        skip_old_git(f"git >= 2.43 is needed: {exc.detail}")
     return temp
 
 

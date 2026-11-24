@@ -100,7 +100,7 @@ seed bytes unchanged; a given salt is appended as a fifth `\0`-joined field); in
 `os.urandom(8).hex()`, and the result records the salt used. Salt validation (lowercase hex, 1 to 64 chars, else `MEASURE_ARGS_INVALID`) happens at
 step 1. Helpers: `_compare_checks` (steps 1 to 6), `_compare_prepare` (7 to 9; frozen `_Prepared`), `_compare_runs` (10 to 13). `_Verdict` subclasses
 `Exception` only. All in `benchmark_gate.py`, so `harness_sha256` covers it. The 1800 s gate cap budgets child time only; `is_ancestor` and
-`diff_checks` (up to 300 s each) and the hashing sit outside it, so the Orchestrator's wait is at least `cap + 600 s + hashing`.
+`diff_checks` (up to 300 s each) and the hashing sit outside it, so the Orchestrator's wait is at least `cap + hashing + 300 s x (the git invocations `compare` opens, at least nine contexts)`: `is_ancestor`, `diff_checks`, the benchmark-origin read at step 7 and `verify_export_against_commit` per side at steps 4, 9 and 12, several invocations each (the module docstring says the same).
 
 ### 2.3 Vocabularies (module constants, each pinned by an exact-contents test)
 - `COMPARE_RESULT_OF_REASON: dict[str, str]`, one entry per reason: REJECTED: `GATE_REJECTED`, `ISOLATION_REJECTED`, `PROTECTED_PATH_CHANGED`,
@@ -165,7 +165,7 @@ repository's pinned requirements (or a wheelhouse), the project **editable only*
 by the build user; a writable one needs `--allow-writable-interpreter` and shows in the `RESULT:` line; (5) a stray-process census around the
 installs is recommended and not enforced here; (5b) `--no-compile` at install, and every `__pycache__` and `.pyc` under the venv's site-packages removed
 after the install and before `compare` (`dependency_parity` rejects bytecode there). The pins of (1) are minted before the install and are never
-re-minted after one: the removal touches only site-packages, which the interpreter pin does not cover; (6) the Orchestrator cross-checks that the `RESULT:` line's result and reason equal the parsed file's.
+re-minted after one: the removal touches only site-packages, which the interpreter pin does not cover; (6) the Orchestrator pins the EXPECTED `harness_sha256` (the harness file is writable by the same user, residual 2) and compares it with the result's; (7) each project venv must be CPython >= 3.12 (no `sys.monitoring` before it: the trace is `TRACE_UNAVAILABLE` and the run can never reach `IMPROVED`, residual 3); (8) the Orchestrator reads the result file once into bytes, hashes those bytes, compares to `sha256=`, parses the SAME bytes and reads `stage` and `detail` only from them (the `RESULT:` line carries neither; `INTERPRETER_WRITABLE` needs the detail from the file) and checks the line's result and reason against them.
 
 **Interpreter (T2b1b), `interpreter_pin(bin_dir) -> InterpreterPin(sha256, writable, real_python)`.** Per side, `pyvenv.cfg` is parsed as `key = value`
 lines (UTF-8, non-ASCII allowed: a user home may contain it; the `command` key and every key other than the four below are ignored); a duplicate of
@@ -286,15 +286,27 @@ the CLI path. `_run_once` masks SIGTERM, SIGHUP and SIGINT with `pthread_sigmask
 an empty mask), enters `try`, then unmasks; `signal` and `pthread_sigmask` are imported in the parent before the fork. The mask is per thread: the
 window is safe only while the process is single-threaded, which `_run_once`'s comment states by contract (not asserted).
 
-**Disclosed residuals (claim no more):** the fingerprints detect changes to the exports, venvs and dispatch root between the baseline and the end,
-not writes elsewhere (absolute `/tmp` or `/dev/shm` state a head run leaves for a later run), not a change undone inside one ctime tick on a coarse
-filesystem, not an escaped `setsid` daemon (page-cache effects included); the interpreter pin covers the files listed and is exact only for a
-non-writable interpreter; a bytecode or file planted into a writable interpreter by a *child during a run* is caught only by the end-of-run pin, not
-if restored; the interpreter's own path chain (the `home` of `pyvenv.cfg`, symlink hops to the real prefix, the parent of the prefix) is pinned by content
-and not guarded by directory identity, so a user-writable hop in front of a prefix that is not user-owned (a layout `INTERPRETER_WRITABLE` does not refuse)
-could be repointed by a head child between runs; third-party content that is identical and RECORD-consistent on both sides is not judged. **The human acceptance of every `IMPROVED` is
-the control that remains.** The run order is public but salted (`order_salt`; the recorded `order` reproduces a run). A SIGKILLed `compare` leaves a
-running child until its own timeout.
+**Disclosed residuals (claim no more).** Numbered here and in the module docstring of `benchmark_gate.py` ("Known residuals of `compare`") with the
+same numbers; a test pins that every numbered residual of the docstring appears here.
+1. An escaped `setsid` daemon: a head child can leave the process-group kill behind with fork + `setsid`; a stray same-user daemon survives the run
+   and nothing detects it (no process census; page-cache effects included).
+2. The harness file is writable by the same user: C4e must pin the EXPECTED `harness_sha256` and compare it with the result's; it should also prefer a
+   non-writable interpreter (a stray `.pyc` in a writable prefix between the pin and `compare` gives `INTERPRETER_CHANGED`; `INTERPRETER_DIFFERS` is a
+   different fault).
+3. A project venv older than CPython 3.12 has no `sys.monitoring`: its trace is `TRACE_UNAVAILABLE` and it can never reach `IMPROVED`.
+4. The interpreter's own path chain (the `home` of `pyvenv.cfg`, symlink hops to the real prefix, the parent of the prefix) is pinned by content and
+   not guarded by directory identity, so a user-writable hop in front of a prefix that is not user-owned (a layout `INTERPRETER_WRITABLE` does not
+   refuse) could be repointed by a head child between runs.
+5. State outside the fingerprints: they detect changes to the exports, venvs and dispatch root between the baseline and the end, not writes elsewhere
+   (absolute `/tmp` or `/dev/shm` state a head run leaves for a later run).
+6. A coarse ctime tick: a change undone inside one ctime tick on a coarse filesystem is not seen.
+7. A writable interpreter: the interpreter pin covers the files listed and is exact only for a non-writable interpreter; a bytecode or file planted
+   into a writable interpreter by a *child during a run* is caught only by the end-of-run pin, not if restored.
+8. A SIGKILLed `compare` leaves a running child until its own timeout.
+9. Third-party content that is identical and RECORD-consistent on both sides is not judged.
+
+**The human acceptance of every `IMPROVED` is the control that remains.** The run order is public but salted (`order_salt`; the recorded `order`
+reproduces a run).
 
 ### 2.6 Host checks
 Exact arithmetic on `Fraction(str(load1))`: `busy_start = load1 * 10 > 7 * cpu_count` (always probed); `busy_end = (load1 - 1) * 10 > 7 * cpu_count`,
@@ -505,7 +517,7 @@ makes every trace fault `TRACE_MISMATCH`; both are non-pass; `trace_fault` carri
 `(reason, stage, detail)` (the constant `COMPARE_RETRYABLE_ON_SAME_EXPORTS`); the spawn guard's `ISOLATION_REJECTED`/`EXPORT_CHANGED` at stage `ran` with no
 measured fields (C4e routes it as tamper, to a human); `detail` is a closed vocabulary (parent: free-form escaped). 8. **Head provisioned first, base created after**, the provisioning
 contract of 2.5, snapshot and interpreter pins minted pre-install, `--allow-writable-interpreter`, `verify_export_against_commit`,
-`dependency_parity`, the ctime fingerprint, per-run scratch and ini, no pycache prefix. 9. `out_path` written by dir-fd link after step 12 with the
+`dependency_parity`, the ctime fingerprint, per-run scratch and ini, no pycache prefix; the C4e write-back list also carries: pin the expected `harness_sha256`, and the project venv must be CPython >= 3.12. 9. `out_path` written by dir-fd link after step 12 with the
 file's sha256 in the `RESULT:` line (parent: temp file then rename). 10. `repo_top_levels` taken after the install. 11. Seeded order gains a random
-salt. 12. The Orchestrator's wait is at least the gate cap plus 600 s plus hashing. 13. `compare`'s signature: `Side` tuples with the two pins and
+salt. 12. The Orchestrator's wait is at least the gate cap plus hashing plus 300 s x the git invocations `compare` opens (at least nine contexts). 13. `compare`'s signature: `Side` tuples with the two pins and
 `allow_writable_interpreter` replace the parent's positional `(gate, base_root, head_root, repo, base_commit, head_commit, base_bin, head_bin, ...)`.

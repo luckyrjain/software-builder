@@ -860,6 +860,51 @@ def test_a_finder_target_through_a_user_owned_link_is_refused_and_through_a_trus
     assert bg._finder_problem(_finder(through), export) is not None  # and back to refused
 
 
+@pytest.mark.parametrize("trusted", [False, True], ids=["user-owned", "trusted-uid"])
+def test_a_finder_target_with_dot_dot_after_a_link_is_refused_whoever_owns_the_link(tmp_path, monkeypatch, trusted):
+    """The kernel resolves the RAW target: `ul/..` goes to the PARENT of what `ul` points at, while `abspath` collapses it lexically and never meets
+    the link, so a check on the collapsed string passed a target that a repointed `ul` would send elsewhere."""
+    base = Path(os.path.realpath(tmp_path))
+    (base / "a" / "b").mkdir(parents=True)
+    (base / "dispatch" / "head" / "src" / "pkg").mkdir(parents=True)
+    os.symlink(base / "a" / "b", base / "ul")  # base/ul/../.. is base: the raw target names base/dispatch/head/src/pkg
+    raw = f"{base}/ul/../../dispatch/head/src/pkg"
+    assert os.path.realpath(raw) == str(base / "dispatch" / "head" / "src" / "pkg")
+    if trusted:
+        monkeypatch.setattr(bg, "_TRUSTED_LINK_UID", os.getuid())
+    assert bg._finder_problem(_finder(raw), str(base / "dispatch" / "head")) == "a finder target resolves outside the export"
+    for odd in (f"{base}/dispatch/head/./src/pkg", f"{base}//dispatch/head/src/pkg", f"{base}/dispatch/head/src/pkg/"):
+        assert bg._finder_problem(_finder(odd), str(base / "dispatch" / "head")) is not None  # not normal: refused
+    assert bg._finder_problem(_finder(str(base / "dispatch" / "head" / "src" / "pkg")), str(base / "dispatch" / "head")) is None
+
+
+def test_a_root_run_trusts_no_alias_at_all(tmp_path, monkeypatch):
+    """With an effective uid of 0 the head child is root too: a root-owned link is no more trustworthy than a user-owned one."""
+    base = Path(os.path.realpath(tmp_path))
+    (base / "real" / "export" / "src" / "pkg").mkdir(parents=True)
+    os.symlink(base / "real", base / "alias")
+    through = str(base / "alias" / "export" / "src" / "pkg")
+    monkeypatch.setattr(bg, "_TRUSTED_LINK_UID", os.getuid())
+    monkeypatch.setattr(os, "geteuid", lambda: os.getuid() + 1)  # not root: the (patched) trusted link is accepted
+    assert bg._finder_problem(_finder(through), str(base / "real" / "export")) is None
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    assert bg._finder_problem(_finder(through), str(base / "real" / "export")) == "a finder target resolves outside the export"
+    assert bg._alias_accepted(through) is False
+
+
+def test_the_codecs_of_the_compare_path_are_loaded_at_import():
+    """A first `utf-8-sig` decode (a `.pth` file) would import from the harness interpreter's stdlib, possibly after a child ran."""
+    import subprocess
+    code = ("import importlib.util, sys\n"
+            "spec = importlib.util.spec_from_file_location('bgx', sys.argv[1]); m = importlib.util.module_from_spec(spec)\n"
+            "sys.modules['bgx'] = m; before = 'encodings.utf_8_sig' in sys.modules; spec.loader.exec_module(m)\n"
+            "assert 'encodings.utf_8_sig' in sys.modules and 'encodings.ascii' in sys.modules, 'not loaded at import'\n"
+            "print('ok')\n")
+    done = subprocess.run([sys.executable, "-I", "-c", code, str(_SCRIPTS / "benchmark_gate.py")], capture_output=True, text=True, timeout=120,
+                          env={"PYTHONDONTWRITEBYTECODE": "1"})
+    assert done.returncode == 0 and done.stdout.strip() == "ok", done.stderr
+
+
 def test_a_nested_user_owned_link_behind_a_trusted_one_is_still_refused(tmp_path, monkeypatch):
     base = Path(os.path.realpath(tmp_path))
     (base / "real" / "export" / "src").mkdir(parents=True)

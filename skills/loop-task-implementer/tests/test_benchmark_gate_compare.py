@@ -15,7 +15,6 @@ from __future__ import annotations
 import ast
 import hashlib
 import importlib.util
-import inspect
 import json
 import os
 import re
@@ -41,11 +40,70 @@ spec.loader.exec_module(bg)
 
 posix_only = pytest.mark.skipif(os.name != "posix", reason="POSIX harness")
 
+
+def skip_old_git(message: str):
+    """A git older than 2.43 skips these tests on a developer machine and FAILS them under CI (the ``CI`` variable): a skip there would hide a
+    whole suite. Production's ``_require_modern_git`` hard-fails either way."""
+    if os.environ.get("CI"):
+        pytest.fail(message)
+    pytest.skip(message)
+
+
+def test_skip_old_git_fails_under_ci_and_skips_elsewhere(monkeypatch):
+    monkeypatch.setenv("CI", "true")
+    with pytest.raises(pytest.fail.Exception, match="needed"):
+        skip_old_git("git >= 2.43 is needed")
+    monkeypatch.delenv("CI", raising=False)
+    with pytest.raises(pytest.skip.Exception, match="needed"):
+        skip_old_git("git >= 2.43 is needed")
+
 REJECTED = "GATE_REJECTED ISOLATION_REJECTED PROTECTED_PATH_CHANGED BENCHMARK_AWARE_CODE DIFF_UNCHECKABLE EXPORT_REJECTED OVERLAY_REJECTED " \
            "BENCHMARK_MODIFIED LINT_REJECTED TRACE_MISMATCH BASE_NONZERO_EXIT DIGEST_MISSING DIGEST_UNSTABLE WORKLOAD_TOO_SHORT".split()
 NOT_IMPROVED = "HEAD_NONZERO_EXIT HEAD_TIMEOUT HEAD_OUTPUT_TOO_LARGE DIGEST_MISMATCH BELOW_HALF_THRESHOLD".split()
 INCONCLUSIVE = "UNSUPPORTED_PLATFORM HOST_BUSY_START HOST_BUSY_END TRACE_UNAVAILABLE BASE_TIMEOUT BASE_OUTPUT_TOO_LARGE NOISY INCONSISTENT " \
                "BORDERLINE INVALID_INPUT".split()
+
+
+# --- the docstring's residuals and spec 2.5 say the same thing ---
+
+SPEC_C4D3 = Path(__file__).resolve().parents[3] / "docs" / "superpowers" / "specs" / "2026-11-06-c4d3-compare-and-run-once-design.md"
+# number -> a phrase that must be in BOTH the module docstring's item and spec 2.5's item of that number (case-insensitive)
+RESIDUAL_PHRASES = {1: "setsid", 2: "harness_sha256", 3: "3.12", 4: "path chain", 5: "/tmp", 6: "ctime tick", 7: "writable interpreter", 8: "sigkill",
+                    9: "record-consistent"}
+
+
+def _spec_text():
+    if not SPEC_C4D3.parent.parent.parent.is_dir():  # `docs/` itself is absent: a packaged install, not the repository checkout
+        pytest.skip("the repository's docs/ directory is not present (not a checkout)")
+    return SPEC_C4D3.read_text(encoding="utf-8")  # a missing spec in a checkout is a failure (FileNotFoundError), never a skip
+
+
+def _numbered(text, pattern):
+    parts = re.split(pattern, text, flags=re.M)
+    return {int(parts[i]): parts[i + 1].lower() for i in range(1, len(parts) - 1, 2)}
+
+
+def test_every_numbered_residual_of_the_module_docstring_is_in_spec_2_5():
+    doc = bg.__doc__
+    section = doc[doc.index("Known residuals of ``compare``"):doc.index("Limits of the trace:")]
+    in_doc = _numbered(section, r"^\((\d)\) ")
+    spec = _spec_text()
+    block = spec[spec.index("**Disclosed residuals"):spec.index("### 2.6 Host checks")]
+    in_spec = _numbered(block, r"^(\d)\. ")
+    assert sorted(in_doc) == sorted(in_spec) == sorted(RESIDUAL_PHRASES) == list(range(1, 10))
+    for number, phrase in RESIDUAL_PHRASES.items():
+        assert phrase in in_doc[number], (number, phrase, "docstring")
+        assert phrase in in_spec[number], (number, phrase, "spec 2.5")
+    # the compare docstring numbers them the same way
+    assert all(f"({number})" in bg.compare.__doc__ for number in RESIDUAL_PHRASES)
+
+
+def test_the_provisioning_contract_and_the_c4e_write_back_list_name_the_two_pins():
+    spec = _spec_text()
+    contract = spec[spec.index("**Provisioning contract for C4e"):spec.index("**Interpreter (T2b1b)")].lower()
+    deviations = spec[spec.index("## 9. Deviations"):].lower()
+    for text in (contract, deviations):
+        assert "expected `harness_sha256`" in text and "cpython >= 3.12" in text
 
 
 # --- vocabularies ---
@@ -521,7 +579,7 @@ def build_world(tmp_path: Path, monkeypatch, shapes=("homebrew", "uv")) -> World
     except bg.BenchmarkGateError as exc:
         if exc.code != "GIT_TOO_OLD":
             raise
-        pytest.skip(f"git >= 2.43 is needed: {exc.detail}")
+        skip_old_git(f"git >= 2.43 is needed: {exc.detail}")
     repo, base, head = build_repo(tmp_path)
     prefix = build_fake_prefix(tmp_path / "interp")
     dispatch = bg.fixed_parent() / DISPATCH_ROOT
@@ -1539,7 +1597,7 @@ def _vexport(tmp_path, monkeypatch, fmt="sha1", files=BASIC, attrs=None):
     except bg.BenchmarkGateError as exc:
         if exc.code != "GIT_TOO_OLD":
             raise
-        pytest.skip(f"git >= 2.43 is needed: {exc.detail}")
+        skip_old_git(f"git >= 2.43 is needed: {exc.detail}")
     repo, commit = _vrepo(tmp_path, fmt, files, attrs=attrs)
     export = bg.export_tree(repo, commit, bg.fixed_parent() / DISPATCH_ROOT / "head")
     return types.SimpleNamespace(repo=repo, commit=commit, export=export,
@@ -2782,7 +2840,7 @@ def test_step9_pin_errors_map_with_the_stage_overlaid(bcase, code, detail):
     assert (e.value.reason, e.value.detail, e.value.stage) == ("ISOLATION_REJECTED", detail, "overlaid")
 
 
-# --- T4a1: step 12 (the post-run check) and the step-9 baseline ---
+# --- step 12 (the post-run check) and the step-9 baseline ---
 
 
 def _p12(c, prepared):
@@ -4695,7 +4753,7 @@ def build_real_world(tmp_path: Path, monkeypatch, mode: str) -> World:
     except bg.BenchmarkGateError as exc:
         if exc.code != "GIT_TOO_OLD":
             raise
-        pytest.skip(f"git >= 2.43 is needed: {exc.detail}")
+        skip_old_git(f"git >= 2.43 is needed: {exc.detail}")
     repo, base, head = _real_repo(mode)(tmp_path)
     dispatch = bg.fixed_parent() / DISPATCH_ROOT
     sides = {}
@@ -4740,12 +4798,8 @@ def _real_compare(tmp_path: Path, monkeypatch, mode: str):
     return c, result, seen
 
 
-@posix_only
-@pytest.mark.xdist_group("real-timing")
-def test_real_improved_overlay_origin(tmp_path, monkeypatch):
-    c, result, seen = _real_compare(tmp_path, monkeypatch, "new")
-    noisy = result["result"] == "INCONCLUSIVE" and result["reason"] in ("NOISY", "INCONSISTENT", "BORDERLINE")  # the host, not the harness
-    # every property that does not depend on a measured duration is asserted first, noisy host or not
+def _assert_real_improved_non_timing(c, result, seen):
+    # every property that does not depend on a measured duration
     assert result["stage"] == "ran" and result["kind"] is None and result["benchmark_origin"] == "BUILDER_AUTHORED"
     assert len(result["ratios"]) == 6 and result["n"] == 6
     fixture_writable = any(bg.interpreter_pin(side.bin, outside=c.roots).writable for side in c.world.sides.values())
@@ -4764,8 +4818,23 @@ def test_real_improved_overlay_origin(tmp_path, monkeypatch):
     # every fingerprint is unchanged after the children ran (recomputed here, independently of step 12)
     assert bg._baseline_fingerprints(c.base, c.head, c.roots, prepared.baseline.real_python, "ran") == prepared.baseline
     assert bg.hash_export(c.roots[0]) == prepared.h0[0] and bg.hash_export(c.roots[1]) == prepared.h0[1]
-    if noisy:
-        pytest.skip(f"host too noisy for the timing assertion ({result['reason']}); every non-timing property above held")
+
+
+@posix_only
+@pytest.mark.xdist_group("real-timing")
+def test_real_improved_overlay_origin(tmp_path, monkeypatch):
+    # one `compare` per fixture, so a noisy host gets up to three whole fresh runs (every non-timing property is asserted on EVERY attempt) before
+    # the timing assertion is given up as a skip
+    for attempt in range(3):
+        tries = tmp_path / f"try{attempt}"
+        tries.mkdir()
+        c, result, seen = _real_compare(tries, monkeypatch, "new")
+        noisy = result["result"] == "INCONCLUSIVE" and result["reason"] in ("NOISY", "INCONSISTENT", "BORDERLINE")  # the host, not the harness
+        _assert_real_improved_non_timing(c, result, seen)
+        if not noisy:
+            break
+    else:
+        pytest.skip(f"host too noisy for the timing assertion in 3 whole runs ({result['reason']}); every non-timing property held on each")
     _ran(result, "IMPROVED_CLEAR")
     assert result["result"] == "IMPROVED"  # exit-0 class: IMPROVED
     # a lower bound, not equality: removing half the work cannot give more than 0.5, and a quiet machine gave 0.45 to 0.49 (T6 calibration); 0.25 is
@@ -5145,6 +5214,35 @@ def test_a_swapped_dispatch_root_is_isolation_rejected_and_never_measured(tmp_pa
 
 
 @posix_only
+def test_the_guard_ending_result_carries_side_phase_and_partial_from_the_real_run(tmp_path, monkeypatch):
+    """`_IdentityChanged` knows the side about to be spawned, the phase and the completed timed rounds; the result must say so (not leave them null).
+    A head child swaps the dispatch root during the timed rounds: the next spawn is guarded, and the result has side, phase and the partial."""
+    c = _bench_case(tmp_path, monkeypatch)
+    monkeypatch.setattr(bg, "_post_run_check", lambda *a, **k: None)  # the guard alone
+    builder, log = _swap_builder(tmp_path, "head", 1, "keep")
+    result = c.impl(argv_builder=builder, min_base_ns=0)
+    _ends(result, "ISOLATION_REJECTED", "EXPORT_CHANGED", stage="ran")
+    assert result["side"] in ("base", "head") and result["phase"] == "timed"  # the next spawn's side: it follows the commit-seeded run order
+    assert set(result["partial"]) == {"order", "base_ns", "head_ns"} and len(result["partial"]["order"]) == 6
+    assert json.loads(Path(c.last_out).read_text()) == result
+
+
+@posix_only
+def test_the_guard_ending_result_carries_side_and_phase_of_a_warmup_swap(bcase, monkeypatch):
+    c = bcase
+    monkeypatch.setattr(bg, "trace_paired", lambda *a, **k: TRACE_OK)
+
+    def swapped(*a, **k):
+        error = bg._IdentityChanged("head root: replaced", "head")
+        error.phase = "warmup"
+        raise error
+    monkeypatch.setattr(bg, "measure_paired", swapped)
+    result = c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+    _ends(result, "ISOLATION_REJECTED", "EXPORT_CHANGED", stage="ran")
+    assert (result["side"], result["phase"], result["partial"]) == ("head", "warmup", None)
+
+
+@posix_only
 def test_the_real_trace_paired_forwards_the_guard_to_execute(tmp_path, monkeypatch):
     """The BASE trace child swaps the dispatch root: the HEAD trace child must never start in the planted tree. Only the real `trace_paired`
     (not a stub) can fail this; a `trace_paired` that does not pass its `spawn_guard` on to `_execute` runs the head child in the plant."""
@@ -5241,7 +5339,7 @@ def test_a_measure_args_invalid_with_nothing_replaced_stays_a_raise(bcase, monke
 
 
 @posix_only
-def test_a_trace_args_invalid_after_a_replaced_directory_is_a_verdict_and_otherwise_a_raise(bcase, monkeypatch):
+def test_a_trace_args_invalid_with_nothing_replaced_stays_a_raise(bcase, monkeypatch):
     c = bcase
     monkeypatch.setattr(bg, "measure_paired", lambda *a, **k: MEASURE_OK)
 
@@ -5251,6 +5349,52 @@ def test_a_trace_args_invalid_after_a_replaced_directory_is_a_verdict_and_otherw
     with pytest.raises(bg.BenchmarkGateError) as caught:  # silent guard: unchanged behaviour
         c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
     assert caught.value.code == "MEASURE_ARGS_INVALID"
+
+
+def _guard_objecting_from_call(monkeypatch, n):
+    """A spawn guard that is silent for the first ``n - 1`` calls and objects from the n-th on."""
+    real = bg._spawn_guard
+    calls = []
+
+    def factory(identities):
+        inner = real(identities)
+
+        def guard(side, path):
+            calls.append((side, path))
+            if len(calls) >= n:
+                raise bg._IdentityChanged("head root: replaced", side)
+            return inner(side, path)
+        return guard
+    monkeypatch.setattr(bg, "_spawn_guard", factory)
+    return calls
+
+
+def _args_invalid(*a, **k):
+    raise bg.BenchmarkGateError("MEASURE_ARGS_INVALID", "x")
+
+
+@posix_only
+def test_a_trace_args_invalid_after_a_replaced_directory_is_a_verdict(bcase, monkeypatch):
+    """The pre-trace guard is silent (call 1), `trace_paired` says args invalid and the guard (call 2) objects: `_replaced_after_invalid` is the
+    branch that makes this a verdict (a mutant returning None there raises MEASURE_ARGS_INVALID instead)."""
+    calls = _guard_objecting_from_call(monkeypatch, 2)
+    monkeypatch.setattr(bg, "trace_paired", _args_invalid)
+    result = bcase.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+    _ends(result, "ISOLATION_REJECTED", "EXPORT_CHANGED", stage="ran")
+    assert len(calls) == 2
+
+
+@posix_only
+def test_a_pre_measure_guard_that_objects_is_a_verdict_before_measure_paired_runs(bcase, monkeypatch):
+    """Trace passes, guard call 2 (the pre-measure guard) objects: a verdict, and `measure_paired` is never called (a mutant that makes that guard
+    a no-op reaches the stubbed measure, which here raises args-invalid, and then `_replaced_after_invalid` would ALSO object: so the stub records)."""
+    _guard_objecting_from_call(monkeypatch, 2)
+    monkeypatch.setattr(bg, "trace_paired", lambda *a, **k: TRACE_OK)
+    ran = []
+    monkeypatch.setattr(bg, "measure_paired", lambda *a, **k: ran.append(1) or MEASURE_OK)
+    result = bcase.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+    _ends(result, "ISOLATION_REJECTED", "EXPORT_CHANGED", stage="ran")
+    assert ran == []
 
 
 @posix_only
@@ -5420,10 +5564,14 @@ def test_compare_refuses_to_spawn_from_an_unrecorded_path_as_an_invariant(bcase,
     assert caught.value.code == "MEASURE_FAILED" and "internal invariant" in caught.value.detail
 
 
-def test_an_identity_change_is_not_a_gate_error_so_no_generic_handler_can_swallow_it():
-    """Why `_IdentityChanged` derives from `Exception`: `compare` is the only place that converts it, and its `except` for it comes first."""
+def test_an_identity_change_is_not_a_gate_error_so_no_generic_handler_can_swallow_it(bcase, monkeypatch):
+    """Why `_IdentityChanged` derives from `Exception`: only `compare` converts it. Behaviour: a stub raising it from `trace_paired` and from
+    `measure_paired` each gives a verdict (not a MEASURE_FAILED raise); the class is not a `BenchmarkGateError`."""
     assert issubclass(bg._IdentityChanged, Exception) and not issubclass(bg._IdentityChanged, bg.BenchmarkGateError)
-    source = inspect.getsource(bg._compare_runs)
-    assert source.index("except _IdentityChanged") < source.index("except BenchmarkGateError")
     error = bg._IdentityChanged("x", "head")
     assert (error.code, error.detail, error.side, error.phase, error.kind, error.partial, error.trace) == ("MEASURE_FAILED", "x", "head", None, "harness", None, None)
+
+    def raiser(*a, **k):
+        raise bg._IdentityChanged("head root: replaced", "base")
+    monkeypatch.setattr(bg, "trace_paired", raiser)
+    _ends(bcase.impl(argv_builder=fake_trace_builder, min_base_ns=0), "ISOLATION_REJECTED", "EXPORT_CHANGED", stage="ran")
