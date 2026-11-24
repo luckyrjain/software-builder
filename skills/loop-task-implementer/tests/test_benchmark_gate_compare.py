@@ -4368,3 +4368,278 @@ def test_cli_arguments_are_the_spec_ones(monkeypatch, capsys):
     for rest in (["--root", "r", "--bin", "b"], ["--gate", "g", "--bin", "b"], ["--gate", "g", "--root", "r"],
                  ["--gate", "g", "--root", "r", "--bin", "b", "--side", "both"], ["--gate", "g", "--root", "r", "--bin", "b", "--ini", "i"]):
         assert bg.main(["run-once", *rest]) == 2 and seen == [], rest
+
+
+# --- T6: real pytest children and real-child tamper rows (spec 3, 4 rows 6 and 17) ---
+# The two real rows run the whole pipeline with the default argv (a real ``python -P -m pytest`` child, a real trace plugin) in two real,
+# pip-less venvs whose project is installed as an editable dist (the one exempt dist of the parity check). The interpreter is the machine's own,
+# so ``allow_writable_interpreter`` is on (a Homebrew or runner interpreter is writable) and the interpreter seam is the default probe.
+# The tamper rows use tiny real child processes in the fixture world, whose interpreter is the FAKE prefix: no row ever writes to a real interpreter.
+
+REAL_LOOP = 40_000_000  # iterations of one pass of the workload; sized so one pass takes about a second (see the T6 calibration figures)
+_REAL_WORK = ("def _work():\n    x = 0\n    for i in range(%d):\n        x = (x * 31 + i) %% 1000003\n    return x\n\n\n" % REAL_LOOP)
+REAL_CORE_SLOW = _REAL_WORK + "def f():\n    _work()\n    return _work()\n"  # the redundant first pass is the "fix" the head removes
+REAL_CORE_FAST = _REAL_WORK + "def f():\n    return _work()\n"  # the same value, half the work
+REAL_CORE_UNCHANGED = REAL_CORE_SLOW + "\n# a comment: the work done is the same\n"
+REAL_MIN_BASE_NS = 500_000_000 # lowered from the production floor so a fast machine still measures; the pipeline, not the floor, is under test
+
+_REAL_FINDER = '''MAPPING: dict[str, str] = {{"app": {target!r}}}
+NAMESPACES: dict[str, list[str]] = {{}}
+
+import sys
+from importlib.util import spec_from_file_location
+
+
+class _Finder:
+    @classmethod
+    def find_spec(cls, fullname, path=None, target=None):
+        if fullname in MAPPING:
+            return spec_from_file_location(fullname, MAPPING[fullname] + "/__init__.py", submodule_search_locations=[MAPPING[fullname]])
+        return None
+
+
+def install():
+    if _Finder not in sys.meta_path:
+        sys.meta_path.append(_Finder)
+'''
+
+
+def _real_repo(mode: str):
+    """``new``: the base has the slow code and no benchmark, the head has the fast code and adds the benchmark (overlay-origin). ``pre``:
+    the base already has the benchmark and the head changes nothing but a comment."""
+    def build(tmp_path: Path):
+        repo, _, _ = _ORIGINAL_BUILD_REPO(tmp_path)
+        files = {"src/app/core.py": REAL_CORE_SLOW}
+        if mode == "pre":
+            files[BENCH] = BENCH_OK.decode()
+        make_commit(repo, files, "slow")
+        git(repo, "commit", "-q", "-m", "slow")
+        base = git(repo, "rev-parse", "HEAD")
+        if mode == "new":
+            make_commit(repo, {"src/app/core.py": REAL_CORE_FAST, BENCH: BENCH_OK.decode()}, "fast")
+        else:
+            make_commit(repo, {"src/app/core.py": REAL_CORE_UNCHANGED}, "same")
+        git(repo, "commit", "-q", "-m", "head")
+        return repo, base, git(repo, "rev-parse", "HEAD")
+    return build
+
+
+def _real_pytest_venv(root: Path, export: Path) -> Path:
+    """A real, pip-less venv: this interpreter's pytest through a ``.pth`` (the pattern of ``build_venv``), and the project installed as the
+    one editable dist the parity check exempts, so ``import app`` finds the export's ``src/app``. All of it exists before the snapshot."""
+    venv.create(root, with_pip=False, symlinks=True)
+    sites = {os.path.dirname(os.path.dirname(sys.modules[name].__file__)) for name in ("pytest", "_pytest", "pluggy", "iniconfig", "packaging")
+             if name in sys.modules}
+    site = next((root / "lib").glob("python3*/site-packages"))
+    (site / "zz_pytest.pth").write_text("\n".join(sorted(sites)) + "\n")
+    finder = _REAL_FINDER.format(target=str(export / "src" / "app")).encode()
+    _editable(types.SimpleNamespace(site=site, export=export), name="app", extra_files={"__editable___app_1_0_finder.py": finder})
+    return root / "bin"
+
+
+def build_real_world(tmp_path: Path, monkeypatch, mode: str) -> World:
+    temp = tmp_path / "tmp"
+    temp.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(temp))
+    try:
+        bg._require_modern_git()
+    except bg.BenchmarkGateError as exc:
+        if exc.code != "GIT_TOO_OLD":
+            raise
+        pytest.skip(f"git >= 2.43 is needed: {exc.detail}")
+    repo, base, head = _real_repo(mode)(tmp_path)
+    dispatch = bg.fixed_parent() / DISPATCH_ROOT
+    sides = {}
+    for name, commit in (("base", base), ("head", head)):
+        export = bg.export_tree(repo, commit, dispatch / name)
+        bin_dir = _real_pytest_venv(dispatch / f"venv-{name}", export)
+        snapshot = tmp_path / f"{name}-venv.json"
+        bg.snapshot_venv(bin_dir, snapshot)
+        sides[name] = types.SimpleNamespace(commit=commit, export=export, bin=bin_dir, snapshot=snapshot, shape="real")
+    return World(repo=repo, base=base, head=head, prefix=None, dispatch=dispatch, sides=sides, interpreter_of=None)
+
+
+class RealCase(Case):
+    """``Case`` with the real interpreter probe instead of the fake-prefix stub."""
+
+    def interp(self, bin_dir):
+        self.spy.append("interpreter_of")
+        return bg.interpreter_pin(bin_dir, outside=self.roots)
+
+    def _side(self, name):
+        s = self.world.sides[name]
+        pin = bg.interpreter_pin(s.bin, outside=self.roots)
+        return bg.Side(str(s.export), s.commit, str(s.bin), str(s.snapshot), hashlib.sha256(s.snapshot.read_bytes()).hexdigest(), pin.sha256)
+
+
+def _real_compare(tmp_path: Path, monkeypatch, mode: str):
+    """One whole real comparison (steps 1 to 13) on fresh fixtures. Returns ``(case, result, seen)``; ``seen`` holds what steps 9 and 12 returned."""
+    c = RealCase(build_real_world(tmp_path, monkeypatch, mode), tmp_path, monkeypatch)
+    seen = {"post": []}
+    real_prepare, real_post = bg._compare_prepare, bg._post_run_check
+
+    def prepare(*a, **k):
+        seen["prepared"] = real_prepare(*a, **k)
+        return seen["prepared"]
+
+    def post(*a, **k):
+        seen["post"].append(real_post(*a, **k))
+        return seen["post"][-1]
+    monkeypatch.setattr(bg, "_compare_prepare", prepare)
+    monkeypatch.setattr(bg, "_post_run_check", post)
+    result = c.impl(min_base_ns=REAL_MIN_BASE_NS)  # default argv_builder: real pytest children
+    return c, result, seen
+
+
+@posix_only
+def test_real_improved_overlay_origin(tmp_path, monkeypatch):
+    c, result, seen = _real_compare(tmp_path, monkeypatch, "new")
+    _ran(result, "IMPROVED_CLEAR")
+    assert result["result"] == "IMPROVED" and result["kind"] is None and result["benchmark_origin"] == "BUILDER_AUTHORED"  # exit-0 class: IMPROVED
+    # a lower bound, not equality: removing half the work cannot give more than 0.5, and a quiet machine gave 0.45 to 0.49 (T6 calibration); 0.25 is
+    # about half of that, above the gate's own 0.10 (never loosened) and far from anything noise alone would make
+    assert result["improvement"] >= 0.25 and len(result["ratios"]) == 6 and result["n"] == 6
+    assert result["host_check"] == "checked" and result["interpreter_writable"] is True and result["order_salt"] == "ab12"
+    # JSON with every 2.8 key, equal to what was returned
+    assert set(result) == set(bg.COMPARE_RESULT_KEYS) and json.loads(Path(c.last_out).read_text()) == result
+    assert [k for k, v in result.items() if v is None] == ["kind", "trace_fault", "side", "phase", "partial"]
+    assert re.fullmatch(r"[0-9a-f]{64}", result["digest"]) and result["benchmark_sha256"] == hashlib.sha256(BENCH_OK).hexdigest()
+    assert result["trace"]["base"]["kind"] == result["trace"]["head"]["kind"] == "lines" and result["trace"]["base"]["value"] > 0
+    assert result["trace"]["base"]["value"] == result["trace"]["head"]["value"]
+    # steps 9 and 12 passed with the overlaid file: the base export holds the head's benchmark, sealed, and step 12 found nothing
+    prepared = seen["prepared"]
+    assert prepared.origin == "BUILDER_AUTHORED" and seen["post"] == [None]
+    base_bench = Path(c.roots[0]) / BENCH
+    assert base_bench.read_bytes() == BENCH_OK and not os.stat(base_bench).st_mode & 0o222
+    # every fingerprint is unchanged after the children ran (recomputed here, independently of step 12)
+    assert bg._baseline_fingerprints(c.base, c.head, c.roots, prepared.baseline.real_python, "ran") == prepared.baseline
+    assert bg.hash_export(c.roots[0]) == prepared.h0[0] and bg.hash_export(c.roots[1]) == prepared.h0[1]
+
+
+@posix_only
+def test_real_not_improved_pre_existing_benchmark(tmp_path, monkeypatch):
+    c, result, seen = _real_compare(tmp_path, monkeypatch, "pre")
+    _ran(result, "BELOW_HALF_THRESHOLD")
+    assert result["result"] == "NOT_IMPROVED" and result["benchmark_origin"] == "PRE_EXISTING"
+    assert result["improvement"] < c.gate.get("min_improvement", 0.10) / 2 and len(result["ratios"]) == 6
+    assert set(result) == set(bg.COMPARE_RESULT_KEYS) and json.loads(Path(c.last_out).read_text()) == result
+    assert seen["post"] == [None] and re.fullmatch(r"[0-9a-f]{64}", result["digest"])
+    assert result["trace"]["base"]["value"] == result["trace"]["head"]["value"] > 0
+
+
+def _child_with(extra: str, payload):
+    """A builder for tiny real children that speak both protocols (``_FAKE_TRACE_CHILD``) and then run ``extra`` on the HEAD side only.
+    ``payload(side, bin_dir, root)`` is the JSON the child gets as ``sys.argv[3]`` (``{}`` for the base side)."""
+    def builder(side, bin_dir, root, target):
+        arg = json.dumps(payload(bin_dir, root) if side == "head" else {})
+        return [sys.executable, "-c", _FAKE_TRACE_CHILD + extra, FAKE_DIGEST, str(FAKE_TRACE_LINES), arg]
+    return builder
+
+
+_CHILD_HOOK_AND_SNAPSHOT = """
+import importlib.util, json
+a = json.loads(sys.argv[3])
+if a:
+    spec = importlib.util.spec_from_file_location("bg_in_child", a["script"])
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["bg_in_child"] = mod
+    spec.loader.exec_module(mod)
+    open(os.path.join(a["site"], "evil.pth"), "w").write("import evil_hook\\n")
+    if os.path.exists(a["snapshot"]):
+        os.unlink(a["snapshot"])
+    mod.snapshot_venv(a["bin"], a["snapshot"])  # the snapshot now blesses the hook
+"""
+
+_CHILD_EDIT_INTERPRETER = """
+import json
+a = json.loads(sys.argv[3])
+if a:
+    os.makedirs(os.path.join(a["stdlib"], "__pycache__"), exist_ok=True)
+    open(os.path.join(a["stdlib"], "__pycache__", "planted.cpython-312.pyc"), "wb").write(b"x")
+"""
+
+_CHILD_EDIT_AND_RESTORE = """
+import json, stat
+a = json.loads(sys.argv[3])
+if a:
+    root, path = a["root"], os.path.join(a["root"], "README.md")
+    dir_mode, before = stat.S_IMODE(os.stat(root).st_mode), os.stat(path)
+    data = open(path, "rb").read()
+    os.chmod(root, 0o755)
+    os.chmod(path, 0o644)
+    open(path, "wb").write(b"x" * len(data))
+    open(path, "wb").write(data)
+    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+    os.chmod(path, stat.S_IMODE(before.st_mode))
+    os.chmod(root, dir_mode)
+"""
+
+
+def _hook_payload(c):
+    side = c.world.sides["head"]
+    return lambda bin_dir, root: {"script": str(SCRIPT), "site": str(_site(c)), "snapshot": str(side.snapshot), "bin": str(side.bin)}
+
+
+def _interp_payload(c):
+    stdlib = next(p for p in (c.world.prefix / "lib").glob("python3*") if p.is_dir())
+    return lambda bin_dir, root: {"stdlib": str(stdlib)}
+
+
+def _restore_payload(c):
+    return lambda bin_dir, root: {"root": root}
+
+
+REAL_CHILD_TAMPERS = {
+    "hook-and-snapshot": ("SNAPSHOT_CHANGED", _CHILD_HOOK_AND_SNAPSHOT, _hook_payload),
+    "interpreter": ("INTERPRETER_CHANGED", _CHILD_EDIT_INTERPRETER, _interp_payload),
+    "edit-and-restore": ("EXPORT_CHANGED", _CHILD_EDIT_AND_RESTORE, _restore_payload),
+}
+
+
+@posix_only
+@pytest.mark.parametrize("name", sorted(REAL_CHILD_TAMPERS))
+def test_real_child_tamper_is_isolation_rejected_and_beats_the_other_results(bcase, name):
+    c = bcase
+    detail, extra, payload = REAL_CHILD_TAMPERS[name]
+    c.spies("_post_run_check")
+    seen = {}
+    real_prepare = bg._compare_prepare
+    c.mp.setattr(bg, "_compare_prepare", lambda *a, **k: seen.setdefault("prepared", real_prepare(*a, **k)))
+    result = c.impl(argv_builder=_child_with(extra, payload(c)), min_base_ns=0)
+    _ran(result, "ISOLATION_REJECTED", detail)
+    assert result["result"] == "REJECTED" and result["kind"] is None and _post12(c) == 1
+    assert result["trace"]["head"]["value"] == FAKE_TRACE_LINES  # both paired runs completed; step 12 then beat what they said
+    if name == "edit-and-restore":  # the bytes, modes and names are all back, so the content hash is blind to it: only the fingerprint saw it
+        assert bg.hash_export(c.roots[1]) == seen["prepared"].h0[1]
+        assert bg.verify_export_against_commit(c.world.repo, c.head.commit, c.roots[1], allow={}) == []
+
+
+_CHILD_REWRITES_INI_AND_PLANTS = """
+import json
+log = json.loads(sys.argv[3])["log"]
+home = os.environ["HOME"]
+scratch = os.path.dirname(home)
+work = os.path.dirname(scratch)
+ini = os.path.join(scratch, "empty.ini")
+row = {"ini": open(ini).read(), "scratch": sorted(os.listdir(scratch)), "work_has_planted": "planted" in os.listdir(work)}
+open(log, "a").write(json.dumps(row) + "\\n")
+open(ini, "w").write("[pytest]\\naddopts = --tampered\\n")
+open(os.path.join(work, "planted"), "w").write("x")
+"""
+
+
+@posix_only
+def test_a_real_child_that_rewrites_its_ini_or_plants_a_file_under_work_changes_nothing(bcase, tmp_path):
+    c = bcase
+    log = tmp_path / "ini-log.jsonl"
+
+    def builder(side, bin_dir, root, target):  # BOTH sides tamper with their own scratch and work
+        return [sys.executable, "-c", _FAKE_TRACE_CHILD + _CHILD_REWRITES_INI_AND_PLANTS, FAKE_DIGEST, str(FAKE_TRACE_LINES), json.dumps({"log": str(log)})]
+    result = c.impl(argv_builder=builder, min_base_ns=0)
+    rows = [json.loads(line) for line in log.read_text().splitlines()]
+    gate = bg.validate_benchmark_gate(c.gate)[0]
+    assert len(rows) == 2 + 2 * (gate["warmup_runs"] + gate["repeats"])  # the trace pair, then every warmup and timed run of both sides
+    # every run saw the pristine ini and a scratch holding only its own three entries, however much the earlier children rewrote and planted
+    assert all(row["ini"] == bg._EMPTY_INI and row["scratch"] == ["empty.ini", "home", "tmp"] for row in rows)
+    assert any(row["work_has_planted"] for row in rows)  # the plant did land under work for the measure runs: the row is not vacuous
+    assert result["stage"] == "ran" and result["reason"] != "ISOLATION_REJECTED" and len(result["ratios"]) == 6 and result["trace"]["head"]["value"] == FAKE_TRACE_LINES
