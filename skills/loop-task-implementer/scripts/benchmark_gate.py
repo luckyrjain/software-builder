@@ -5529,7 +5529,7 @@ def _map_measure_error(error: BenchmarkGateError) -> _Verdict:
 
 def _compare_runs(prepared: _Prepared, repo: object, base: Side, head: Side, checked: _Checked, *, run: _Run, argv_builder=None,
                   min_base_ns: int = _MIN_BASE_NS, interpreter_of: Callable[[str], InterpreterPin] | None = None) -> _RunOutcome:
-    """Steps 10 to 12 (step 13 is T4b's). A `BenchmarkGateError` (a raise of 2.7: T1, M4, any 2.1 raise) propagates and step 12 does not run.
+    """Steps 10 to 12 (step 13, `_merge_outcome`, merges what is returned). A `BenchmarkGateError` (a raise of 2.7: T1, M4, any 2.1 raise) propagates and step 12 does not run.
     Every other path started a child (a T3 spawn too, even if none ran), so step 12 runs: its `ISOLATION_REJECTED` beats everything. Then
     the at-once trace results (items 2) and a measure-raised REJECTED/NOT_IMPROVED (item 3) are raised as `_Verdict`; what is left for the
     precedence list (pending trace mismatch, measure INCONCLUSIVE, success: items 4 to 6) is returned."""
@@ -5577,24 +5577,85 @@ def _compare_runs(prepared: _Prepared, repo: object, base: Side, head: Side, che
     return _RunOutcome(trace, pending, measured, measure_verdict)
 
 
+# --- step 13: the one merge point of steps 10 to 12 (spec 2.6, 2.7) ---------------------------------------------------------------
+
+_HOST_BUSY_MIN_CPUS = 3  # below this the gate's own one-process load is too large a share of the machine for the end check to mean anything
+
+
+def _host_busy_end(checked: _Checked, load_probe: Callable[[], tuple] | None, common: dict) -> bool:
+    """The end host check (2.6), probed once: `(load1 - 1) * 10 > 7 * cpu_count` in exact arithmetic (`Fraction(str(load1))`), the 1 being
+    the gate's own load. Records `host_check`, `loadavg.end` and `cpu_count.end`. A failed start probe already skipped both checks (no end
+    probe); a bad end probe or fewer than `_HOST_BUSY_MIN_CPUS` cpus skips this one."""
+    if checked.load is None:
+        return False
+    load = _host_load(load_probe or _default_load_probe)
+    if load is None:
+        common["host_check"] = "skipped_probe_failed"
+        return False
+    common["loadavg"] = {**common["loadavg"], "end": float(load[0])}
+    common["cpu_count"] = {**common["cpu_count"], "end": load[1]}
+    if load[1] < _HOST_BUSY_MIN_CPUS:
+        common["host_check"] = "end_skipped_few_cpus"
+        return False
+    common["host_check"] = "checked"
+    return (Fraction(str(load[0])) - 1) * 10 > 7 * load[1]
+
+
+def _measured_fields(measured: dict) -> dict:
+    """The result keys a successful `measure_paired` fills (raw samples kept so a consumer can recompute): the ratios head/base per pair,
+    `improvement = 1 - median(ratios)`, `mad_over_median`, the two median times. Fractions become floats in `_result_dict`."""
+    base_ns, head_ns = measured["base_ns"], measured["head_ns"]
+    ratios, median, mad = _ratio_stats(base_ns, head_ns)
+    return {"order": measured["order"], "base_ns": base_ns, "head_ns": head_ns, "digest": measured["digest"], "argv": measured["argv"],
+            "n": len(base_ns), "ratios": ratios, "improvement": 1 - median, "mad_over_median": mad / median,
+            "base_median_ns": _median([Fraction(v) for v in base_ns]), "head_median_ns": _median([Fraction(v) for v in head_ns])}
+
+
+def _merge_outcome(outcome: _RunOutcome, prepared: _Prepared, checked: _Checked, run: _Run, load_probe: Callable[[], tuple] | None) -> _Verdict:
+    """Items 4 to 6 of the precedence list (2.7); items 0 to 3 already left `_compare_runs` as a raise or a `_Verdict`. 4: a pending
+    `counts_differ` mismatch beats a measure-raised INCONCLUSIVE and the statistics; whatever was measured stays in the result and the end
+    host check is not probed. 5: a measure-raised INCONCLUSIVE with nothing pending. 6: the statistics, then `HOST_BUSY_END` replaces an
+    IMPROVED, NOT_IMPROVED or INCONCLUSIVE of `evaluate_paired_samples`, never `INVALID_INPUT`."""
+    pending, refused, measured = outcome.pending, outcome.measure_verdict, outcome.measured
+    if pending is not None:
+        if measured is not None:
+            pending.extra.update(_measured_fields(measured))
+        elif refused is not None:
+            pending.extra["partial"] = refused.extra.get("partial")
+            pending.extra["untrusted_text"] = [*pending.extra.get("untrusted_text", []), *refused.extra.get("untrusted_text", [])]
+        return pending
+    if refused is not None:
+        return refused
+    assert measured is not None  # no pending error and no refusal: the measurement succeeded
+    fields = _measured_fields(measured)
+    gate = prepared.gate
+    result, reason = evaluate_paired_samples(measured["base_ns"], measured["head_ns"], repeats=gate["repeats"],
+                                             min_improvement=gate["min_improvement"], max_noise=gate["max_noise"])
+    if reason != "INVALID_INPUT" and _host_busy_end(checked, load_probe, run.common):
+        result, reason = "INCONCLUSIVE", "HOST_BUSY_END"
+    return _Verdict(result, reason, stage="ran", extra=fields)
+
+
 def _compare_impl(gate: object, repo: object, base: Side, head: Side, *, attempt: object = 1, out_path: object,
                   allow_writable_interpreter: bool = False, argv_builder=None, load_probe=None, min_base_ns: int = _MIN_BASE_NS,
                   order_salt: object = None, interpreter_of=None) -> dict:
     """The pipeline behind `compare`, with the test seams (`argv_builder`, `load_probe`, `min_base_ns`, `order_salt`, `interpreter_of`).
-    A result (a `_Verdict`) is assembled, written to ``out_path`` and returned; a caller or harness fault raises `BenchmarkGateError`."""
+    A result (a `_Verdict`) is assembled, written to ``out_path`` after step 12 and returned; a caller or harness fault raises
+    `BenchmarkGateError`."""
     run = _Run()
     try:
         checked = _compare_checks(gate, repo, base, head, attempt=attempt, out_path=out_path, allow_writable_interpreter=allow_writable_interpreter,
                                   load_probe=load_probe, order_salt=order_salt, interpreter_of=interpreter_of, run=run)
         prepared = _compare_prepare(repo, base, head, checked, interpreter_of=interpreter_of, run=run)
-        _compare_runs(prepared, repo, base, head, checked, run=run, argv_builder=argv_builder, min_base_ns=min_base_ns,
-                      interpreter_of=interpreter_of)
-    except _Verdict as verdict:
-        result = _result_dict(verdict, run.common)
-        assert run.out is not None  # a verdict only exists after step 1 validated out_path
-        _write_result(str(out_path), run.out[0], run.out[1], _result_bytes(result))
-        return result
-    raise NotImplementedError("step 13: T4b")  # declared scaffold: removed by T4b
+        outcome = _compare_runs(prepared, repo, base, head, checked, run=run, argv_builder=argv_builder, min_base_ns=min_base_ns,
+                                interpreter_of=interpreter_of)
+        verdict = _merge_outcome(outcome, prepared, checked, run, load_probe)
+    except _Verdict as ended:
+        verdict = ended
+    result = _result_dict(verdict, run.common)
+    assert run.out is not None  # a verdict only exists after step 1 validated out_path
+    _write_result(str(out_path), run.out[0], run.out[1], _result_bytes(result))
+    return result
 
 
 def compare(gate: object, repo: object, base: Side, head: Side, *, attempt: object = 1, out_path: object,

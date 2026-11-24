@@ -1749,7 +1749,7 @@ def test_error_mappings(tmp_path, monkeypatch):
 
 # --- _compare_checks: steps 1 to 6 (T3a) ---
 # ``_compare_checks`` is driven directly for passing paths (it returns the context the later steps use); ``_compare_impl`` for the paths that
-# end with a result. Until T3b, ``_compare_impl`` raises NotImplementedError after step 6 (the declared scaffold; T4b removes it).
+# end with a result.
 
 BENCH = "benchmarks/bench_x.py"
 GATE = {"command": f"pytest -q --no-header {BENCH}", "benchmark_paths": [BENCH], "benchmark_symbol": "build"}
@@ -2383,9 +2383,10 @@ def test_overlay_origin_pass_through(bcase):
 
 
 @posix_only
-def test_overlay_origin_through_the_pipeline_reaches_the_scaffold(bcase):
-    with pytest.raises(NotImplementedError):  # steps 7 to 12 passed with honest fake children; only step 13 (T4b) is missing
-        bcase.impl(argv_builder=fake_trace_builder, min_base_ns=0)
+def test_overlay_origin_through_the_pipeline_reaches_step_13(bcase):
+    result = bcase.impl(argv_builder=fake_trace_builder, min_base_ns=0)  # steps 7 to 12 passed with honest fake children; the timings decide the rest
+    assert result["stage"] == "ran" and result["benchmark_origin"] == "BUILDER_AUTHORED" and result["reason"] != "ISOLATION_REJECTED"
+    assert result["trace"]["base"]["value"] == FAKE_TRACE_LINES and result["digest"] in (FAKE_DIGEST, None)
 
 
 @posix_only
@@ -3332,7 +3333,7 @@ def test_step12_runs_after_every_path_that_started_a_child(bcase, name):
     else:
         _stub(c, "trace_paired", TRACE_OK)
         _stub(c, "measure_paired", outcome, hook=_s12_edit)
-    result = c.impl(argv_builder=fake_trace_builder, min_base_ns=0)  # never the NotImplementedError: step 12 beats the success path too
+    result = c.impl(argv_builder=fake_trace_builder, min_base_ns=0)  # step 12 beats the success path too
     _ran(result, "ISOLATION_REJECTED", "EXPORT_CHANGED")
     assert _post12(c) == 1
     assert result["kind"] is None  # step 12's verdict is its own, not the ending it beat
@@ -3346,3 +3347,618 @@ def test_step12_beats_a_pending_trace_mismatch_and_a_measure_failure(bcase):
     result = c.impl(argv_builder=fake_trace_builder, min_base_ns=0)
     _ran(result, "ISOLATION_REJECTED", "EXPORT_CHANGED")
     assert result["trace"]["head"]["value"] == 8  # what the trace saw stays in the file
+
+
+# --- T4b: step 13 (the precedence list, HOST_BUSY_END, statistics) and the coverage of the vocabularies ---
+# The stubs above stand in for ``trace_paired`` / ``measure_paired``; steps 1 to 9 and the step-12 check are real, so a ``hook`` that edits an
+# export is a real tamper. ``_probes`` scripts the load probe: the first call is the start probe (step 6), the second the end probe (step 13).
+
+def _meas(base_ns, head_ns):
+    return {**MEASURE_OK, "base_ns": list(base_ns), "head_ns": list(head_ns)}
+
+
+def _go(c, trace=TRACE_OK, measure=MEASURE_OK, hook=None, hook_on="measure", **over):
+    """Stub both library calls and run ``_compare_impl``; the stubs' recorded calls are ``c.calls = (trace, measure)``."""
+    c.calls = (_stub(c, "trace_paired", trace, hook=hook if hook_on == "trace" else None),
+               _stub(c, "measure_paired", measure, hook=hook if hook_on == "measure" else None))
+    return c.impl(argv_builder=fake_trace_builder, min_base_ns=0, **over)
+
+
+def _probes(c, *values):
+    """The n-th call returns ``values[n-1]`` (the last repeats); an exception instance is raised. Returns the list of calls."""
+    calls = []
+
+    def probe():
+        calls.append(1)
+        value = values[min(len(calls), len(values)) - 1]
+        if isinstance(value, BaseException):
+            raise value
+        return value
+    c.probe = probe
+    return calls
+
+
+BUSY_END = (4.0, 4)  # (4.0 - 1) * 10 = 30 > 7 * 4 = 28
+START_OK = (0.1, 4)
+PENDING = _err("TRACE_MISMATCH", "counts_differ", phase="trace", trace=_seen())
+HALVED = _meas([100, 200, 400, 100, 200, 400], [50, 100, 200, 50, 100, 200])
+
+
+@posix_only
+def test_precedence_0_a_raise_beats_a_step12_finding(bcase):
+    c = bcase
+    c.spies("_post_run_check")
+    with pytest.raises(bg.BenchmarkGateError) as e:
+        _go(c, measure=_err("MEASURE_FAILED", None, None, "timed"), hook=_s12_edit)  # the export was edited, and the raise still wins
+    assert e.value.code == "MEASURE_FAILED" and _post12(c) == 0 and not Path(c.last_out).exists()
+
+
+TRACE_AT_ONCE = {
+    "T2": _err("TRACE_UNAVAILABLE", "unavailable", None, "trace", trace=_seen("unavailable", "no_monitoring", "unavailable", "no_monitoring")),
+    "T3": _err("TRACE_MISMATCH", "spawn", "base", "trace"),
+    "T4": _err("TRACE_MISMATCH", "nonzero", "head", "trace"),
+    "T6": _err("TRACE_MISMATCH", "no_result", "head", "trace"),
+}
+T_REASON = {"T2": "TRACE_UNAVAILABLE", "T3": "ISOLATION_REJECTED", "T4": "HEAD_NONZERO_EXIT", "T6": "TRACE_MISMATCH"}
+
+
+@posix_only
+@pytest.mark.parametrize("name", sorted(TRACE_AT_ONCE))
+def test_precedence_1_step12_beats_an_at_once_trace_result_and_its_detail_wins(bcase, name):
+    c = bcase
+    result = _go(c, trace=TRACE_AT_ONCE[name], hook=_s12_edit, hook_on="trace")
+    _ran(result, "ISOLATION_REJECTED", "EXPORT_CHANGED")  # also over the T3 spawn's NOT_PROVISIONED
+    assert result["kind"] is None and result["trace_fault"] is None
+
+
+@posix_only
+@pytest.mark.parametrize("name", sorted(TRACE_AT_ONCE))
+def test_precedence_2_an_at_once_trace_result_beats_a_measure_refusal_and_is_not_probed(bcase, name):
+    c = bcase
+    calls = _probes(c, START_OK, BUSY_END)
+    result = _go(c, trace=TRACE_AT_ONCE[name], measure=_err("BASE_NONZERO_EXIT", "nonzero", "base", "warmup"))
+    _ran(result, T_REASON[name])
+    assert c.calls[1] == [] and len(calls) == 1 and result["host_check"] == "start_only" and result["ratios"] is None  # step 11 did not run
+
+
+@posix_only
+@pytest.mark.parametrize("code,kind,side,reason", [("BASE_NONZERO_EXIT", "nonzero", "base", "BASE_NONZERO_EXIT"), ("DIGEST_MISSING", None, None, "DIGEST_MISSING"),
+                                                   ("HEAD_NONZERO_EXIT", "nonzero", "head", "HEAD_NONZERO_EXIT"), ("DIGEST_MISMATCH", None, None, "DIGEST_MISMATCH"),
+                                                   ("BASE_NONZERO_EXIT", "spawn", "base", "ISOLATION_REJECTED")])
+def test_precedence_3_a_measure_rejection_beats_a_pending_trace_mismatch_and_marks_it_seen(bcase, code, kind, side, reason):
+    c = bcase
+    calls = _probes(c, START_OK, BUSY_END)
+    result = _go(c, trace=PENDING, measure=_err(code, kind, side, "timed"))
+    _ran(result, reason)
+    assert result["trace_mismatch_seen"] is True and result["ratios"] is None and len(calls) == 1 and result["host_check"] == "start_only"
+
+
+@posix_only
+def test_precedence_4_a_pending_trace_mismatch_beats_a_measure_inconclusive_and_keeps_the_partial_data(bcase):
+    c = bcase
+    calls = _probes(c, START_OK, BUSY_END)
+    partial = {"order": ["base_first"], "base_ns": [3], "head_ns": [2]}
+    result = _go(c, trace=PENDING, measure=_err("BASE_TIMEOUT", "timeout", "base", "timed", partial=partial))
+    _ran(result, "TRACE_MISMATCH", "counts_differ")
+    assert result["partial"] == partial and result["trace"]["head"]["value"] == 8 and result["ratios"] is None and result["improvement"] is None
+    assert len(calls) == 1 and result["host_check"] == "start_only" and result["trace_mismatch_seen"] is False  # the result itself is the mismatch
+
+
+@posix_only
+def test_precedence_4_a_pending_trace_mismatch_beats_the_statistics_and_a_busy_host_and_keeps_the_measured_data(bcase):
+    c = bcase
+    calls = _probes(c, START_OK, BUSY_END)
+    evaluated = []
+    real = bg.evaluate_paired_samples
+    c.mp.setattr(bg, "evaluate_paired_samples", lambda *a, **k: (evaluated.append(1), real(*a, **k))[1])
+    result = _go(c, trace=PENDING, measure=HALVED)
+    _ran(result, "TRACE_MISMATCH", "counts_differ")
+    assert result["ratios"] == [0.5] * 6 and result["improvement"] == 0.5 and result["mad_over_median"] == 0.0 and result["n"] == 6
+    assert result["base_ns"] == HALVED["base_ns"] and result["head_ns"] == HALVED["head_ns"] and result["digest"] == FAKE_DIGEST
+    assert result["base_median_ns"] == 200.0 and result["head_median_ns"] == 100.0 and result["order"] == HALVED["order"]
+    assert len(calls) == 1 and result["host_check"] == "start_only" and result["loadavg"]["end"] is None
+    assert result["trace_mismatch_seen"] is False and evaluated == []  # the mismatch stands; evaluate is not consulted
+
+
+@posix_only
+def test_precedence_5_a_measure_inconclusive_with_no_pending_beats_the_statistics_and_is_not_probed(bcase):
+    c = bcase
+    calls = _probes(c, START_OK, BUSY_END)
+    evaluated = []
+    c.mp.setattr(bg, "evaluate_paired_samples", lambda *a, **k: evaluated.append(1))
+    partial = {"order": ["base_first"], "base_ns": [3], "head_ns": [2]}
+    result = _go(c, measure=_err("BASE_TIMEOUT", "timeout", "base", "timed", partial=partial))
+    _ran(result, "BASE_TIMEOUT", "timeout")
+    assert result["partial"] == partial and result["ratios"] is None and result["trace"]["base"]["value"] == 7
+    assert len(calls) == 1 and result["host_check"] == "start_only" and evaluated == []
+
+
+@posix_only
+@pytest.mark.parametrize("name", ["digest", "trace", "tamper", "pending"])
+def test_a_forced_busy_host_cannot_hide_a_digest_trace_or_tamper_verdict(bcase, name):
+    c = bcase
+    calls = _probes(c, START_OK, (50.0, 4))
+    if name == "digest":
+        result, reason = _go(c, measure=_err("DIGEST_MISMATCH", None, None, "warmup")), "DIGEST_MISMATCH"
+    elif name == "trace":
+        result, reason = _go(c, trace=TRACE_AT_ONCE["T6"]), "TRACE_MISMATCH"
+    elif name == "tamper":
+        result, reason = _go(c, hook=_s12_edit), "ISOLATION_REJECTED"
+    else:
+        result, reason = _go(c, trace=PENDING), "TRACE_MISMATCH"
+    _ran(result, reason)
+    assert len(calls) == 1 and result["host_check"] == "start_only" and result["loadavg"]["end"] is None
+
+
+ACCEPTANCE_TRACE_ROWS = {  # one compare per case: the overlay seals the exports, so a second run on them would be a different (rejected) call
+    "counts-differ-digests-match": (dict(trace=PENDING), "TRACE_MISMATCH", "counts_differ", False, None),
+    "counts-differ-digests-differ": (dict(trace=PENDING, measure=_err("DIGEST_MISMATCH", None, None, "warmup")), "DIGEST_MISMATCH", None, True, None),
+    "counts-differ-base-times-out": (dict(trace=PENDING, measure=_err("BASE_TIMEOUT", "timeout", "base", "timed")), "TRACE_MISMATCH", "counts_differ", False, None),
+    "head-nonzero-in-the-trace-run": (dict(trace=_err("TRACE_MISMATCH", "nonzero", "head", "trace")), "HEAD_NONZERO_EXIT", "nonzero", False, "head"),
+    "both-sides-unavailable": (dict(trace=TRACE_AT_ONCE["T2"]), "TRACE_UNAVAILABLE", None, False, None),
+}
+
+
+@posix_only
+@pytest.mark.parametrize("name", sorted(ACCEPTANCE_TRACE_ROWS))
+def test_acceptance_trace_rows(bcase, name):
+    kwargs, reason, detail, seen, fault = ACCEPTANCE_TRACE_ROWS[name]
+    result = _go(bcase, **kwargs)
+    _ran(result, reason, detail)
+    assert result["trace_mismatch_seen"] is seen and result["trace_fault"] == fault
+
+
+@posix_only
+def test_acceptance_trace_mismatch_through_real_children(bcase):
+    c = bcase
+
+    def builder(side, bin_dir, root, target):
+        return fake_trace_builder(side, bin_dir, root, target, lines=7 if side == "base" else 9)
+    result = c.impl(argv_builder=builder, min_base_ns=0)  # counts differ, digests match: real children for both runs
+    _ran(result, "TRACE_MISMATCH", "counts_differ")
+    assert result["trace"]["head"]["value"] == 9 and len(result["ratios"]) == 6 and result["digest"] == FAKE_DIGEST
+
+
+def _stat_row(c, base, head):
+    return _go(c, measure=_meas(base, head))
+
+
+@posix_only
+def test_statistics_fix_halves_the_work(bcase):
+    c = bcase
+    calls = _probes(c, START_OK, (0.2, 4))
+    result = _go(c, measure=HALVED)
+    _ran(result, "IMPROVED_CLEAR")
+    assert result["result"] == "IMPROVED" and result["kind"] is None and result["benchmark_origin"] == "BUILDER_AUTHORED"
+    assert result["ratios"] == [0.5] * 6 and result["improvement"] == 0.5 and result["mad_over_median"] == 0.0
+    assert result["base_ns"] == [100, 200, 400, 100, 200, 400] and result["head_ns"] == [50, 100, 200, 50, 100, 200] and result["n"] == 6
+    assert result["base_median_ns"] == 200.0 and result["head_median_ns"] == 100.0 and result["repeats"] == 6
+    assert (result["min_improvement"], result["max_noise"]) == (0.1, 0.1) and result["digest"] == FAKE_DIGEST and result["order"] == HALVED["order"]
+    assert result["argv"] == HALVED["argv"] and result["order_salt"] == "ab12"
+    assert result["host_check"] == "checked" and result["loadavg"] == {"start": 0.1, "end": 0.2} and result["cpu_count"] == {"start": 4, "end": 4}
+    assert len(calls) == 2 and json.loads(Path(c.last_out).read_text()) == result
+
+
+@posix_only
+@pytest.mark.parametrize("base,head,reason,improvement", [
+    ([100] * 6, [120] * 6, "BELOW_HALF_THRESHOLD", -0.2),  # head slower
+    ([100] * 6, [100] * 6, "BELOW_HALF_THRESHOLD", 0.0),
+    ([100] * 6, [50, 100, 50, 100, 50, 100], "NOISY", 0.25),
+    ([100] * 6, [85, 85, 85, 85, 95, 95], "INCONSISTENT", 0.15),
+    ([100] * 6, [93] * 6, "BORDERLINE", 0.07),
+])
+def test_statistics_verdict_rows(bcase, base, head, reason, improvement):
+    result = _stat_row(bcase, base, head)
+    _ran(result, reason)
+    ratios = [Fraction(h, b) for b, h in zip(base, head)]
+    assert result["ratios"] == [float(r) for r in ratios] and result["improvement"] == pytest.approx(improvement)
+    median = bg._median(ratios)
+    assert result["improvement"] == float(1 - median) and result["mad_over_median"] == float(bg._ratio_stats(base, head)[2] / median)
+    assert result["base_ns"] == base and result["head_ns"] == head and result["host_check"] == "checked"
+
+
+@posix_only
+def test_invalid_input_via_monkeypatched_evaluate_is_never_replaced_by_host_busy_end(bcase):
+    c = bcase
+    c.mp.setattr(bg, "evaluate_paired_samples", lambda *a, **k: ("INCONCLUSIVE", "INVALID_INPUT"))
+    _probes(c, START_OK, BUSY_END)
+    result = _go(c, measure=HALVED)
+    _ran(result, "INVALID_INPUT")
+    assert result["result"] == "INCONCLUSIVE" and result["ratios"] == [0.5] * 6
+
+
+@posix_only
+@pytest.mark.parametrize("base,head", [([100] * 6, [50] * 6), ([100] * 6, [120] * 6), ([100] * 6, [50, 100, 50, 100, 50, 100]), ([100] * 6, [93] * 6)],
+                         ids=["improved", "not-improved", "noisy", "borderline"])
+def test_host_busy_end_replaces_improved_not_improved_and_inconclusive(bcase, base, head):
+    c = bcase
+    _probes(c, START_OK, BUSY_END)
+    result = _stat_row(c, base, head)
+    _ran(result, "HOST_BUSY_END", "")
+    ratios = [Fraction(h, b) for b, h in zip(base, head)]
+    assert result["result"] == "INCONCLUSIVE" and result["host_check"] == "checked" and result["loadavg"]["end"] == 4.0
+    assert result["ratios"] == [float(r) for r in ratios] and result["improvement"] == float(1 - bg._median(ratios)) and result["base_ns"] == base  # data stays
+
+
+ONE_CALL = {  # one call per case, as above: (kwargs of _go, expected reason)
+    "pending-with-success": (dict(trace=PENDING, measure=HALVED), "TRACE_MISMATCH"),
+    "T2": (dict(trace=TRACE_AT_ONCE["T2"]), "TRACE_UNAVAILABLE"), "T3": (dict(trace=TRACE_AT_ONCE["T3"]), "ISOLATION_REJECTED"),
+    "T4": (dict(trace=TRACE_AT_ONCE["T4"]), "HEAD_NONZERO_EXIT"), "T6": (dict(trace=TRACE_AT_ONCE["T6"]), "TRACE_MISMATCH"),
+    "M2-head-timeout": (dict(measure=_err("HEAD_TIMEOUT", "timeout", "head", "timed")), "HEAD_TIMEOUT"),
+    "M3-base-timeout": (dict(measure=_err("BASE_TIMEOUT", "timeout", "base", "timed")), "BASE_TIMEOUT"),
+    "M1-digest-unstable": (dict(measure=_err("DIGEST_UNSTABLE", None, None, "timed")), "DIGEST_UNSTABLE"),
+}
+
+
+@posix_only
+@pytest.mark.parametrize("name", sorted(ONE_CALL))
+def test_host_busy_end_with_a_pending_mismatch_the_mismatch_stands_and_other_endings_are_not_probed(bcase, name):
+    c = bcase
+    calls = _probes(c, START_OK, BUSY_END)
+    kwargs, reason = ONE_CALL[name]
+    _ran(_go(c, **kwargs), reason)
+    assert len(calls) == 1  # the start probe only, never an end probe
+
+
+def _end_row(c, start, end, cpus_note=None):
+    calls = _probes(c, start, end)
+    result = _go(c, measure=HALVED)
+    return result, calls
+
+
+@posix_only
+@pytest.mark.parametrize("cpus,load,busy", [(3, 3.1, False), (3, 3.11, True), (4, 3.8, False), (4, 3.81, True), (10, 8.0, False), (10, 8.01, True)])
+def test_host_busy_arithmetic_subtracts_the_gates_own_load_exactly(bcase, cpus, load, busy):
+    c = bcase
+    result, calls = _end_row(c, (0.1, cpus), (load, cpus))  # (load - 1) * 10 > 7 * cpus, with Fraction(str(load)): no float error at the edge
+    _ran(result, "HOST_BUSY_END" if busy else "IMPROVED_CLEAR")
+    assert result["host_check"] == "checked" and result["loadavg"]["end"] == load and result["cpu_count"]["end"] == cpus and len(calls) == 2
+    if cpus == 4 and load == 3.8:
+        assert load * 10 > 7 * cpus and result["reason"] == "IMPROVED_CLEAR"
+
+
+@posix_only
+@pytest.mark.parametrize("load,reason", [(0.70, "IMPROVED_CLEAR"), (0.71, "HOST_BUSY_START")])
+def test_host_busy_start_edge_is_exact_at_one_cpu(bcase, load, reason):
+    c = bcase
+    c.probe = lambda: (load, 1)  # 0.70 * 10 > 7 is false, 0.71 * 10 > 7 true; the end check is skipped for 1 cpu
+    result = c.impl(argv_builder=fake_trace_builder, min_base_ns=0) if reason == "HOST_BUSY_START" else _go(c)
+    _ends(result, reason, stage="pre_overlay" if reason == "HOST_BUSY_START" else "ran")
+
+
+@posix_only
+@pytest.mark.parametrize("cpus", [1, 2])
+def test_host_end_check_is_skipped_below_three_cpus(bcase, cpus):
+    c = bcase
+    result, calls = _end_row(c, (0.1, cpus), (50.0, cpus))
+    _ran(result, "IMPROVED_CLEAR")
+    assert result["host_check"] == "end_skipped_few_cpus" and result["loadavg"] == {"start": 0.1, "end": 50.0} and len(calls) == 2
+
+
+def _boom():
+    return OSError("no loadavg")
+
+
+BAD_PROBES = [_boom(), (True, 4), (float("nan"), 4), (float("inf"), 4), (-1.0, 4), ("1", 4), (1.0, 0), (1.0, True), (1.0, 2.5), (1.0,), None, (50.0, -1)]
+
+
+@posix_only
+@pytest.mark.parametrize("bad", range(len(BAD_PROBES)))
+def test_a_bad_end_probe_skips_the_end_check(bcase, bad):
+    c = bcase
+    result, calls = _end_row(c, START_OK, BAD_PROBES[bad])
+    _ran(result, "IMPROVED_CLEAR")
+    assert result["host_check"] == "skipped_probe_failed" and result["loadavg"] == {"start": 0.1, "end": None}
+    assert result["cpu_count"] == {"start": 4, "end": None} and len(calls) == 2
+
+
+@posix_only
+def test_a_failed_start_probe_skips_both_checks_and_the_end_probe_does_not_run(bcase):
+    c = bcase
+    result, calls = _end_row(c, None, BUSY_END)
+    _ran(result, "IMPROVED_CLEAR")
+    assert result["host_check"] == "skipped_probe_failed" and result["loadavg"] == {"start": None, "end": None} and len(calls) == 1
+
+
+@posix_only
+def test_the_default_end_probe_is_the_default_load_probe(bcase):
+    c = bcase
+    c.probe = None  # no seam: the default probe answers (a real load on a real host)
+    calls = []
+    real = bg._default_load_probe
+    c.mp.setattr(bg, "_default_load_probe", lambda: (calls.append(1), (0.1, 4))[1])
+    c.probe = None
+    result = _go(c)
+    _ran(result, "IMPROVED_CLEAR")
+    assert len(calls) == 2 and real is not bg._default_load_probe and result["host_check"] == "checked"
+
+
+# --- the coverage of the vocabularies ---
+
+def _mapped(fn, code, kind=None, side=None):
+    """The reason ``fn`` maps an error to, or "RAISES"."""
+    try:
+        verdict = fn(_err(code, kind, side, "timed"))
+    except bg.BenchmarkGateError:
+        return "RAISES"
+    assert bg.COMPARE_RESULT_OF_REASON[verdict.reason] == verdict.result
+    return verdict.reason
+
+
+MEASURE_CASES = {
+    "UNSUPPORTED_PLATFORM": [(None, None, "RAISES")],
+    "BASE_NONZERO_EXIT": [("nonzero", "base", "BASE_NONZERO_EXIT"), ("spawn", "base", "ISOLATION_REJECTED")],
+    "HEAD_NONZERO_EXIT": [("nonzero", "head", "HEAD_NONZERO_EXIT"), ("spawn", "head", "ISOLATION_REJECTED")],
+    "BASE_TIMEOUT": [("timeout", "base", "BASE_TIMEOUT")],
+    "HEAD_TIMEOUT": [("timeout", "head", "HEAD_TIMEOUT")],
+    "OUTPUT_TOO_LARGE": [("oversize", "base", "BASE_OUTPUT_TOO_LARGE"), ("oversize", "head", "HEAD_OUTPUT_TOO_LARGE")],
+    "DIGEST_MISSING": [(None, None, "DIGEST_MISSING")],
+    "DIGEST_UNSTABLE": [(None, "head", "DIGEST_UNSTABLE")],
+    "DIGEST_MISMATCH": [(None, None, "DIGEST_MISMATCH")],
+    "WORKLOAD_TOO_SHORT": [(None, "base", "WORKLOAD_TOO_SHORT")],
+    "MEASURE_ARGS_INVALID": [(None, None, "RAISES")],  # the two codes `measure_paired` raises for a caller or harness fault: item 0
+    "MEASURE_FAILED": [("harness", None, "RAISES"), ("spawn", "base", "RAISES")],
+}
+TRACE_CASES = {  # by kind: (code the trace run raises it with, side, mapped reason)
+    "spawn": ("TRACE_MISMATCH", "base", "ISOLATION_REJECTED"),
+    "oversize": ("TRACE_MISMATCH", "head", "HEAD_OUTPUT_TOO_LARGE"),
+    "timeout": ("TRACE_MISMATCH", "base", "BASE_TIMEOUT"),
+    "nonzero": ("TRACE_MISMATCH", "head", "HEAD_NONZERO_EXIT"),
+    "plugin_failed": ("TRACE_MISMATCH", "head", "TRACE_MISMATCH"),
+    "no_result": ("TRACE_MISMATCH", "head", "TRACE_MISMATCH"),
+    "unavailable_one_side": ("TRACE_MISMATCH", "head", "TRACE_MISMATCH"),
+    "unavailable_tokens_differ": ("TRACE_MISMATCH", None, "TRACE_MISMATCH"),
+    "unavailable_interpreters_differ": ("TRACE_MISMATCH", None, "TRACE_MISMATCH"),
+    "interpreters_differ": ("TRACE_MISMATCH", None, "TRACE_MISMATCH"),
+    "counts_differ": ("TRACE_MISMATCH", None, "TRACE_MISMATCH"),  # pending: the caller keeps it for item 4
+    "unavailable": ("TRACE_UNAVAILABLE", None, "TRACE_UNAVAILABLE"),
+    "harness": ("MEASURE_FAILED", None, "RAISES"),
+}
+
+
+def test_coverage_every_measure_code_is_mapped_or_deliberately_raised():
+    assert set(MEASURE_CASES) == set(bg.MEASURE_REFUSAL_CODES) | {"MEASURE_ARGS_INVALID", "MEASURE_FAILED"}  # kills a forgotten code
+    for code, rows in MEASURE_CASES.items():
+        for kind, side, expected in rows:
+            assert _mapped(bg._map_measure_error, code, kind, side) == expected, (code, kind, side)
+
+
+def test_coverage_every_trace_kind_and_code_is_mapped_or_deliberately_raised():
+    assert set(TRACE_CASES) == set(bg.TRACE_FAILURE_KINDS)  # includes `harness`
+    assert {code for code, _, _ in TRACE_CASES.values()} >= set(bg.TRACE_REFUSAL_CODES)
+    for kind, (code, side, expected) in TRACE_CASES.items():
+        assert _mapped(bg._map_trace_error, code, kind, side) == expected, kind
+    for code in ("MEASURE_ARGS_INVALID", "MEASURE_FAILED"):
+        assert _mapped(bg._map_trace_error, code, "harness", None) == "RAISES"
+    assert _mapped(bg._map_trace_error, "SOMETHING_NEW", "nonzero", "head") == "RAISES"
+
+
+def test_coverage_every_evaluate_reason_has_a_result_that_agrees():
+    import inspect
+    reasons = set(re.findall(r'"([A-Z_]+)"', inspect.getsource(bg._evaluate))) - bg.COMPARE_RESULTS
+    assert reasons == {"INVALID_INPUT", "IMPROVED_CLEAR", "NOISY", "INCONSISTENT", "BORDERLINE", "BELOW_HALF_THRESHOLD"}
+    seen = set()
+    for base, head in (([100] * 6, [50] * 6), ([100] * 6, [120] * 6), ([100] * 6, [50, 100] * 3), ([100] * 6, [85, 85, 85, 85, 95, 95]),
+                       ([100] * 6, [93] * 6), ([100] * 6, [])):
+        result, reason = bg.evaluate_paired_samples(base, head, repeats=6, min_improvement=0.1, max_noise=0.1)
+        assert bg.COMPARE_RESULT_OF_REASON[reason] == result
+        seen.add(reason)
+    assert seen == reasons
+
+
+# --- one row per reason, the stage of every step-ending, the schema ---
+
+def _diff_raises(code):
+    def run(c):
+        def fn(repo, base, head, path):
+            error = bg.BenchmarkGateError(code, "x")
+            error.hits = [{"path": "a.py", "token": "sys.argv", "line_number": 3, "line": "x"}] if code != "GIT_OUTPUT_TOO_LARGE" else []
+            raise error
+        c.mp.setattr(bg, "diff_checks", fn)
+        return c.impl()
+    return run
+
+
+def _raises_in(name, code):
+    def run(c):
+        def fn(*a, **k):
+            raise bg.BenchmarkGateError(code, "x")
+        c.mp.setattr(bg, name, fn)
+        return c.impl()
+    return run
+
+
+def _unsupported(c):
+    c.mp.setattr(os, "name", "nt")
+    result = c.impl()
+    c.mp.undo()
+    return result
+
+
+def _root_has_git(c):
+    (Path(c.roots[0]) / ".git").mkdir()
+    return c.impl()
+
+
+def _writable(c):
+    c.allow = False
+    return c.impl()
+
+
+def _busy_start(c):
+    c.probe = lambda: (0.71, 1)
+    return c.impl()
+
+
+def _diverge(c):
+    real = bg.overlay_benchmark_file
+
+    def overlay_then_diverge(*a, **k):
+        out = real(*a, **k)
+        path = Path(c.roots[0]) / BENCH
+        path.chmod(0o644)
+        path.write_bytes(BENCH_OK + b"# diverged\n")
+        return out
+    c.mp.setattr(bg, "overlay_benchmark_file", overlay_then_diverge)
+    return c.impl()
+
+
+def _step9_pin(c):
+    calls, real = [], c.interp
+
+    def seam(bin_dir):
+        calls.append(bin_dir)
+        if len(calls) > 2:  # step 4 asks twice; the third call is step 9
+            raise bg.BenchmarkGateError("VENV_NOT_ISOLATED", "x")
+        return real(bin_dir)
+    c.interp = seam
+    return c.impl()
+
+
+def _measure_raises(code, kind=None, side=None, trace=TRACE_OK):
+    return lambda c: _go(c, trace=trace, measure=_err(code, kind, side, "timed"))
+
+
+def _stats(base, head):
+    return lambda c: _go(c, measure=_meas(base, head))
+
+
+def _invalid(c):
+    c.mp.setattr(bg, "evaluate_paired_samples", lambda *a, **k: ("INCONCLUSIVE", "INVALID_INPUT"))
+    return _go(c)
+
+
+def _busy_end(c):
+    _probes(c, START_OK, BUSY_END)
+    return _go(c)
+
+
+def _real_spawn(c):
+    return c.impl(argv_builder=_bad_exe, min_base_ns=0)
+
+
+def _lint_body(c):
+    return c.impl()
+
+
+# id: (case body, runner, reason, detail (None: any token), stage)
+ENDING_ROWS = {
+    "s1-unsupported-platform": (BENCH_OK, _unsupported, "UNSUPPORTED_PLATFORM", "", "pre_overlay"),
+    "s2-gate-rejected": (BENCH_OK, lambda c: c.impl(gate={**c.gate, "warmup_runs": 0}), "GATE_REJECTED", "BOUNDS_REJECTED", "pre_overlay"),
+    "s4-root-has-git": (BENCH_OK, _root_has_git, "ISOLATION_REJECTED", "ROOT_HAS_GIT", "pre_overlay"),
+    "s4-interpreter-writable": (BENCH_OK, _writable, "ISOLATION_REJECTED", "INTERPRETER_WRITABLE", "pre_overlay"),
+    "s4-export-rejected": (BENCH_OK, _raises_in("verify_export_against_commit", "TREE_UNREADABLE"), "EXPORT_REJECTED", "TREE_UNREADABLE", "pre_overlay"),
+    "s5-protected-path": (BENCH_OK, _diff_raises("PROTECTED_PATH_CHANGED"), "PROTECTED_PATH_CHANGED", "PROTECTED_PATH_CHANGED", "pre_overlay"),
+    "s5-benchmark-aware": (BENCH_OK, _diff_raises("BENCHMARK_AWARE_CODE"), "BENCHMARK_AWARE_CODE", "BENCHMARK_AWARE_CODE", "pre_overlay"),
+    "s5-diff-uncheckable": (BENCH_OK, _diff_raises("GIT_OUTPUT_TOO_LARGE"), "DIFF_UNCHECKABLE", "GIT_OUTPUT_TOO_LARGE", "pre_overlay"),
+    "s6-host-busy-start": (BENCH_OK, _busy_start, "HOST_BUSY_START", "", "pre_overlay"),
+    "s7-overlay-rejected": (BENCH_OK, _raises_in("overlay_benchmark_file", "OVERLAY_PATH_REJECTED"), "OVERLAY_REJECTED", "OVERLAY_PATH_REJECTED", "pre_overlay"),
+    "s7-benchmark-modified": (BENCH_OK, _raises_in("overlay_benchmark_file", "BENCHMARK_MODIFIED"), "BENCHMARK_MODIFIED", "BENCHMARK_MODIFIED", "pre_overlay"),
+    "s7-export-rejected": (BENCH_OK, _raises_in("overlay_benchmark_file", "SEAL_FAILED"), "EXPORT_REJECTED", "SEAL_FAILED", "pre_overlay"),
+    "s8-bytes-differ": (BENCH_OK, _diverge, "ISOLATION_REJECTED", "BENCHMARK_BYTES_DIFFER", "overlaid"),
+    "s8-lint-rejected": (BENCH_BAD, _lint_body, "LINT_REJECTED", None, "overlaid"),
+    "s8-export-rejected": (BENCH_OK, _raises_in("hash_export", "TREE_TOO_LARGE"), "EXPORT_REJECTED", "TREE_TOO_LARGE", "overlaid"),
+    "s9-interpreter-differs": (BENCH_OK, _step9_pin, "ISOLATION_REJECTED", "INTERPRETER_DIFFERS", "overlaid"),
+    "s10-trace-unavailable": (BENCH_OK, lambda c: _go(c, trace=TRACE_AT_ONCE["T2"]), "TRACE_UNAVAILABLE", "unavailable", "ran"),
+    "s10-spawn-without-a-child": (BENCH_OK, _real_spawn, "ISOLATION_REJECTED", "NOT_PROVISIONED", "ran"),
+    "s10-trace-mismatch": (BENCH_OK, lambda c: _go(c, trace=TRACE_AT_ONCE["T6"]), "TRACE_MISMATCH", "no_result", "ran"),
+    "s10-head-nonzero": (BENCH_OK, lambda c: _go(c, trace=TRACE_AT_ONCE["T4"]), "HEAD_NONZERO_EXIT", "nonzero", "ran"),
+    "s10-head-timeout": (BENCH_OK, lambda c: _go(c, trace=_err("TRACE_MISMATCH", "timeout", "head", "trace")), "HEAD_TIMEOUT", "timeout", "ran"),
+    "s10-head-output": (BENCH_OK, lambda c: _go(c, trace=_err("TRACE_MISMATCH", "oversize", "head", "trace")), "HEAD_OUTPUT_TOO_LARGE", "oversize", "ran"),
+    "s10-base-nonzero": (BENCH_OK, lambda c: _go(c, trace=_err("TRACE_MISMATCH", "nonzero", "base", "trace")), "BASE_NONZERO_EXIT", "nonzero", "ran"),
+    "s10-base-timeout": (BENCH_OK, lambda c: _go(c, trace=_err("TRACE_MISMATCH", "timeout", "base", "trace")), "BASE_TIMEOUT", "timeout", "ran"),
+    "s10-base-output": (BENCH_OK, lambda c: _go(c, trace=_err("TRACE_MISMATCH", "oversize", "base", "trace")), "BASE_OUTPUT_TOO_LARGE", "oversize", "ran"),
+    "s11-base-nonzero": (BENCH_OK, _measure_raises("BASE_NONZERO_EXIT", "nonzero", "base"), "BASE_NONZERO_EXIT", "nonzero", "ran"),
+    "s11-digest-missing": (BENCH_OK, _measure_raises("DIGEST_MISSING"), "DIGEST_MISSING", "", "ran"),
+    "s11-digest-unstable": (BENCH_OK, _measure_raises("DIGEST_UNSTABLE", None, "head"), "DIGEST_UNSTABLE", "", "ran"),
+    "s11-too-short": (BENCH_OK, _measure_raises("WORKLOAD_TOO_SHORT", None, "base"), "WORKLOAD_TOO_SHORT", "", "ran"),
+    "s11-head-nonzero": (BENCH_OK, _measure_raises("HEAD_NONZERO_EXIT", "nonzero", "head"), "HEAD_NONZERO_EXIT", "nonzero", "ran"),
+    "s11-head-timeout": (BENCH_OK, _measure_raises("HEAD_TIMEOUT", "timeout", "head"), "HEAD_TIMEOUT", "timeout", "ran"),
+    "s11-head-output": (BENCH_OK, _measure_raises("OUTPUT_TOO_LARGE", "oversize", "head"), "HEAD_OUTPUT_TOO_LARGE", "oversize", "ran"),
+    "s11-digest-mismatch": (BENCH_OK, _measure_raises("DIGEST_MISMATCH"), "DIGEST_MISMATCH", "", "ran"),
+    "s11-base-timeout": (BENCH_OK, _measure_raises("BASE_TIMEOUT", "timeout", "base"), "BASE_TIMEOUT", "timeout", "ran"),
+    "s11-base-output": (BENCH_OK, _measure_raises("OUTPUT_TOO_LARGE", "oversize", "base"), "BASE_OUTPUT_TOO_LARGE", "oversize", "ran"),
+    "s11-spawn": (BENCH_OK, _measure_raises("BASE_NONZERO_EXIT", "spawn", "base"), "ISOLATION_REJECTED", "NOT_PROVISIONED", "ran"),
+    "s11-pending-mismatch": (BENCH_OK, lambda c: _go(c, trace=PENDING), "TRACE_MISMATCH", "counts_differ", "ran"),
+    "s12-export-changed": (BENCH_OK, lambda c: _go(c, hook=_s12_edit), "ISOLATION_REJECTED", "EXPORT_CHANGED", "ran"),
+    "s13-improved": (BENCH_OK, _stats([100] * 6, [50] * 6), "IMPROVED_CLEAR", "", "ran"),
+    "s13-below-half": (BENCH_OK, _stats([100] * 6, [120] * 6), "BELOW_HALF_THRESHOLD", "", "ran"),
+    "s13-noisy": (BENCH_OK, _stats([100] * 6, [50, 100] * 3), "NOISY", "", "ran"),
+    "s13-inconsistent": (BENCH_OK, _stats([100] * 6, [85, 85, 85, 85, 95, 95]), "INCONSISTENT", "", "ran"),
+    "s13-borderline": (BENCH_OK, _stats([100] * 6, [93] * 6), "BORDERLINE", "", "ran"),
+    "s13-invalid-input": (BENCH_OK, _invalid, "INVALID_INPUT", "", "ran"),
+    "s13-host-busy-end": (BENCH_OK, _busy_end, "HOST_BUSY_END", "", "ran"),
+}
+
+
+def _row_result(tmp_path, monkeypatch, name):
+    body, runner, *_ = ENDING_ROWS[name]
+    c = _bench_case(tmp_path, monkeypatch, body=body)
+    return c, runner(c)
+
+
+@posix_only
+@pytest.mark.parametrize("name", sorted(ENDING_ROWS))
+def test_stage_of_every_step_ending_and_one_row_per_reason(tmp_path, monkeypatch, name):
+    _, _, reason, detail, stage = ENDING_ROWS[name]
+    c, result = _row_result(tmp_path, monkeypatch, name)
+    _ends(result, reason, detail, stage=stage)  # the 2.3 table: the stage, the result of the reason and the detail
+    token = result["detail"].split(" ")[0]
+    assert token == "" or token in bg.COMPARE_DETAIL_TOKENS, result["detail"]
+    assert all(part.isdigit() for part in result["detail"].split(" ")[1:])
+    assert result["schema"] == bg.COMPARE_SCHEMA and set(result) == set(bg.COMPARE_RESULT_KEYS)
+    assert json.loads(Path(c.last_out).read_text()) == result
+
+
+def test_every_reason_of_the_vocabulary_has_a_row():
+    assert {row[2] for row in ENDING_ROWS.values()} == set(bg.COMPARE_RESULT_OF_REASON)  # kills an unreachable or forgotten reason
+    assert {bg.COMPARE_RESULT_OF_REASON[row[2]] for row in ENDING_ROWS.values()} == bg.COMPARE_RESULTS
+
+
+@posix_only
+def test_the_step_to_stage_table_is_asserted_whole():
+    by_stage = {}
+    for _, _, reason, _, stage in ENDING_ROWS.values():
+        by_stage.setdefault(stage, set()).add(reason)
+    assert set(by_stage) == set(bg.COMPARE_STAGES)
+    assert {"UNSUPPORTED_PLATFORM", "GATE_REJECTED", "HOST_BUSY_START", "PROTECTED_PATH_CHANGED"} <= by_stage["pre_overlay"]
+    assert {"LINT_REJECTED"} <= by_stage["overlaid"] and {"HOST_BUSY_END", "TRACE_UNAVAILABLE", "IMPROVED_CLEAR"} <= by_stage["ran"]
+
+
+@posix_only
+def test_the_result_schema_from_compare_impl(bcase):
+    c = bcase
+    evil = "EVIL\x1b[31mé`|\n" * 3
+    hits = [{"path": f"p{i}.py", "token": evil, "line_number": i, "line": evil} for i in range(30)]
+
+    def diff(repo, base, head, path):
+        error = bg.BenchmarkGateError("BENCHMARK_AWARE_CODE", evil)
+        error.hits = hits
+        raise error
+    c.mp.setattr(bg, "diff_checks", diff)
+    result = c.impl()
+    raw = Path(c.last_out).read_bytes()
+    assert raw.decode("ascii") and raw.endswith(b"\n") and json.loads(raw) == result  # ASCII only, nothing lost
+    assert set(result) == set(bg.COMPARE_RESULT_KEYS) and len(result["untrusted_text"]) == 20
+    assert all(len(t) <= 200 and "\x1b" not in t for t in result["untrusted_text"]) and any("EVIL" in t for t in result["untrusted_text"])
+    assert "EVIL" not in json.dumps({k: v for k, v in result.items() if k != "untrusted_text"})  # attacker text lives only in untrusted_text
+    assert result["detail"] == "BENCHMARK_AWARE_CODE" and result["schema"] == "software-builder-bench-compare-v1"
+
+
+@posix_only
+def test_the_result_of_a_finished_comparison_has_every_key_filled(bcase):
+    done = _go(bcase, measure=HALVED)
+    assert set(done) == set(bg.COMPARE_RESULT_KEYS) and done["stage"] == "ran" and done["untrusted_text"] == []
+    assert [k for k, v in done.items() if v is None] == ["kind", "trace_fault", "side", "phase", "partial"]  # only what does not apply is null
+
+
+@posix_only
+def test_gate_sha256_equals_what_validate_prints_for_the_same_gate(bcase, tmp_path):
+    c = bcase
+    result = _go(c, measure=HALVED)
+    spec = tmp_path / "inputs.json"
+    spec.write_text(json.dumps({"benchmark_gate": c.gate, "performance_review_origin": True}))
+    done = subprocess.run([sys.executable, str(SCRIPT), "validate", "--specialist-inputs", str(spec)], capture_output=True, text=True, check=True)
+    assert done.stdout.splitlines() == ["OK", f"gate_sha256: {result['gate_sha256']}"]
+    normalized, _ = bg.validate_benchmark_gate(c.gate)
+    assert result["gate_sha256"] == bg.gate_sha256(normalized)
