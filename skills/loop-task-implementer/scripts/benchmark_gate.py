@@ -33,7 +33,7 @@ immediately before the first child; ``trace_paired``; ``measure_paired``; a post
 after any path that started a child; and the verdict, written to ``out_path``. ``harness_sha256`` is computed at step 2 (both parts are fixed
 at import and at the first load of the validator, whose module body it therefore runs).
 
-Provisioning contract (spec 2.2 and 2.5; the Orchestrator's side, not enforced beyond what ``compare`` checks): each venv is created fresh
+Provisioning contract (spec 2.2 and 2.5; the Orchestrator's side, not enforced beyond what ``compare`` checks; head first, as above): each venv is created fresh
 and ``snapshot-venv`` runs BEFORE that side's install: it mints the snapshot and interpreter pins, and a pin is never re-minted after an
 install. The install uses ``--no-compile`` and runs with ``PYTHONDONTWRITEBYTECODE=1``, a fresh ``HOME`` and ``TMPDIR``, ``PIP_CONFIG_FILE=/dev/null``
 and ``PIP_NO_CACHE_DIR=1``, from pinned requirements (or a wheelhouse), ideally with no network, and installs the project EDITABLE ONLY (``dependency_parity`` fails closed on a non-editable project install). AFTER the install and before
@@ -44,19 +44,28 @@ shows in the ``RESULT:`` line). A stray-process census around the installs is re
 accepted ``setsid`` residual [R1]. The harness's euid must not be 0: a euid-0 Orchestrator (e.g. Docker as root) gets ``INTERPRETER_WRITABLE`` on EVERY
 compare (root owns, and can write, every interpreter file, so the interpreter is never "non-writable") and every symlink alias is refused, so root is
 effectively unsupported unless a human passes ``--allow-writable-interpreter`` and the paths have no symlink hop; C4e must run the Orchestrator non-root
-(an alias or venv-hook refusal is an ENVIRONMENT fault, not a Builder fault). After ``compare`` the Orchestrator reads the result file ONCE into bytes, hashes
+(an alias or venv-hook refusal is an ENVIRONMENT fault, not a Builder fault). The same refusal (fail closed, alias paths only) can also come from a
+user-namespace remapped or rootless Docker where root appears as nobody, from ancestors on a bind mount owned by a CI user, from overlayfs with
+``st_nlink`` above 1, or from a euid-0 harness: route each as an environment fault, not a Builder fault. After ``compare`` the Orchestrator reads the result file ONCE into bytes, hashes
 those bytes and compares the hash to the line's ``sha256=``, parses the SAME bytes, reads ``stage`` and ``detail`` only from those bytes (the
-``RESULT:`` line carries neither; ``INTERPRETER_WRITABLE`` needs its detail from the file) and checks the line's result and reason against them (the CLI
+``RESULT:`` line carries neither; ``INTERPRETER_WRITABLE`` needs its detail from the file) and checks the line's result, reason and ``interpreter_writable=`` against them (``parse_compare_outcome`` does it; the CLI
 prints the line from the in-memory result and the hash of the bytes it wrote, never from a re-read of the file; a file rewritten afterwards no
 longer matches its line and must be ignored). It also pins the EXPECTED ``harness_sha256`` and requires each project venv to be CPython >= 3.12
 ([R2] and [R3] below). ``harness_sha256`` is a domain-separated, length-prefixed digest that ``sha256sum`` cannot reproduce: the
 ``harness-sha256`` subcommand prints it, and the expected value must be taken from a TRUSTED copy of the harness (the pinned release, or a run of
 ``harness-sha256`` in a clean checkout), NEVER from a previous ``compare`` result (that would be circular: a tampered harness vouches for itself).
 
-Reading the outcome (the contract of ``_cmd_compare``): exit 0 is ``IMPROVED`` ONLY together with a valid ``RESULT: IMPROVED ...`` line whose
+Reading the outcome (the contract of ``_cmd_compare``; ``parse_compare_outcome`` is the reference implementation of this
+protocol and C4e should call it, not re-write it): exit 0 is ``IMPROVED`` ONLY together with a valid ``RESULT: IMPROVED ...`` line whose
 ``sha256=`` matches the bytes of the result file; a bare exit 0 (``compare --help`` exits 0 and prints no ``RESULT:`` line) is NOT an ``IMPROVED``.
 Exit 1 is any other result, but an exit 1 WITHOUT a valid ``RESULT:`` line counts as exit 2; exit 2 (usage error, a raised ``BenchmarkGateError``,
 a crash) means any file at ``--out`` is to be IGNORED (the file can exist: ``compare`` writes it before the CLI validates the in-memory result).
+Retry budget and ``attempt`` (C4e owns the exact numbers, but must cap them): (a) ``HOST_BUSY_START`` is retried automatically on the SAME exports with
+``attempt`` unchanged, at most 3 retries with a wait of at least 60 s between them; then the Orchestrator stops and reports ``INCONCLUSIVE``/``HOST_BUSY_START`` to the human.
+(b) ``attempt=2`` is the one allowed re-measure: only after a first measured result that was ``INCONCLUSIVE`` with a measure-stage reason (the ``INCONCLUSIVE``
+reasons whose ``COMPARE_REASONS`` stage is ``ran``: ``HOST_BUSY_END``, ``TRACE_UNAVAILABLE``, ``BASE_TIMEOUT``, ``BASE_OUTPUT_TOO_LARGE``, ``NOISY``, ``INCONSISTENT``,
+``BORDERLINE``, ``INVALID_INPUT``), only once per task, and on FRESH exports (head-first provisioning again); a third call is out of contract. (c) ``compare`` validates
+``attempt`` as 1 or 2 and nothing more: the cap on the number of calls is enforced by C4e, not here. (d) The acceptance screen shows the count of ``compare`` results.
 Option abbreviations are refused (``allow_abbrev=False``: ``--allow-writable-i`` is a usage error, exit 2, not the human flag). Retry on the same
 exports is keyed on (reason, stage, detail), not on the reason alone, and two constants are the complete list: ``COMPARE_RETRYABLE_AUTOMATIC``
 (``HOST_BUSY_START``, retried by the Orchestrator itself) and ``COMPARE_RETRYABLE_WITH_HUMAN_FLAG`` (``INTERPRETER_WRITABLE``, detail of
@@ -1123,7 +1132,12 @@ def _check_pid(pid: object) -> int:
 
 
 def _write_json_atomic(path: str, payload: dict) -> None:
-    tmp = f"{path}.{os.getpid()}.tmp"  # O_EXCL + O_NOFOLLOW, then rename: a reader sees all of it or none
+    """Create `path` with `payload` (create-new only: every caller writes a name that must not exist). The payload goes to a temp name made with
+    O_EXCL + O_NOFOLLOW, then ``os.link(tmp, path)`` gives it its final name: the link FAILS if `path` exists (``os.replace`` would silently overwrite
+    anything created there after the caller's ``lexists`` check), and a reader sees all of the file or none. The temp is unlinked afterwards, by its
+    path: that is best effort against a same-user process, which can swap the temp name between the link and the unlink (only the temp name is
+    ever removed, never `path`)."""
+    tmp = f"{path}.{os.getpid()}.tmp"
     try:
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
     except FileExistsError as exc:  # a stale file of ours from a crashed run: never overwritten, never removed here
@@ -1132,11 +1146,13 @@ def _write_json_atomic(path: str, payload: dict) -> None:
         os.fchmod(fd, 0o600)  # umask-proof: umask 0577 would leave a mode-0 file that reads back as MARKER_MISSING
         with os.fdopen(fd, "wb") as handle:
             handle.write(json.dumps(payload, sort_keys=True).encode("ascii"))
-        os.replace(tmp, path)
-    except BaseException:
+        try:
+            os.link(tmp, path, **_LINK_NO_FOLLOW)
+        except FileExistsError as exc:
+            raise BenchmarkGateError("DEST_REJECTED", "the destination appeared while writing; it is left as it is") from exc
+    finally:
         if os.path.lexists(tmp):
             os.unlink(tmp)
-        raise
 
 
 def _write_marker(root: str, owner_pid: int, name: str | None = None) -> None:
@@ -3299,11 +3315,15 @@ def _euid_can_write(path: str) -> bool:
 
 
 def _only_root_changes(path: str, info: os.stat_result) -> bool:
-    """Whether the directory at `path` (stat `info`) is closed to the harness's euid and to group and other. Group or other write is accepted only
-    for a sticky directory owned by ``_TRUSTED_LINK_UID`` (`/tmp`: a user can then remove only their own entries)."""
+    """Whether the directory at `path` (stat `info`) can be changed only by ``_TRUSTED_LINK_UID``. A STICKY directory owned by ``_TRUSTED_LINK_UID``
+    (`/tmp` on Linux) is accepted whatever its mode and whatever the euid can write: the sticky bit stops anyone but an entry's owner (or the
+    directory's) from renaming or removing it, and the entries the checks look at are root-owned, so a same-user child cannot move them (it can
+    only rename entries it owns). Any other directory must be closed to the euid (`os.access`) and to group and other."""
+    if info.st_uid == _TRUSTED_LINK_UID and info.st_mode & stat.S_ISVTX:
+        return True
     if _euid_can_write(path):
         return False
-    return info.st_mode & 0o022 == 0 or (info.st_mode & stat.S_ISVTX != 0 and info.st_uid == _TRUSTED_LINK_UID)
+    return info.st_mode & 0o022 == 0
 
 
 def _link_is_trusted(directory: str, info: os.stat_result) -> bool:
@@ -3311,8 +3331,9 @@ def _link_is_trusted(directory: str, info: os.stat_result) -> bool:
     rename or unlink a link in its directory replaces it, whatever the link's owner. So the link must be owned by ``_TRUSTED_LINK_UID`` with
     exactly one name (`st_nlink == 1`: a second hard link to a root-owned link lives wherever someone else can write); the holding directory must
     be owned by ``_TRUSTED_LINK_UID`` too (a directory the user owns can be chmodded by the user, whatever its mode now), and closed to the euid
-    and to group and other (`_only_root_changes`); and so must EVERY ancestor of the holder (a writable ancestor lets the holder be renamed away
-    and replaced), a sticky root-owned ancestor such as `/tmp` being acceptable. Fail closed on any error."""
+    and to group and other, or be sticky (`_only_root_changes`); and so must EVERY ancestor of the holder, which must be owned by
+    ``_TRUSTED_LINK_UID`` as well (a writable ancestor lets the holder be renamed away and replaced), a sticky root-owned ancestor such as `/tmp`
+    being acceptable. Fail closed on any error."""
     if info.st_uid != _TRUSTED_LINK_UID or info.st_nlink != 1:
         return False
     try:
@@ -3324,7 +3345,8 @@ def _link_is_trusted(directory: str, info: os.stat_result) -> bool:
             parent = os.path.dirname(ancestor)
             if parent == ancestor:
                 return True
-            if not _only_root_changes(parent, os.stat(parent)):
+            above = os.stat(parent)
+            if above.st_uid != _TRUSTED_LINK_UID or not _only_root_changes(parent, above):  # a user-owned 0555 ancestor can be chmodded by its owner
                 return False
             ancestor = parent
     except OSError:
@@ -5182,7 +5204,7 @@ COMPARE_DETAIL_TOKENS = tuple(dict.fromkeys(token for _, _, details in COMPARE_R
 
 # THE retry rule, machine-readable (spec 2.3, "Retry on the same exports"): the `(reason, stage, detail)` triples of a `compare` result for
 # which a second `compare` on the SAME exports (always with a new `out_path`) can give another outcome. There are two sets because they are
-# retried by different actors: a busy host is waited out AUTOMATICALLY; a writable interpreter is retried ONLY after a human has set
+# retried by different actors: a busy host is waited out AUTOMATICALLY (capped: the module docstring, "Retry budget"); a writable interpreter is retried ONLY after a human has set
 # `--allow-writable-interpreter` (never automatically). Nothing else is retryable on the same exports: every other outcome is a function of the
 # exports, the venvs and their pins (all minted once, before the install), so only fresh provisioning can change it.
 COMPARE_RETRYABLE_AUTOMATIC = frozenset({
@@ -6193,7 +6215,9 @@ def compare(gate: object, repo: object, base: Side, head: Side, *, attempt: obje
     `BenchmarkGateError` for a caller or harness fault. A thin wrapper over `_compare_impl` with the default seams.
     ``allow_writable_interpreter`` must be a ``bool`` (a ``BenchmarkGateError`` ``MEASURE_ARGS_INVALID`` otherwise); it is a human signal and
     must never be set by an automatic retry of ``INTERPRETER_WRITABLE``.
-    Known residuals: the module docstring ("Known residuals of ``compare``", ``[R1]`` to ``[R9]``) is their single source; read them there. Retry on the
+    Known residuals: the module docstring ("Known residuals of ``compare``", the labels ``[R1]`` and following) is their single source; read them there.
+    ``parse_compare_outcome`` is the reference implementation of the reading protocol for this command's outcome (module docstring,
+    "Reading the outcome"). Retry on the
     same exports is keyed on (reason, stage, detail): ``COMPARE_RETRYABLE_AUTOMATIC`` (``HOST_BUSY_START``) and, only after a human sets the flag,
     ``COMPARE_RETRYABLE_WITH_HUMAN_FLAG`` (``INTERPRETER_WRITABLE``) are the complete list; every other
     ``ISOLATION_REJECTED`` at ``pre_overlay`` (``INTERPRETER_CHANGED``, ``INTERPRETER_DIFFERS``, ``SNAPSHOT_CHANGED``, ``DEPENDENCY_PARITY``,
@@ -6362,7 +6386,7 @@ def _cmd_snapshot_venv(args: argparse.Namespace) -> int:
         if len(data) > _VENV_MAX_SNAPSHOT_BYTES:
             raise BenchmarkGateError("VENV_SNAPSHOT_INVALID", "the snapshot is larger than the limit every later step reads")
     except (BenchmarkGateError, OSError, ValueError) as exc:
-        if written:  # the file this call just created (O_EXCL) is unusable: remove that exact path, or the retry would be blocked by it
+        if written:  # unusable: remove the file at `--out` (best effort, by path: a same-user process could have swapped it), or it blocks the retry
             with contextlib.suppress(OSError):
                 os.unlink(args.out)
         return _fail(exc if isinstance(exc, BenchmarkGateError) else BenchmarkGateError("TREE_UNREADABLE", escape_diagnostic(str(exc), 120)))
@@ -6441,7 +6465,8 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     a same-user process can rewrite it in place, and the exit code must not follow such a rewrite; the Orchestrator's check of the line
     against the bytes it reads from the file, once, is what catches one). A crash catches ``BenchmarkGateError``, ``OSError``, ``ValueError``, ``RecursionError``,
     ``Exception`` and ``KeyboardInterrupt`` (a SIGTERM, SIGHUP or SIGINT) and prints ``usage error: <CODE or INTERNAL>: <type>`` on stderr
-    (never attacker text) and exits 2; sealed exports stay sealed (``cleanup`` restores them)."""
+    (never attacker text) and exits 2; sealed exports stay sealed (``cleanup`` restores them). The line is built by ``format_result_line``; the reference
+    reader of the protocol is ``parse_compare_outcome``."""
     try:
         with _with_signal_handlers():
             gate = _read_gate_file(args.gate)
@@ -6451,13 +6476,9 @@ def _cmd_compare(args: argparse.Namespace) -> int:
                               allow_writable_interpreter=args.allow_writable_interpreter)
             # everything below comes from the in-memory result and the hash `_write_result` returned for the bytes it wrote: the file on
             # disk is not read back (a same-user process could have rewritten it in place since, with the same inode)
-            result, reason = outcome["result"], outcome["reason"]
+            result = outcome["result"]
             digest = getattr(outcome, "written_sha256", None)
-            if (type(digest) is not str or result not in COMPARE_RESULTS or COMPARE_RESULT_OF_REASON.get(reason) != result or outcome["interpreter_writable"] not in (True, False, None)
-                    or _SHA256_RE.fullmatch(digest) is None):
-                raise ValueError("compare returned an unknown result or reason, or no hash of what it wrote")
-            writable = {True: "1", False: "0", None: "n/a"}[outcome["interpreter_writable"]]
-            print(f"RESULT: {result} {reason} interpreter_writable={writable} sha256={digest}")
+            print(format_result_line(result, outcome["reason"], outcome["interpreter_writable"], digest))  # raises ValueError for anything off the closed sets
     except (BenchmarkGateError, OSError, ValueError, RecursionError, Exception, KeyboardInterrupt) as exc:
         print(_crash_message(exc), file=sys.stderr)
         return 2
@@ -6489,28 +6510,49 @@ def _cmd_run_once(args: argparse.Namespace) -> int:
         return 2
 
 
-_RESULT_LINE_RE = re.compile(r"RESULT: ([A-Z_]+) ([A-Z_]+) interpreter_writable=(0|1|n/a) sha256=([0-9a-f]{64})")
+_WRITABLE_TOKENS = {True: "1", False: "0", None: "n/a"}  # `interpreter_writable` of the result -> its token in the RESULT line
+_RESULT_LINE_RE = re.compile(r"RESULT: ([A-Z_]+) ([A-Z_]+) interpreter_writable=(0|1|n/a) sha256=([0-9a-f]{64})")  # the same line as `format_result_line` prints
+
+
+def _is_result_reason_pair(result: object, reason: object) -> bool:
+    """Whether (`result`, `reason`) is one pair of ``COMPARE_RESULT_OF_REASON`` (the one check the printer and the reader share)."""
+    return type(result) is str and type(reason) is str and result in COMPARE_RESULTS and COMPARE_RESULT_OF_REASON.get(reason) == result
+
+
+def format_result_line(result: object, reason: object, interpreter_writable: object, sha256: object) -> str:
+    """The ``RESULT:`` line of ``compare`` (the ONE place that builds it; ``_RESULT_LINE_RE`` and ``parse_compare_outcome`` read what it prints).
+    ``ValueError`` unless the pair is a pair of ``COMPARE_RESULT_OF_REASON``, `interpreter_writable` is exactly ``True``, ``False`` or ``None`` (printed
+    ``1``, ``0``, ``n/a``) and `sha256` is 64 lower-case hex digits."""
+    if (not _is_result_reason_pair(result, reason) or all(interpreter_writable is not known for known in _WRITABLE_TOKENS)
+            or type(sha256) is not str or _SHA256_RE.fullmatch(sha256) is None):
+        raise ValueError("compare returned an unknown result or reason, or no hash of what it wrote")
+    return f"RESULT: {result} {reason} interpreter_writable={_WRITABLE_TOKENS[interpreter_writable]} sha256={sha256}"
 
 
 def parse_compare_outcome(returncode: int, stdout: str, file_bytes: bytes | None) -> tuple[int, dict | None]:
     """The REFERENCE READER of one ``compare`` run for C4e (spec 2.9; stdlib only): `(exit_code, parsed)`, the exit code the Orchestrator may act
     on and the parsed result file. `returncode` and `stdout` are the process's; `file_bytes` is the result file read ONCE into bytes (``None``
-    when it does not exist). An exit 0 or 1 counts only with exactly ONE valid ``RESULT:`` line whose ``sha256=`` is the hash of `file_bytes` and
-    whose result and reason equal those of the parsed file (and are a pair of ``COMPARE_RESULT_OF_REASON``), and the exit agrees with the result: 0 only for
+    when it does not exist). An exit 0 or 1 counts only with exactly ONE valid ``RESULT:`` line (the one `format_result_line` prints) whose ``sha256=`` is
+    the hash of `file_bytes` and whose result, reason and ``interpreter_writable=`` (``n/a`` is the file's ``null``) equal those of the parsed file (and the
+    result and reason are a pair of ``COMPARE_RESULT_OF_REASON``), and the exit agrees with the result: 0 only for
     ``IMPROVED`` (a bare exit 0, such as ``compare --help``, is NOT an ``IMPROVED``), 1 only for any other result. Anything else, including Python's own
-    exit 1 for an uncaught exception, is `(2, None)`: "ignore the file". `stage` and `detail` are to be read from `parsed`, never from the line."""
+    exit 1 for an uncaught exception, a file that is not a JSON object and a file too deeply nested to parse, is `(2, None)`: "ignore the file". `stage` and
+    `detail` are to be read from `parsed`, never from the line."""
     ignore: tuple[int, dict | None] = (2, None)
-    if returncode not in (0, 1) or file_bytes is None:
+    if type(returncode) is not int or returncode not in (0, 1) or file_bytes is None:
         return ignore
     lines = [m for m in map(_RESULT_LINE_RE.fullmatch, stdout.splitlines()) if m]
     if len(lines) != 1 or lines[0].group(4) != hashlib.sha256(file_bytes).hexdigest():
         return ignore
     try:
         parsed = json.loads(file_bytes)
-    except ValueError:
+    except (ValueError, RecursionError):
         return ignore
     if not isinstance(parsed, dict) or (parsed.get("result"), parsed.get("reason")) != (lines[0].group(1), lines[0].group(2)) \
-            or COMPARE_RESULT_OF_REASON.get(parsed["reason"]) != parsed["result"]:
+            or not _is_result_reason_pair(parsed["result"], parsed["reason"]):
+        return ignore
+    writable = {token: value for value, token in _WRITABLE_TOKENS.items()}[lines[0].group(3)]
+    if "interpreter_writable" not in parsed or parsed["interpreter_writable"] is not writable:
         return ignore
     improved = parsed["result"] == "IMPROVED"
     return (returncode, parsed) if (returncode == 0) == improved else ignore
@@ -6524,7 +6566,8 @@ def main(argv: list[str] | None = None) -> int:
     subcommands is Python's uncaught exception and exits 1, so a caller must treat ANY non-zero exit of those as a failure. ``harness-sha256`` prints the harness digest. Reading contract for ``compare``: exit 0 is ``IMPROVED`` ONLY with a
     valid ``RESULT: IMPROVED ...`` line whose ``sha256=`` matches the file's bytes (``main`` returns an argparse ``SystemExit`` code unchanged, so
     ``compare --help`` is a bare exit 0 and NOT an ``IMPROVED``); exit 1 without a valid ``RESULT:`` line counts as 2, and exit 2 means
-    any result file is to be IGNORED; ``INTERPRETER_WRITABLE`` must never be auto-retried with ``--allow-writable-interpreter``. Every parser has
+    any result file is to be IGNORED; ``INTERPRETER_WRITABLE`` must never be auto-retried with ``--allow-writable-interpreter``. ``parse_compare_outcome`` is the
+    reference implementation of this reading protocol. Every parser has
     ``allow_abbrev=False``: an abbreviated option is a usage error (exit 2), never the human flag."""
     # `allow_abbrev=False` on the parser and on every subparser: an abbreviation such as `--allow-writable-i` must not set the human signal
     parser = argparse.ArgumentParser(prog="benchmark_gate.py", allow_abbrev=False,

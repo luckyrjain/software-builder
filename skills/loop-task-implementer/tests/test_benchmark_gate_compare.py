@@ -93,22 +93,38 @@ def test_every_residual_label_of_the_module_docstring_is_in_spec_2_5():
     _assert_labels_match(bg.__doc__, _spec_text())
 
 
-@pytest.mark.parametrize("width", [37, 61, 83, 140])
-def test_the_label_check_survives_a_rewrap_of_the_docstring_and_the_spec(width):
-    """Join every line, then split again at other points (`textwrap` at `width`, no word broken): the check still passes; so does a re-wrapped spec."""
+DOC_WIDTHS = (None, 37, 61, 83, 140)  # None: as written
+
+
+def _rewrap(text, width):
+    """Join every line of each paragraph and split it again at `width` (no word broken): the same words at other line ends."""
     import textwrap
-    def rewrap(text):
-        paragraphs = re.split(r"\n\s*\n", text)
-        return "\n\n".join(textwrap.fill(" ".join(p.split()), width=width, break_long_words=False, break_on_hyphens=False) for p in paragraphs)
+    if width is None:
+        return text
+    return "\n\n".join(textwrap.fill(" ".join(p.split()), width=width, break_long_words=False, break_on_hyphens=False) for p in re.split(r"\n\s*\n", text))
+
+
+def _docstrings(width):
+    """The four docstrings the reading contract lives in, re-wrapped: (module, compare, main, _cmd_compare)."""
+    return tuple(_rewrap(doc, width) for doc in (bg.__doc__, bg.compare.__doc__, bg.main.__doc__, bg._cmd_compare.__doc__))
+
+
+@pytest.mark.parametrize("width", DOC_WIDTHS)
+def test_the_label_check_survives_a_rewrap_of_the_docstring_and_the_spec(width):
+    import textwrap
     spec = _spec_text()
     lines_spec = "\n".join(line if line.startswith("#") else textwrap.fill(line, width=width, break_long_words=False, break_on_hyphens=False)
-                           for line in spec.splitlines())
-    _assert_labels_match(rewrap(bg.__doc__), lines_spec)
+                           for line in spec.splitlines()) if width else spec
+    _assert_labels_match(_docstrings(width)[0], lines_spec)
 
 
 def test_the_compare_docstring_points_at_the_module_docstring_instead_of_copying_the_residuals():
-    assert not _LABEL_RE.search(bg.compare.__doc__) and "(1)" not in bg.compare.__doc__ and "(9)" not in bg.compare.__doc__
-    assert "single source" in bg.compare.__doc__ and "[R1]" in bg.compare.__doc__
+    doc = bg.compare.__doc__
+    assert not _LABEL_RE.search(doc) and "(1)" not in doc and "(9)" not in doc
+    assert not re.search(r"\[R\d+\]\s*(?:to|-|\u2013|\.\.\.?)\s*\[R\d+\]", doc)  # no numeric range: it was wrong once ([R1] to [R9] of twelve)
+    assert not re.search(r"\bR\d+\s*(?:to|-)\s*R?\d+", doc)
+    flat = _normal(doc)
+    assert "module docstring" in flat and "single source" in flat and "[r1]" in flat
 
 
 def test_the_spec_skip_rule_fails_in_a_checkout_without_the_spec(tmp_path, monkeypatch):
@@ -125,21 +141,53 @@ def _normal(text):
     return " ".join(text.replace("`", "").lower().split())
 
 
-# One keyword per provisioning item (spec 2.5 items 3, 4, 5, 6, 7, 9): the three places carry the same item set.
-PROVISIONING_KEYWORDS = ("pip_config_file", "pip_no_cache_dir", "home", "no network", "census", "euid", "expected harness_sha256", "cpython >= 3.12")
+# One keyword per provisioning item (spec 2.5 items 3, 4, 5, 6, 7, 9 and the order of the steps): the three places carry the same item set.
+PROVISIONING_KEYWORDS = ("pip_config_file", "pip_no_cache_dir", "fresh home", "no network", "census", "euid", "expected harness_sha256", "cpython >= 3.12",
+                         "head first", "before that side's install", "editable only", "--no-compile", "bytecode", "once into bytes")
 
 
-def test_the_provisioning_contract_and_the_c4e_write_back_list_name_the_two_pins():
+def _provisioning_parts(module_doc):
     spec = _spec_text()
     contract = spec[re.search(r"\*\*Provisioning\s+contract\s+for\s+C4e", spec).start():re.search(r"\*\*Interpreter\s+\(T2b1b\)", spec).start()]
     deviations = spec[re.search(r"^##\s+9\.\s+Deviations", spec, re.M).start():]
-    doc = bg.__doc__
-    first = re.search(r"Provisioning\s+contract\s+\(spec", doc).start()
-    docstring = doc[first:first + re.search(r"Reading\s+the\s+outcome\s+\(the\s+contract", doc[first:]).start()]
-    for where, text in (("spec 2.5", contract), ("spec 9.8", deviations), ("module docstring", docstring)):
+    first = re.search(r"Provisioning\s+contract\s+\(spec", module_doc).start()
+    docstring = module_doc[first:first + re.search(r"Reading\s+the\s+outcome\s+\(the\s+contract", module_doc[first:]).start()]
+    return (("spec 2.5", contract), ("spec 9.8", deviations), ("module docstring", docstring))
+
+
+@pytest.mark.parametrize("width", DOC_WIDTHS)
+def test_the_provisioning_contract_and_the_c4e_write_back_list_name_the_two_pins(width):
+    for where, text in _provisioning_parts(_docstrings(width)[0]):
         text = _normal(text)
         for keyword in PROVISIONING_KEYWORDS:
             assert keyword in text, f"{keyword!r} is missing from {where}"
+
+
+RETRY_COMMON = ("attempt=2", "60 s", "fresh exports", "same exports", "attempt unchanged")
+RETRY_FULL = (*RETRY_COMMON, "at most 3 retries", "one allowed re-measure", "third call is out of contract", "enforced by c4e", "count of compare results")
+
+
+def _measure_stage_inconclusive():
+    return sorted(reason for reason, (result, stages, _d) in bg.COMPARE_REASONS.items() if result == "INCONCLUSIVE" and stages == ("ran",))
+
+
+@pytest.mark.parametrize("width", DOC_WIDTHS)
+def test_the_retry_budget_and_the_attempt_semantics_are_stated_in_spec_2_3_the_module_docstring_and_section_9(width):
+    spec = _spec_text()
+    section_2_3 = spec[re.search(r"^###\s+2\.3\s", spec, re.M).start():re.search(r"^###\s+2\.4\s", spec, re.M).start()]
+    deviations = spec[re.search(r"^##\s+9\.\s+Deviations", spec, re.M).start():]
+    module = _docstrings(width)[0]
+    measure_stage = _measure_stage_inconclusive()
+    assert measure_stage == sorted("HOST_BUSY_END TRACE_UNAVAILABLE BASE_TIMEOUT BASE_OUTPUT_TOO_LARGE NOISY INCONSISTENT BORDERLINE INVALID_INPUT".split())
+    for where, text, keywords in (("spec 2.3", section_2_3, RETRY_FULL), ("module docstring", module, RETRY_FULL), ("spec 9", deviations, RETRY_COMMON)):
+        flat = _normal(text)
+        for keyword in keywords:
+            assert keyword in flat, f"{keyword!r} is missing from {where}"
+    for where, text in (("spec 2.3", section_2_3), ("module docstring", module)):
+        flat = _normal(text)
+        for reason in measure_stage:  # the allowed re-measure reasons come from COMPARE_REASONS, and both places list them all
+            assert reason.lower() in flat, f"{reason} is missing from {where}"
+    assert "enforce" in _normal(deviations) and "attempt cap" in _normal(deviations)
 
 
 # --- vocabularies ---
@@ -4368,7 +4416,8 @@ def test_cli_result_line_and_exit_codes(tmp_path, monkeypatch, capsys, name):
     parsed = json.loads(data)
     assert (parsed["result"], parsed["reason"]) == (result, reason)
     expected = _writable_token(parsed["interpreter_writable"]) if writable is None else writable
-    assert stdout == f"RESULT: {result} {reason} interpreter_writable={expected} sha256={hashlib.sha256(data).hexdigest()}\n"  # the closed sets, one line
+    assert stdout == bg.format_result_line(result, reason, parsed["interpreter_writable"], hashlib.sha256(data).hexdigest()) + "\n"  # the one builder, one line
+    assert stdout == f"RESULT: {result} {reason} interpreter_writable={expected} sha256={hashlib.sha256(data).hexdigest()}\n"  # and the literal shape
     assert parse_compare_outcome(code, stdout, data) == exit_code  # a reader that hashes the file bytes agrees
 
 
@@ -4443,7 +4492,7 @@ def test_cli_process_with_default_seams_ends_at_the_gate_with_a_result_line(tmp_
 
 @posix_only
 def test_exit_1_without_a_valid_result_line_is_not_a_result(tmp_path):
-    good = (json.dumps({"result": "NOT_IMPROVED", "reason": "BELOW_HALF_THRESHOLD"}) + "\n").encode()
+    good = (json.dumps({"result": "NOT_IMPROVED", "reason": "BELOW_HALF_THRESHOLD", "interpreter_writable": True}) + "\n").encode()
     sha = hashlib.sha256(good).hexdigest()
     line = f"RESULT: NOT_IMPROVED BELOW_HALF_THRESHOLD interpreter_writable=1 sha256={sha}\n"
     assert parse_compare_outcome(1, line, good) == 1
@@ -4455,7 +4504,7 @@ def test_exit_1_without_a_valid_result_line_is_not_a_result(tmp_path):
     assert parse_compare_outcome(1, line + line, good) == 2  # two lines
     assert parse_compare_outcome(0, line, good) == 2  # exit 0 only for IMPROVED
     assert parse_compare_outcome(2, line, good) == 2
-    improved = (json.dumps({"result": "IMPROVED", "reason": "IMPROVED_CLEAR"}) + "\n").encode()
+    improved = (json.dumps({"result": "IMPROVED", "reason": "IMPROVED_CLEAR", "interpreter_writable": False}) + "\n").encode()
     line0 = f"RESULT: IMPROVED IMPROVED_CLEAR interpreter_writable=0 sha256={hashlib.sha256(improved).hexdigest()}\n"
     assert parse_compare_outcome(0, line0, improved) == 0 and parse_compare_outcome(1, line0, improved) == 2
     crash = subprocess.run([sys.executable, "-c", "raise RuntimeError('boom')"], capture_output=True, text=True, timeout=60)
@@ -5044,14 +5093,74 @@ def test_a_real_child_that_rewrites_its_ini_or_plants_a_file_under_work_changes_
 
 def test_the_reference_reader_is_public_stdlib_only_and_returns_the_parsed_file():
     """`parse_compare_outcome` lives in the module (the reader C4e uses): `(exit_code, parsed)`, and `(2, None)` for anything it must not act on."""
-    body = json.dumps({"result": "IMPROVED", "reason": "IMPROVED_CLEAR", "stage": "ran", "detail": ""}).encode()
+    body = json.dumps({"result": "IMPROVED", "reason": "IMPROVED_CLEAR", "stage": "ran", "detail": "", "interpreter_writable": False}).encode()
     line = f"RESULT: IMPROVED IMPROVED_CLEAR interpreter_writable=0 sha256={hashlib.sha256(body).hexdigest()}\n"
     code, parsed = bg.parse_compare_outcome(0, line, body)
     assert code == 0 and parsed["stage"] == "ran" and parsed["reason"] == "IMPROVED_CLEAR"
     assert bg.parse_compare_outcome(1, line, body) == (2, None) and bg.parse_compare_outcome(0, "", body) == (2, None)
-    assert bg.parse_compare_outcome(0, line, b"[]") == (2, None)  # a JSON file that is not an object
+    assert bg.parse_compare_outcome(0, line, b"[]") == (2, None)  # (the sha differs here: the sha check ends it; the next test covers a matching sha)
     assert bg.parse_compare_outcome(0, line, None) == (2, None)
-    assert "parse_compare_outcome" in bg.main.__doc__ or "parse_compare_outcome" in _spec_text()  # named for C4e (spec 2.9)
+    assert "parse_compare_outcome" in _normal(bg.main.__doc__)  # named for C4e (spec 2.9)
+
+
+def _body_and_line(result="IMPROVED", reason="IMPROVED_CLEAR", writable=False, token=None, **file_fields):
+    """A result file (bytes) and the line `format_result_line` prints for it (a token other than the file's can be forced)."""
+    body = json.dumps({"result": result, "reason": reason, "stage": "ran", "detail": "", "interpreter_writable": writable, **file_fields}).encode()
+    shown = bg._WRITABLE_TOKENS[writable] if token is None else token
+    return body, f"RESULT: {result} {reason} interpreter_writable={shown} sha256={hashlib.sha256(body).hexdigest()}\n"
+
+
+def test_format_result_line_is_the_one_builder_and_the_reader_round_trips_it():
+    for result, reason in sorted((r, k) for k, r in bg.COMPARE_RESULT_OF_REASON.items()):
+        for writable in (True, False, None):
+            body, _ = _body_and_line(result, reason, writable)
+            line = bg.format_result_line(result, reason, writable, hashlib.sha256(body).hexdigest())
+            assert bg._RESULT_LINE_RE.fullmatch(line) and line.count("\n") == 0
+            code, parsed = bg.parse_compare_outcome(0 if result == "IMPROVED" else 1, line + "\n", body)
+            assert (code, parsed["interpreter_writable"]) == (0 if result == "IMPROVED" else 1, writable)
+    sha = "a" * 64
+    assert bg.format_result_line("IMPROVED", "IMPROVED_CLEAR", None, sha) == f"RESULT: IMPROVED IMPROVED_CLEAR interpreter_writable=n/a sha256={sha}"
+    for bad in [("IMPROVED", "NOISY", False, sha), ("NOISY", "IMPROVED_CLEAR", False, sha), ("IMPROVED", "IMPROVED_CLEAR", 1, sha),
+                ("IMPROVED", "IMPROVED_CLEAR", "1", sha), ("IMPROVED", "IMPROVED_CLEAR", False, "A" * 64), ("IMPROVED", "IMPROVED_CLEAR", False, None),
+                ("IMPROVED", "IMPROVED_CLEAR", False, "a" * 63), (["IMPROVED"], "IMPROVED_CLEAR", False, sha), ("IMPROVED", ["x"], False, sha)]:
+        with pytest.raises(ValueError):
+            bg.format_result_line(*bad)
+
+
+def test_the_reader_checks_interpreter_writable_of_the_line_against_the_file():
+    for writable, token, expected in [(True, "1", True), (False, "0", True), (None, "n/a", True), (True, "0", False), (False, "1", False),
+                                      (None, "0", False), (False, "n/a", False), (True, "n/a", False)]:
+        body, line = _body_and_line("NOT_IMPROVED", "BELOW_HALF_THRESHOLD", writable, token)
+        assert (bg.parse_compare_outcome(1, line, body)[0] == 1) is expected, (writable, token)
+    body = json.dumps({"result": "NOT_IMPROVED", "reason": "BELOW_HALF_THRESHOLD"}).encode()  # the key is missing: fail closed
+    line = f"RESULT: NOT_IMPROVED BELOW_HALF_THRESHOLD interpreter_writable=n/a sha256={hashlib.sha256(body).hexdigest()}\n"
+    assert bg.parse_compare_outcome(1, line, body) == (2, None)
+    body, line = _body_and_line("NOT_IMPROVED", "BELOW_HALF_THRESHOLD", None, interpreter_writable="n/a")  # a string is not null
+    assert bg.parse_compare_outcome(1, line, body) == (2, None)
+
+
+def test_the_reader_rejects_a_file_that_is_not_an_object_even_with_a_matching_sha():
+    body = b"[]"
+    line = f"RESULT: IMPROVED IMPROVED_CLEAR interpreter_writable=0 sha256={hashlib.sha256(body).hexdigest()}\n"
+    assert bg.parse_compare_outcome(0, line, body) == (2, None) and bg.parse_compare_outcome(1, line, body) == (2, None)
+
+
+def test_the_reader_rejects_a_pair_off_the_closed_table_even_with_a_matching_sha():
+    for result, reason, code in [("IMPROVED", "NOISY", 0), ("IMPROVED", "NOISY", 1), ("NOT_IMPROVED", "IMPROVED_CLEAR", 1), ("REJECTED", "NOISY", 1),
+                                 ("INCONCLUSIVE", "NO_SUCH_REASON", 1), ("IMPROVED", "NO_SUCH_REASON", 0)]:
+        body, line = _body_and_line(result, reason)
+        assert bg.parse_compare_outcome(code, line, body) == (2, None), (result, reason, code)
+
+
+def test_the_reader_survives_deeply_nested_json_and_a_bool_exit_code():
+    body = b"[" * 200000 + b"]" * 200000
+    line = f"RESULT: IMPROVED IMPROVED_CLEAR interpreter_writable=0 sha256={hashlib.sha256(body).hexdigest()}\n"
+    assert bg.parse_compare_outcome(0, line, body) == (2, None)
+    body, line = _body_and_line()
+    assert bg.parse_compare_outcome(0, line, body)[0] == 0
+    assert bg.parse_compare_outcome(False, line, body) == (2, None)  # `False == 0` and `False in (0, 1)`: not an int exit code
+    body, line = _body_and_line("NOT_IMPROVED", "BELOW_HALF_THRESHOLD")
+    assert bg.parse_compare_outcome(True, line, body) == (2, None)
 
 
 @posix_only
@@ -5275,18 +5384,25 @@ def test_the_cli_fails_closed_when_compare_returns_no_hash_of_what_it_wrote(tmp_
     assert _run_main(capsys, ["compare", *full]) == (2, "", "usage error: INTERNAL: ValueError\n")
     unset.written_sha256 = "a" * 64
     monkeypatch.setattr(bg, "compare", lambda *a, **k: unset)
-    assert _run_main(capsys, ["compare", *full]) == (0, f"RESULT: IMPROVED IMPROVED_CLEAR interpreter_writable=0 sha256={'a' * 64}\n", "")
+    assert _run_main(capsys, ["compare", *full]) == (0, bg.format_result_line("IMPROVED", "IMPROVED_CLEAR", False, "a" * 64) + "\n", "")
 
 
-def test_the_public_docstrings_state_the_reading_contract():
-    doc = bg.__doc__ + bg._cmd_compare.__doc__ + bg.main.__doc__
+@pytest.mark.parametrize("width", DOC_WIDTHS)
+def test_the_public_docstrings_state_the_reading_contract(width):
+    module, compare_doc, main_doc, cmd_doc = _docstrings(width)
+    doc = _normal(" ".join((module, cmd_doc, main_doc)))
     for phrase in ("counts as exit 2", "IGNORED", "NEVER be auto-retried", "COMPARE_RETRYABLE_AUTOMATIC", "COMPARE_RETRYABLE_WITH_HUMAN_FLAG",
                    "INTERPRETER_CHANGED", "single source", "allow_abbrev=False", "bare exit 0", "NOT an ``IMPROVED``", "TRUSTED copy"):
-        assert phrase in doc or phrase.lower() in doc.lower(), phrase
+        assert _normal(phrase) in doc, phrase
+    for where, text in (("module", module), ("compare", compare_doc), ("main", main_doc), ("_cmd_compare", cmd_doc)):
+        assert "parse_compare_outcome" in _normal(text), where  # the reference implementation of the protocol is named in all four
+    assert "reference implementation" in _normal(compare_doc)
+    flat_compare = _normal(compare_doc)
     for reason, _stage, detail in bg.COMPARE_RETRYABLE_AUTOMATIC | bg.COMPARE_RETRYABLE_WITH_HUMAN_FLAG:  # the prose names exactly what the constants list
-        assert reason in bg.compare.__doc__ and (detail in bg.compare.__doc__ or not detail)
-    assert "interpreter's own path chain" in bg.__doc__  # the disclosed residual of the pinned-by-content interpreter path
-    assert "TRUSTED copy" in bg.harness_sha256.__doc__ and "never from a previous `compare` result" in bg.harness_sha256.__doc__
+        assert reason.lower() in flat_compare and (detail.lower() in flat_compare or not detail)
+    assert "interpreter's own path chain" in _normal(module)  # the disclosed residual of the pinned-by-content interpreter path
+    harness = _normal(_rewrap(bg.harness_sha256.__doc__, width))
+    assert "trusted copy" in harness and "never from a previous compare result" in harness
 
 
 def test_the_spec_and_the_docstrings_say_the_expected_harness_digest_comes_from_a_trusted_copy():
@@ -5758,3 +5874,38 @@ def test_an_identity_change_is_not_a_gate_error_so_no_generic_handler_can_swallo
         raise bg._IdentityChanged("head root: replaced", "base")
     monkeypatch.setattr(bg, "trace_paired", raiser)
     _ends(bcase.impl(argv_builder=fake_trace_builder, min_base_ns=0), "ISOLATION_REJECTED", "EXPORT_CHANGED", stage="ran")
+
+
+# --- I7: `_write_json_atomic` creates a NEW name and never overwrites one that appeared after the caller's check ---
+
+@posix_only
+def test_write_json_atomic_creates_a_new_file_and_leaves_no_temp(tmp_path):
+    target = tmp_path / "out.json"
+    bg._write_json_atomic(str(target), {"a": 1})
+    assert json.loads(target.read_bytes()) == {"a": 1} and stat.S_IMODE(target.stat().st_mode) == 0o600
+    assert [p.name for p in tmp_path.iterdir()] == ["out.json"]
+
+
+@posix_only
+def test_write_json_atomic_does_not_overwrite_a_name_created_after_the_callers_check(tmp_path, monkeypatch):
+    target = tmp_path / "out.json"
+    real_fchmod = os.fchmod
+
+    def plant_then_chmod(fd, mode):  # runs after the caller's `lexists` check and before the final name is made
+        target.write_text("planted")
+        real_fchmod(fd, mode)
+    monkeypatch.setattr(bg.os, "fchmod", plant_then_chmod)
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        bg._write_json_atomic(str(target), {"a": 1})
+    assert info.value.code == "DEST_REJECTED" and target.read_text() == "planted"
+    assert [p.name for p in tmp_path.iterdir()] == ["out.json"]  # only the planted file: our temp is gone
+
+
+@posix_only
+def test_snapshot_venv_refuses_a_path_planted_after_its_check_and_does_not_replace_it(tmp_path, monkeypatch):
+    target = tmp_path / "snap.json"
+    monkeypatch.setattr(bg, "_venv_layout", lambda bin_dir: ("/root", []))
+    monkeypatch.setattr(bg, "_venv_entries", lambda root, sites: target.write_text("planted") or {})
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        bg.snapshot_venv(str(tmp_path / "bin"), str(target))
+    assert info.value.code == "DEST_REJECTED" and target.read_text() == "planted"

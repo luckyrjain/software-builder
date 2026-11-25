@@ -844,6 +844,15 @@ def _trust_own_links(monkeypatch):
     monkeypatch.setattr(bg, "_TRUSTED_LINK_UID", os.getuid())
     real_access = os.access
     monkeypatch.setattr(bg.os, "access", lambda path, mode, *a, **k: False if mode & os.W_OK else real_access(path, mode, *a, **k))
+    real_stat = os.stat
+
+    def owned_stat(path, *a, **k):  # every ancestor must be owned by the trusted uid as well: the directories on the way up to `/` are root's or ours
+        st = real_stat(path, *a, **k)
+        if not stat.S_ISDIR(st.st_mode):
+            return st
+        return os.stat_result((st.st_mode, st.st_ino, st.st_dev, st.st_nlink, os.getuid(), st.st_gid, st.st_size,
+                               int(st.st_atime), int(st.st_mtime), int(st.st_ctime)))
+    monkeypatch.setattr(bg.os, "stat", owned_stat)
 
 
 @pytest.mark.parametrize("line", ["{alias}/export/src\n", "../../../../export/src\n", "{real}/export/src\n"])
@@ -1046,9 +1055,10 @@ def test_a_writable_ancestor_of_a_trusted_holder_is_refused(tmp_path, monkeypatc
 
 
 def test_a_group_or_other_writable_ancestor_is_refused_unless_sticky_and_trusted(tmp_path, monkeypatch):
+    """A root-owned (uid seam) sticky 1777-like ancestor that the euid CAN write (`os.access` True) is accepted; one owned by another uid is refused."""
     base, through = _one_link(tmp_path)
     _trust_own_links(monkeypatch)
-    real_stat = os.stat
+    real_stat = os.stat  # `_trust_own_links`'s: every directory reports the trusted uid
     parent = os.fspath(base.parent)
     modes = {"mode": 0o775, "uid": os.getuid()}
 
@@ -1059,11 +1069,51 @@ def test_a_group_or_other_writable_ancestor_is_refused_unless_sticky_and_trusted
         return os.stat_result((stat.S_IFDIR | modes["mode"], st.st_ino, st.st_dev, st.st_nlink, modes["uid"], st.st_gid, st.st_size,
                                int(st.st_atime), int(st.st_mtime), int(st.st_ctime)))
     monkeypatch.setattr(bg.os, "stat", fake_stat)
-    assert bg._only_trusted_aliases(through) is False
+    closed_access = os.access
+    monkeypatch.setattr(bg.os, "access", lambda path, mode, *a, **k: True if (mode & os.W_OK and os.fspath(path) == parent) else closed_access(path, mode, *a, **k))
+    assert os.access(parent, os.W_OK)  # the euid can really write the ancestor
+    assert bg._only_trusted_aliases(through) is False  # 0775, writable, not sticky
     modes["mode"] = 0o1777
-    assert bg._only_trusted_aliases(through) is True        # a sticky ancestor of the trusted uid, like /tmp
+    assert bg._only_trusted_aliases(through) is True   # sticky, owned by the trusted uid, writable by the euid: like /tmp on Linux
     modes["uid"] = os.getuid() + 1
-    assert bg._only_trusted_aliases(through) is False       # sticky but not trusted-owned
+    assert bg._only_trusted_aliases(through) is False  # not owned by the trusted uid (and sticky): refused
+    modes["uid"] = os.getuid()
+    modes["mode"] = 0o555
+    monkeypatch.setattr(bg.os, "access", closed_access)
+    assert bg._only_trusted_aliases(through) is True   # closed and trusted-owned
+    modes["uid"] = os.getuid() + 1
+    assert bg._only_trusted_aliases(through) is False  # closed (0555) but owned by another uid: that owner can chmod it
+
+
+def test_only_root_changes_sticky_rule_needs_the_trusted_owner(tmp_path, monkeypatch):
+    st = os.stat(tmp_path)
+
+    def info(mode, uid):
+        return os.stat_result((stat.S_IFDIR | mode, st.st_ino, st.st_dev, st.st_nlink, uid, st.st_gid, st.st_size, 0, 0, 0))
+    monkeypatch.setattr(bg, "_TRUSTED_LINK_UID", 0)
+    monkeypatch.setattr(bg.os, "access", lambda path, mode, *a, **k: True)  # the euid can write everywhere
+    assert bg._only_root_changes("/x", info(0o1777, 0)) is True        # root-owned sticky, like /tmp on Linux
+    assert bg._only_root_changes("/x", info(0o1777, os.getuid() or 1)) is False  # sticky, owned by the test user: refused
+    assert bg._only_root_changes("/x", info(0o755, 0)) is False        # not sticky and writable by the euid
+    monkeypatch.setattr(bg.os, "access", lambda path, mode, *a, **k: False)
+    assert bg._only_root_changes("/x", info(0o755, 0)) is True and bg._only_root_changes("/x", info(0o775, 0)) is False
+
+
+def test_an_own_uid_read_only_ancestor_is_refused(tmp_path, monkeypatch):
+    """The reviewer's repro: a 0555 ancestor owned by the user passes `_only_root_changes` but its owner can chmod it."""
+    base, through = _one_link(tmp_path)
+    _trust_own_links(monkeypatch)
+    assert bg._only_trusted_aliases(through) is True
+    real_stat = os.stat
+    parent = os.fspath(base.parent)
+
+    def other_owner(path, *a, **k):
+        st = real_stat(path, *a, **k)
+        if os.fspath(path) != parent:
+            return st
+        return os.stat_result((st.st_mode, st.st_ino, st.st_dev, st.st_nlink, os.getuid() + 1, st.st_gid, st.st_size, 0, 0, 0))
+    monkeypatch.setattr(bg.os, "stat", other_owner)
+    assert bg._only_trusted_aliases(through) is False
 
 
 def test_an_unstatable_ancestor_fails_closed(tmp_path, monkeypatch):
