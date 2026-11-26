@@ -163,9 +163,11 @@ def test_the_provisioning_contract_and_the_c4e_write_back_list_name_the_two_pins
             assert keyword in text, f"{keyword!r} is missing from {where}"
 
 
-RETRY_COMMON = ("attempt=2", "60 s", "fresh exports", "same exports", "attempt unchanged")
-RETRY_FULL = (*RETRY_COMMON, "at most 3 retries per dispatch", "one allowed re-measure per task", "second attempt=2 measurement for the same task is out of contract",
-              "counts as the one re-measure", "enforced by c4e", "count of compare results")
+RETRY_COMMON = ("attempt=2", "60 s", "fresh exports", "same exports", "attempt unchanged",
+                "spent by an attempt=2 measurement or by any host_busy_end result, whatever its attempt", "after either there is no further re-measure")
+RETRY_FULL = (*RETRY_COMMON, "at most 3 retries per dispatch", "one allowed re-measure per task", "spent by an attempt=2 measurement or by any host_busy_end result, whatever its attempt",
+              "after either there is no further re-measure", "if such a dispatch itself ends host_busy_end, it spends the allowance", "enforced by c4e",
+              "count of compare results")
 
 
 def test_the_remeasurable_reasons_are_the_parent_designs_three_noise_reasons():
@@ -186,11 +188,19 @@ def test_the_retry_budget_and_the_attempt_semantics_are_stated_in_spec_2_3_the_m
         for keyword in keywords:
             assert keyword in flat, f"{keyword!r} is missing from {where}"
     expected = [reason.lower() for reason in bg.COMPARE_REMEASURABLE_REASONS]
-    for where, text in (("spec 2.3", section_2_3), ("module docstring", module)):
+    for where, text in (("spec 2.3", section_2_3), ("module docstring", module), ("spec 9", deviations)):
         # parse the one list itself: a name that merely appears elsewhere in the section must not satisfy this, and an extra name must fail it
         listed = re.findall(r"re-measure reasons: ([a-z_]+(?:, [a-z_]+)*)\.", _normal(text))
         assert [item.split(", ") for item in listed] == [expected], f"the re-measure list of {where} is {listed}"
     assert "enforce" in _normal(deviations) and "attempt cap" in _normal(deviations)
+
+
+def test_run_once_declares_that_it_ignores_pythonpath_and_the_child_environment_really_drops_it(monkeypatch, tmp_path):
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path / "base" / "src"))
+    assert "PYTHONPATH" not in bg.side_env(str(tmp_path / "bin"), str(tmp_path / "scratch"))
+    spec = _normal(_spec_text())
+    assert "run-once ignores the caller's pythonpath" in spec and "c4e must remove that alternative" in spec
+    assert "caller's pythonpath is ignored" in _normal(bg.run_benchmark_once.__doc__)
 
 
 # --- vocabularies ---

@@ -1,6 +1,6 @@
 # C4d-3 `compare`, `run-once` and the verdict mapping: implementation plan
 
-> **Note (I5): the spec wins over this plan** wherever they differ, and the spec is annotated by round (design D1 to D6, implementation I1 to I8). Known
+> **Note (I5): the spec wins over this plan** wherever they differ, and the spec is annotated by round (design D1 to D6, implementation I1 to I9). Known
 > differences: the spawn guard (`spawn_guard`, called before every spawn, with the recorded directory identities); `_IdentityChanged` (derives from
 > `Exception`, not from `BenchmarkGateError`); `_WrittenResult` and `written_sha256` (the CLI prints the line from the in-memory result and the hash of the
 > bytes written); the retry rule (two constants, `COMPARE_RETRYABLE_AUTOMATIC` and `COMPARE_RETRYABLE_WITH_HUMAN_FLAG`, not one); `harness-sha256`; `allow_abbrev=False`; `format_result_line` (the one builder of the `RESULT:` line) and `parse_compare_outcome` (the reference reader, which also checks `interpreter_writable=`).

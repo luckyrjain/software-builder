@@ -64,9 +64,11 @@ Retry budget and ``attempt`` (C4e owns the exact numbers, but must cap them): (a
 ``attempt`` unchanged, at most 3 retries per dispatch with a wait of at least 60 s between them; then the Orchestrator stops and reports ``INCONCLUSIVE``/``HOST_BUSY_START`` to the human.
 (b) ``attempt=2`` is the one allowed re-measure per task: a new Lens B dispatch on FRESH exports (head-first provisioning again), allowed only after a
 measured result with one of these re-measure reasons: ``NOISY``, ``INCONSISTENT``, ``BORDERLINE``. No other reason allows it
-(``COMPARE_REMEASURABLE_REASONS``). ``HOST_BUSY_END`` is not retried either; it follows a full run, so it counts as the one re-measure. Only ``attempt=2``
-measurements use up the allowance: the busy-start retries of (a) and a dispatch for a new head or merge-base do not. A second ``attempt=2`` measurement
-for the same task is out of contract. (c) ``compare`` validates
+(``COMPARE_REMEASURABLE_REASONS``). The allowance is one per task and is spent by an
+``attempt=2`` measurement or by any ``HOST_BUSY_END`` result, whatever its ``attempt`` (``HOST_BUSY_END`` is not retried; it follows a full run, so the
+parent counts it as the one re-measure); after either there is no further re-measure. A second run after a measured result for the same head and base IS
+the re-measure and carries ``attempt=2``. The busy-start retries of (a), and a dispatch for a new head or merge-base, are not charged for being
+dispatches; if such a dispatch itself ends ``HOST_BUSY_END``, it spends the allowance. (c) ``compare`` validates
 ``attempt`` as 1 or 2 and nothing more: the cap on the number of calls is enforced by C4e, not here. (d) The acceptance screen shows the count of ``compare`` results.
 Option abbreviations are refused (``allow_abbrev=False``: ``--allow-writable-i`` is a usage error, exit 2, not the human flag). Retry on the same
 exports is keyed on (reason, stage, detail), not on the reason alone, and two constants are the complete list: ``COMPARE_RETRYABLE_AUTOMATIC``
@@ -5100,7 +5102,9 @@ def run_benchmark_once(root: str, bin_dir: str, target: str, *, timeout_seconds:
                        ini_path: str | None = None) -> dict:
     """One untimed run of the benchmark in ``root`` with ``bin_dir``'s interpreter, through the same ``_prepare_run``/``_execute`` chain as
     ``measure_paired`` (own scratch and ini, removed afterwards). Returns ``{"digest", "argv"}``; the digest is what the child printed and
-    is NOT evidence. Nothing in ``root`` is sealed, hashed or written by this function. Raises ``BenchmarkGateError``: ``MEASURE_ARGS_INVALID``,
+    is NOT evidence. Nothing in ``root`` is sealed, hashed or written by this function.
+    The caller's ``PYTHONPATH`` is IGNORED (``side_env`` builds the whole child environment): a base-isolated run needs a base export with its own venv
+    and install; ``PYTHONPATH=<base>/src`` has no effect. Raises ``BenchmarkGateError``: ``MEASURE_ARGS_INVALID``,
     ``UNSUPPORTED_PLATFORM``, ``<SIDE>_NONZERO_EXIT`` (also a spawn failure), ``<SIDE>_TIMEOUT``, ``OUTPUT_TOO_LARGE``, ``DIGEST_MISSING``
     (each with ``side`` set; ``kind`` is the ``_execute`` kind, ``None`` for ``DIGEST_MISSING``) or ``MEASURE_FAILED`` (a harness fault)."""
     if os.name != "posix":
