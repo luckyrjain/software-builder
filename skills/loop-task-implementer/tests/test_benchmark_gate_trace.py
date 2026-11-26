@@ -8,6 +8,9 @@ The plugin is a raw-string constant that is written into a side's harness-owned 
 source in a scratch namespace (the module ends with ``_init(os.environ, sys)``, which runs on the real process objects, so each test sets the
 ``BENCH_TRACE_*`` variables, changes into a directory holding a real target file, and replaces ``sys.monitoring`` with a fake unless the row
 deliberately claims the real tool id 4). Anything really claimed is released in a ``finally`` through the plugin's own ``_release_tool``.
+
+Every ``trace_paired`` error after the validation carries ``kind`` (one of ``TRACE_FAILURE_KINDS``), ``phase == "trace"`` and no ``partial``; the
+result tests of ``compare`` over the trace (what it makes of each kind) are in test_benchmark_gate_compare.py.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import importlib.util
 import io
 import os
 import re
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -1795,6 +1799,25 @@ def test_a_backslash_in_the_id_part_is_accepted_by_trace_paired(tmp_path, monkey
 
 
 @posix_only
+def test_trace_paired_has_no_work_identity_check(tmp_path, monkeypatch):
+    # one run per work directory, so there is nothing to compare against: replacing work is not a failure here (documents the vacuous check)
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch)
+    real, moved = bg._prepare_run, []
+
+    def replacing(side, bin_dir, work, *args, **kwargs):
+        os.rename(work, work + ".moved")
+        moved.append(work + ".moved")
+        os.mkdir(work)
+        return real(side, bin_dir, work, *args, **kwargs)
+    monkeypatch.setattr(bg, "_prepare_run", replacing)
+    try:
+        assert run()["base"] == 5
+    finally:
+        for path in moved:
+            shutil.rmtree(path, ignore_errors=True)
+
+
+@posix_only
 def test_trace_paired_and_measure_paired_use_the_same_temporary_directory_prefix(tmp_path, monkeypatch):
     prefixes, homes = [], []
     real = tempfile.TemporaryDirectory
@@ -1806,17 +1829,58 @@ def test_trace_paired_and_measure_paired_use_the_same_temporary_directory_prefix
     monkeypatch.setattr(tempfile, "TemporaryDirectory", spy)
     fake, run, roots, bins = trace_setup(tmp_path, monkeypatch)
     run()
-    homes += [os.path.basename(os.path.dirname(c.env["HOME"])) for c in fake.calls]
+    homes += [os.path.dirname(os.path.dirname(c.env["HOME"])) for c in fake.calls]  # the scratch's parent: the side's work directory
     trace_prefixes, prefixes[:] = list(prefixes), []
 
     digest = "a" * 64
 
     def measure_child(argv, cwd, env, timeout):
-        homes.append(os.path.basename(os.path.dirname(env["HOME"])))
+        homes.append(os.path.dirname(os.path.dirname(env["HOME"])))
         return 0, 3_000_000_000, ("BENCH_RESULT_DIGEST: " + digest + "\n").encode(), b"", False
 
     monkeypatch.setattr(bg, "_run_once", measure_child)
     bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t", repeats=4, timeout_seconds=30,
                       base_commit="1" * 40, head_commit="2" * 40, benchmark_sha256="3" * 64, min_base_ns=0)
     assert trace_prefixes == ["bench-run-", "bench-run-"] and prefixes == ["bench-run-"]
-    assert all(re.fullmatch(r"(base|head)-\d+", name) for name in homes)
+    assert all(os.path.basename(work).startswith("bench-run-") for work in homes)  # each home's parent sits directly under a bench-run-* work directory
+
+
+@posix_only
+def test_the_spawn_guard_runs_before_each_trace_spawn(tmp_path, monkeypatch):
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch)
+    order = []
+    real = bg._run_once
+
+    def spy(*args, **kwargs):
+        order.append("spawn")
+        return real(*args, **kwargs)
+    monkeypatch.setattr(bg, "_run_once", spy)
+    assert run(spawn_guard=lambda side, root: order.append("guard " + side))["base"] == 5
+    assert order == ["guard base", "spawn", "guard head", "spawn"]
+
+
+@posix_only
+def test_an_identity_change_out_of_trace_paired_is_not_a_gate_error_and_carries_the_documented_attributes(tmp_path, monkeypatch):
+    monkeypatch.setenv("TMPDIR", str(tmp_path / "tmp"))
+    (tmp_path / "tmp").mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", None)
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch)
+    calls = []
+
+    def guard(side, root):
+        calls.append(side)
+        if side == "head":
+            raise bg._IdentityChanged("head root: directory replaced", side)
+    with pytest.raises(bg._IdentityChanged) as caught:
+        run(spawn_guard=guard)
+    error = caught.value
+    assert not isinstance(error, bg.BenchmarkGateError)
+    assert (error.code, error.side, error.phase, error.kind, error.partial, error.trace) == ("MEASURE_FAILED", "head", "trace", "harness", None, None)
+    assert len(fake.calls) == 1  # the base child ran; the head child never started
+    assert list((tmp_path / "tmp").iterdir()) == []
+
+
+@posix_only
+def test_a_trace_run_without_a_guard_is_unchanged(tmp_path, monkeypatch):
+    fake, run, _, _ = trace_setup(tmp_path, monkeypatch)
+    assert run(spawn_guard=None)["base"] == 5 and len(fake.calls) == 2

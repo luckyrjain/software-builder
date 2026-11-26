@@ -3,14 +3,18 @@
 Children are ``python -c`` processes injected through the ``argv_builder`` seam (a real ``python -m pytest`` costs 0.4 s median and up to
 3 s under load); one test runs real pytest to prove the digest is read with ``-P --import-mode=importlib`` and that a head-added
 ``hashlib.py`` cannot shadow (that is the only real-pytest test in this file; the trace's real-pytest rows are in test_benchmark_gate_trace.py).
-No assertion depends on a measured duration.
+No assertion depends on a measured duration. ``side_env`` is pinned as exactly nine keys with ``PYTHONDONTWRITEBYTECODE=1`` and no
+``PYTHONPYCACHEPREFIX``; every run gets its own scratch (and ini) under a per-call ``work`` directory; ``run_order`` is pinned both unsalted and
+with a salt (``compare`` passes a generated, recorded one: see test_benchmark_gate_compare.py); an ``_execute`` failure sets ``error.kind``.
 """
 
 from __future__ import annotations
 
+import errno
 import importlib.util
 import os
 import re
+import subprocess
 import sys
 import textwrap
 import time
@@ -76,11 +80,12 @@ def test_run_order_accepts_sha256_commits():
 
 def test_side_env_is_an_allowlist(tmp_path):
     env = bg.side_env(str(tmp_path / "venv" / "bin"), str(tmp_path / "scratch"))
-    assert set(env) == {"PATH", "VIRTUAL_ENV", "PYTHONNOUSERSITE", "PYTHONHASHSEED", "PYTHONPYCACHEPREFIX",
+    assert set(env) == {"PATH", "VIRTUAL_ENV", "PYTHONNOUSERSITE", "PYTHONHASHSEED", "PYTHONDONTWRITEBYTECODE",
                         "PYTEST_DISABLE_PLUGIN_AUTOLOAD", "LANG", "HOME", "TMPDIR"}
     assert env["PATH"] == f"{tmp_path / 'venv' / 'bin'}:/usr/bin:/bin"
     assert env["VIRTUAL_ENV"] == str(tmp_path / "venv")
     assert env["PYTHONNOUSERSITE"] == "1" and env["PYTHONHASHSEED"] == "0" and env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] == "1"
+    assert env["PYTHONDONTWRITEBYTECODE"] == "1" and "PYTHONPYCACHEPREFIX" not in env and len(env) == 9
     assert "PYTHONPATH" not in env
     assert Path(env["HOME"]).is_dir() and Path(env["TMPDIR"]).is_dir()
     assert Path(env["HOME"]).parent == tmp_path / "scratch"
@@ -237,7 +242,7 @@ def test_scratch_directories_are_removed(tmp_path, monkeypatch):
 
 @posix_only
 def test_an_unknown_execute_failure_kind_is_an_assertion_error(tmp_path, monkeypatch):
-    def execute(side, argv, root, scratch, env, timeout, fail):
+    def execute(side, argv, root, scratch, env, timeout, fail, guard=None):
         raise fail("mystery", "x")
 
     monkeypatch.setattr(bg, "_execute", execute)
@@ -364,7 +369,8 @@ def test_scratch_is_removed_after_spawn_failure_timeout_and_nonzero(tmp_path, mo
     removed = []
 
     def spy(path, *args, **kwargs):
-        if re.fullmatch(r"(base|head)-\d+", os.path.basename(str(path))):
+        # the run's scratch is a mkdtemp directory directly under a bench-run-* work directory (its name is not predictable)
+        if os.path.basename(os.path.dirname(str(path))).startswith("bench-run-"):
             removed.append(os.path.basename(str(path)))
         return real(path, *args, **kwargs)
     monkeypatch.setattr(bg.shutil, "rmtree", spy)
@@ -372,12 +378,12 @@ def test_scratch_is_removed_after_spawn_failure_timeout_and_nonzero(tmp_path, mo
     with pytest.raises(bg.BenchmarkGateError):  # spawn failure
         bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t", repeats=4, timeout_seconds=30,
                           base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0)
-    assert removed == ["base-1"]
+    assert len(removed) == 1
     for name, script, overrides in (("t", "import time\ntime.sleep(30)", {"timeout_seconds": 1}), ("n", "import sys\nsys.exit(3)", {})):
         removed.clear()
         (tmp_path / name).mkdir()
         refusal(tmp_path / name, script, **overrides)
-        assert removed == ["base-1"], name
+        assert len(removed) == 1, name
 
 
 @posix_only
@@ -601,7 +607,7 @@ def test_a_harness_fault_in_a_timed_round_keeps_the_phase_and_the_finished_round
 
     def flaky(*args, **kwargs):
         calls["n"] += 1
-        if calls["n"] > 12:  # a few runs in: the second timed round
+        if calls["n"] > 8:  # side_env makes home and tmp: two calls per run; 4 runs (warmup + first timed round) use 8, so run 5 (the second timed round) fails
             raise OSError(28, "No space left on device")
         return real(*args, **kwargs)
     monkeypatch.setattr(bg.os, "makedirs", flaky)
@@ -657,18 +663,131 @@ def test_the_file_size_limit_is_applied_to_the_child(tmp_path):
     assert set(marker.read_text().split("\n")) - {""} == {f"({1 << 20}, {1 << 20})"}
 
 
+def _fake_run_once(seen):
+    """A ``_run_once`` that records ``(argv, env)`` and the state of the ini and its scratch while the run is live."""
+    def fake(argv, cwd, env, timeout):
+        ini = argv[argv.index("-c") + 1]
+        seen.append({"ini": ini, "scratch": os.path.dirname(ini), "env": env, "ini_bytes": Path(ini).read_bytes(),
+                     "home_parent": os.path.dirname(env["HOME"])})
+        return 0, 3_000_000_000, f"BENCH_RESULT_DIGEST: {DIGEST}\n".encode(), b"", False
+    return fake
+
+
+def _default_builder_measure(tmp_path, **overrides):
+    return measure(tmp_path, OK_CHILD, argv_builder=None, **overrides)
+
+
 @posix_only
-def test_the_pycache_prefix_is_per_side_and_shared_across_that_sides_runs(tmp_path):
-    marker = tmp_path / "prefix"
+def test_each_run_gets_its_own_ini_inside_a_scratch_removed_after_the_run(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(bg, "_run_once", _fake_run_once(seen))
+    _default_builder_measure(tmp_path)
+    assert len(seen) == 10  # one warmup round and four timed rounds, two runs each
+    assert len({row["ini"] for row in seen}) == len(seen)
+    for row in seen:
+        assert row["ini_bytes"] == bg._EMPTY_INI.encode("ascii")
+        assert row["scratch"] == row["home_parent"]  # the ini lives in the run's scratch, next to its home
+        assert not os.path.exists(row["scratch"]) and not os.path.exists(row["ini"])
+
+
+@posix_only
+def test_a_child_that_rewrites_its_ini_or_plants_a_file_under_work_changes_nothing_for_the_next_run(tmp_path, monkeypatch):
+    log = tmp_path / "log"
     script = f"""
         import os, sys
-        open({str(marker)!r}, "a").write(sys.argv[1] + " " + os.environ["PYTHONPYCACHEPREFIX"] + "\\n")
+        ini = sys.argv[1]
+        work = os.path.dirname(os.path.dirname(ini))
+        scratch = os.path.dirname(ini)
+        open({str(log)!r}, "a").write(repr((open(ini, "rb").read(), sorted(os.listdir(scratch)))) + "\\n")
+        open(ini, "w").write("[pytest]\\naddopts=-x\\n")
+        open(os.path.join(work, "planted"), "w").write("x")
         print("BENCH_RESULT_DIGEST: {DIGEST}")
     """
-    measure(tmp_path, script)
-    rows = [line.split() for line in marker.read_text().splitlines()]
-    by_side = {side: {prefix for s, prefix in rows if s == side} for side in ("base", "head")}
-    assert len(by_side["base"]) == 1 and len(by_side["head"]) == 1 and by_side["base"] != by_side["head"]
+    real = bg._run_once
+
+    def as_child(argv, cwd, env, timeout):  # a REAL child: the argv's ini path is handed to the script
+        return real([sys.executable, "-c", textwrap.dedent(script), argv[argv.index("-c") + 1]], cwd, env, timeout)
+    monkeypatch.setattr(bg, "_run_once", as_child)
+    _default_builder_measure(tmp_path)
+    rows = [eval(line) for line in log.read_text().splitlines()]  # noqa: S307 - our own repr of (bytes, list)
+    assert len(rows) == 10
+    # every run sees the pristine ini and a scratch holding only its own entries: neither the rewrite nor the file planted under work crosses
+    assert all(row == (bg._EMPTY_INI.encode("ascii"), ["empty.ini", "home", "tmp"]) for row in rows)
+
+
+@posix_only
+def test_a_precreated_scratch_name_does_not_fail_the_run(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(bg, "_run_once", _fake_run_once(seen))
+    real = bg._prepare_run
+
+    def with_planted_names(side, bin_dir, work, *args, **kwargs):
+        for number in range(1, 20):  # every name the old counter scheme would pick
+            os.makedirs(os.path.join(work, f"{side}-{number}"), exist_ok=True)
+        return real(side, bin_dir, work, *args, **kwargs)
+    monkeypatch.setattr(bg, "_prepare_run", with_planted_names)
+    _default_builder_measure(tmp_path)
+    assert len(seen) == 10
+
+
+def _replace_work_on_call(monkeypatch, number, moved):
+    """Wrap ``_prepare_run`` so that its ``number``-th call renames ``work`` away and recreates it (what a hostile child could do)."""
+    real = bg._prepare_run
+    calls = {"n": 0}
+
+    def wrapper(side, bin_dir, work, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == number:
+            os.rename(work, work + ".moved")
+            moved.append(work + ".moved")
+            os.mkdir(work)
+        return real(side, bin_dir, work, *args, **kwargs)
+    monkeypatch.setattr(bg, "_prepare_run", wrapper)
+
+
+@posix_only
+def test_measure_paired_raises_measure_failed_when_work_is_replaced(tmp_path, monkeypatch):
+    seen, moved = [], []
+    monkeypatch.setattr(bg, "_run_once", _fake_run_once(seen))
+    _replace_work_on_call(monkeypatch, 6, moved)  # run 6 is the second run of the second timed round
+    try:
+        err = refusal(tmp_path, OK_CHILD, argv_builder=None)
+    finally:
+        for path in moved:
+            bg.shutil.rmtree(path, ignore_errors=True)
+    assert err.code == "MEASURE_FAILED" and err.phase == "timed" and "replaced" in err.detail
+    assert set(err.partial) == {"order", "base_ns", "head_ns"}
+    assert len(seen) == 6  # the run after the replacement never started
+
+
+@posix_only
+def test_no_pycache_prefix_and_bytecode_is_not_written(tmp_path, monkeypatch):
+    env = bg.side_env(str(tmp_path / "venv" / "bin"), str(tmp_path / "scratch"))
+    assert "PYTHONPYCACHEPREFIX" not in env and env["PYTHONDONTWRITEBYTECODE"] == "1" and len(env) == 9
+    roots, bins = fake_sides(tmp_path)
+    (roots["base"] / "mod_b.py").write_text("VALUE = 1\n")
+    (roots["head"] / "mod_b.py").write_text("VALUE = 1\n")
+    log = tmp_path / "bytecode"
+    script = f"""
+        import os, sys
+        root = sys.argv[1]
+        sys.path.insert(0, root)
+        import mod_b
+        scratch = os.path.dirname(os.environ["HOME"])
+        found = [d for top in (root, scratch) for d, dirs, files in os.walk(top)
+                 if "__pycache__" in dirs or "pycache" in dirs or any(f.endswith(".pyc") for f in files)]
+        open({str(log)!r}, "a").write(repr(found) + "\\n")
+        print("BENCH_RESULT_DIGEST: {DIGEST}")
+    """
+    real = bg._run_once
+
+    def as_child(argv, cwd, env, timeout):
+        return real([sys.executable, "-c", textwrap.dedent(script), cwd], cwd, env, timeout)
+    monkeypatch.setattr(bg, "_run_once", as_child)
+    bg.measure_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::t", repeats=4, timeout_seconds=30,
+                      base_commit=BASE, head_commit=HEAD, benchmark_sha256=BENCH, min_base_ns=0)
+    assert log.read_text().split() == ["[]"] * 10
+    assert not list(roots["base"].rglob("__pycache__")) and not list(roots["head"].rglob("__pycache__"))
 
 
 @posix_only
@@ -918,3 +1037,566 @@ def test_real_pytest_prints_the_digest_with_dash_s_and_a_head_added_hashlib_does
                                benchmark_sha256=BENCH, min_base_ns=0)
     assert len(result["digest"]) == 64
     assert len(result["base_ns"]) == 4
+
+
+# --- C4d-3 T0b1: error kind, spawn errno split, salted run order -----------------------------------------------------------
+
+def subdir_of(tmp_path, name):
+    path = tmp_path / name
+    path.mkdir()
+    return path
+
+
+def stub_run_once(monkeypatch, outcome):
+    """Replace ``bg._run_once`` with a fake that returns ``outcome`` or raises it when it is an exception."""
+    def fake(argv, cwd, env, timeout):
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+    monkeypatch.setattr(bg, "_run_once", fake)
+
+
+@posix_only
+@pytest.mark.parametrize("kind,outcome,code", [
+    ("spawn", bg._SpawnFailed("no python"), "BASE_NONZERO_EXIT"),
+    ("oversize", (0, 1, b"", b"", True), "OUTPUT_TOO_LARGE"),
+    ("timeout", (None, 1, b"", b"", False), "BASE_TIMEOUT"),
+    ("nonzero", (2, 1, b"", b"x", False), "BASE_NONZERO_EXIT"),
+])
+def test_measure_errors_carry_kind(tmp_path, monkeypatch, kind, outcome, code):
+    stub_run_once(monkeypatch, outcome)
+    error = refusal(tmp_path, OK_CHILD)
+    assert error.code == code
+    assert error.kind == kind
+
+
+def test_run_error_code_maps_every_kind_and_asserts_on_unknown():
+    assert bg._run_error_code("head", "oversize") == "OUTPUT_TOO_LARGE"
+    assert bg._run_error_code("head", "timeout") == "HEAD_TIMEOUT"
+    assert bg._run_error_code("base", "nonzero") == "BASE_NONZERO_EXIT"
+    assert bg._run_error_code("base", "spawn") == "BASE_NONZERO_EXIT"
+    with pytest.raises(AssertionError, match="unknown _execute failure kind"):
+        bg._run_error_code("base", "mystery")
+
+
+@posix_only
+@pytest.mark.parametrize("number", [errno.ENOENT, errno.EACCES, errno.ENOEXEC, errno.ENOTDIR])
+def test_spawn_failed_errno_split_provisioning_errnos_are_a_spawn(tmp_path, monkeypatch, number):
+    stub_run_once(monkeypatch, bg._SpawnFailed("x", number))
+    error = refusal(tmp_path, OK_CHILD)
+    assert (error.code, error.kind) == ("BASE_NONZERO_EXIT", "spawn")
+
+
+@posix_only
+@pytest.mark.parametrize("number", [errno.EAGAIN, errno.ENOMEM, None])
+def test_spawn_failed_errno_split_host_faults_are_measure_failed(tmp_path, monkeypatch, number):
+    stub_run_once(monkeypatch, bg._SpawnFailed("x", number))
+    error = refusal(tmp_path, OK_CHILD)
+    assert error.code == "MEASURE_FAILED"
+    assert error.phase == "warmup" and error.partial is None
+    assert isinstance(error.__cause__, RuntimeError) and isinstance(error.__cause__.__cause__, bg._SpawnFailed)
+    # the same fault through trace_paired is a harness error
+    roots, bins = fake_sides(subdir_of(tmp_path, "trace"))
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        bg.trace_paired(str(roots["base"]), str(roots["head"]), str(bins["base"]), str(bins["head"]), "bench.py::test_x", timeout_seconds=10)
+    assert (info.value.code, info.value.kind) == ("MEASURE_FAILED", "harness")
+
+
+@posix_only
+@pytest.mark.parametrize("number", [errno.ENOENT, errno.EAGAIN])
+def test_spawn_failed_errno_split_in_a_timed_round_keeps_partial(tmp_path, monkeypatch, number):
+    calls = []
+    real = bg._SpawnFailed
+
+    def fake(argv, cwd, env, timeout):
+        calls.append(1)
+        if len(calls) > 2:  # the warmup round (base, head) ran; the first timed run fails
+            raise real("x", number)
+        return 0, 1, f"BENCH_RESULT_DIGEST: {DIGEST}\n".encode(), b"", False
+
+    monkeypatch.setattr(bg, "_run_once", fake)
+    error = refusal(tmp_path, OK_CHILD)
+    assert error.phase == "timed" and error.partial is not None
+    assert error.code == ("MEASURE_FAILED" if number == errno.EAGAIN else error.code)
+    if number == errno.ENOENT:
+        assert error.code.endswith("_NONZERO_EXIT") and error.kind == "spawn"
+
+
+def test_spawn_failed_default_errno_is_enoent():
+    assert bg._SpawnFailed("x").errno == errno.ENOENT
+    assert bg._SpawnFailed("x", None).errno is None
+
+
+@posix_only
+def test_run_once_passes_the_errno_of_an_oserror_and_none_for_a_subprocess_error(tmp_path, monkeypatch):
+    def popen_os(*args, **kwargs):
+        raise OSError(errno.EACCES, "denied")
+
+    def popen_sub(*args, **kwargs):
+        raise subprocess.SubprocessError("preexec failed")
+
+    monkeypatch.setattr(subprocess, "Popen", popen_os)
+    with pytest.raises(bg._SpawnFailed) as info:
+        bg._run_once([sys.executable, "-c", "pass"], str(tmp_path), {}, 5.0)
+    assert info.value.errno == errno.EACCES
+    monkeypatch.setattr(subprocess, "Popen", popen_sub)
+    with pytest.raises(bg._SpawnFailed) as info:
+        bg._run_once([sys.executable, "-c", "pass"], str(tmp_path), {}, 5.0)
+    assert info.value.errno is None
+
+
+FROZEN_ORDER_1_4 = ["base_first", "base_first", "head_first", "head_first"]  # computed on the base, before T0b1
+
+
+def test_run_order_unsalted_is_todays_bytes_and_salt_changes_it():
+    assert bg.run_order(BASE, HEAD, BENCH, 1, 4) == FROZEN_ORDER_1_4
+    assert bg.run_order(BASE, HEAD, BENCH, 1, 4, salt=None) == FROZEN_ORDER_1_4
+    inputs = [(f"{i:040x}", HEAD, BENCH, 1, 8) for i in range(10)]
+    assert any(bg.run_order(*args, salt="aa") != bg.run_order(*args, salt="bb") for args in inputs)
+    assert any(bg.run_order(*args, salt="aa") != bg.run_order(*args) for args in inputs)
+    assert bg.run_order(*inputs[0], salt="aa") == bg.run_order(*inputs[0], salt="aa")
+
+
+def test_run_order_salt_is_a_fifth_nul_joined_field():
+    import hashlib
+    import random
+    seed = hashlib.sha256("\0".join((BASE, HEAD, BENCH, "1", "ab12")).encode("ascii")).digest()
+    want = ["head_first"] * 4 + ["base_first"] * 4
+    random.Random(int.from_bytes(seed, "big")).shuffle(want)
+    assert bg.run_order(BASE, HEAD, BENCH, 1, 8, salt="ab12") == want
+
+
+@pytest.mark.parametrize("salt", ["", "G", "A1", "a" * 65, 5, b"aa", True])
+def test_run_order_rejects_a_bad_salt(salt):
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        bg.run_order(BASE, HEAD, BENCH, 1, 4, salt=salt)
+    assert info.value.code == "MEASURE_ARGS_INVALID"
+
+
+def test_run_order_accepts_a_64_char_salt():
+    assert len(bg.run_order(BASE, HEAD, BENCH, 1, 4, salt="f" * 64)) == 4
+
+
+@posix_only
+def test_measure_paired_order_salt_reaches_run_order(tmp_path):
+    salt = "5a17"
+    result = measure(tmp_path, OK_CHILD, order_salt=salt)
+    assert result["order"] == bg.run_order(BASE, HEAD, BENCH, 1, 4, salt=salt)
+
+
+@posix_only
+def test_measure_paired_rejects_a_bad_order_salt_before_any_child(tmp_path, monkeypatch):
+    stub_run_once(monkeypatch, AssertionError("a child must not start"))
+    error = refusal(tmp_path, OK_CHILD, order_salt="")
+    assert error.code == "MEASURE_ARGS_INVALID"
+
+
+# --- run_benchmark_once / _check_one_side (C4d-3 T1) ------------------------------------------------------------------------
+
+def once_world(tmp_path):
+    """A root holding ``bench.py`` and a venv-shaped bin (``pyvenv.cfg`` and a ``site-packages``, which ``_venv_layout`` needs)."""
+    root = tmp_path / "root"
+    root.mkdir(exist_ok=True)
+    (root / "bench.py").write_text("def test_bench():\n    pass\n")
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True, exist_ok=True)
+    (venv / "lib" / "python3.12" / "site-packages").mkdir(parents=True, exist_ok=True)
+    (venv / "pyvenv.cfg").write_text("home = /usr/bin\ninclude-system-site-packages = false\nversion = 3.12.1\n")
+    return root, venv / "bin"
+
+
+def run_once(tmp_path, script=None, **overrides):
+    root, bin_dir = once_world(tmp_path)
+    kwargs = dict(timeout_seconds=30)
+    if script is not None:
+        kwargs["argv_builder"] = builder(script)
+    kwargs.update(overrides)
+    target = kwargs.pop("target", "bench.py::test_bench")
+    return bg.run_benchmark_once(str(kwargs.pop("root", root)), str(kwargs.pop("bin_dir", bin_dir)), target, **kwargs)
+
+
+@posix_only
+def test_run_benchmark_once_returns_digest_and_argv(tmp_path):
+    result = run_once(tmp_path, OK_CHILD)
+    assert set(result) == {"digest", "argv"}
+    assert result["digest"] == DIGEST  # the child's own, not a boolean and not the stdout
+    assert result["argv"][-3:] == ["head", os.path.realpath(tmp_path / "root"), "bench.py::test_bench"]
+
+
+@posix_only
+def test_run_benchmark_once_default_builder_is_pytest_argv(tmp_path):
+    # the default argv is the harness argv; a spawn failure (no <bin>/python in the fake venv) still exposes nothing but the code
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        run_once(tmp_path)
+    assert info.value.code == "HEAD_NONZERO_EXIT" and info.value.kind == "spawn"
+
+
+@posix_only
+@pytest.mark.parametrize("side", ["base", "head"])
+@pytest.mark.parametrize("script,overrides,code,kind", [
+    ("import sys\nsys.exit(3)", {}, "{S}_NONZERO_EXIT", "nonzero"),
+    ("import time\ntime.sleep(30)", {"timeout_seconds": 1}, "{S}_TIMEOUT", "timeout"),
+    ("import sys\nsys.stdout.write('x' * (bg_limit + 1))", {}, "OUTPUT_TOO_LARGE", "oversize"),
+    ("print('no digest here')", {}, "DIGEST_MISSING", None),
+])
+def test_run_benchmark_once_error_codes(tmp_path, side, script, overrides, code, kind):
+    script = script.replace("bg_limit", str(bg._RUN_FSIZE_LIMIT))
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        run_once(tmp_path, script, side=side, **overrides)
+    assert info.value.code == code.format(S=side.upper())
+    assert info.value.side == side and info.value.kind == kind
+
+
+@posix_only
+def test_run_benchmark_once_spawn_failure_names_the_side(tmp_path, monkeypatch):
+    stub_run_once(monkeypatch, bg._SpawnFailed("no python"))
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        run_once(tmp_path, OK_CHILD, side="base")
+    assert (info.value.code, info.value.kind, info.value.side) == ("BASE_NONZERO_EXIT", "spawn", "base")
+
+
+@posix_only
+def test_run_benchmark_once_host_spawn_fault_is_measure_failed(tmp_path, monkeypatch):
+    stub_run_once(monkeypatch, bg._SpawnFailed("no memory", errno.ENOMEM))
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        run_once(tmp_path, OK_CHILD)
+    assert info.value.code == "MEASURE_FAILED"
+
+
+@posix_only
+@pytest.mark.parametrize("what", [
+    "relative_root", "missing_root", "relative_bin", "bad_layout", "target_missing", "target_directory", "target_symlink",
+    "target_outside", "bad_timeout", "bad_side", "bad_target_text", "bad_ini",
+])
+def test_check_one_side_rejects(tmp_path, what, monkeypatch):
+    root, bin_dir = once_world(tmp_path)
+    kwargs = dict(timeout_seconds=30, argv_builder=builder(OK_CHILD))
+    target = "bench.py::t"
+    args = [str(root), str(bin_dir)]
+    if what == "relative_root":
+        args[0] = "root"
+    elif what == "missing_root":
+        args[0] = str(tmp_path / "nope")
+    elif what == "relative_bin":
+        args[1] = "venv/bin"
+    elif what == "bad_layout":
+        (tmp_path / "venv" / "pyvenv.cfg").unlink()
+    elif what == "target_missing":
+        target = "absent.py::t"
+    elif what == "target_directory":
+        (root / "d.py").mkdir()
+        target = "d.py::t"
+    elif what == "target_symlink":
+        (root / "link.py").symlink_to(root / "bench.py")
+        target = "link.py::t"
+    elif what == "target_outside":  # an intermediate symlink out of the root: the file is regular, its resolved path is not under the root
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "b.py").write_text("x = 1\n")
+        (root / "sub").symlink_to(outside)
+        target = "sub/b.py::t"
+    elif what == "bad_timeout":
+        kwargs["timeout_seconds"] = 0
+    elif what == "bad_side":
+        kwargs["side"] = "both"
+    elif what == "bad_target_text":
+        target = "../bench.py"
+    elif what == "bad_ini":
+        kwargs["ini_path"] = "relative.ini"
+    stub_run_once(monkeypatch, AssertionError("a child must not start"))
+    with pytest.raises(bg.BenchmarkGateError) as info:
+        bg.run_benchmark_once(args[0], args[1], target, **kwargs)
+    assert info.value.code == "MEASURE_ARGS_INVALID"
+
+
+def test_check_one_side_accepts_a_plain_directory_as_root(tmp_path):
+    root, bin_dir = once_world(tmp_path)
+    real_root, real_bin, benchmark_file = bg._check_one_side(str(root), str(bin_dir), "bench.py::t", None)
+    assert (real_root, real_bin, benchmark_file) == (os.path.realpath(root), os.path.realpath(bin_dir), "bench.py")
+
+
+def tree_state(root: Path):
+    return sorted((str(p.relative_to(root)), p.lstat().st_mode, p.lstat().st_mtime_ns, p.read_bytes() if p.is_file() else b"")
+                  for p in [root, *root.rglob("*")])
+
+
+@posix_only
+def test_run_benchmark_once_touches_nothing_in_the_root(tmp_path):
+    root, bin_dir = once_world(tmp_path)
+    before = tree_state(root)
+    bg.run_benchmark_once(str(root), str(bin_dir), "bench.py::test_bench", timeout_seconds=30, argv_builder=builder(OK_CHILD))
+    assert tree_state(root) == before  # no seal (modes unchanged), no hash file, no write
+    assert os.access(root, os.W_OK) and os.access(root / "bench.py", os.W_OK)
+
+
+@posix_only
+def test_run_benchmark_once_scratch_is_per_run_and_removed(tmp_path, monkeypatch):
+    seen = []
+    real = bg._prepare_run
+
+    def spy(side, bin_dir, work, ini_path=None):
+        result = real(side, bin_dir, work, ini_path)
+        seen.append((work, *result))
+        return result
+    monkeypatch.setattr(bg, "_prepare_run", spy)
+    run_once(tmp_path, OK_CHILD)
+    run_once(tmp_path, OK_CHILD)
+    assert len(seen) == 2
+    for work, scratch, env, ini in seen:
+        assert os.path.dirname(scratch) == work and os.path.basename(work).startswith("bench-run-")
+        assert os.path.dirname(ini) == scratch and env["HOME"].startswith(scratch)
+        assert not os.path.exists(scratch) and not os.path.exists(work)
+    assert seen[0][1] != seen[1][1]
+
+
+# --- C4d-3 T5a: signal masking around Popen, child restore, CLI handler helper -------------------------------------------------
+
+_SIGNALS = ("SIGTERM", "SIGHUP", "SIGINT")
+
+
+def _signal_numbers():
+    import signal
+    return [getattr(signal, name) for name in _SIGNALS]
+
+
+def _live_pids(pidfile, deadline=10.0):
+    end = time.monotonic() + deadline
+    while time.monotonic() < end:
+        if pidfile.exists() and pidfile.read_text().strip():
+            return int(pidfile.read_text())
+        time.sleep(0.02)
+    raise AssertionError("the child never wrote its grandchild's pid")
+
+
+def _gone(pid, deadline=10.0):
+    end = time.monotonic() + deadline
+    while time.monotonic() < end:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+@posix_only
+def test_child_signals_are_default_and_mask_is_empty(tmp_path, monkeypatch):
+    import json
+    import signal
+    numbers = _signal_numbers()
+    masks = []
+    real_popen = subprocess.Popen
+
+    def spy(*args, **kwargs):  # the parent's state at the moment of the call
+        masks.append(signal.pthread_sigmask(signal.SIG_BLOCK, []))
+        return real_popen(*args, **kwargs)
+    monkeypatch.setattr(bg.subprocess, "Popen", spy)
+    child = ("import json, signal as s; print(json.dumps([s.getsignal(s.SIGTERM) == s.SIG_DFL, s.getsignal(s.SIGHUP) == s.SIG_DFL, "
+             "s.getsignal(s.SIGINT) != s.SIG_IGN, sorted(int(n) for n in s.pthread_sigmask(s.SIG_BLOCK, []))]))")
+    old = [signal.signal(number, signal.SIG_IGN) for number in numbers]  # a parent that ignores them (as under nohup)
+    try:
+        code, _elapsed, stdout, _tail, _oversize = bg._run_once([sys.executable, "-c", child], str(tmp_path), {}, 30.0)
+        after = signal.pthread_sigmask(signal.SIG_BLOCK, [])
+    finally:
+        for number, handler in zip(numbers, old):
+            signal.signal(number, handler)
+    assert code == 0
+    assert set(numbers) <= set(masks[0])  # masked while Popen runs
+    assert json.loads(stdout) == [True, True, True, []]  # the child has defaults and an empty mask
+    assert not set(numbers) & set(after)  # unmasked again in the parent
+
+
+@posix_only
+def test_signal_during_a_run_kills_the_childs_process_group(tmp_path):
+    import signal
+    import threading
+    pidfile = tmp_path / "grandchild.pid"
+    child = (f"import subprocess, sys, time; p = subprocess.Popen(['sleep', '60']); open({str(pidfile)!r}, 'w').write(str(p.pid)); "
+             "time.sleep(60)")
+    interrupts = []
+
+    def sender():
+        _live_pids(pidfile)
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.sleep(0.2)
+        os.kill(os.getpid(), signal.SIGTERM)  # the second is ignored
+        os.kill(os.getpid(), signal.SIGHUP)
+
+    thread = threading.Thread(target=sender)
+    before = [signal.getsignal(number) for number in _signal_numbers()]
+    with bg._with_signal_handlers():
+        thread.start()
+        try:
+            bg._run_once([sys.executable, "-c", child], str(tmp_path), {}, 60.0)
+        except KeyboardInterrupt:
+            interrupts.append(1)
+        thread.join(timeout=10)  # the sender's later signals arrive while the handlers still ignore them
+        assert not thread.is_alive()
+        time.sleep(0.1)
+    assert interrupts == [1]
+    assert _gone(int(pidfile.read_text()))
+    assert [signal.getsignal(number) for number in _signal_numbers()] == before
+
+
+@posix_only
+def test_handlers_are_restored_in_finally():
+    import signal
+    numbers = _signal_numbers()
+
+    def snapshot():
+        return [signal.getsignal(number) for number in numbers]
+    before = snapshot()
+    with bg._with_signal_handlers():
+        assert snapshot() != before
+    assert snapshot() == before  # normal return
+    with pytest.raises(ValueError):
+        with bg._with_signal_handlers():
+            raise ValueError("boom")
+    assert snapshot() == before  # an exception
+    with pytest.raises(KeyboardInterrupt):
+        with bg._with_signal_handlers():
+            os.kill(os.getpid(), signal.SIGTERM)  # the first signal sets SIG_IGN for the rest
+            time.sleep(1)
+    assert snapshot() == before  # KeyboardInterrupt from a signal, after the handlers were replaced by SIG_IGN
+
+
+@posix_only
+def test_library_caller_on_another_thread_gets_no_handlers(tmp_path, monkeypatch):
+    import inspect
+    import signal
+    import threading
+    numbers = _signal_numbers()
+    seen = {}
+    real_popen = subprocess.Popen
+
+    def spy(*args, **kwargs):
+        seen["during"] = [signal.getsignal(number) for number in numbers]
+        return real_popen(*args, **kwargs)
+    monkeypatch.setattr(bg.subprocess, "Popen", spy)
+    before = [signal.getsignal(number) for number in numbers]
+
+    def work():
+        try:
+            seen["result"] = bg._run_once([sys.executable, "-c", "pass"], str(tmp_path), {}, 30.0)
+        except BaseException as exc:  # reported to the test thread
+            seen["error"] = exc
+        try:
+            with bg._with_signal_handlers():
+                seen["installed"] = True
+        except RuntimeError as exc:
+            seen["refused"] = exc
+    thread = threading.Thread(target=work)
+    thread.start()
+    thread.join(timeout=30)
+    assert "error" not in seen, seen.get("error")
+    assert seen["result"][0] == 0  # the preexec_fn works off the main thread
+    assert seen["during"] == before  # _run_once installs no handler
+    assert [signal.getsignal(number) for number in numbers] == before
+    assert "refused" in seen and "installed" not in seen  # the helper is main thread only and says so, changing nothing
+    for function in (bg._run_once, bg.compare):  # neither installs the helper itself
+        assert "_with_signal_handlers" not in inspect.getsource(function)
+
+
+def test_kind_suffix_is_the_one_source_of_the_run_kinds_and_the_run_once_reasons():
+    assert set(bg._KIND_SUFFIX) == set(bg.TRACE_FAILURE_KINDS[:4]) == {"spawn", "oversize", "timeout", "nonzero"}  # the `_execute` kinds
+    assert bg._RUN_FAILURE_KINDS == frozenset(bg._KIND_SUFFIX) - {"spawn"}
+    codes = {bg._run_error_code(side, kind) for side in ("base", "head") for kind in bg._KIND_SUFFIX}
+    assert codes == {"BASE_NONZERO_EXIT", "HEAD_NONZERO_EXIT", "BASE_TIMEOUT", "HEAD_TIMEOUT", "OUTPUT_TOO_LARGE"}
+    assert bg._RUN_ONCE_REASONS == frozenset(codes | {"DIGEST_MISSING"})  # derived: a new kind cannot turn run-once into exit 2
+    for side in ("base", "head"):  # the trace rows (T4) map the kind through the same suffixes
+        for kind in bg._RUN_FAILURE_KINDS:
+            assert f"{side.upper()}_{bg._KIND_SUFFIX[kind]}" in bg.COMPARE_RESULT_OF_REASON
+
+
+@posix_only
+def test_a_keyboard_interrupt_while_the_watchdog_is_cancelled_still_kills_the_group(tmp_path, monkeypatch):
+    pidfile = tmp_path / "grandchild.pid"
+    child = ("import os, subprocess, sys\n"
+             "p = subprocess.Popen(['sleep', '300'])\n"
+             "open(sys.argv[1], 'w').write(str(p.pid))\n")  # the child exits at once; its grandchild stays in the group
+
+    class Interrupted(bg.threading.Timer):
+        def cancel(self):
+            super().cancel()
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(bg.threading, "Timer", Interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        bg._run_once([sys.executable, "-c", child, str(pidfile)], str(tmp_path), {}, 300.0)
+    pid = int(pidfile.read_text())
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    else:
+        os.kill(pid, 9)
+        raise AssertionError("the grandchild survived: the group kill was skipped")
+
+
+# --- the spawn guard (spec 2.5, "Directory identity") ------------------------------------------------------------------------
+
+def _guarded_script(marker):
+    return f"""
+        import sys
+        with open({str(marker)!r}, "a") as handle:
+            handle.write("spawn " + sys.argv[1] + "\\n")
+        print("BENCH_RESULT_DIGEST: {DIGEST}")
+    """
+
+
+@posix_only
+def test_the_spawn_guard_runs_before_every_spawn_warmup_and_timed(tmp_path):
+    marker = tmp_path / "marker"
+    sides = []
+
+    def guard(side, root):
+        sides.append(side)
+        with open(marker, "a") as handle:
+            handle.write("guard " + side + "\n")
+    measure(tmp_path, _guarded_script(marker), spawn_guard=guard, repeats=4)
+    lines = marker.read_text().splitlines()
+    assert len(lines) == 2 * (2 + 8)  # one warmup round and four timed rounds of two spawns, each preceded by its guard call
+    for index in range(0, len(lines), 2):
+        side = lines[index].split()[1]
+        assert lines[index] == f"guard {side}" and lines[index + 1] == f"spawn {side}"
+    assert sides[:2] == ["base", "head"]
+
+
+@posix_only
+@pytest.mark.parametrize("raise_at,phase,partial_rounds", [(0, "warmup", None), (1, "warmup", None), (2, "timed", 0), (7, "timed", 2)])
+def test_an_identity_change_out_of_measure_paired_is_not_a_gate_error_and_carries_the_documented_attributes(tmp_path, monkeypatch, raise_at,
+                                                                                                         phase, partial_rounds):
+    monkeypatch.setenv("TMPDIR", str(tmp_path / "tmp"))
+    (tmp_path / "tmp").mkdir()
+    import tempfile
+    monkeypatch.setattr(tempfile, "tempdir", None)
+    marker = tmp_path / "marker"
+    calls = []
+
+    def guard(side, root):
+        calls.append(side)
+        if len(calls) - 1 == raise_at:
+            raise bg._IdentityChanged("dispatch root: directory replaced", side)
+    with pytest.raises(bg._IdentityChanged) as caught:
+        measure(tmp_path, _guarded_script(marker), spawn_guard=guard, repeats=4)
+    error = caught.value
+    assert not isinstance(error, bg.BenchmarkGateError)  # no `except BenchmarkGateError` can swallow or remap it
+    assert (error.code, error.side, error.phase, error.kind, error.trace) == ("MEASURE_FAILED", calls[-1], phase, "harness", None)
+    if partial_rounds is None:
+        assert error.partial is None
+    else:
+        assert error.partial["order"] == bg.run_order(BASE, HEAD, BENCH, 1, 4) and len(error.partial["base_ns"]) == partial_rounds
+        assert len(error.partial["head_ns"]) == partial_rounds
+    assert len(marker.read_text().splitlines() if marker.exists() else []) == raise_at  # nothing was spawned after (or by) the guard that raised
+    assert list((tmp_path / "tmp").iterdir()) == []  # the scratch and work directories are gone
+
+
+@posix_only
+def test_an_identity_change_is_not_swallowed_by_the_harness_fault_handler(tmp_path):
+    def guard(side, root):
+        raise bg._IdentityChanged("x", side)
+    with pytest.raises(bg._IdentityChanged):
+        measure(tmp_path, OK_CHILD, spawn_guard=guard)

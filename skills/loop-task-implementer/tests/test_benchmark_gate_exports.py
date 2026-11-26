@@ -1,5 +1,7 @@
 """Tests for the filesystem and git pieces of `benchmark_gate.py` (`export_tree`, tree hash and seal, `cleanup_root`, and the `export` / `cleanup`
-CLIs) and for its exported surface: the error-code vocabularies, including the C4d pins (`MEASURE_*`, `TRACE_REFUSAL_CODES`).
+CLIs) and for its exported surface: the error-code vocabularies, including the C4d pins (`MEASURE_*`, `TRACE_REFUSAL_CODES`, and `BASE_NOT_ANCESTOR`, appended by C4d-3). The
+reasons that exist only in a `compare` result (`HOST_BUSY_*` and the rest of `COMPARE_RESULT_OF_REASON`) are not error codes and are pinned in
+test_benchmark_gate_compare.py.
 
 Everything git-related runs against real temporary repositories (no network, hooks or signing); hostile trees (`.git`
 entries, `..`, case collisions, escaping symlinks) are built with `git mktree`, since `git add` refuses them.
@@ -28,6 +30,8 @@ import time
 from pathlib import Path
 
 import pytest
+
+from _gitskip import skip_old_git
 
 _SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 
@@ -109,7 +113,7 @@ def sandbox(tmp_path, monkeypatch):
         found = re.search(r"(\d+)\.(\d+)", shown)  # judged independently of the code under test
         if exc.code != "GIT_TOO_OLD" or found is None or (int(found[1]), int(found[2])) >= (2, 43):
             raise  # a parse regression or a hang must fail, never hide behind a skip
-        pytest.skip(f"git >= 2.43 is needed for GIT_ATTR_SOURCE: {exc.detail}")
+        skip_old_git(f"git >= 2.43 is needed for GIT_ATTR_SOURCE: {exc.detail}")
     return temp
 
 def dest(leaf="head", root="bench-aaaaaaaa") -> str:
@@ -465,7 +469,7 @@ def test_code_vocabularies_are_pinned():
         BENCHMARK_MODIFIED OVERLAY_COMMIT_MISMATCH OVERLAY_FAILED OVERLAY_BASE_SEALED HARNESS_UNREADABLE
         PROTECTED_PATH_CHANGED BENCHMARK_AWARE_CODE VENV_NOT_ISOLATED VENV_HOOK_REJECTED VENV_SNAPSHOT_INVALID
         UNSUPPORTED_PLATFORM BASE_NONZERO_EXIT HEAD_NONZERO_EXIT BASE_TIMEOUT HEAD_TIMEOUT OUTPUT_TOO_LARGE DIGEST_MISSING DIGEST_UNSTABLE DIGEST_MISMATCH
-        WORKLOAD_TOO_SHORT MEASURE_ARGS_INVALID MEASURE_FAILED TRACE_MISMATCH TRACE_UNAVAILABLE""".split())
+        WORKLOAD_TOO_SHORT MEASURE_ARGS_INVALID MEASURE_FAILED TRACE_MISMATCH TRACE_UNAVAILABLE BASE_NOT_ANCESTOR""".split())
     assert bg.DIFF_REFUSAL_CODES == ("PROTECTED_PATH_CHANGED", "BENCHMARK_AWARE_CODE")
     assert bg.VENV_REFUSAL_CODES == ("VENV_NOT_ISOLATED", "VENV_HOOK_REJECTED")
     assert bg.OVERLAY_REFUSAL_CODES == tuple(

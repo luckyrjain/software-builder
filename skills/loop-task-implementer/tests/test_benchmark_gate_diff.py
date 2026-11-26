@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+from _gitskip import skip_old_git
+
 _SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 
 
@@ -88,7 +90,7 @@ def sandbox(tmp_path, monkeypatch):
         found = re.search(r"(\d+)\.(\d+)", shown)
         if exc.code != "GIT_TOO_OLD" or found is None or (int(found[1]), int(found[2])) >= (2, 43):
             raise
-        pytest.skip(f"git >= 2.43 is needed: {exc.detail}")
+        skip_old_git(f"git >= 2.43 is needed: {exc.detail}")
     return temp
 
 

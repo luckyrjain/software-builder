@@ -3,6 +3,10 @@
 Fake venvs only (a directory with `pyvenv.cfg`, `bin/` and `lib/python3.12/site-packages`), as the design asks: no real venvs in unit tests.
 The `.pth` lines are the ones the real editable backends write (setuptools finder, hatchling/pdm path lines, flit/poetry path lines,
 pytest-cov's `a1_coverage.pth`). Design: docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md.
+
+The `snapshot-venv` CLI also prints `snapshot_sha256: <hex>` (the written file's bytes) and `interpreter_sha256: <hex>` (the interpreter pin),
+both computed before any install; they are what `compare` takes in `Side`. The interpreter pin itself (`interpreter_pin`) is tested in
+test_benchmark_gate_compare.py (C4d-3).
 """
 
 from __future__ import annotations
@@ -10,6 +14,8 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
+import stat
 import sys
 from pathlib import Path
 
@@ -363,9 +369,84 @@ def test_a_missing_export_root_is_refused(world):
 
 # --- CLI ------------------------------------------------------------------------------------------------------------------------
 
-def test_cli_snapshot_venv_writes_the_file(world, capsys):
+@pytest.fixture
+def pinned_world(world, tmp_path, monkeypatch):
+    """`world` plus what the interpreter pin needs: `bin/python` -> `bin/python3.12` -> a small fake prefix, and a `pyvenv.cfg` whose `home`
+    is that prefix's `bin`. The start-up probe is stubbed (the fake interpreter is a shell stub); the real one has its own rows."""
+    prefix = tmp_path / "interp"
+    (prefix / "bin").mkdir(parents=True)
+    exe = prefix / "bin" / "python3.12"
+    exe.write_text("#!/bin/sh\nexit 0\n")
+    exe.chmod(0o755)
+    (prefix / "lib" / "python3.12").mkdir(parents=True)
+    (prefix / "lib" / "python3.12" / "os.py").write_text("# fake stdlib\n")
+    venv, bin_dir = world[0], world[1]
+    (bin_dir / "python3.12").symlink_to(exe)
+    (bin_dir / "python").symlink_to("python3.12")
+    (venv / "pyvenv.cfg").write_text(f"home = {prefix / 'bin'}\ninclude-system-site-packages = false\nversion = 3.12.1\n")
+    real = os.path.realpath(prefix)
+    monkeypatch.setattr(bg, "_startup_probe", lambda python, env: "\n".join([real, os.path.join(real, "lib", "python3.12", "os.py"), real]) + "\n")
+    return world
+
+
+def test_cli_snapshot_venv_writes_the_file(pinned_world, capsys):
+    world = pinned_world
     assert bg.main(["snapshot-venv", "--bin", str(world[1]), "--out", str(world[4])]) == 0
     assert json.loads(world[4].read_text())["kind"] == bg._VENV_SNAPSHOT_KIND
+
+
+def test_snapshot_venv_prints_both_pins(pinned_world, capsys):
+    import hashlib
+    world = pinned_world
+    assert bg.main(["snapshot-venv", "--bin", str(world[1]), "--out", str(world[4])]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert len(out) == 2 and out[0].startswith("snapshot_sha256: ") and out[1].startswith("interpreter_sha256: ")
+    assert re.fullmatch(r"snapshot_sha256: [0-9a-f]{64}", out[0]) and re.fullmatch(r"interpreter_sha256: [0-9a-f]{64}", out[1])
+    assert out[0].split(": ")[1] == hashlib.sha256(world[4].read_bytes()).hexdigest()
+    assert out[1].split(": ")[1] == bg.interpreter_pin(str(world[1])).sha256
+
+
+def test_snapshot_venv_missing_or_oversized_stdlib_exits_2_with_the_code_on_stderr(pinned_world, capsys, monkeypatch):
+    world = pinned_world
+    prefix = Path(os.path.realpath(world[1] / "python")).parent.parent
+    os.rename(prefix / "lib" / "python3.12", prefix / "lib" / "gone")
+    assert bg.main(["snapshot-venv", "--bin", str(world[1]), "--out", str(world[4])]) == 2
+    cap = capsys.readouterr()
+    assert "DEST_REJECTED" in cap.err and cap.out == "" and not world[4].exists()
+    os.rename(prefix / "lib" / "gone", prefix / "lib" / "python3.12")
+    limit = bg._INTERPRETER_LIMIT
+    monkeypatch.setattr(bg, "_INTERPRETER_LIMIT", 1)
+    assert bg.main(["snapshot-venv", "--bin", str(world[1]), "--out", str(world[4])]) == 2
+    cap = capsys.readouterr()
+    assert "TREE_TOO_LARGE" in cap.err and cap.out == "" and not world[4].exists()
+    monkeypatch.setattr(bg, "_INTERPRETER_LIMIT", limit)
+    assert bg.main(["snapshot-venv", "--bin", str(world[1]), "--out", str(world[4])]) == 0  # a retry is not blocked by a leftover file
+
+
+def test_snapshot_venv_cli_fails_instead_of_hashing_a_truncated_read(pinned_world, capsys, monkeypatch):
+    """One limit for every reader: a snapshot bigger than `_VENV_MAX_SNAPSHOT_BYTES` could never be loaded by `compare`, so the command that mints its
+    pin must refuse it (the bounded read returns limit + 1 bytes: hashing those would pin a file that is not the file)."""
+    world = pinned_world
+    monkeypatch.setattr(bg, "_VENV_MAX_SNAPSHOT_BYTES", 10)
+    assert bg.main(["snapshot-venv", "--bin", str(world[1]), "--out", str(world[4])]) == 2
+    cap = capsys.readouterr()
+    assert cap.out == "" and "VENV_SNAPSHOT_INVALID" in cap.err
+    assert not world[4].exists()  # the oversize file is removed: a retry on the same --out is not blocked
+    monkeypatch.setattr(bg, "_VENV_MAX_SNAPSHOT_BYTES", 4 << 20)
+    assert bg.main(["snapshot-venv", "--bin", str(world[1]), "--out", str(world[4])]) == 0
+
+
+def test_compare_and_the_loader_use_the_one_snapshot_limit(tmp_path, monkeypatch):
+    import hashlib
+    path = tmp_path / "snap.json"
+    path.write_bytes(b"x" * 100)
+    side = bg.Side(str(tmp_path), "c" * 40, str(tmp_path / "bin"), str(path), hashlib.sha256(path.read_bytes()).hexdigest(), "0" * 64)
+    bg._check_snapshots(side, side, "pre_overlay")  # within the limit, and the hash matches
+    monkeypatch.setattr(bg, "_VENV_MAX_SNAPSHOT_BYTES", 99)
+    with pytest.raises(bg._Verdict) as caught:
+        bg._check_snapshots(side, side, "pre_overlay")
+    assert caught.value.detail == "SNAPSHOT_CHANGED"
+    assert not hasattr(bg, "_SNAPSHOT_LIMIT") and bg._VENV_MAX_SNAPSHOT_BYTES == 99  # no second constant
 
 
 def test_cli_snapshot_venv_failures_are_exit_2_with_the_code_on_stderr(world, capsys):
@@ -756,12 +837,32 @@ def test_bad_root_arguments_are_caller_errors(world, export, others):
     assert info.value.code == "DEST_REJECTED"
 
 
+
+def _trust_own_links(monkeypatch):
+    """Stand in for root's `/var` -> `/private/var` (a link owned by uid 0 in a directory only root can change): the links this test creates are
+    owned by the current user, in directories the current user can write, so both facts are simulated (the uid seam, and `os.access` W_OK false)."""
+    monkeypatch.setattr(bg, "_TRUSTED_LINK_UID", os.getuid())
+    real_access = os.access
+    monkeypatch.setattr(bg.os, "access", lambda path, mode, *a, **k: False if mode & os.W_OK else real_access(path, mode, *a, **k))
+    real_stat = os.stat
+
+    def owned_stat(path, *a, **k):  # every ancestor must be owned by the trusted uid as well: the directories on the way up to `/` are root's or ours
+        st = real_stat(path, *a, **k)
+        if not stat.S_ISDIR(st.st_mode):
+            return st
+        return os.stat_result((st.st_mode, st.st_ino, st.st_dev, st.st_nlink, os.getuid(), st.st_gid, st.st_size,
+                               int(st.st_atime), int(st.st_mtime), int(st.st_ctime)))
+    monkeypatch.setattr(bg.os, "stat", owned_stat)
+
+
 @pytest.mark.parametrize("line", ["{alias}/export/src\n", "../../../../export/src\n", "{real}/export/src\n"])
-def test_paths_through_a_symlinked_parent_are_judged_by_where_they_point(world, tmp_path, line):
-    """macOS: the temp directory is `/var/...` -> `/private/var/...`; a caller may hold the venv and the export by the alias."""
+def test_paths_through_a_symlinked_parent_are_judged_by_where_they_point(world, tmp_path, line, monkeypatch):
+    """macOS: the temp directory is `/var/...` -> `/private/var/...`; a caller may hold the venv and the export by the alias. The alias is
+    a link of the TRUSTED uid here (the test stands in for root's `/var`): a link the user owns is refused, see the test below."""
     snapshot(world)
     alias = tmp_path.parent / (tmp_path.name + "-alias")
     os.symlink(tmp_path, alias)
+    _trust_own_links(monkeypatch)
     try:
         bin_alias, export_alias = str(alias / "venv" / "bin"), str(alias / "export")
         (world[2] / "x.pth").write_text(line.format(alias=alias, real=tmp_path))
@@ -770,17 +871,293 @@ def test_paths_through_a_symlinked_parent_are_judged_by_where_they_point(world, 
         os.unlink(alias)
 
 
-def test_a_path_outside_the_export_is_still_refused_through_a_symlinked_parent(world, tmp_path):
+@pytest.mark.parametrize("line", ["{alias}/export/src\n", "../../../../export/src\n"])
+def test_a_pth_path_through_a_link_the_user_owns_is_refused(world, tmp_path, line):
+    """A head child (same uid) could repoint such a link after the check and leave it; the spawn guard re-checks resolved paths only."""
     snapshot(world)
-    alias = tmp_path.parent / (tmp_path.name + "-alias2")
+    alias = tmp_path.parent / (tmp_path.name + "-useralias")
     os.symlink(tmp_path, alias)
     try:
-        (world[2] / "x.pth").write_text(f"{alias}/venv\n")
+        (world[2] / "x.pth").write_text(line.format(alias=alias))
         with pytest.raises(Err) as info:
             bg.check_venv(str(alias / "venv" / "bin"), str(world[4]), str(alias / "export"), ())
         assert info.value.code == "VENV_HOOK_REJECTED"
     finally:
         os.unlink(alias)
+
+
+def _finder(target):
+    return f"MAPPING = {{'pkg': {target!r}}}\nNAMESPACES = {{}}\n".encode()
+
+
+def test_a_finder_target_through_a_user_owned_link_is_refused_and_through_a_trusted_one_accepted(tmp_path, monkeypatch):
+    real = Path(os.path.realpath(tmp_path)) / "real"
+    (real / "export" / "src" / "pkg").mkdir(parents=True)
+    alias = Path(os.path.realpath(tmp_path)) / "alias"
+    os.symlink(real, alias)
+    export = str(real / "export")
+    through = str(alias / "export" / "src" / "pkg")
+    assert bg._finder_problem(_finder(str(real / "export" / "src" / "pkg")), export) is None  # the resolved path: accepted
+    assert bg._finder_problem(_finder(through), export) == "a finder target resolves outside the export"  # the user owns the link
+    _trust_own_links(monkeypatch)  # a root-owned link (macOS `/var`), simulated
+    assert bg._finder_problem(_finder(through), export) is None
+    monkeypatch.undo()
+    assert bg._finder_problem(_finder(through), export) is not None  # and back to refused
+
+
+@pytest.mark.parametrize("trusted", [False, True], ids=["user-owned", "trusted-uid"])
+def test_a_finder_target_with_dot_dot_after_a_link_is_refused_whoever_owns_the_link(tmp_path, monkeypatch, trusted):
+    """The kernel resolves the RAW target: `ul/..` goes to the PARENT of what `ul` points at, while `abspath` collapses it lexically and never meets
+    the link, so a check on the collapsed string passed a target that a repointed `ul` would send elsewhere."""
+    base = Path(os.path.realpath(tmp_path))
+    (base / "a" / "b").mkdir(parents=True)
+    (base / "dispatch" / "head" / "src" / "pkg").mkdir(parents=True)
+    os.symlink(base / "a" / "b", base / "ul")  # base/ul/../.. is base: the raw target names base/dispatch/head/src/pkg
+    raw = f"{base}/ul/../../dispatch/head/src/pkg"
+    assert os.path.realpath(raw) == str(base / "dispatch" / "head" / "src" / "pkg")
+    if trusted:
+        _trust_own_links(monkeypatch)
+    assert bg._finder_problem(_finder(raw), str(base / "dispatch" / "head")) == "a finder target resolves outside the export"
+    for odd in (f"{base}/dispatch/head/./src/pkg", f"{base}//dispatch/head/src/pkg", f"{base}/dispatch/head/src/pkg/"):
+        assert bg._finder_problem(_finder(odd), str(base / "dispatch" / "head")) is not None  # not normal: refused
+    assert bg._finder_problem(_finder(str(base / "dispatch" / "head" / "src" / "pkg")), str(base / "dispatch" / "head")) is None
+
+
+def test_a_root_run_trusts_no_alias_at_all(tmp_path, monkeypatch):
+    """With an effective uid of 0 the head child is root too: a root-owned link is no more trustworthy than a user-owned one."""
+    base = Path(os.path.realpath(tmp_path))
+    (base / "real" / "export" / "src" / "pkg").mkdir(parents=True)
+    os.symlink(base / "real", base / "alias")
+    through = str(base / "alias" / "export" / "src" / "pkg")
+    _trust_own_links(monkeypatch)
+    monkeypatch.setattr(os, "geteuid", lambda: os.getuid() + 1)  # not root: the (patched) trusted link is accepted
+    assert bg._finder_problem(_finder(through), str(base / "real" / "export")) is None
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    assert bg._finder_problem(_finder(through), str(base / "real" / "export")) == "a finder target resolves outside the export"
+    assert bg._alias_accepted(through) is False
+
+
+def test_the_codecs_of_the_compare_path_are_loaded_at_import():
+    """A first `utf-8-sig` decode (a `.pth` file) would import from the harness interpreter's stdlib, possibly after a child ran."""
+    import subprocess
+    code = ("import importlib.util, sys\n"
+            "spec = importlib.util.spec_from_file_location('bgx', sys.argv[1]); m = importlib.util.module_from_spec(spec)\n"
+            "sys.modules['bgx'] = m; before = 'encodings.utf_8_sig' in sys.modules; spec.loader.exec_module(m)\n"
+            "assert 'encodings.utf_8_sig' in sys.modules and 'encodings.ascii' in sys.modules, 'not loaded at import'\n"
+            "print('ok')\n")
+    done = subprocess.run([sys.executable, "-I", "-c", code, str(_SCRIPTS / "benchmark_gate.py")], capture_output=True, text=True, timeout=120,
+                          env={"PYTHONDONTWRITEBYTECODE": "1"})
+    assert done.returncode == 0 and done.stdout.strip() == "ok", done.stderr
+
+
+def test_a_nested_user_owned_link_behind_a_trusted_one_is_still_refused(tmp_path, monkeypatch):
+    base = Path(os.path.realpath(tmp_path))
+    (base / "real" / "export" / "src").mkdir(parents=True)
+    os.symlink(base / "real", base / "user")           # user-owned, reached through the trusted one below
+    os.symlink(base / "user", base / "trusted")        # "root-owned": the first hop only
+    real_lstat = os.lstat
+
+    def lstat(path, *a, **k):
+        st = real_lstat(path, *a, **k)
+        if os.fspath(path) != str(base / "trusted"):
+            return st
+        return os.stat_result((st.st_mode, st.st_ino, st.st_dev, st.st_nlink, 0, st.st_gid, st.st_size, int(st.st_atime), int(st.st_mtime),
+                               int(st.st_ctime)))
+    monkeypatch.setattr(bg.os, "lstat", lstat)
+    _trust_own_links(monkeypatch)
+    monkeypatch.setattr(bg, "_TRUSTED_LINK_UID", 0)  # the first hop (reported as uid 0) is trusted; the second is owned by the user
+    assert bg._only_trusted_aliases(str(base / "trusted" / "export" / "src")) is False  # the second hop is the user's
+    assert bg._only_trusted_aliases(str(base / "real" / "export" / "src")) is True      # no link at all
+    assert bg._only_trusted_aliases(str(base / "real" / "missing" / "x")) is True       # a missing component ends the walk
+
+
+def _one_link(tmp_path):
+    base = Path(os.path.realpath(tmp_path))
+    (base / "real" / "export").mkdir(parents=True)
+    os.symlink(base / "real", base / "alias")
+    return base, str(base / "alias" / "export")
+
+
+def test_a_link_in_a_directory_the_user_can_write_is_refused_even_when_its_uid_is_trusted(tmp_path, monkeypatch):
+    """The owner of a link is not who can replace it: whoever can rename or unlink in its directory can (the round-5 swap: pre-swap and post-swap
+    `_alias_accepted` both said True)."""
+    base, through = _one_link(tmp_path)
+    monkeypatch.setattr(bg, "_TRUSTED_LINK_UID", os.getuid())  # the uid check alone passes; the directory is the user's
+    assert os.access(base, os.W_OK)
+    assert bg._only_trusted_aliases(through) is False and bg._alias_accepted(through) is False
+    os.rename(base / "alias", base / "moved")  # the swap a head child could do: a different link under the same name
+    os.symlink(base / "real", base / "alias")
+    assert bg._alias_accepted(through) is False
+
+
+def test_a_link_in_a_root_owned_directory_is_accepted_the_macos_var_style(tmp_path, monkeypatch):
+    base, through = _one_link(tmp_path)
+    _trust_own_links(monkeypatch)  # the uid seam and a directory the euid cannot write
+    assert os.stat(base).st_mode & 0o022 == 0
+    assert bg._only_trusted_aliases(through) is True and bg._alias_accepted(through) is True
+
+
+@pytest.mark.parametrize("mode,owner_is_trusted,expected", [(0o777, True, False), (0o775, True, False), (0o757, True, False), (0o1777, False, False),
+                                                            (0o1777, True, True), (0o755, True, True), (0o755, False, False), (0o555, False, False)])
+def test_a_directory_is_trusted_only_when_trusted_owned_and_closed_to_group_and_other(tmp_path, monkeypatch, mode, owner_is_trusted, expected):
+    """The holder must be owned by the trusted uid UNCONDITIONALLY (an owner-uid 0555 directory is one chmod away from writable); group or other write
+    is accepted only for a sticky directory of the trusted uid."""
+    base, through = _one_link(tmp_path)
+    _trust_own_links(monkeypatch)
+    real_stat = os.stat
+    held = os.fspath(base)
+
+    def fake_stat(path, *a, **k):
+        st = real_stat(path, *a, **k)
+        if os.fspath(path) != held:
+            return st
+        return os.stat_result((stat.S_IFDIR | mode, st.st_ino, st.st_dev, st.st_nlink, os.getuid() if owner_is_trusted else os.getuid() + 1, st.st_gid,
+                               st.st_size, int(st.st_atime), int(st.st_mtime), int(st.st_ctime)))
+    monkeypatch.setattr(bg.os, "stat", fake_stat)
+    assert bg._only_trusted_aliases(through) is expected
+
+
+def _root_link_in_user_directory(tmp_path, monkeypatch):
+    """A link reported as root-owned (seam uid 0) whose real holder is the user's own directory `base`; returns `(base, through)`."""
+    base, through = _one_link(tmp_path)
+    real_lstat = os.lstat
+
+    def lstat(path, *a, **k):
+        st = real_lstat(path, *a, **k)
+        if os.fspath(path) != str(base / "alias"):
+            return st
+        return os.stat_result((st.st_mode, st.st_ino, st.st_dev, st.st_nlink, 0, st.st_gid, st.st_size, int(st.st_atime), int(st.st_mtime), int(st.st_ctime)))
+    monkeypatch.setattr(bg.os, "lstat", lstat)
+    monkeypatch.setattr(bg, "_TRUSTED_LINK_UID", 0)
+    return base, through
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="the holder must be owned by a non-root user")
+def test_an_own_uid_owned_read_only_holder_is_refused_for_a_root_owned_link(tmp_path, monkeypatch):
+    base, through = _root_link_in_user_directory(tmp_path, monkeypatch)
+    real_access = os.access
+    monkeypatch.setattr(bg.os, "access", lambda path, mode, *a, **k: False if mode & os.W_OK else real_access(path, mode, *a, **k))  # as if 0555
+    assert os.stat(base).st_uid == os.getuid() != 0 and os.stat(base).st_mode & 0o022 == 0
+    assert bg._only_trusted_aliases(through) is False  # closed (as 0555) and not writable by the euid, but not root's directory
+
+
+def test_a_writable_ancestor_of_a_trusted_holder_is_refused(tmp_path, monkeypatch):
+    """The holder is trusted-owned and closed; its parent is writable by the euid: the holder can be renamed away and replaced."""
+    base, through = _one_link(tmp_path)
+    monkeypatch.setattr(bg, "_TRUSTED_LINK_UID", os.getuid())
+    real_access = os.access
+    held = os.fspath(base)
+    monkeypatch.setattr(bg.os, "access", lambda path, mode, *a, **k: False if (mode & os.W_OK and os.fspath(path) == held) else real_access(path, mode, *a, **k))
+    assert os.access(base.parent, os.W_OK)
+    assert bg._only_trusted_aliases(through) is False
+    _trust_own_links(monkeypatch)  # every ancestor closed to the euid as well: accepted
+    assert bg._only_trusted_aliases(through) is True
+
+
+def test_a_group_or_other_writable_ancestor_is_refused_unless_sticky_and_trusted(tmp_path, monkeypatch):
+    """A root-owned (uid seam) sticky 1777-like ancestor that the euid CAN write (`os.access` True) is accepted; one owned by another uid is refused."""
+    base, through = _one_link(tmp_path)
+    _trust_own_links(monkeypatch)
+    real_stat = os.stat  # `_trust_own_links`'s: every directory reports the trusted uid
+    parent = os.fspath(base.parent)
+    modes = {"mode": 0o775, "uid": os.getuid()}
+
+    def fake_stat(path, *a, **k):
+        st = real_stat(path, *a, **k)
+        if os.fspath(path) != parent:
+            return st
+        return os.stat_result((stat.S_IFDIR | modes["mode"], st.st_ino, st.st_dev, st.st_nlink, modes["uid"], st.st_gid, st.st_size,
+                               int(st.st_atime), int(st.st_mtime), int(st.st_ctime)))
+    monkeypatch.setattr(bg.os, "stat", fake_stat)
+    closed_access = os.access
+    monkeypatch.setattr(bg.os, "access", lambda path, mode, *a, **k: True if (mode & os.W_OK and os.fspath(path) == parent) else closed_access(path, mode, *a, **k))
+    assert os.access(parent, os.W_OK)  # the euid can really write the ancestor
+    assert bg._only_trusted_aliases(through) is False  # 0775, writable, not sticky
+    modes["mode"] = 0o1777
+    assert bg._only_trusted_aliases(through) is True   # sticky, owned by the trusted uid, writable by the euid: like /tmp on Linux
+    modes["uid"] = os.getuid() + 1
+    assert bg._only_trusted_aliases(through) is False  # not owned by the trusted uid (and sticky): refused
+    modes["uid"] = os.getuid()
+    modes["mode"] = 0o555
+    monkeypatch.setattr(bg.os, "access", closed_access)
+    assert bg._only_trusted_aliases(through) is True   # closed and trusted-owned
+    modes["uid"] = os.getuid() + 1
+    assert bg._only_trusted_aliases(through) is False  # closed (0555) but owned by another uid: that owner can chmod it
+
+
+def test_only_root_changes_sticky_rule_needs_the_trusted_owner(tmp_path, monkeypatch):
+    st = os.stat(tmp_path)
+
+    def info(mode, uid):
+        return os.stat_result((stat.S_IFDIR | mode, st.st_ino, st.st_dev, st.st_nlink, uid, st.st_gid, st.st_size, 0, 0, 0))
+    monkeypatch.setattr(bg, "_TRUSTED_LINK_UID", 0)
+    monkeypatch.setattr(bg.os, "access", lambda path, mode, *a, **k: True)  # the euid can write everywhere
+    assert bg._only_root_changes("/x", info(0o1777, 0)) is True        # root-owned sticky, like /tmp on Linux
+    assert bg._only_root_changes("/x", info(0o1777, os.getuid() or 1)) is False  # sticky, owned by the test user: refused
+    assert bg._only_root_changes("/x", info(0o755, 0)) is False        # not sticky and writable by the euid
+    monkeypatch.setattr(bg.os, "access", lambda path, mode, *a, **k: False)
+    assert bg._only_root_changes("/x", info(0o755, 0)) is True and bg._only_root_changes("/x", info(0o775, 0)) is False
+
+
+def test_an_own_uid_read_only_ancestor_is_refused(tmp_path, monkeypatch):
+    """The reviewer's repro: a 0555 ancestor owned by the user passes `_only_root_changes` but its owner can chmod it."""
+    base, through = _one_link(tmp_path)
+    _trust_own_links(monkeypatch)
+    assert bg._only_trusted_aliases(through) is True
+    real_stat = os.stat
+    parent = os.fspath(base.parent)
+
+    def other_owner(path, *a, **k):
+        st = real_stat(path, *a, **k)
+        if os.fspath(path) != parent:
+            return st
+        return os.stat_result((st.st_mode, st.st_ino, st.st_dev, st.st_nlink, os.getuid() + 1, st.st_gid, st.st_size, 0, 0, 0))
+    monkeypatch.setattr(bg.os, "stat", other_owner)
+    assert bg._only_trusted_aliases(through) is False
+
+
+def test_an_unstatable_ancestor_fails_closed(tmp_path, monkeypatch):
+    base, through = _one_link(tmp_path)
+    _trust_own_links(monkeypatch)
+    real_stat = os.stat
+    parent = os.fspath(base.parent)
+
+    def fake_stat(path, *a, **k):
+        if os.fspath(path) == parent:
+            raise PermissionError(13, "denied")
+        return real_stat(path, *a, **k)
+    monkeypatch.setattr(bg.os, "stat", fake_stat)
+    assert bg._only_trusted_aliases(through) is False
+
+
+def test_the_effective_uid_form_of_access_is_used_where_supported(monkeypatch):
+    calls = []
+    monkeypatch.setattr(bg.os, "access", lambda path, mode, **k: calls.append(k) or False)
+    monkeypatch.setattr(bg.os, "supports_effective_ids", {bg.os.access})
+    assert bg._euid_can_write("/x") is False and calls == [{"effective_ids": True}]
+    calls.clear()
+    monkeypatch.setattr(bg.os, "supports_effective_ids", set())
+    assert bg._euid_can_write("/x") is False and calls == [{}]
+
+
+@pytest.mark.skipif(not os.path.islink("/var") or os.geteuid() == 0, reason="needs the macOS /var -> /private/var chain, not root")
+def test_the_real_macos_var_chain_is_still_accepted():
+    assert bg._only_trusted_aliases("/var/folders") is True
+
+
+def test_a_hard_linked_symlink_is_refused(tmp_path, monkeypatch):
+    base, through = _one_link(tmp_path)
+    _trust_own_links(monkeypatch)
+    assert bg._only_trusted_aliases(through) is True
+    real_lstat = os.lstat
+
+    def lstat(path, *a, **k):  # a second name for the link (a hard link to a symlink is not possible everywhere, so the count is simulated)
+        st = real_lstat(path, *a, **k)
+        if os.fspath(path) != str(base / "alias"):
+            return st
+        return os.stat_result((st.st_mode, st.st_ino, st.st_dev, 2, st.st_uid, st.st_gid, st.st_size, int(st.st_atime), int(st.st_mtime), int(st.st_ctime)))
+    monkeypatch.setattr(bg.os, "lstat", lstat)
+    assert bg._only_trusted_aliases(through) is False
 
 
 @pytest.mark.parametrize("lib", ["lib", "lib64"])

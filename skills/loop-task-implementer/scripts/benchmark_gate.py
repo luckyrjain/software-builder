@@ -1,21 +1,125 @@
 #!/usr/bin/env python3
 """Validation, lint and statistics core of the performance-review -> loop-task-implementer benchmark gate (Epic C).
 
-**This module is not wired into anything yet.** It is delivered by a series of eleven PRs for gap-backlog ticket
-C4 (C4a core, C4b lint, C4c-1a export, C4c-1b seal/cleanup, C4c-1c claim recovery, C4c-2 overlay/diff/venv check, C4d harness, C4e classifier/docs, C4f wiring); no workflow file,
-lifecycle validator or other script calls it until C4f. So far it holds the pure, string-level and arithmetic
-pieces (``validate``, ``lint``) and C4c-1 (a: export, b: seal and cleanup, c: claim recovery): ``export``, ``fixed-parent``, ``cleanup`` and the library
-functions ``compare`` will call (``export_tree``, ``seal_tree``, ``unseal_tree``, ``cleanup_root``). C4c-2 is delivered in three parts: 2a adds the library functions ``hash_tree``,
-``overlay_benchmark_file``, ``read_benchmark``, ``export_commit``, ``repo_top_levels``, ``seal_export``, ``hash_export`` and
-``harness_sha256``; 2b (``protected_path_diff``, ``token_tripwire``, ``diff_checks``, ``is_ancestor``) the protected-path diff and the
-token tripwire; 2c (``snapshot_venv``, ``check_venv``, CLI ``snapshot-venv``) the venv ``.pth`` and startup-file check. Calling order for ``compare`` (C4d): ``is_ancestor`` and ``diff_checks`` first (they
-read only the repository and the two commits, no export, so they can run before anything is built), then ``export_tree`` x2 (the dispatch root's
-marker pid defaults to the exporting process, so pass ``--owner-pid`` when ``cleanup`` will run from another process),
-``repo_top_levels(base)`` (BEFORE the install: afterwards ``build/``, ``dist/`` and ``venv/`` would join the lint's allowlist), venv and
-``check_venv`` x2 (after each install), ``overlay_benchmark_file(..., head_ref_commit=...)``, ``seal_export`` x2, ``read_benchmark`` on BOTH roots (required equal) and
-the lint, ``hash_export`` x2, ``trace_paired`` (C4d-2; after the pairing set-up, before the timed measurement), measure, ``hash_export`` x2; ``harness_sha256`` at any point (both parts are fixed at import and at the
-first load of the validator, whose module body it therefore runs); C4d is delivered in parts: C4d-1 (#366) adds the measurement harness (``run_order``, ``side_env``, ``pytest_argv``, ``measure_paired``: seeded balanced order, one child per run in its own process group, digest and exit checks, raw wall times); C4d-2 adds the trace (``TRACE_PLUGIN_SOURCE``, ``trace_env``, ``trace_paired``, and the helpers shared with ``measure_paired``: ``_prepare_run``, ``_execute``, ``_check_timeout``, ``_check_sides``, ``_benchmark_file_of``); ``compare`` and ``run-once`` are still to come (C4d-3). Limits of the trace: it is a narrow tripwire, not a proof of equal work. For the typical benchmark, which makes one library call and prints a digest, the executed-line count is a small constant on both sides, so equality proves nothing; the trace discriminates only when the test body loops or branches on library behaviour. Blind spots: helpers and callbacks, generator expressions, lambdas, ``map``, ``exec``/``eval``, ``asyncio.run(main())``, a same-named decoy, and branches inside one line. In-process tampering by code running in the child, and detection of the trace run itself, are not detected. The trace run also differs from a timed run in the contents of its per-side work directory (extra ``plugin-`` and ``out-`` entries) and the pycache prefix tree, in ``config.invocation_params`` and ``getoption('plugins')`` (not tokenised), and in a cold pycache. A suppressed or missing result is fail-closed; only a forged, matching result is a bypass. C4e
-the classifier and docs, C4f the workflow wiring. Specification (revision 5, the converged result of four review
+**This module is not wired into anything yet.** It is delivered by a series of PRs for gap-backlog ticket C4 (C4a core, C4b lint,
+C4c-1a export, C4c-1b seal/cleanup, C4c-1c claim recovery, C4c-2 overlay/diff/venv check, C4d harness, C4e classifier/docs, C4f wiring); no
+workflow file, lifecycle validator or other script calls it until C4f. C4d is delivered in three parts: C4d-1 the measurement harness
+(``run_order``, ``side_env``, ``pytest_argv``, ``measure_paired``), C4d-2 the trace (``TRACE_PLUGIN_SOURCE``, ``trace_env``,
+``trace_paired``) and C4d-3 ``compare`` (the pipeline of ``_compare_impl``: integrity checks, paired trace and measurement, post-run
+check, verdict), ``run_benchmark_once`` and the CLI commands ``compare`` and ``run-once``. C4e is the classifier and docs, C4f the workflow
+wiring.
+
+Sections, in file order: the gate's string-level validation (``benchmark_symbol_from_location``, ``validate_benchmark_command``,
+``validate_benchmark_gate``, ``benchmark_target``); ``evaluate_paired_samples``; ``escape_diagnostic``; the AST lint
+(``validate_benchmark_content``); C4c-1 export, seal and cleanup (``export_tree``, ``seal_tree``, ``unseal_tree``, ``cleanup_root``,
+``BenchmarkGateError`` and the error codes); C4c-2a tree hash and overlay (``hash_tree``, ``harness_sha256``, ``export_commit``,
+``read_benchmark``, ``seal_export``, ``hash_export``, ``fingerprint_tree``, ``repo_top_levels``, ``overlay_benchmark_file``); C4c-2b the
+diff checks (``protected_path_diff``, ``token_tripwire``, ``diff_checks``, ``is_ancestor``); C4c-2c the venv hook check
+(``snapshot_venv``, ``interpreter_pin``, ``check_venv``); C4d-3 ``dependency_parity`` and ``verify_export_against_commit``; C4d-1 and C4d-2
+the measurement harness and the trace (``measure_paired``, ``trace_paired``); ``run_benchmark_once``; C4d-3 ``compare`` (vocabularies,
+``Side``, result assembly and writing, steps 1 to 13); the CLI.
+
+Calling order. The Orchestrator provisions HEAD FIRST (spec 2.5): for each side it creates the venv, runs ``snapshot-venv`` (which prints
+``snapshot_sha256`` and ``interpreter_sha256``) BEFORE that side's install, then installs; it creates the base export and venv only after the
+head install has finished. Each export comes from ``export_tree`` (the dispatch root's marker pid defaults to the exporting process, so pass
+``--owner-pid`` when ``cleanup`` will run from another process). It then calls ``compare`` once per fresh pair of exports; a second call on the SAME exports only for the
+``COMPARE_RETRYABLE_AUTOMATIC`` triple and, after a human sets the flag, the ``COMPARE_RETRYABLE_WITH_HUMAN_FLAG`` triple (see "Reading the
+outcome"); every other outcome needs fresh exports. ``compare`` runs
+``is_ancestor``, then the isolation checks of both sides (roots, interpreter pin, snapshots, ``check_venv``, ``dependency_parity``,
+``verify_export_against_commit``), ``diff_checks`` and the host-load check, all before any export is modified; then ``repo_top_levels`` of the
+base export (after the install, so ``build/`` and ``dist/`` can join the lint allowlist: harmless, disclosed) and ``overlay_benchmark_file``;
+``seal_export`` x2, ``read_benchmark`` on BOTH roots (required equal), the lint and ``hash_export`` x2; the integrity checks once more
+immediately before the first child; ``trace_paired``; ``measure_paired``; a post-run check of every hash, fingerprint, snapshot and pin
+after any path that started a child; and the verdict, written to ``out_path``. ``harness_sha256`` is computed at step 2 (both parts are fixed
+at import and at the first load of the validator, whose module body it therefore runs).
+
+Provisioning contract (spec 2.2 and 2.5; the Orchestrator's side, not enforced beyond what ``compare`` checks; head first, as above): each venv is created fresh
+and ``snapshot-venv`` runs BEFORE that side's install: it mints the snapshot and interpreter pins, and a pin is never re-minted after an
+install. The install uses ``--no-compile`` and runs with ``PYTHONDONTWRITEBYTECODE=1``, a fresh ``HOME`` and ``TMPDIR``, ``PIP_CONFIG_FILE=/dev/null``
+and ``PIP_NO_CACHE_DIR=1``, from pinned requirements (or a wheelhouse), ideally with no network, and installs the project EDITABLE ONLY (``dependency_parity`` fails closed on a non-editable project install). AFTER the install and before
+``compare``, every ``__pycache__`` and ``.pyc`` under the venv's site-packages is removed (``dependency_parity`` rejects bytecode there; the
+dependencies then compile on every run on both sides; the interpreter pin does not cover site-packages, so the removal leaves the pins valid).
+An interpreter that is not writable by the build user is preferred (a writable one needs ``--allow-writable-interpreter``, a human's signal, and
+shows in the ``RESULT:`` line). A stray-process census around the installs is recommended and not enforced here: it is the Orchestrator-side check for the
+accepted ``setsid`` residual [R1]. The harness's euid must not be 0: a euid-0 Orchestrator (e.g. Docker as root) gets ``INTERPRETER_WRITABLE`` on EVERY
+compare (root owns, and can write, every interpreter file, so the interpreter is never "non-writable") and every symlink alias is refused, so root is
+effectively unsupported unless a human passes ``--allow-writable-interpreter`` and the paths have no symlink hop; C4e must run the Orchestrator non-root
+(an alias or venv-hook refusal is an ENVIRONMENT fault, not a Builder fault). The same refusal (fail closed, alias paths only) can also come from a
+user-namespace remapped or rootless Docker where root appears as nobody, from ancestors on a bind mount owned by a CI user, from overlayfs with
+``st_nlink`` above 1, or from a euid-0 harness: route each as an environment fault, not a Builder fault. After ``compare`` the Orchestrator reads the result file ONCE into bytes, hashes
+those bytes and compares the hash to the line's ``sha256=``, parses the SAME bytes, reads ``stage`` and ``detail`` only from those bytes (the
+``RESULT:`` line carries neither; ``INTERPRETER_WRITABLE`` needs its detail from the file) and checks the line's result, reason and ``interpreter_writable=`` against them (``parse_compare_outcome`` does it; the CLI
+prints the line from the in-memory result and the hash of the bytes it wrote, never from a re-read of the file; a file rewritten afterwards no
+longer matches its line and must be ignored). It also pins the EXPECTED ``harness_sha256`` and requires each project venv to be CPython >= 3.12
+([R2] and [R3] below). ``harness_sha256`` is a domain-separated, length-prefixed digest that ``sha256sum`` cannot reproduce: the
+``harness-sha256`` subcommand prints it, and the expected value must be taken from a TRUSTED copy of the harness (the pinned release, or a run of
+``harness-sha256`` in a clean checkout), NEVER from a previous ``compare`` result (that would be circular: a tampered harness vouches for itself).
+
+Reading the outcome (the contract of ``_cmd_compare``; ``parse_compare_outcome`` is the reference implementation of this
+protocol and C4e should call it, not re-write it): exit 0 is ``IMPROVED`` ONLY together with a valid ``RESULT: IMPROVED ...`` line whose
+``sha256=`` matches the bytes of the result file; a bare exit 0 (``compare --help`` exits 0 and prints no ``RESULT:`` line) is NOT an ``IMPROVED``.
+Exit 1 is any other result, but an exit 1 WITHOUT a valid ``RESULT:`` line counts as exit 2; exit 2 (usage error, a raised ``BenchmarkGateError``,
+a crash) means any file at ``--out`` is to be IGNORED (the file can exist: ``compare`` writes it before the CLI validates the in-memory result).
+Retry budget and ``attempt`` (C4e owns the exact numbers, but must cap them): (a) ``HOST_BUSY_START`` is retried automatically on the SAME exports with
+``attempt`` unchanged, at most 3 retries per dispatch with a wait of at least 60 s between them; then the Orchestrator stops and reports ``INCONCLUSIVE``/``HOST_BUSY_START`` to the human.
+(b) ``attempt=2`` is the one allowed re-measure per task: a new Lens B dispatch on FRESH exports (head-first provisioning again), allowed only after a
+measured result with one of these re-measure reasons: ``NOISY``, ``INCONSISTENT``, ``BORDERLINE``. No other reason allows it
+(``COMPARE_REMEASURABLE_REASONS``). The allowance is one per task and is spent by an
+``attempt=2`` measurement or by any ``HOST_BUSY_END`` result, whatever its ``attempt`` (``HOST_BUSY_END`` is not retried; it follows a full run, so the
+parent counts it as the one re-measure); after either there is no further re-measure. A second run after a measured result for the same head and base IS
+the re-measure and carries ``attempt=2``. The busy-start retries of (a), and a dispatch for a new head or merge-base, are not charged for being
+dispatches; if such a dispatch itself ends ``HOST_BUSY_END``, it spends the allowance. (c) ``compare`` validates
+``attempt`` as 1 or 2 and nothing more: the cap on the number of calls is enforced by C4e, not here. (d) The acceptance screen shows the count of ``compare`` results.
+Option abbreviations are refused (``allow_abbrev=False``: ``--allow-writable-i`` is a usage error, exit 2, not the human flag). Retry on the same
+exports is keyed on (reason, stage, detail), not on the reason alone, and two constants are the complete list: ``COMPARE_RETRYABLE_AUTOMATIC``
+(``HOST_BUSY_START``, retried by the Orchestrator itself) and ``COMPARE_RETRYABLE_WITH_HUMAN_FLAG`` (``INTERPRETER_WRITABLE``, detail of
+``ISOLATION_REJECTED``, retried ONLY after a human sets ``--allow-writable-interpreter``: it must NEVER be auto-retried with the flag). Every other ``ISOLATION_REJECTED`` at ``pre_overlay`` (``INTERPRETER_CHANGED``, ``INTERPRETER_DIFFERS``,
+``SNAPSHOT_CHANGED``, ``DEPENDENCY_PARITY``, ``TRACKED_FILE_DIFFERS``, ...) is NOT: the pins precede the install, so it needs fresh provisioning
+(the other rows are in spec 2.3). Tamper signals: ``ISOLATION_REJECTED``/``EXPORT_CHANGED`` at stage ``ran`` is also what the spawn guard gives when a directory was replaced before a spawn (no measured fields): a human matter, never retried.
+
+The Orchestrator's wait is a provisioning-side budget and is NOT enforced by any deadline inside ``compare``: at least the gate cap (1800 s of
+child time) plus the hashing plus 300 s x the git invocations ``compare`` opens plus up to ~20 s per interpreter probe (``python -I -S``, a
+child that runs before any benchmark child: steps 4, 9 and 12; spec 2.2 and 9.12 say the same). ``_GIT_TIMEOUT_SECONDS`` (300 s) bounds EACH git invocation, and ``compare``
+opens at least nine git contexts (``is_ancestor``, ``diff_checks``, ``_benchmark_origin`` at step 7, and ``verify_export_against_commit`` per
+side at steps 4, 9 and 12), several invocations each; a slow repository can therefore exceed any fixed allowance.
+
+Known residuals of ``compare``: THIS list is the single source; spec 2.5 ("Disclosed residuals") carries the same stable labels ``[R1]`` to ``[R12]`` and
+a test pins that the labels match (numbers and short labels, not prose).
+[R1:setsid] Escaped ``setsid`` daemon: a head child can leave the process-group kill behind with fork + ``setsid``: a stray same-user daemon survives the run.
+Nothing detects it (there is no process census; page-cache effects included).
+[R2:harness-file] Harness file writable: it is writable by the same user, so C4e must pin the EXPECTED ``harness_sha256`` and compare it with the result's; and it
+should prefer a non-writable interpreter: bytecode written into a writable interpreter prefix between the pin and ``compare`` changes the pin's hash and
+gives ``INTERPRETER_CHANGED`` (``INTERPRETER_DIFFERS`` is a different fault: two sides on different interpreters, an interpreter inside a venv or an
+export, or a start-up probe that disagrees). Both are ``ISOLATION_REJECTED`` and NOT retryable on the same exports (see "Reading the outcome");
+the stage is ``pre_overlay`` at step 4, but a change noticed at step 9 ends at ``overlaid`` and one noticed at step 12 at ``ran``. At step 12 an
+over-budget ``_check_parity`` ends as ``NOT_PROVISIONED`` at stage ``ran``.
+[R3:py312] Python older than 3.12: the trace needs ``sys.monitoring``, so a project venv older than CPython 3.12 yields ``no_monitoring``, hence
+``INCONCLUSIVE``/``TRACE_UNAVAILABLE``, and can never reach ``IMPROVED``.
+[R4:path-chain] Interpreter path chain: the interpreter's own path chain (the ``home`` of ``pyvenv.cfg``, symlink hops to the real prefix and the parent of the prefix are pinned by content, not guarded
+by directory identity: a user-writable hop in front of a prefix that is not user-owned could be repointed by a head child between runs (a writable prefix
+is already refused as ``INTERPRETER_WRITABLE``, so this needs that unusual layout); the human acceptance of every ``IMPROVED`` remains the control.
+[R5:outside-state] State outside the fingerprints: they detect changes to the exports, venvs and dispatch root between the baseline and the end, not writes elsewhere
+(absolute ``/tmp`` or ``/dev/shm`` state a head run leaves for a later run).
+[R6:ctime-tick] Coarse ctime tick: a change undone inside one ctime tick on a coarse filesystem is not seen.
+[R7:writable-interpreter] Writable interpreter: the pin covers the files listed and is exact only for a non-writable interpreter; a bytecode or file planted into a writable
+interpreter by a child during a run is caught only by the end-of-run pin, not if restored.
+[R8:sigkill] SIGKILL leaves child: a SIGKILLed ``compare`` leaves a running child until its own timeout.
+[R9:third-party] Third-party content: content that is identical and RECORD-consistent on both sides is not judged.
+[R10:prefix-ancestors-libs] Ancestors and shared libraries: the ancestors of ``<prefix>`` (the interpreter's real prefix) are not checked for writability, and shared
+libraries outside ``<prefix>`` (``libssl``, ``libffi`` linked by ``_ssl``, ``_hashlib`` under a user-owned Homebrew) are not pinned.
+[R11:finder-and-bin] Finder code and ``bin/``: the editable finder's own code is trusted by name once its mapping is checked, and the venv ``bin/`` directory (``PATH`` puts it
+first) is not verified (the benchmark lint allows no subprocess module; only the library under test could spawn a tool).
+[R12:non-code-inputs] Non-code untracked inputs (``.env``, ``*.json``, ``*.cfg``) are not covered by ``verify_export_against_commit``.
+
+Limits of the trace: it is a narrow tripwire, not a proof of equal work. For the typical benchmark, which makes one library call and prints a
+digest, the executed-line count is a small constant on both sides, so equality proves nothing; the trace discriminates only when the test body
+loops or branches on library behaviour. Blind spots: helpers and callbacks, generator expressions, lambdas, ``map``, ``exec``/``eval``,
+``asyncio.run(main())``, a same-named decoy, and branches inside one line. In-process tampering by code running in the child, and detection of
+the trace run itself, are not detected. The trace run also differs from a timed run in the contents of its per-side work directory (extra
+``plugin-`` and ``out-`` entries), in its environment (``PYTHONPATH`` and the three ``BENCH_TRACE_*`` keys), in ``config.invocation_params`` and
+``getoption('plugins')`` (not tokenised), and in compiling the plugin on every run (no bytecode is written: ``PYTHONDONTWRITEBYTECODE``). A
+suppressed or missing result is fail-closed; only a forged, matching result is a bypass. C4d-3 specification:
+``docs/superpowers/specs/2026-11-06-c4d3-compare-and-run-once-design.md``. Parent Specification (revision 5, the converged result of four review
 rounds): ``docs/superpowers/specs/2026-10-02-c4-performance-review-executor-handoff-design.md`` (APIs table,
 Data model, Capacity, Threat model). This docstring states each function's own contract and the reason each
 rule exists; it does not re-derive the design.
@@ -36,6 +140,7 @@ from __future__ import annotations
 import argparse
 import ast
 import codecs
+import contextlib
 import dis
 import errno
 import hashlib
@@ -46,6 +151,7 @@ import os
 import posixpath
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -343,9 +449,12 @@ def validate_benchmark_gate(gate: object) -> tuple[dict | None, str]:
     ``Fraction`` where a number is required), ``PATH_REJECTED`` (also for a ``benchmark_paths`` list whose
     length is not exactly one), ``SYMBOL_REJECTED``, ``COMMAND_REJECTED``, ``BOUNDS_REJECTED`` (also for
     NaN and infinity) and ``BUDGET_REJECTED``. The budget cap
-    ``(warmup_runs + repeats + 3) * 2 * per_run_timeout_seconds <= 1800`` keeps one Lens B dispatch inside its
-    wait; the ``+3`` is the untimed trace run, allowed 3x a timed run, per side. Defaults use 1600 s; at
-    ``repeats`` 8 the timeout may be at most 81 with ``warmup_runs`` 0, 75 with 1 and 69 with 2.
+    ``(warmup_runs + repeats + 3) * 2 * per_run_timeout_seconds <= 1800`` budgets the CHILD time of one ``compare`` only; the
+    ``+3`` is the untimed trace run, allowed 3x a timed run, per side. It does not keep a dispatch inside its wait: the git work and the hashing
+    sit outside it, so the Orchestrator's wait must be longer than the cap (a budget it keeps; nothing enforces it: see "Provisioning
+    contract" in the module docstring). Defaults use 1600 s; at
+    ``repeats`` 8 the timeout may be at most 75 with ``warmup_runs`` 1 and 69 with 2 (``warmup_runs`` 0 is
+    ``BOUNDS_REJECTED``: ``measure_paired`` needs at least one warm-up).
     """
     if not isinstance(gate, dict):
         return None, "GATE_MISSING"
@@ -382,7 +491,7 @@ def validate_benchmark_gate(gate: object) -> tuple[dict | None, str]:
         return None, "COMMAND_REJECTED"
 
     if not (
-        0 <= values["warmup_runs"] <= 2
+        1 <= values["warmup_runs"] <= 2
         and values["repeats"] in _REPEATS_ALLOWED
         and 10 <= values["per_run_timeout_seconds"] <= 300
         and Fraction("0.05") <= fractions["min_improvement"] <= Fraction("0.90")
@@ -405,6 +514,19 @@ def validate_benchmark_gate(gate: object) -> tuple[dict | None, str]:
     return normalized, "OK"
 
 
+def benchmark_target(normalized_gate: dict) -> str:
+    """The pytest target (path or ``path::symbol``) of a validated gate command: its one non-option token."""
+    tokens = normalized_gate["command"].split(" ")
+    if tokens[:3] == ["python3", "-m", "pytest"]:
+        tokens = tokens[3:]
+    elif tokens[:1] == ["pytest"]:
+        tokens = tokens[1:]
+    targets = [token for token in tokens if token and not token.startswith("-")]
+    if len(targets) != 1:
+        raise ValueError("gate command has no single target")  # unreachable for a validated gate
+    return targets[0]
+
+
 # ---------------------------------------------------------------------------
 # evaluate_paired_samples
 # ---------------------------------------------------------------------------
@@ -419,6 +541,14 @@ def _median(values: list[Fraction]) -> Fraction:
     if len(ordered) % 2:
         return ordered[mid]
     return (ordered[mid - 1] + ordered[mid]) / 2
+
+
+def _ratio_stats(base, head) -> tuple[list[Fraction], Fraction, Fraction]:
+    """Exact ``(ratios, median, mad)`` of head/base per pair, in input order; does not validate (``_evaluate`` does)."""
+    ratios = [Fraction(h, b) for b, h in zip(base, head)]
+    median = _median(ratios)
+    mad = _median([abs(r - median) for r in ratios])
+    return ratios, median, mad
 
 
 def _evaluate(base, head, repeats, min_improvement, max_noise) -> tuple[str, str]:
@@ -436,14 +566,12 @@ def _evaluate(base, head, repeats, min_improvement, max_noise) -> tuple[str, str
         if any(not _is_real_int(v) or v <= 0 for v in samples):
             return "INCONCLUSIVE", "INVALID_INPUT"
 
-    ratios = [Fraction(h, b) for b, h in zip(base, head)]
+    ratios, median, mad = _ratio_stats(base, head)
     # (1) Clear win: at least `need` ratios <= 1 - min_improvement. The noise gate is skipped here (the median
     # clause of revision 3 was redundant). need = 7 at n=8 is the stricter setting: need 6 gave 11.9% false
     # IMPROVED in the period-4 lock-in regime (revision 5).
     if sum(1 for r in ratios if r <= 1 - threshold) >= _NEED_CLEAR[repeats]:
         return "IMPROVED", "IMPROVED_CLEAR"
-    median = _median(ratios)
-    mad = _median([abs(r - median) for r in ratios])
     if mad / median > noise_limit:
         return "INCONCLUSIVE", "NOISY"
     if 1 - median >= threshold:
@@ -848,9 +976,17 @@ EXPORT_REFUSAL_CODES = (
     "EXPORT_SYMLINK_ESCAPES",   # a symlink whose real target is outside the export
     "EXPORT_VERIFY_FAILED",     # the written tree differs from the commit's listing
 )
-ERROR_CODES = (  # MARKER_MISSING / MARKER_INVALID also appear in CLEANUP_CODES: the same condition seen by `cleanup`
+# ERROR_CODES: the codes a `BenchmarkGateError.code` can carry (built up in stages below). The reasons of a `compare` RESULT that exist only
+# there (`HOST_BUSY_START`, `HOST_BUSY_END`, `IMPROVED_CLEAR`, `NOISY`, `BORDERLINE`, `GATE_REJECTED`, `ISOLATION_REJECTED`, `LINT_REJECTED`,
+# `HEAD_OUTPUT_TOO_LARGE`, ... see `COMPARE_REASONS`) are not exceptions and are not listed here. Many names are both, because `compare` reports a
+# library refusal under its own name as a reason (the measure and trace refusals, the diff refusals, `BENCHMARK_MODIFIED`,
+# `UNSUPPORTED_PLATFORM`): the overlap is exactly `set(ERROR_CODES) & set(COMPARE_REASONS)` (14 names when this was written; a test pins it).
+GIT_TREE_SEAL_CODES = (  # the git, tree and seal refusals and failures; `COMPARE_REASONS` takes its detail tokens from here
     "COMMIT_INVALID", "COMMIT_NOT_FOUND", "REPO_UNREADABLE", "DEST_REJECTED", "GIT_FAILED", "GIT_TOO_OLD", "GIT_TIMEOUT",
-    "GIT_OUTPUT_TOO_LARGE", "TREE_UNREADABLE", "TREE_TOO_LARGE", "SEAL_FAILED", "MARKER_MISSING", "MARKER_INVALID",
+    "GIT_OUTPUT_TOO_LARGE", "TREE_UNREADABLE", "TREE_TOO_LARGE", "SEAL_FAILED",
+)
+ERROR_CODES = GIT_TREE_SEAL_CODES + (  # MARKER_MISSING / MARKER_INVALID also appear in CLEANUP_CODES: the same condition seen by `cleanup`
+    "MARKER_MISSING", "MARKER_INVALID",
 )
 # C4c-2a: refusals of the overlay: library results that `compare` (C4d) maps to a verdict. No CLI prints them (`_fail` is for
 # `export`); a failure that is not one of these is OVERLAY_FAILED (an I/O error or a broken validator: a crash, not a verdict), and
@@ -908,8 +1044,11 @@ class BenchmarkGateError(Exception):
         self.side: str | None = None  # measure_paired and trace_paired: which side failed ("base" or "head"), None if neither or both
         self.phase: str | None = None  # measure_paired: "warmup" or "timed"; trace_paired: "trace" (None for an argument error)
         self.partial: dict | None = None  # measure_paired only: {"order", "base_ns", "head_ns"} of the completed rounds when phase == "timed" (None for trace_paired)
-        self.kind: str | None = None  # trace_paired only: why it failed, one of TRACE_FAILURE_KINDS (None for every other error)
-        # trace_paired only, and only for an error raised AFTER both sides produced a result (the kinds unavailable_one_side,
+        # why a run failed. trace_paired: one of TRACE_FAILURE_KINDS on every error after validation; measure_paired: the `_execute` kind (spawn,
+        # oversize, timeout, nonzero) of a failed run only (None for a digest error, WORKLOAD_TOO_SHORT, MEASURE_FAILED or a bad argument);
+        # run_benchmark_once: the same `_execute` kind of a failed run, None for DIGEST_MISSING; `compare` maps by kind. None for every other error.
+        self.kind: str | None = None
+        # trace_paired only (`compare` shows it in its result), and only for an error raised AFTER both sides produced a result (the kinds unavailable_one_side,
         # unavailable_tokens_differ, unavailable_interpreters_differ, interpreters_differ, counts_differ, unavailable): {"base": {"kind":
         # "lines"|"unavailable", "value": int count | str token, "interpreter": "<ver> <impl>"}, "head": {...}, "argv": {"base": [...],
         # "head": [...]}, "body_has_control_flow": bool}. None for an error raised during a side's run and for every other error.
@@ -918,6 +1057,31 @@ class BenchmarkGateError(Exception):
 
     def __str__(self) -> str:  # a traceback or log line shows the reason, not only the code
         return f"{self.code}: {self.detail}" if self.detail else self.code
+
+
+class _IdentityChanged(Exception):
+    """Raised by the spawn guard of ``_execute`` (spec 2.5, "Directory identity"): a directory a child is about to run in or from is no
+    longer the one step 9 recorded (or a recorded path no longer resolves to itself). Deliberately NOT a ``BenchmarkGateError``: no generic
+    ``except BenchmarkGateError`` (a verdict mapper, a CLI wrapper, ``measure_paired``'s own harness-fault handler) can swallow it or turn it
+    into a ``MEASURE_FAILED``; only ``compare`` handles it, and it ends with ``ISOLATION_REJECTED``/``EXPORT_CHANGED`` (stage ``ran``) with
+    nothing measured. It carries ``code`` (``MEASURE_FAILED``, for a library caller that logs it), ``detail`` and the same attributes as the
+    errors of ``measure_paired`` and ``trace_paired``: ``side`` (the side about to be spawned), ``phase`` (``trace``; ``warmup`` or
+    ``timed``), ``kind`` (``harness``), ``partial`` (the completed timed rounds when ``phase`` is ``timed``, else ``None``) and ``trace``
+    (``None``). The guard sets ``side``; the function that called ``_execute`` fills the rest. A guard that finds nothing returns silently."""
+
+    code = "MEASURE_FAILED"
+
+    def __init__(self, detail: str, side: str | None = None) -> None:
+        super().__init__(detail)
+        self.detail = detail
+        self.side: str | None = side
+        self.phase: str | None = None
+        self.kind: str | None = "harness"
+        self.partial: dict | None = None
+        self.trace: dict | None = None
+
+    def __str__(self) -> str:
+        return f"{self.code}: {self.detail}"
 
 
 # --- the fixed parent, the dispatch-unique root and its marker ----------------------------------------------------
@@ -930,8 +1094,11 @@ def fixed_parent() -> Path:
     and `cleanup` refuse (`DEST_REJECTED` / `NOT_UNDER_FIXED_PARENT`): a safe refusal, not a takeover. Absolute even for a
     relative `TMPDIR`. `tempfile.gettempdir()` caches its answer, so the path is fixed for the life of a process; separate
     CLI invocations must share one `TMPDIR`. CLI: `fixed-parent`. Residual: the parent is validated
-    BY PATH above the dispatch root; a same-uid process can redirect it between check and use, gaining no capability (it can
-    already write, chmod and delete those directories). Everything below a root is handled by descriptor."""
+    BY PATH above the dispatch root; a same-uid process can redirect it between check and use. For `export`/`cleanup` that gains
+    nothing it did not have (it can already write, chmod and delete those directories); for `compare` it is NOT harmless in general: a
+    head child could repoint a user-owned link in a path the later children are spawned through, which is why `compare` records and
+    re-checks the RESOLVED directories before every spawn (`_spawn_guard`) and the venv checks refuse a `.pth` or finder path that goes
+    through a link the user owns. Everything below a root is handled by descriptor."""
     suffix = f"-{os.getuid()}" if hasattr(os, "getuid") else ""
     return Path(os.path.abspath(tempfile.gettempdir())) / (_ROOT_PARENT_NAME + suffix)
 
@@ -969,7 +1136,12 @@ def _check_pid(pid: object) -> int:
 
 
 def _write_json_atomic(path: str, payload: dict) -> None:
-    tmp = f"{path}.{os.getpid()}.tmp"  # O_EXCL + O_NOFOLLOW, then rename: a reader sees all of it or none
+    """Create `path` with `payload` (create-new only: every caller writes a name that must not exist). The payload goes to a temp name made with
+    O_EXCL + O_NOFOLLOW, then ``os.link(tmp, path)`` gives it its final name: the link FAILS if `path` exists (``os.replace`` would silently overwrite
+    anything created there after the caller's ``lexists`` check), and a reader sees all of the file or none. The temp is unlinked afterwards, by its
+    path: that is best effort against a same-user process, which can swap the temp name between the link and the unlink (only the temp name is
+    ever removed, never `path`)."""
+    tmp = f"{path}.{os.getpid()}.tmp"
     try:
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
     except FileExistsError as exc:  # a stale file of ours from a crashed run: never overwritten, never removed here
@@ -978,11 +1150,13 @@ def _write_json_atomic(path: str, payload: dict) -> None:
         os.fchmod(fd, 0o600)  # umask-proof: umask 0577 would leave a mode-0 file that reads back as MARKER_MISSING
         with os.fdopen(fd, "wb") as handle:
             handle.write(json.dumps(payload, sort_keys=True).encode("ascii"))
-        os.replace(tmp, path)
-    except BaseException:
+        try:
+            os.link(tmp, path, **_LINK_NO_FOLLOW)
+        except FileExistsError as exc:
+            raise BenchmarkGateError("DEST_REJECTED", "the destination appeared while writing; it is left as it is") from exc
+    finally:
         if os.path.lexists(tmp):
             os.unlink(tmp)
-        raise
 
 
 def _write_marker(root: str, owner_pid: int, name: str | None = None) -> None:
@@ -1824,6 +1998,26 @@ def _parse_listing(raw: bytes) -> dict[str, tuple[str, int, bool]]:
     return entries
 
 
+def _parse_listing_oids(raw: bytes) -> dict[str, str]:
+    """`git ls-tree -r -z [-l]` -> `{relpath: object id}` (40 or 64 lowercase hex). A sibling of `_parse_listing`, which keeps its tuple
+    shape: `verify_export_against_commit` parses the same bytes with both. A record that does not parse, or an id that is not hex of a
+    git hash width, is `GIT_FAILED`; path policy (`EXPORT_*`) stays `_parse_listing`'s."""
+    oids: dict[str, str] = {}
+    records = raw.split(b"\0")
+    if records.pop() != b"":
+        raise BenchmarkGateError("GIT_FAILED", "unterminated ls-tree output")
+    for record in records:
+        meta, tab, raw_path = record.partition(b"\t")
+        try:
+            fields = meta.decode("ascii").split()
+        except UnicodeDecodeError as exc:
+            raise BenchmarkGateError("GIT_FAILED", "unparseable ls-tree record") from exc
+        if not tab or len(fields) not in (3, 4) or _COMMIT_RE.fullmatch(fields[2]) is None:
+            raise BenchmarkGateError("GIT_FAILED", "unparseable ls-tree record")
+        oids[os.fsdecode(raw_path)] = fields[2]
+    return oids
+
+
 def _verify_export(dest: str, entries: dict[str, tuple[str, int, bool]]) -> list[str]:
     """Demand the written tree equal the commit's listing (nothing extra or missing, sizes and executable bits equal: this
     also catches a conversion that slipped past `GIT_ATTR_SOURCE`), no symlink resolving outside `dest`. Returns LFS pointers."""
@@ -2177,7 +2371,9 @@ def harness_sha256() -> str:
     process has been using (up to the stale-`.pyc` residual of `_digest_own_file`): this file is digested when it is imported, the
     validator when it is loaded (and cached until
     `_reset_task_target_cache()`). The trace plugin is a constant inside this file, so the own-file digest covers it; the domain string stays ``-v1``.
-    `HARNESS_UNREADABLE` if either part cannot be read."""
+    `HARNESS_UNREADABLE` if either part cannot be read. It is not a file hash (`sha256sum` cannot reproduce it): the CLI command ``harness-sha256``
+    prints it, and the EXPECTED value must be taken from a TRUSTED copy of the harness (the pinned release, or ``harness-sha256`` run in a clean
+    checkout), never from a previous `compare` result (circular: a tampered harness would vouch for itself)."""
     try:
         if not _SELF_DIGEST:
             raise ValueError("this file could not be read when it was imported")
@@ -2424,12 +2620,55 @@ def hash_export(export_root: str | os.PathLike) -> str:
     return hash_tree(root)
 
 
+_VENV_FINGERPRINT_LIMIT = 200_000
+
+
+def fingerprint_tree(root: str | os.PathLike, *, limit: int) -> str:
+    """sha256 over every entry of `root` (no link followed) as `(relpath, dev, ino, mode, nlink, size, mtime_ns, ctime_ns)`, sorted by
+    path, plus the root's `(dev, ino, ctime_ns)`. `ctime` cannot be set by a user, so a tamper-and-restore of content or `mtime` still
+    moves it. A tree over `limit` entries or deeper than `_MAX_HASH_DEPTH` levels is `TREE_TOO_LARGE`, any `OSError` (an unreadable
+    directory, a vanished entry, a root that is not a real directory) is `TREE_UNREADABLE`: a limit or a fault is never a skip."""
+    root_path = os.fsdecode(_root_path(root, "TREE_UNREADABLE"))
+    records: list[tuple[bytes, bytes]] = []
+    try:
+        root_st = os.lstat(root_path)
+        if not stat.S_ISDIR(root_st.st_mode):
+            raise BenchmarkGateError("TREE_UNREADABLE", "root is not a real directory")
+        pending = [("", 0)]
+        while pending:
+            rel, depth = pending.pop()
+            with os.scandir(os.path.join(root_path, rel) if rel else root_path) as it:
+                names = [entry.name for entry in it]
+            for name in names:
+                child = os.path.join(rel, name) if rel else name
+                st = os.lstat(os.path.join(root_path, child))
+                if len(records) >= limit:
+                    raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {limit} entries")
+                key = os.fsencode(child)
+                records.append((key, key + b"\0" + b" ".join(str(n).encode() for n in (
+                    st.st_dev, st.st_ino, st.st_mode, st.st_nlink, st.st_size, st.st_mtime_ns, st.st_ctime_ns)) + b"\n"))
+                if stat.S_ISDIR(st.st_mode):
+                    if depth + 1 > _MAX_HASH_DEPTH:
+                        raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_HASH_DEPTH} levels")
+                    pending.append((child, depth + 1))
+    except BenchmarkGateError:
+        raise
+    except OSError as exc:
+        raise BenchmarkGateError("TREE_UNREADABLE", _describe(exc)) from exc
+    digest = hashlib.sha256(b"software-builder-bench-fingerprint-v1\0")
+    digest.update(f"{root_st.st_dev} {root_st.st_ino} {root_st.st_ctime_ns}\n".encode())
+    for _, record in sorted(records):
+        digest.update(record)
+    return digest.hexdigest()
+
+
 def repo_top_levels(export_root: str | os.PathLike) -> frozenset[str]:
     """The top-level package and module names of an export (its root and `src/`), the `repo_top_levels` argument of
     `validate_benchmark_content`. Walked by descriptor with no symlink followed (a symlink named like a package, or a symlinked
-    `src`, contributes nothing). Compute it from the BASE export BEFORE `overlay_benchmark_file` and before any build step that
-    could create `build/`, `dist/` or `venv/` there: afterwards those names would join the allowlist too. `DEST_REJECTED` for a bad
-    root, `TREE_TOO_LARGE`, `OVERLAY_FAILED` for an I/O failure."""
+    `src`, contributes nothing). Compute it from the BASE export BEFORE `overlay_benchmark_file`. `compare` calls it at step 7, AFTER
+    the project install, so a build step that created `build/` or `dist/` in the base export has already added those names to the
+    allowlist: harmless, and disclosed. A caller that wants the strict list computes it before any install. `DEST_REJECTED`
+    for a bad root, `TREE_TOO_LARGE`, `OVERLAY_FAILED` for an I/O failure."""
     try:
         root = _export_root(export_root, "export_root")
         names: set[str] = set()
@@ -2597,7 +2836,8 @@ def overlay_benchmark_file(
     for the file's origin: presence is read from the base export AFTER the project install, so a build step that wrote that path would
     make a Builder-authored file look `PRE_EXISTING`. The Orchestrator re-derives the origin itself (`git cat-file -e <base>:<path>`),
     never from this value or the JSON. `read_benchmark` gives back the bytes for the hash and the lint; `repo_top_levels` (taken
-    BEFORE the overlay) gives the lint its argument. One writer per base.
+    BEFORE the overlay, but by `compare` after the install: `build/` and `dist/` can join the allowlist, harmless and disclosed)
+    gives the lint its argument. One writer per base.
 
     Both commits are REQUIRED and each must equal the commit in its export's sidecar (`export_commit`), so neither export can come from
     another commit than the one it is named for.
@@ -3027,7 +3267,10 @@ def _venv_entries(root: str, sites: list[str]) -> dict[str, dict]:
 def snapshot_venv(bin_dir: str | os.PathLike, out_path: str | os.PathLike) -> None:
     """Record the hook candidates of a FRESH venv (run after creating it and BEFORE installing the project) to `out_path`, JSON, written
     atomically; an existing `out_path` is refused (`DEST_REJECTED`). `VENV_NOT_ISOLATED` if the venv is not a plain isolated one;
-    `TREE_UNREADABLE` for an I/O error. Anything already in the snapshot (the venv's own `distutils-precedence.pth`, say) is not judged later."""
+    `TREE_UNREADABLE` for an I/O error. Anything already in the snapshot (the venv's own `distutils-precedence.pth`, say) is not judged later.
+    The CLI `snapshot-venv` also prints the snapshot file's sha256 and the interpreter pin's (`snapshot_sha256`, `interpreter_sha256`): the
+    Orchestrator passes both to `compare` in `Side`, and `compare` ends with `ISOLATION_REJECTED` (`SNAPSHOT_CHANGED`, `INTERPRETER_CHANGED`) when either no longer hashes to its pin. This
+    function writes only the snapshot; the digest is computed from the file that was written."""
     try:
         root, sites = _venv_layout(_fs(bin_dir))
         out = _fs(out_path)
@@ -3058,8 +3301,336 @@ def _load_venv_snapshot(path: object, real_root: str) -> dict[str, dict]:
     return entries
 
 
+_TRUSTED_LINK_UID = 0  # the uid whose symlinks a path string may go through (root: macOS `/var` -> `/private/var`); a test seam
+# Codecs the compare path uses, loaded NOW: a first use (the `utf-8-sig` decode of a `.pth` file, an ascii decode) would import a module from the
+# harness interpreter's stdlib, possibly after a child ran (the interpreter is pinned, but the import would then read it late).
+for _codec in ("utf-8", "utf-8-sig", "ascii"):
+    codecs.lookup(_codec)
+
+
+def _euid_can_write(path: str) -> bool:
+    """`os.access(path, W_OK)` by the EFFECTIVE uid where the platform supports it (`effective_ids`), else the plain call; an error is "writable"."""
+    try:
+        if os.access in os.supports_effective_ids:
+            return os.access(path, os.W_OK, effective_ids=True)
+        return os.access(path, os.W_OK)
+    except OSError:
+        return True
+
+
+def _only_root_changes(path: str, info: os.stat_result) -> bool:
+    """Whether the directory at `path` (stat `info`) can be changed only by ``_TRUSTED_LINK_UID``. A STICKY directory owned by ``_TRUSTED_LINK_UID``
+    (`/tmp` on Linux) is accepted whatever its mode and whatever the euid can write: the sticky bit stops anyone but an entry's owner (or the
+    directory's) from renaming or removing it, and the entries the checks look at are root-owned, so a same-user child cannot move them (it can
+    only rename entries it owns). Any other directory must be closed to the euid (`os.access`) and to group and other."""
+    if info.st_uid == _TRUSTED_LINK_UID and info.st_mode & stat.S_ISVTX:
+        return True
+    if _euid_can_write(path):
+        return False
+    return info.st_mode & 0o022 == 0
+
+
+def _link_is_trusted(directory: str, info: os.stat_result) -> bool:
+    """Whether the symlink with `lstat` `info`, held by `directory`, can be repointed only by root. Owner uid alone is not enough: whoever can
+    rename or unlink a link in its directory replaces it, whatever the link's owner. So the link must be owned by ``_TRUSTED_LINK_UID`` with
+    exactly one name (`st_nlink == 1`: a second hard link to a root-owned link lives wherever someone else can write); the holding directory must
+    be owned by ``_TRUSTED_LINK_UID`` too (a directory the user owns can be chmodded by the user, whatever its mode now), and closed to the euid
+    and to group and other, or be sticky (`_only_root_changes`); and so must EVERY ancestor of the holder, which must be owned by
+    ``_TRUSTED_LINK_UID`` as well (a writable ancestor lets the holder be renamed away and replaced), a sticky root-owned ancestor such as `/tmp`
+    being acceptable. Fail closed on any error."""
+    if info.st_uid != _TRUSTED_LINK_UID or info.st_nlink != 1:
+        return False
+    try:
+        held_by = os.stat(directory)
+        if held_by.st_uid != _TRUSTED_LINK_UID or not _only_root_changes(directory, held_by):
+            return False
+        ancestor = directory
+        while True:
+            parent = os.path.dirname(ancestor)
+            if parent == ancestor:
+                return True
+            above = os.stat(parent)
+            if above.st_uid != _TRUSTED_LINK_UID or not _only_root_changes(parent, above):  # a user-owned 0555 ancestor can be chmodded by its owner
+                return False
+            ancestor = parent
+    except OSError:
+        return False
+
+
+def _only_trusted_aliases(path: str) -> bool:
+    """True when every symlink met while resolving the absolute lexical `path` (each hop followed, nested ones too) is trusted
+    (`_link_is_trusted`: owned by ``_TRUSTED_LINK_UID``, with one name, in a root-owned directory only root can change; its ancestors too), and only when the harness does not
+    itself run as root: with an effective uid of 0 the head child is root too, so a root-owned link is not distinct from the attacker's and
+    EVERY alias is refused (a root Orchestrator, e.g. Docker, must use paths without symlink hops; C4e must route that refusal, like a venv-hook
+    refusal through an alias, as an ENVIRONMENT fault, not a Builder fault). A path string that goes through any other link is refused by the venv
+    checks: a head child (same uid) could repoint or replace that link after the check and leave it there, and the spawn guard only re-checks
+    resolved paths. A missing component ends the walk as accepted (nothing below it can be a link)."""
+    todo = path.split("/")[:0:-1]  # components, last first (so `pop` yields them in order)
+    current, hops = "/", 0
+    while todo:
+        part = todo.pop()
+        if part in ("", "."):
+            continue
+        if part == "..":
+            current = os.path.dirname(current)
+            continue
+        candidate = os.path.join(current, part)
+        try:
+            info = os.lstat(candidate)
+        except FileNotFoundError:
+            return True
+        except OSError:
+            return False
+        if not stat.S_ISLNK(info.st_mode):
+            current = candidate
+            continue
+        hops += 1
+        if getattr(os, "geteuid", lambda: 1)() == 0 or hops > 40 or not _link_is_trusted(current, info):
+            return False
+        try:
+            target = os.readlink(candidate)
+        except OSError:
+            return False
+        if os.path.isabs(target):
+            current = "/"
+        todo.extend(target.split("/")[::-1])
+    return True
+
+
+def _alias_accepted(lexical: str) -> bool:
+    """A lexical path that differs from its own realpath is accepted only through trusted (root-owned) links."""
+    return lexical == os.path.realpath(lexical) or _only_trusted_aliases(lexical)
+
+
 def _inside(path: str, root: str) -> bool:
     return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
+
+
+_INTERPRETER_LIMIT = 20_000  # entries hashed into an interpreter pin (a stock CPython stdlib is a few thousand)
+_INTERPRETER_BYTES = 1 << 30  # bytes hashed into an interpreter pin
+_PROBE_MAX_OUTPUT = 4096
+_PROBE_TIMEOUT = 20.0
+_PROBE_CODE = "import os,sys;print(os.path.realpath(sys.base_prefix),os.path.realpath(os.__file__),os.path.realpath(sys.base_exec_prefix),sep='\\n')"
+_CFG_KEYS = frozenset({"home", "version", "include-system-site-packages", "executable"})  # `version_info` folds into `version`
+
+
+class InterpreterPin(NamedTuple):
+    sha256: str
+    writable: bool
+    real_python: str
+
+
+def _parse_pyvenv_cfg(data: bytes) -> dict[str, str]:
+    """The five keys that matter from a `pyvenv.cfg` (`key = value` lines, UTF-8: a user home may be non-ASCII). `version` and
+    `version_info` are one key; a duplicate of any of them is refused, because CPython and `site` would not agree on which wins. The
+    `command` key and every other key are ignored."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "pyvenv.cfg is not UTF-8") from exc
+    found: dict[str, str] = {}
+    for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        key, sep, value = line.partition("=")
+        key = key.strip().casefold()
+        key = "version" if key == "version_info" else key
+        if not sep or key not in _CFG_KEYS:
+            continue
+        if key in found:
+            raise BenchmarkGateError("VENV_NOT_ISOLATED", f"pyvenv.cfg repeats {escape_diagnostic(key, 40)}")
+        found[key] = value.strip()
+    return found
+
+
+def _probe_env(bin_path: str) -> dict[str, str]:
+    """The side's clean environment without a scratch directory: `side_env`'s allowlist minus `HOME` and `TMPDIR` (the probe needs neither)."""
+    return {"PATH": f"{bin_path}:/usr/bin:/bin", "VIRTUAL_ENV": os.path.dirname(bin_path), "PYTHONNOUSERSITE": "1", "PYTHONHASHSEED": "0",
+            "PYTHONDONTWRITEBYTECODE": "1", "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "LANG": "C.UTF-8"}
+
+
+def _startup_probe(python: str, env: dict[str, str]) -> str:
+    """Run `python -I -S -c <_PROBE_CODE>` (no shell, no `.pth`, no `sitecustomize`, no user site: only the interpreter binary runs) and
+    return its stdout. Output is read up to a cap, the run is killed after `_PROBE_TIMEOUT`; any failure is `VENV_NOT_ISOLATED`."""
+    try:
+        proc = subprocess.Popen([python, "-I", "-S", "-c", _PROBE_CODE], env=env, cwd="/", stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, close_fds=True, shell=False)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", f"the interpreter does not start: {escape_diagnostic(str(exc), 120)}") from exc
+    timer = threading.Timer(_PROBE_TIMEOUT, proc.kill)
+    timer.start()
+    try:
+        data = proc.stdout.read(_PROBE_MAX_OUTPUT + 1)  # type: ignore[union-attr]
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()  # closed its output and lingers: not a clean run
+            proc.wait()
+    finally:
+        timer.cancel()
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+        proc.stdout.close()  # type: ignore[union-attr]
+    if len(data) > _PROBE_MAX_OUTPUT or proc.returncode != 0:  # a killed or timed-out child has a negative code
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "the start-up probe failed, timed out or printed too much")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "the start-up probe printed non-UTF-8") from exc
+
+
+def _interpreter_digest(real: str, prefix: str, stdlib: str) -> tuple[str, bool]:
+    """`(sha256, writable)` of the pinned interpreter files: the real binary; the stdlib tree without its top-level `site-packages` (so
+    with `__pycache__` and `lib-dynload`); and the regular files directly under `prefix` and `prefix/lib` (the framework dylib,
+    `libpython*`, a `python3XY.zip`). Content only, no timestamps. Entries and bytes are bounded; `writable` is decided in the same walk."""
+    euid = getattr(os, "geteuid", lambda: -1)()
+    entries = 0
+    hashed = 0
+    writable = False
+    records: list[tuple[bytes, bytes]] = []
+
+    def count() -> None:
+        nonlocal entries
+        entries += 1
+        if entries > _INTERPRETER_LIMIT:
+            raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_INTERPRETER_LIMIT} interpreter entries")
+
+    def owned_or_writable(path: str, st: os.stat_result) -> None:
+        nonlocal writable
+        if st.st_uid == euid or (not stat.S_ISLNK(st.st_mode) and os.access(path, os.W_OK)):
+            writable = True
+
+    def content(path: str, st: os.stat_result) -> str:
+        nonlocal hashed
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+        try:
+            opened = os.fstat(fd)
+            if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (st.st_dev, st.st_ino):
+                raise BenchmarkGateError("TREE_UNREADABLE", "an interpreter file changed while it was read")
+            file_digest = hashlib.sha256()
+            while True:
+                chunk = os.read(fd, 1 << 20)
+                if not chunk:
+                    return file_digest.hexdigest()
+                hashed += len(chunk)
+                if hashed > _INTERPRETER_BYTES:
+                    raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_INTERPRETER_BYTES} interpreter bytes")
+                file_digest.update(chunk)
+        finally:
+            os.close(fd)
+
+    def record(tag: bytes, rel: str, path: str, st: os.stat_result) -> None:
+        count()
+        owned_or_writable(path, st)
+        key = tag + os.fsencode(rel)
+        if stat.S_ISREG(st.st_mode):
+            body = b"f" + content(path, st).encode()
+        elif stat.S_ISDIR(st.st_mode):
+            body = b"d"
+        elif stat.S_ISLNK(st.st_mode):
+            body = b"l" + os.fsencode(os.readlink(path))
+        else:
+            body = b"o"  # a fifo or device is never opened
+        records.append((key, key + b"\0" + body + b"\n"))
+
+    try:
+        for directory in (os.path.dirname(real), prefix, os.path.join(prefix, "lib")):
+            if os.path.isdir(directory):
+                owned_or_writable(directory, os.stat(directory))
+        record(b"B", os.path.basename(real), real, os.lstat(real))
+        for tag, directory in ((b"P", prefix), (b"L", os.path.join(prefix, "lib"))):
+            if not os.path.isdir(directory):
+                continue
+            with os.scandir(directory) as scan:
+                names = sorted(item.name for item in scan)
+            for name in names:
+                path = os.path.join(directory, name)
+                st = os.lstat(path)
+                if stat.S_ISREG(st.st_mode):
+                    record(tag, name, path, st)
+        owned_or_writable(stdlib, os.stat(stdlib))
+        pending = [("", 0)]
+        while pending:
+            rel, depth = pending.pop()
+            where = os.path.join(stdlib, rel) if rel else stdlib
+            with os.scandir(where) as scan:
+                names = sorted(item.name for item in scan)
+            for name in names:
+                if not rel and name == "site-packages":
+                    continue
+                child = os.path.join(rel, name) if rel else name
+                path = os.path.join(stdlib, child)
+                st = os.lstat(path)
+                record(b"S", child, path, st)
+                if stat.S_ISDIR(st.st_mode):
+                    if depth + 1 > _MAX_HASH_DEPTH:
+                        raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_HASH_DEPTH} levels")
+                    pending.append((child, depth + 1))
+    except BenchmarkGateError:
+        raise
+    except OSError as exc:
+        raise BenchmarkGateError("TREE_UNREADABLE", _describe(exc)) from exc
+    digest = hashlib.sha256(b"software-builder-bench-interpreter-v1\0")
+    for _, line in sorted(records):
+        digest.update(line)
+    return digest.hexdigest(), writable
+
+
+def interpreter_pin(bin_dir: str | os.PathLike, *, outside: tuple[str, ...] | list[str] = (),
+                    probe: Callable[[str, dict[str, str]], str] | None = None) -> InterpreterPin:
+    """Identify and hash the interpreter behind a venv's `bin/python`. `pyvenv.cfg` is parsed (`include-system-site-packages` must be
+    `false`, no duplicate keys, `version`/`version_info` agrees with a `python3.X` basename), `home` is checked BY FILE
+    (`realpath(home/<first symlink hop's name>) == realpath(bin/python)`: Homebrew, uv and Xcode CLT layouts all satisfy that and a
+    `dirname(realpath)` comparison would not), the real interpreter must lie outside the venv and every `outside` root (the sibling exports;
+    a `--copies` venv is therefore refused), and a start-up probe (`probe(python, env) -> stdout`, default `_startup_probe`) must report a
+    `base_prefix` equal to `prefix = dirname(dirname(realpath))` and an `os.__file__` under the stdlib, which catches a `home` redirected
+    to a decoy prefix. The cross-side check (both sides one interpreter) is `compare`'s. `VENV_NOT_ISOLATED` (cfg, layout, probe),
+    `TREE_TOO_LARGE`, `DEST_REJECTED` (no stdlib directory) and `TREE_UNREADABLE`."""
+    bin_path = _fs(bin_dir)
+    venv_root, _ = _venv_layout(bin_path)
+    bin_path = os.path.abspath(bin_path)
+    python = os.path.join(bin_path, "python")
+    try:
+        cfg = _parse_pyvenv_cfg(_read_bounded(os.path.join(venv_root, "pyvenv.cfg"), 64 << 10, nofollow=True))
+        real = os.path.realpath(python)
+        if not stat.S_ISREG(os.stat(real).st_mode):
+            raise OSError("not a regular file")
+    except (OSError, ValueError) as exc:
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", f"bin/python or pyvenv.cfg unusable: {escape_diagnostic(str(exc), 120)}") from exc
+    forbidden = [os.path.realpath(venv_root)] + [os.path.realpath(_fs(root)) for root in outside]
+    if any(_inside(real, root) for root in forbidden):
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "the interpreter lies inside the venv or an export (a --copies venv?)")
+    if cfg.get("include-system-site-packages", "false").casefold() != "false":
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "the venv includes the system site-packages")
+    home = cfg.get("home", "")
+    first_hop = os.path.basename(os.readlink(python)) if os.path.islink(python) else "python"
+    if not os.path.isabs(home) or "\0" in home or os.path.realpath(os.path.join(home, first_hop)) != real:
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "pyvenv.cfg `home` does not lead to the venv's python")
+    version = re.fullmatch(r"(\d+)\.(\d+)(?:\..*)?", cfg.get("version", ""))
+    if not version:
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "pyvenv.cfg has no usable version")
+    named = re.fullmatch(r"python(\d+)\.(\d+)", os.path.basename(real))
+    if named and named.groups() != version.groups():
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "pyvenv.cfg version does not match the interpreter's name")
+    xy = f"python{version[1]}.{version[2]}"
+    prefix = os.path.dirname(os.path.dirname(real))
+    stdlib = next((path for path in (os.path.join(prefix, "lib", xy), os.path.join(prefix, "lib64", xy)) if os.path.isdir(path)), None)
+    if stdlib is None:
+        raise BenchmarkGateError("DEST_REJECTED", f"no {xy} standard library under the interpreter prefix")
+    try:
+        out = (probe or _startup_probe)(python, _probe_env(bin_path))
+        lines = out.rstrip("\n").split("\n")
+        if len(lines) != 3:
+            raise ValueError("unexpected probe output")
+        base_prefix, os_file = os.path.realpath(lines[0]), os.path.realpath(lines[1])
+    except BenchmarkGateError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - a stub or a odd output is a failed probe, whatever it raised
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", f"the start-up probe is unusable: {escape_diagnostic(_describe(exc), 120)}") from exc
+    real_stdlib = os.path.realpath(stdlib)  # `site-packages` is not in the pin, so an `os` loaded from there is not the pinned one
+    if base_prefix != prefix or not _inside(os_file, real_stdlib) or _inside(os_file, os.path.join(real_stdlib, "site-packages")):
+        raise BenchmarkGateError("VENV_NOT_ISOLATED", "the start-up probe loads another prefix than the pinned one (`home` redirected?)")
+    sha256, writable = _interpreter_digest(real, prefix, stdlib)
+    return InterpreterPin(sha256, writable, real)
 
 
 def _pth_problem(site: str, data: bytes, export_root: str, export_aliases: tuple[str, ...] = ()) -> str | None:
@@ -3088,7 +3659,8 @@ def _pth_problem(site: str, data: bytes, export_root: str, export_aliases: tuple
         # BOTH: CPython puts the lexical `abspath` (`..` collapsed without resolving symlinks) on `sys.path`, and the directory it
         # names may itself reach elsewhere through a link; a symlink inside the export plus `..` makes the two differ
         lexical = os.path.abspath(joined)  # compared with the root as given too: the venv path (so `site`) may go through a symlink (macOS /var -> /private/var)
-        if not (any(_inside(lexical, root) for root in (export_root, *export_aliases)) and _inside(os.path.realpath(joined), export_root)):
+        if not (any(_inside(lexical, root) for root in (export_root, *export_aliases)) and _inside(os.path.realpath(joined), export_root)
+                and _alias_accepted(lexical)):
             return f"path outside the export: {escape_diagnostic(line, 60)}"
     return None
 
@@ -3144,6 +3716,440 @@ def check_venv(bin_dir: str | os.PathLike, snapshot_path: str | os.PathLike, exp
 
 
 # ---------------------------------------------------------------------------
+# C4d-3 dependency parity: an inventory of each venv's site-packages (spec 2.5), not a comparison of RECORD files
+# ---------------------------------------------------------------------------
+
+_VENV_HASH_BYTES = 1 << 30  # bytes hashed per venv; more is NOT_PROVISIONED
+_RECORD_MAX_BYTES = 16 << 20
+_PARITY_FINDINGS_MAX = 50
+_PARITY_NAMES_SHOWN = 8
+_DIST_INFO_FREE = frozenset({"INSTALLER", "REQUESTED", "RECORD", "direct_url.json"})
+_EDITABLE_OWNED_PREFIXES = ("__editable__", "_editable_impl_")
+_FINDER_RE = re.compile(r"__editable___[A-Za-z0-9_]+_finder\.py", re.ASCII)
+
+
+class _ParityOverBudget(Exception):
+    pass
+
+
+def _parity_hash(path: str, st: os.stat_result, spent: list[int]) -> str:
+    """sha256 of a regular file by descriptor (no link followed), charged against the venv's byte budget."""
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        opened = os.fstat(fd)
+        if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (st.st_dev, st.st_ino):
+            raise OSError("entry changed while hashing")
+        digest = hashlib.sha256()
+        while True:
+            chunk = os.read(fd, 1 << 20)
+            if not chunk:
+                return digest.hexdigest()
+            spent[0] += len(chunk)
+            if spent[0] > _VENV_HASH_BYTES:
+                raise _ParityOverBudget()
+            digest.update(chunk)
+    finally:
+        os.close(fd)
+
+
+def _parity_walk(site: str, spent: list[int], add: Callable[[str], None]) -> dict[str, str]:
+    """`{relpath: sha256}` of every regular file under `site`, by `lstat` with no link followed. A symlink, device, socket, fifo, `.pyc`
+    or `__pycache__` is a finding and is not descended into; a limit or an I/O fault is an error, never a skip."""
+    files: dict[str, str] = {}
+    count = 0
+    pending = [("", 0)]
+    while pending:
+        rel, depth = pending.pop()
+        with os.scandir(os.path.join(site, rel) if rel else site) as it:
+            names = sorted(entry.name for entry in it)
+        for name in names:
+            count += 1
+            if count > _VENV_FINGERPRINT_LIMIT:
+                raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_VENV_FINGERPRINT_LIMIT} entries in site-packages")
+            child = f"{rel}/{name}" if rel else name
+            full = os.path.join(site, child)
+            st = os.lstat(full)
+            if stat.S_ISLNK(st.st_mode):
+                add(f"symlink {escape_diagnostic(child, 100)}")
+            elif stat.S_ISDIR(st.st_mode):
+                if name.casefold() == "__pycache__":
+                    add(f"bytecode directory {escape_diagnostic(child, 100)}")
+                    continue
+                if depth + 1 > _MAX_HASH_DEPTH:
+                    raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_HASH_DEPTH} levels in site-packages")
+                pending.append((child, depth + 1))
+            elif not stat.S_ISREG(st.st_mode):
+                add(f"device, socket or fifo {escape_diagnostic(child, 100)}")
+            elif name.casefold().endswith((".pyc", ".pyo")):
+                add(f"bytecode {escape_diagnostic(child, 100)}")
+            else:
+                files[child] = _parity_hash(full, st, spent)
+    return files
+
+
+def _record_path(raw: str) -> str | None:
+    """A RECORD row's path as a clean relative path, `None` for a console-script row (a leading `../` run: out of site-packages, dropped);
+    `ValueError` for anything else that is not a plain relative path. An absolute path is refused here and never joined."""
+    if not raw or "\0" in raw or "\\" in raw or raw.startswith("/"):
+        raise ValueError("not a plain relative path")
+    parts = raw.split("/")
+    lead = 0
+    while lead < len(parts) and parts[lead] == "..":
+        lead += 1
+    rest = parts[lead:]
+    if not rest or any(part in ("", ".", "..") for part in rest):
+        raise ValueError("empty, dot or dot-dot component")
+    return None if lead else "/".join(rest)
+
+
+def _file_url_inside(url: object, export_real: str) -> bool | None:
+    """`None` if `url` is not a local `file://` URL, else whether it resolves inside `export_real`."""
+    import urllib.parse
+    if type(url) is not str:
+        return None
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme != "file":
+        return None
+    path = urllib.parse.unquote(parts.path)
+    if parts.netloc not in ("", "localhost") or "\0" in path or not os.path.isabs(path):
+        return False
+    return _inside(os.path.realpath(path), export_real)
+
+
+def _finder_problem(source: bytes, export_real: str) -> str | None:
+    """`MAPPING` and `NAMESPACES` of a setuptools editable finder, parsed as literals only; every target must resolve inside the export."""
+    try:
+        tree = ast.parse(source.decode("utf-8"))
+    except (UnicodeDecodeError, SyntaxError, ValueError, RecursionError, MemoryError):
+        return "the editable finder does not parse"
+    found: dict[str, object] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            name, value = node.targets[0].id, node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
+            name, value = node.target.id, node.value
+        else:
+            continue
+        if name in ("MAPPING", "NAMESPACES"):
+            if name in found:
+                return f"{name} is assigned twice"
+            try:
+                found[name] = ast.literal_eval(value)
+            except (ValueError, TypeError, SyntaxError, RecursionError, MemoryError):
+                return f"{name} is not a literal"
+    mapping, namespaces = found.get("MAPPING"), found.get("NAMESPACES")
+    if not isinstance(mapping, dict) or not isinstance(namespaces, dict):
+        return "MAPPING or NAMESPACES missing or not a dict"
+    targets = list(mapping.values())
+    for value in namespaces.values():
+        if not isinstance(value, (list, tuple)):
+            return "a NAMESPACES value is not a list"
+        targets.extend(value)
+    for target in targets:
+        if type(target) is not str or not target or "\0" in target or not os.path.isabs(target):
+            return "a finder target is not an absolute path"
+        # the kernel (and the finder's `Path(target, ...)`) resolves the RAW string: `..` after a user-owned link would otherwise be collapsed by
+        # `abspath` into a path that never meets the link. A target that is not already normal (`..`, `.`, `//`, a trailing `/`) is refused
+        if posixpath.normpath(target) != target or not _inside(os.path.realpath(target), export_real) or not _alias_accepted(target):
+            return "a finder target resolves outside the export"
+    return None
+
+
+def _side_inventory(bin_dir: object, export_root: object, label: str, add: Callable[[str, str], None]) -> tuple[dict[str, str], set[str]] | None:
+    """`(inventory, exempt keys)` of one venv, findings through `add(detail, text)`; `None` when the byte budget ran out."""
+    import base64
+    import csv
+    root, sites = _venv_layout(_fs(bin_dir))
+    export_real = os.path.realpath(_fs(export_root))
+
+    def bad(text: str) -> None:
+        add("DEPENDENCY_PARITY", f"{label}: {text}")
+
+    inventory: dict[str, str] = {}
+    exempt: set[str] = set()
+    editable_dists: list[str] = []
+    spent = [0]
+    try:
+        for site in sites:
+            prefix = os.path.relpath(site, root)
+            files = _parity_walk(site, spent, bad)
+            inventory.update({f"{prefix}/{rel}": digest for rel, digest in files.items()})
+            dists = sorted({rel.split("/", 1)[0] for rel in files if "/" in rel and rel.split("/", 1)[0].endswith(".dist-info")})
+            claimed: set[str] = set()
+            for dist in dists:
+                exempt_dist = False
+                owned_all: list[str] = []
+                record_key = f"{dist}/RECORD"
+                url_key = f"{dist}/direct_url.json"
+                if url_key in files:
+                    try:
+                        meta = json.loads(_read_bounded(os.path.join(site, url_key), _PTH_MAX_BYTES, nofollow=True).decode("utf-8"))
+                        if not isinstance(meta, dict):
+                            raise ValueError("not an object")
+                        info = meta.get("dir_info")
+                        editable = isinstance(info, dict) and info.get("editable") is True
+                        inside = _file_url_inside(meta.get("url"), export_real)
+                    except (OSError, ValueError, RecursionError) as exc:
+                        bad(f"{escape_diagnostic(dist, 80)} has an unreadable direct_url.json ({escape_diagnostic(str(exc), 60)})")
+                        editable, inside = False, None
+                    if editable and inside:
+                        exempt_dist = True
+                        editable_dists.append(dist)
+                    elif editable:
+                        bad(f"{escape_diagnostic(dist, 80)} is editable but not from this side's export")
+                    elif inside:
+                        bad(f"{escape_diagnostic(dist, 80)} is a non-editable install of the project")
+                if record_key not in files:
+                    bad(f"{escape_diagnostic(dist, 80)} has no RECORD")
+                    continue
+                try:
+                    data = _read_bounded(os.path.join(site, record_key), _RECORD_MAX_BYTES, nofollow=True)
+                    if len(data) > _RECORD_MAX_BYTES:
+                        raise ValueError("RECORD too large")
+                    if hashlib.sha256(data).hexdigest() != files[record_key]:
+                        raise ValueError("RECORD changed while checking")
+                    rows = [row for row in csv.reader(io.StringIO(data.decode("utf-8"), newline="")) if row]
+                except (OSError, ValueError, csv.Error) as exc:
+                    bad(f"{escape_diagnostic(dist, 80)} RECORD unusable ({escape_diagnostic(str(exc), 60)})")
+                    continue
+                for row in rows:
+                    try:
+                        rel = _record_path(row[0])
+                    except ValueError:
+                        bad(f"{escape_diagnostic(dist, 80)} RECORD row path refused: {escape_diagnostic(row[0], 80)}")
+                        continue
+                    if rel is None:
+                        continue
+                    owned_all.append(rel)
+                    digest = row[1] if len(row) > 1 else ""
+                    if not digest:
+                        continue  # an unhashed row (the RECORD itself, a bytecode row) verifies and owns nothing
+                    if not digest.startswith("sha256="):
+                        bad(f"{escape_diagnostic(dist, 80)} RECORD row {escape_diagnostic(rel, 80)} is not sha256")
+                        continue
+                    claimed.add(rel)
+                    disk = files.get(rel)
+                    if disk is None:
+                        bad(f"{escape_diagnostic(dist, 80)} RECORD names a missing file {escape_diagnostic(rel, 80)}")
+                    elif base64.urlsafe_b64encode(bytes.fromhex(disk)).rstrip(b"=").decode() != digest[7:].rstrip("="):
+                        bad(f"hash on disk differs from RECORD: {escape_diagnostic(rel, 100)}")
+                if exempt_dist:
+                    own_prefix = dist + "/"
+                    for rel in owned_all:
+                        top = rel.split("/", 1)[0]
+                        if not (rel.startswith(own_prefix) or (rel.endswith(".pth") and "/" not in rel) or top.startswith(_EDITABLE_OWNED_PREFIXES)):
+                            bad(f"the editable dist {escape_diagnostic(dist, 80)} owns {escape_diagnostic(rel, 80)}")
+                        elif _FINDER_RE.fullmatch(rel) and rel in files:
+                            try:
+                                problem = _finder_problem(_read_bounded(os.path.join(site, rel), 1 << 20, nofollow=True), export_real)
+                            except (OSError, ValueError) as exc:
+                                problem = f"finder unreadable ({escape_diagnostic(str(exc), 60)})"
+                            if problem:
+                                bad(f"{escape_diagnostic(rel, 80)}: {problem}")
+                    exempt.update(f"{prefix}/{rel}" for rel in owned_all if rel in files)
+                    exempt.update(f"{prefix}/{rel}" for rel in files if rel.startswith(own_prefix))
+            for rel in files:
+                name = rel.rsplit("/", 1)[-1]
+                parent = rel.rsplit("/", 1)[0] if "/" in rel else ""
+                if (rel in claimed or (parent in dists and name in _DIST_INFO_FREE)
+                        or (not parent and (name == "distutils-precedence.pth" or name.startswith("_virtualenv.")))):
+                    continue
+                bad(f"file not owned by a verified RECORD row: {escape_diagnostic(rel, 100)}")
+    except _ParityOverBudget:
+        add("NOT_PROVISIONED", f"{label}: more than {_VENV_HASH_BYTES} bytes in site-packages")
+        return None
+    except OSError as exc:
+        raise BenchmarkGateError("TREE_UNREADABLE", f"{label}: {_describe(exc)}") from exc
+    if len(editable_dists) > 1:
+        bad("more than one editable dist: " + ", ".join(escape_diagnostic(d, 60) for d in editable_dists[:4]))
+        exempt.clear()
+    return inventory, exempt
+
+
+def dependency_parity(base_bin: str | os.PathLike, head_bin: str | os.PathLike,
+                      base_root: str | os.PathLike, head_root: str | os.PathLike) -> list[tuple[str, str]]:
+    """Findings `(detail, text)` for the two venvs' site-packages; an empty list is a pass. `detail` is `DEPENDENCY_PARITY`, or
+    `NOT_PROVISIONED` when a venv holds more than `_VENV_HASH_BYTES`. Each venv is inventoried `{relpath: sha256 on disk}` with no link
+    followed; every regular file must be a hash-verified RECORD row or one of the few allowed names; the two inventories must be equal
+    except for the one exempt editable dist per side. `text` is escaped. `VENV_NOT_ISOLATED`, `TREE_TOO_LARGE` and `TREE_UNREADABLE`
+    are raised (a venv that cannot be inspected is not a finding about the dependencies)."""
+    findings: list[tuple[str, str]] = []
+    over_budget: list[tuple[str, str]] = []  # NOT_PROVISIONED lives outside the capped list: a full list must not lose it
+
+    def add(detail: str, text: str) -> None:
+        if detail == "NOT_PROVISIONED":
+            over_budget.append((detail, escape_diagnostic(text, 300)))  # at most one per venv
+        elif len(findings) < _PARITY_FINDINGS_MAX:
+            findings.append((detail, escape_diagnostic(text, 300)))
+
+    base = _side_inventory(base_bin, base_root, "base", add)
+    head = _side_inventory(head_bin, head_root, "head", add)
+    if over_budget:
+        return over_budget
+    if base is None or head is None:  # `_side_inventory` gives None only after reporting the budget: an invariant, not an input
+        raise BenchmarkGateError("MEASURE_FAILED", "internal invariant: a venv inventory is missing")
+    skip = base[1] | head[1]
+    # A RECORD is excluded from the comparison: its console-script rows embed the venv's own path. Every row of it was verified against
+    # the disk above and what it does not list is refused as unowned, so its text decides nothing the file inventory does not.
+    def comparable(inv: dict[str, str]) -> dict[str, str]:
+        return {k: v for k, v in inv.items() if k not in skip and not (k.endswith(".dist-info/RECORD"))}
+
+    left, right = comparable(base[0]), comparable(head[0])
+    for label, names in (("only in base", sorted(left.keys() - right.keys())), ("only in head", sorted(right.keys() - left.keys())),
+                         ("content differs", sorted(k for k in left.keys() & right.keys() if left[k] != right[k]))):
+        if names:
+            add("DEPENDENCY_PARITY", f"{label} ({len(names)}): " + ", ".join(escape_diagnostic(n, 60) for n in names[:_PARITY_NAMES_SHOWN]))
+    return findings
+
+
+_EXPORT_FINDINGS_MAX = 50
+_UNTRACKED_MODULE_SUFFIXES = (".py", ".pyc", ".pyd", ".so", ".pth", ".zip", ".egg", ".whl")
+_EXEMPT_TOP_DIRS = frozenset({"build", "dist", ".eggs"})  # an honest `pip install -e` / build leaves these at the root
+
+
+def _is_untracked_python_name(name: str) -> bool:
+    """A file name the interpreter or an installer would treat as code or a path hook: a module/archive suffix, a startup module name
+    (`sitecustomize*`, `usercustomize*`, any suffix). Casefolded, so `HASHLIB.PY` counts on a case-insensitive filesystem."""
+    folded = name.casefold()
+    module = _MODULE_FILE_RE.fullmatch(folded)
+    return (folded.endswith(_UNTRACKED_MODULE_SUFFIXES) or folded.startswith(tuple(_STARTUP_MODULES))
+            or (module is not None and module[1] in _STARTUP_MODULES))
+
+
+def _blob_id(length: int, size: int, chunks) -> str:
+    """The git blob id of `chunks` (an iterable of bytes totalling `size`; `blob <n>\\0` framing, NO filters), sha1 for a 40-hex commit
+    and sha256 for 64. A total other than `size` yields an id nothing matches."""
+    digest = hashlib.sha1(usedforsecurity=False) if length == 40 else hashlib.sha256()
+    digest.update(b"blob %d\0" % size)
+    seen = 0
+    for chunk in chunks:
+        seen += len(chunk)
+        if seen > size:
+            return ""
+        digest.update(chunk)
+    return digest.hexdigest() if seen == size else ""
+
+
+def _read_chunks(fd: int):
+    while chunk := os.read(fd, 1 << 20):
+        yield chunk
+
+
+def verify_export_against_commit(repo: str | os.PathLike, commit: str, export_root: str | os.PathLike, *,
+                                 allow: dict[str, str] | None = None) -> list[tuple[str, str]]:
+    """Findings `(detail, relpath)` for the export at `export_root` against `commit`'s tree; an empty list is a pass. `detail` is
+    `TRACKED_FILE_DIFFERS` (a tracked file, symlink or gitlink that is not what the commit lists: git blob id of the bytes, no filters,
+    and the executable bit; a symlink's `readlink` bytes and a target staying inside the export; a gitlink an empty directory; missing
+    entries) or `UNTRACKED_PYTHON_FILE` (an untracked symlink, socket, device or fifo; an untracked file with a module, archive or startup
+    name, or a `__pycache__` directory, except under the root-level `build/`, `dist/`, `.eggs/` and `<root>/*.egg-info`, and except the
+    `allow` entries `{relpath: sha256 of the bytes}`, which must be that exact regular file). The walk follows no link. Untracked inputs
+    that are not code (`.env`, `*.json`) are not covered. `relpath` is escaped. Raises, never returns, for `EXPORT_*` (a hostile
+    listing), `GIT_*` and `COMMIT_*` errors including `GIT_OUTPUT_TOO_LARGE`, `TREE_TOO_LARGE` (entries or depth) and `TREE_UNREADABLE`
+    (an I/O fault: a tree that cannot be read is not a finding)."""
+    length = _check_commits(commit)
+    root = _export_root(export_root, "export_root")
+    allowed = dict(allow or {})
+    with _PrivateGit(repo, length) as git:
+        git.require_commit(commit)
+        raw = git.run("ls-tree", "-r", "-l", "-z", "--full-tree", commit)  # one byte string, two parsers (shape and ids)
+    entries = _parse_listing(raw)
+    oids = _parse_listing_oids(raw)
+    if oids.keys() != entries.keys():
+        raise BenchmarkGateError("GIT_FAILED", "ls-tree listing parsed inconsistently")
+    tracked_dirs = {"/".join(rel.split("/")[:i]) for rel in entries for i in range(1, rel.count("/") + 1)}
+    findings: list[tuple[str, str]] = []
+
+    def add(detail: str, rel: str) -> None:
+        if len(findings) < _EXPORT_FINDINGS_MAX:
+            findings.append((detail, escape_diagnostic(rel, 300)))
+
+    seen: set[str] = set()
+    count = 0
+    pending: list[tuple[str, int, bool]] = [("", 0, False)]  # (relpath of a directory, depth, inside an exempt untracked directory)
+    try:
+        while pending:
+            rel_dir, depth, exempt_dir = pending.pop()
+            with os.scandir(os.path.join(root, rel_dir) if rel_dir else root) as it:
+                names = sorted(entry.name for entry in it)
+            for name in names:
+                count += 1
+                if count > _MAX_TREE_ENTRIES:
+                    raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_TREE_ENTRIES} entries")
+                rel = f"{rel_dir}/{name}" if rel_dir else name
+                path = os.path.join(root, rel)
+                st = os.lstat(path)
+                want = entries.get(rel)
+                is_dir = stat.S_ISDIR(st.st_mode)
+                if want is not None:
+                    seen.add(rel)
+                    kind = want[0]
+                    if kind == "G":
+                        if not is_dir or os.listdir(path):
+                            add("TRACKED_FILE_DIFFERS", rel)
+                    elif kind == "L":
+                        if not stat.S_ISLNK(st.st_mode):
+                            add("TRACKED_FILE_DIFFERS", rel)
+                        else:
+                            target = os.fsencode(os.readlink(path))
+                            real_root = os.path.realpath(root)
+                            real = os.path.realpath(path)
+                            inside = real == real_root or real.startswith(real_root + os.sep)
+                            if _blob_id(length, len(target), [target]) != oids[rel] or not inside:
+                                add("TRACKED_FILE_DIFFERS", rel)
+                    else:
+                        ok = stat.S_ISREG(st.st_mode) and st.st_size == want[1] and bool(st.st_mode & 0o100) == want[2]
+                        if ok:
+                            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
+                            try:
+                                fst = os.fstat(fd)
+                                ok = (stat.S_ISREG(fst.st_mode) and (fst.st_dev, fst.st_ino) == (st.st_dev, st.st_ino)
+                                      and _blob_id(length, want[1], _read_chunks(fd)) == oids[rel])
+                            finally:
+                                os.close(fd)
+                        if not ok:
+                            add("TRACKED_FILE_DIFFERS", rel)
+                    continue  # a directory where a file or link is tracked is reported above and not walked
+                if is_dir:
+                    if rel in tracked_dirs:  # an ancestor of tracked entries
+                        pending.append((rel, depth + 1, False))
+                        if depth + 1 > _MAX_HASH_DEPTH:
+                            raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_HASH_DEPTH} levels")
+                        continue
+                    exempt = exempt_dir or (rel_dir == "" and (name in _EXEMPT_TOP_DIRS or name.endswith(".egg-info")))
+                    if name == "__pycache__" and not exempt and rel not in allowed:
+                        add("UNTRACKED_PYTHON_FILE", rel)
+                    if depth + 1 > _MAX_HASH_DEPTH:
+                        raise BenchmarkGateError("TREE_TOO_LARGE", f"more than {_MAX_HASH_DEPTH} levels")
+                    pending.append((rel, depth + 1, exempt))
+                elif not stat.S_ISREG(st.st_mode):  # untracked symlink, socket, device, fifo
+                    add("UNTRACKED_PYTHON_FILE", rel)
+                elif rel in allowed:
+                    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
+                    try:
+                        fst = os.fstat(fd)
+                        digest, total = hashlib.sha256(), 0
+                        ok = stat.S_ISREG(fst.st_mode) and (fst.st_dev, fst.st_ino) == (st.st_dev, st.st_ino)
+                        while ok and (chunk := os.read(fd, 1 << 20)):
+                            total += len(chunk)
+                            if total > _MAX_BENCHMARK_FILE_BYTES:
+                                ok = False
+                            digest.update(chunk)
+                    finally:
+                        os.close(fd)
+                    if not ok or digest.hexdigest() != allowed[rel]:
+                        add("UNTRACKED_PYTHON_FILE", rel)
+                elif not exempt_dir and _is_untracked_python_name(name):
+                    add("UNTRACKED_PYTHON_FILE", rel)
+    except BenchmarkGateError:
+        raise
+    except OSError as exc:
+        raise BenchmarkGateError("TREE_UNREADABLE", _describe(exc)) from exc
+    for rel in sorted(entries.keys() - seen):
+        add("TRACKED_FILE_DIFFERS", rel)  # missing
+    return findings
+
+
+# ---------------------------------------------------------------------------
 # C4d-1 the measurement harness (`measure_paired`); the block also holds the C4d-2 trace (`TRACE_PLUGIN_SOURCE`, `trace_env`, `trace_paired`)
 #
 # Runs the benchmark as a child process of each side, alternating sides in a seeded balanced order, and returns raw wall times.
@@ -3173,6 +4179,9 @@ ERROR_CODES += MEASURE_REFUSAL_CODES + ("MEASURE_ARGS_INVALID", "MEASURE_FAILED"
 # `trace_paired` only, with phase "trace"; a harness fault there is `MEASURE_FAILED`, not one of these.
 TRACE_REFUSAL_CODES = ("TRACE_MISMATCH", "TRACE_UNAVAILABLE")
 ERROR_CODES += TRACE_REFUSAL_CODES
+# C4d-3: `compare` raises this when the base commit is not an ancestor of the head commit (a caller error: the pair is not a PR's
+# before and after). It is never a result reason or detail.
+ERROR_CODES += ("BASE_NOT_ANCESTOR",)
 # The closed vocabulary of ``BenchmarkGateError.kind`` that ``trace_paired`` sets on EVERY error it raises after validation: the four ``_execute``
 # kinds, then plugin_failed ("plugin reported failure"), no_result ("no trace result"), the four post-result unavailable/interpreter
 # kinds, counts_differ (TRACE_MISMATCH), unavailable (TRACE_UNAVAILABLE) and harness (MEASURE_FAILED).
@@ -3190,6 +4199,9 @@ _TRACE_TIMEOUT_FACTOR = 3  # the traced run may take this many times the per-run
 
 # The trace plugin, written fresh into a harness-owned directory per side (spec D1, D2). It must stay ASCII, annotation-free and importable
 # on CPython 3.8: it runs inside the side's own venv, whose interpreter may be older than this one. Raw string: no escape is interpreted.
+# Importable is not usable: it counts lines with ``sys.monitoring`` (3.12+), so on an older interpreter the plugin reports ``no_monitoring``,
+# `trace_paired` raises ``TRACE_UNAVAILABLE`` and `compare` ends INCONCLUSIVE/``TRACE_UNAVAILABLE``: a project venv older than 3.12 never
+# reaches ``IMPROVED``.
 TRACE_PLUGIN_SOURCE = r"""import os
 import sys
 import threading
@@ -3443,11 +4455,15 @@ def _verify_plugin(path: str) -> None:
         raise BenchmarkGateError("MEASURE_FAILED", "plugin file hash mismatch")
 
 
-def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int, repeats: int) -> list[str]:
+def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int, repeats: int, *, salt: str | None = None) -> list[str]:
     """The round order: exactly ``repeats / 2`` rounds are ``"head_first"``, the rest ``"base_first"``, shuffled by a PRNG seeded from
-    ``sha256(base_commit || head_commit || benchmark_sha256 || attempt)``. Strict alternation phase-locks onto a period-4 disturbance
+    ``sha256(base_commit || head_commit || benchmark_sha256 || attempt [|| salt])`` (fields joined by ``\\0``). Strict alternation phase-locks onto a period-4 disturbance
     (about 25% false IMPROVED); a seeded balanced permutation does not, and a human can reproduce it. ``attempt`` makes the one allowed
-    re-measure use a different order. Raises ``MEASURE_ARGS_INVALID`` for a bad argument."""
+    re-measure use a different order. ``salt`` (``None`` means unsalted: today's seed bytes, unchanged) is lowercase hex of 1 to 64
+    characters and is appended as a fifth ``\\0``-joined seed field, so a run's order is reproducible from the recorded salt but not
+    predictable from the public inputs. ``measure_paired`` passes its ``order_salt`` straight through (so ``None`` is unsalted there);
+    ``compare`` generates a random salt when it is given none and records it as ``order_salt`` in its result, so the order of any
+    result can be recomputed. Raises ``MEASURE_ARGS_INVALID`` for a bad argument."""
     import random
 
     if not all(isinstance(c, str) and _COMMIT_RE.fullmatch(c) for c in (base_commit, head_commit)):
@@ -3458,15 +4474,21 @@ def run_order(base_commit: str, head_commit: str, benchmark_sha256: str, attempt
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "attempt must be 1 or 2")
     if not _is_real_int(repeats) or repeats not in _NEED_CLEAR:
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "repeats must be 4, 6 or 8")
-    seed = hashlib.sha256("\0".join((base_commit, head_commit, benchmark_sha256, str(attempt))).encode("ascii")).digest()
+    if salt is not None and not (isinstance(salt, str) and re.fullmatch(r"[0-9a-f]{1,64}", salt, re.ASCII)):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "order_salt must be 1 to 64 lowercase hex characters")
+    fields = (base_commit, head_commit, benchmark_sha256, str(attempt)) + (() if salt is None else (salt,))
+    seed = hashlib.sha256("\0".join(fields).encode("ascii")).digest()
     order = ["head_first"] * (repeats // 2) + ["base_first"] * (repeats - repeats // 2)
     random.Random(int.from_bytes(seed, "big")).shuffle(order)
     return order
 
 
 def side_env(bin_dir: str, scratch: str) -> dict[str, str]:
-    """The child's environment: an allowlist, not a sandbox. The side's venv ``bin`` first on ``PATH``, no user site, a fixed hash seed, a
-    per-side ``PYTHONPYCACHEPREFIX`` under ``scratch``, fresh ``HOME`` and ``TMPDIR`` under ``scratch``, plugin autoload off. No
+    """The child's environment, exactly nine keys: an allowlist, not a sandbox. The side's venv ``bin`` first on ``PATH`` (and ``VIRTUAL_ENV``),
+    no user site, a fixed hash seed, ``PYTHONDONTWRITEBYTECODE=1``, fresh ``HOME`` and ``TMPDIR`` under ``scratch`` (it makes both
+    directories), ``LANG``, pytest plugin autoload off. No ``PYTHONPYCACHEPREFIX``: a prefix
+    would make CPython ignore every existing ``__pycache__`` and recompile the interpreter, pytest and the benchmark's imports on every
+    run, pushing ratios toward 1 and letting compile time satisfy the workload floor; existing bytecode is read, none is written. No
     ``PYTHONPATH``, no SCM, cloud or API token. The trace's environment is ``trace_env``, which adds ``PYTHONPATH`` and the three ``BENCH_TRACE_*``
     keys (file, out, nonce) for the trace run only."""
     home = os.path.join(scratch, "home")
@@ -3478,7 +4500,7 @@ def side_env(bin_dir: str, scratch: str) -> dict[str, str]:
         "VIRTUAL_ENV": os.path.dirname(bin_dir),
         "PYTHONNOUSERSITE": "1",
         "PYTHONHASHSEED": "0",
-        "PYTHONPYCACHEPREFIX": os.path.join(scratch, "pycache"),
+        "PYTHONDONTWRITEBYTECODE": "1",
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
         "LANG": "C.UTF-8",
         "HOME": home,
@@ -3508,32 +4530,80 @@ def pytest_argv(bin_dir: str, root: str, target: str, ini: str, *, plugins: tupl
 
 
 def _kill_group(pgid: int) -> None:
-    import signal
-
     try:
         os.killpg(pgid, signal.SIGKILL)
     except (ProcessLookupError, PermissionError):  # already gone, or a reused pgid we may not signal
         pass
 
 
+def _guarded_signals() -> tuple:
+    """The signals the harness guards: SIGTERM, SIGHUP and SIGINT where the platform has them (no SIGHUP on Windows). Built on each call, so
+    importing this module never needs a POSIX-only name (``compare`` then reports ``UNSUPPORTED_PLATFORM`` instead of the import failing)."""
+    return tuple(getattr(signal, name) for name in ("SIGTERM", "SIGHUP", "SIGINT") if hasattr(signal, name))
+
+
+
+@contextlib.contextmanager
+def _with_signal_handlers():
+    """For CLI commands (main thread only; every CLI command installs it: ``compare``, ``run-once`` and ``cleanup``; the library functions
+    ``compare`` and ``_run_once`` do not): SIGTERM, SIGHUP and SIGINT raise
+    ``KeyboardInterrupt``, and the first one sets ``SIG_IGN`` for all three so a second cannot interrupt the cleanup. The previous
+    handlers are restored in a ``finally``. A library caller on another thread must not use this (``signal.signal`` works only on the
+    main thread), so it raises ``RuntimeError`` before changing anything."""
+    if threading.current_thread() is not threading.main_thread():
+        raise RuntimeError("signal handlers can be installed only from the main thread")
+
+    guarded = _guarded_signals()
+
+    def interrupt(_signum, _frame):
+        for number in guarded:
+            signal.signal(number, signal.SIG_IGN)
+        raise KeyboardInterrupt
+
+    old: list = []
+    try:
+        for number in guarded:
+            old.append((number, signal.signal(number, interrupt)))
+        yield
+    finally:
+        for number, handler in old:
+            signal.signal(number, handler or signal.SIG_DFL)  # None: a handler Python did not install
+
+
 def _run_once(argv: list[str], cwd: str, env: dict[str, str], timeout: float) -> tuple[int | None, int, bytes, bytes, bool]:
     """One child run: ``(exit code or None if killed by the watchdog, wall nanoseconds, stdout, stderr tail, output hit the size limit)``.
     A blocking ``wait`` with a watchdog ``Timer`` (cancelled and joined after the wait, so a late fire cannot ``killpg`` a reused pgid),
     and a group kill after EVERY run. ``RLIMIT_FSIZE`` kills nothing in Python (CPython ignores SIGXFSZ), so oversize is detected by a
-    file whose size equals the limit."""
+    file whose size equals the limit. The child starts in its own session with default dispositions for the guarded signals and an empty
+    signal mask (the parent has handlers for them, or ignores them, and blocks them around the spawn), no stdin, and ``env`` exactly as given. ``Popen`` failing
+    raises ``_SpawnFailed`` (with the errno), which ``_execute`` splits into a provisioning fault of the side and a host fault. Used by
+    ``measure_paired``, ``trace_paired`` and ``run_benchmark_once`` through ``_execute`` only."""
     import resource  # imported here, in the parent, not between fork and exec
 
-    def fsize_limit() -> None:  # runs in the child between fork and exec; touches nothing but `resource`
+    guarded = _guarded_signals()  # in the parent: the child touches nothing but `signal` and `resource`
+
+    def child_setup() -> None:  # runs in the child between fork and exec
+        for number in guarded:
+            signal.signal(number, signal.SIG_DFL)  # an ignored signal would be inherited across exec
+        signal.pthread_sigmask(signal.SIG_SETMASK, ())  # the parent's mask (below) would be inherited across exec too
         resource.setrlimit(resource.RLIMIT_FSIZE, (_RUN_FSIZE_LIMIT, _RUN_FSIZE_LIMIT))
 
     timed_out = threading.Event()
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         started = time.perf_counter_ns()
+        # SIGTERM, SIGHUP and SIGINT are blocked from before the fork until the `try` below is entered, so a signal cannot arrive
+        # after the child exists but before its group is guarded; the pending signal is delivered at the unmask, inside the `try`.
+        # The mask is per thread: this window is safe only while the process is SINGLE-THREADED (a contract of this function, not
+        # asserted; `preexec_fn` is thread-unsafe for the same reason).
+        old_mask = signal.pthread_sigmask(signal.SIG_BLOCK, guarded)
         try:
             proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=err, close_fds=True,
-                                    start_new_session=True, preexec_fn=fsize_limit)  # preexec_fn is thread-unsafe: single-threaded here
-        except (OSError, subprocess.SubprocessError) as exc:
-            raise _SpawnFailed(str(exc)) from exc
+                                    start_new_session=True, preexec_fn=child_setup)
+        except BaseException as exc:
+            signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)
+            if isinstance(exc, (OSError, subprocess.SubprocessError)):
+                raise _SpawnFailed(str(exc), exc.errno if isinstance(exc, OSError) else None) from exc  # a SubprocessError has no errno
+            raise
 
         def fire() -> None:
             timed_out.set()
@@ -3541,14 +4611,17 @@ def _run_once(argv: list[str], cwd: str, env: dict[str, str], timeout: float) ->
 
         watchdog = threading.Timer(timeout, fire)
         try:  # from here on the child exists: whatever goes wrong (even a failed thread start or Ctrl-C), its group dies
+            signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)  # a pending signal is delivered here, inside the try
             watchdog.start()
             code = proc.wait()
             elapsed = time.perf_counter_ns() - started
         finally:
-            watchdog.cancel()
-            if watchdog.is_alive():
-                watchdog.join()
-            _kill_group(proc.pid)
+            try:  # the kill has its own `finally`: a KeyboardInterrupt while the watchdog is cancelled or joined cannot skip it
+                watchdog.cancel()
+                if watchdog.is_alive():
+                    watchdog.join()
+            finally:
+                _kill_group(proc.pid)
         out_size = os.fstat(out.fileno()).st_size
         err_size = os.fstat(err.fileno()).st_size
         out.seek(0)
@@ -3560,7 +4633,30 @@ def _run_once(argv: list[str], cwd: str, env: dict[str, str], timeout: float) ->
 
 
 class _SpawnFailed(Exception):
-    """``Popen`` could not start the child (no ``<bin>/python``, not executable): a provisioning fault of that side."""
+    """``Popen`` could not start the child. ``errno`` (``None`` for a ``SubprocessError``) tells a provisioning fault of that side (no
+    ``<bin>/python``, not executable) from a host fault (no processes or memory left); ``_execute`` splits on it. The default keeps
+    callers that build one from a message alone meaning the provisioning case."""
+
+    def __init__(self, message: str, errno: int | None = errno.ENOENT) -> None:  # the default is bound here, before the parameter shadows the module
+        super().__init__(message)
+        self.errno = errno
+
+
+_SPAWN_PROVISIONING_ERRNOS = frozenset({errno.ENOENT, errno.EACCES, errno.ENOEXEC, errno.ENOTDIR})  # a missing cwd is ENOENT too
+
+
+# The ONE table of `_execute` failure kinds: kind -> the suffix of the reason and the error code (``<SIDE>_<suffix>``). A spawn failure (a venv
+# that was not provisioned) is a nonzero exit. `_run_error_code`, the trace rows of the `compare` mapping (T4), `_RUN_FAILURE_KINDS` and the
+# `run-once` reasons (`_RUN_ONCE_REASONS`) all derive from it, so a new kind cannot be handled in one place and forgotten in another.
+_KIND_SUFFIX = {"nonzero": "NONZERO_EXIT", "timeout": "TIMEOUT", "oversize": "OUTPUT_TOO_LARGE", "spawn": "NONZERO_EXIT"}
+_UNSIDED_KINDS = frozenset({"oversize"})  # their ERROR CODE has no side prefix (`OUTPUT_TOO_LARGE`; the `compare` reason has one)
+
+
+def _run_error_code(side: str, kind: str) -> str:
+    """The ``measure_paired`` error code of an ``_execute`` failure kind; an unknown kind is a bug in this file, not an input."""
+    if kind not in _KIND_SUFFIX:
+        raise AssertionError(f"unknown _execute failure kind {kind!r}")
+    return _KIND_SUFFIX[kind] if kind in _UNSIDED_KINDS else f"{side.upper()}_{_KIND_SUFFIX[kind]}"
 
 
 def _digest_of(stdout: bytes) -> str | None:
@@ -3574,23 +4670,40 @@ def _tail_detail(tail: bytes) -> str:
     return tail.decode("ascii", "replace")[-150:]
 
 
-def _prepare_run(side: str, bin_dir: str, work: str, counter: int) -> tuple[str, dict]:
-    """Make the run's scratch directory and build its environment (``side_env`` makes the home and tmp directories)."""
-    scratch = os.path.join(work, f"{side}-{counter}")
-    os.makedirs(scratch)
+def _prepare_run(side: str, bin_dir: str, work: str, ini_path: str | None = None) -> tuple[str, dict, str]:
+    """Make the run's scratch directory (``tempfile.mkdtemp`` inside ``work``, so an unpredictable name and a planted name cannot fail the run)
+    and build its environment (``side_env`` makes the home and tmp directories). Returns ``(scratch, env, ini)``: ``ini`` is ``ini_path``
+    when given, else a fresh ``empty.ini`` written inside the scratch, so a child that rewrites its ini changes nothing for the next run
+    (no mutable harness state crosses a child). Shared by ``measure_paired``, ``trace_paired`` and ``run_benchmark_once``; the caller owns
+    ``work`` (a temporary directory it removes), and ``_execute`` removes the scratch."""
+    scratch = tempfile.mkdtemp(dir=work)
     env = side_env(bin_dir, scratch)
-    env["PYTHONPYCACHEPREFIX"] = os.path.join(work, f"pycache-{side}")  # per side, shared by its runs (a warm cache is part of the warmup)
-    return scratch, env
+    ini = ini_path
+    if ini is None:
+        ini = os.path.join(scratch, "empty.ini")
+        with open(ini, "w", encoding="ascii") as handle:
+            handle.write(_EMPTY_INI)
+    return scratch, env, ini
 
 
 def _execute(side: str, argv: list[str], root: str, scratch: str, env: dict[str, str], timeout_seconds: float,
-             fail: Callable[[str, str], BenchmarkGateError]) -> tuple[int, bytes]:
+             fail: Callable[[str, str], BenchmarkGateError], guard: Callable[[str, str], None] | None = None) -> tuple[int, bytes]:
     """Run once, always remove ``scratch``, and raise ``fail(kind, detail)`` for a spawn failure, oversize output, timeout or nonzero exit
-    (kinds ``spawn``, ``oversize``, ``timeout``, ``nonzero``, checked in that order). Returns ``(elapsed_ns, stdout)``."""
+    (kinds ``spawn``, ``oversize``, ``timeout``, ``nonzero``, checked in that order; ``spawn`` only for a provisioning errno of the side,
+    ``_SPAWN_PROVISIONING_ERRNOS``). A host spawn fault (``EAGAIN``, ``ENOMEM``, a failed ``preexec_fn``) raises ``RuntimeError``, which the
+    callers turn into ``MEASURE_FAILED``. Returns ``(elapsed_ns, stdout)``; the exit code and stderr are not returned (only a failure's
+    detail shows the stderr tail). ``fail`` is the caller's error factory: ``measure_paired`` and ``run_benchmark_once`` map the kind to
+    a code and keep it in ``error.kind``; ``trace_paired`` makes every kind a ``TRACE_MISMATCH``. ``guard(side, root)``, when given, runs
+    immediately before the spawn (the scratch is still removed if it raises): ``compare`` uses it to check that the directories the child
+    runs in are still the ones step 9 recorded."""
     try:
+        if guard is not None:
+            guard(side, root)
         code, elapsed, stdout, tail, oversize = _run_once(argv, root, env, float(timeout_seconds))
-    except _SpawnFailed as exc:  # no <bin>/python, not executable, a failed fork: the side was not provisioned
-        raise fail("spawn", f"could not start the run: {exc}") from exc
+    except _SpawnFailed as exc:
+        if exc.errno in _SPAWN_PROVISIONING_ERRNOS:  # no <bin>/python, not executable, a missing cwd: the side was not provisioned
+            raise fail("spawn", f"could not start the run: {exc}") from exc
+        raise RuntimeError("host spawn fault") from exc  # EAGAIN, ENOMEM, a failed preexec_fn: the host, not the side (callers turn it into MEASURE_FAILED)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
     if oversize:
@@ -3625,29 +4738,61 @@ def _check_timeout(timeout_seconds: object) -> None:
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "timeout_seconds must be a number in (0, 3600]")
 
 
+def _real_dirs(name: str, root: object, bin_dir: object) -> tuple[str, str]:
+    """``(realpath root, realpath bin)`` of one side, each an existing absolute directory, else ``MEASURE_ARGS_INVALID``."""
+    for label, path in (("root", root), ("bin", bin_dir)):
+        if not isinstance(path, str) or not path or "\0" in path or not os.path.isabs(path) or not os.path.isdir(path):
+            raise BenchmarkGateError("MEASURE_ARGS_INVALID", f"{name} {label} must be an existing absolute directory")
+    return os.path.realpath(root), os.path.realpath(bin_dir)
+
+
+def _check_ini(ini_path: object) -> None:
+    if ini_path is not None and (not isinstance(ini_path, str) or not os.path.isabs(ini_path) or not os.path.isfile(ini_path)):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "ini_path must be an existing absolute file")
+
+
+def _check_one_side(root: object, bin_dir: object, target: object, ini_path: object) -> tuple[str, str, str]:
+    """Validate one side for ``run_benchmark_once``; returns ``(realpath root, realpath bin, benchmark_file)``. The root and bin are existing
+    absolute directories, ``bin`` passes ``_venv_layout`` (a plain isolated venv), and the target's file is a regular, non-symlink file
+    that stays under the root once resolved (an intermediate symlink out of the root is refused). ``root`` need not be an export:
+    nothing here seals, hashes or writes. The timeout is the caller's (``_check_timeout``)."""
+    real_root, real_bin = _real_dirs("side", root, bin_dir)
+    try:
+        _venv_layout(bin_dir)
+    except BenchmarkGateError as exc:  # the layout's own codes are the compare pipeline's; here every bad argument is one code
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", f"bin is not an isolated venv bin: {exc.code}") from exc
+    benchmark_file = _benchmark_file_of(target)
+    path = os.path.join(root, benchmark_file)
+    try:
+        regular = stat.S_ISREG(os.lstat(path).st_mode)  # lstat: a symlink target is refused, not followed
+    except OSError:
+        regular = False
+    if not regular or not _inside(os.path.realpath(path), real_root):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "target must be a regular file (not a symlink) under the root")
+    _check_ini(ini_path)
+    return real_root, real_bin, benchmark_file
+
+
 def _check_sides(base_root: object, head_root: object, base_bin: object, head_bin: object, target: object,
                  ini_path: object) -> tuple[dict, str]:
     """Validate the two sides, the target and the ini; returns ``({name: (realpath root, realpath bin)}, benchmark_file)``."""
     sides = {}
     for name, root, bin_dir in (("base", base_root, base_bin), ("head", head_root, head_bin)):
-        for label, path in (("root", root), ("bin", bin_dir)):
-            if not isinstance(path, str) or not path or "\0" in path or not os.path.isabs(path) or not os.path.isdir(path):
-                raise BenchmarkGateError("MEASURE_ARGS_INVALID", f"{name} {label} must be an existing absolute directory")
-        sides[name] = (os.path.realpath(root), os.path.realpath(bin_dir))
+        sides[name] = _real_dirs(name, root, bin_dir)
     for index in (0, 1):  # root, bin: the same directory under two names (a symlink, or a case-folding file system) is one directory
         if os.path.samefile(sides["base"][index], sides["head"][index]):
             raise BenchmarkGateError("MEASURE_ARGS_INVALID", "the two sides must not share a root or a bin directory")
     if _inside(sides["base"][0], sides["head"][0]) or _inside(sides["head"][0], sides["base"][0]):
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "neither root may contain the other")
     benchmark_file = _benchmark_file_of(target)
-    if ini_path is not None and (not isinstance(ini_path, str) or not os.path.isabs(ini_path) or not os.path.isfile(ini_path)):
-        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "ini_path must be an existing absolute file")
+    _check_ini(ini_path)
     return sides, benchmark_file
 
 
 def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, target: str, *, repeats: int, timeout_seconds: float,
                    base_commit: str, head_commit: str, benchmark_sha256: str, attempt: int = 1, warmup: int = 1,
-                   min_base_ns: int = _MIN_BASE_NS, argv_builder=None, ini_path: str | None = None) -> dict:
+                   min_base_ns: int = _MIN_BASE_NS, argv_builder=None, ini_path: str | None = None, order_salt: str | None = None,
+                   spawn_guard: Callable[[str, str], None] | None = None) -> dict:
     """Run ``warmup`` untimed rounds, then ``repeats`` timed rounds; every round runs both sides once, base first in warmup and in the
     order ``run_order`` gives afterwards. Returns ``{"order", "base_ns", "head_ns", "digest", "argv"}``: ``base_ns[i]`` and ``head_ns[i]``
     are the wall nanoseconds of timed round ``i`` (positive ints, ready for ``evaluate_paired_samples``), ``digest`` the one digest every
@@ -3657,15 +4802,22 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
     Raises ``BenchmarkGateError`` with a ``MEASURE_REFUSAL_CODES`` code, or ``MEASURE_ARGS_INVALID`` (a caller error) or ``MEASURE_FAILED`` (a harness fault: no disk space, no thread; not the Builder's). The exception
     carries (always, ``None`` when not applicable) ``side`` (``"base"``, ``"head"`` or ``None``), ``phase`` (``"warmup"``, ``"timed"`` or ``None``) and, for a failure after
     timing began (``phase == "timed"``), ``partial`` (``{"order", "base_ns", "head_ns"}`` of the completed rounds). A spawn failure (no ``<bin>/python``: a venv that was not
-    provisioned) is ``<SIDE>_NONZERO_EXIT``. Digest rules: after the FIRST warmup round both sides have run, so a digest printed by
+    provisioned) is ``<SIDE>_NONZERO_EXIT``. ``kind`` is the ``_execute`` kind (``spawn``, ``oversize``, ``timeout``, ``nonzero``) of a failed run and ``None`` for every
+    other error (a digest error, ``WORKLOAD_TOO_SHORT``, ``MEASURE_FAILED``, a bad argument): ``compare`` needs it because a spawn and a nonzero exit share a code. Digest rules: after the FIRST warmup round both sides have run, so a digest printed by
     neither is ``DIGEST_MISSING``, by one is ``DIGEST_MISMATCH``, by both but different is ``DIGEST_MISMATCH`` (a benchmark that is
     nondeterministic on both sides is therefore reported as a mismatch there); from then on a run without a digest or with another one is
     ``DIGEST_UNSTABLE``; the digests of ALL runs (warmup included) must be one value at the end. ``WORKLOAD_TOO_SHORT`` needs the timed
     rounds and names the measured median. ``argv_builder(side, bin_dir, root, target) -> argv`` is the test seam; the default is
-    ``pytest_argv``. ``phase`` here is only ``"warmup"`` or ``"timed"``; the paired trace run is ``trace_paired``, a separate function."""
+    ``pytest_argv``. ``order_salt`` is ``run_order``'s ``salt`` (``None``: unsalted; ``compare`` always passes one). ``phase`` here is only ``"warmup"`` or ``"timed"``; the paired trace run is ``trace_paired``, a separate function.
+
+    ``spawn_guard(side, root)`` (``None``: no guard; ``compare`` always passes one) is called immediately before EVERY spawn (warmup and timed), with the side and the root the child will run in and
+    returns silently or raises ``_IdentityChanged``. That exception is NOT a ``BenchmarkGateError`` (so no handler of one can swallow it) and
+    is propagated unchanged after the scratch and work directories are removed; no further child is started. It carries ``side`` (the side
+    about to be spawned), ``phase`` (``"warmup"`` or ``"timed"``), ``kind`` ``"harness"`` and ``partial`` (the completed timed rounds once
+    ``phase == "timed"``, else ``None``), the same semantics as an error of this function."""
     if os.name != "posix":
         raise BenchmarkGateError("UNSUPPORTED_PLATFORM", "the harness needs POSIX process groups")
-    order = run_order(base_commit, head_commit, benchmark_sha256, attempt, repeats)
+    order = run_order(base_commit, head_commit, benchmark_sha256, attempt, repeats, salt=order_salt)
     if not _is_real_int(warmup) or not 1 <= warmup <= 3:
         raise BenchmarkGateError("MEASURE_ARGS_INVALID", "warmup must be 1 to 3")
     _check_timeout(timeout_seconds)
@@ -3685,32 +4837,32 @@ def measure_paired(base_root: str, head_root: str, base_bin: str, head_bin: str,
 
     try:
         with tempfile.TemporaryDirectory(prefix="bench-run-") as work:
-            ini = ini_path
-            if ini is None:
-                ini = os.path.join(work, "empty.ini")
-                with open(ini, "w", encoding="ascii") as handle:
-                    handle.write(_EMPTY_INI)
+            work_stat = os.lstat(work)
+            work_identity = (work_stat.st_dev, work_stat.st_ino)
             digests: dict[str, set[str]] = {"base": set(), "head": set()}
             argvs: dict[str, list[str]] = {}
-            counter = 0
 
             def run(side: str, phase: str) -> tuple[int, str | None]:
-                nonlocal counter
-                counter += 1
                 phase_now[0] = phase
+                now = os.lstat(work)  # a child that replaced the work directory is a denial, not a measurement
+                if (now.st_dev, now.st_ino) != work_identity:
+                    raise fail("MEASURE_FAILED", "the work directory was replaced during the measurement", None, phase)
                 root, bin_dir = sides[side]
-                scratch, env = _prepare_run(side, bin_dir, work, counter)
+                scratch, env, ini = _prepare_run(side, bin_dir, work, ini_path)
                 argv = argv_builder(side, bin_dir, root, target) if argv_builder else pytest_argv(bin_dir, root, target, ini)
                 argvs.setdefault(side, argv)
 
                 def adapt(kind: str, detail: str) -> BenchmarkGateError:
-                    codes = {"oversize": "OUTPUT_TOO_LARGE", "timeout": f"{side.upper()}_TIMEOUT", "nonzero": f"{side.upper()}_NONZERO_EXIT",
-                             "spawn": f"{side.upper()}_NONZERO_EXIT"}  # a spawn failure (a venv that was not provisioned) is a nonzero exit
-                    if kind not in codes:
-                        raise AssertionError(f"unknown _execute failure kind {kind!r}")
-                    return fail(codes[kind], detail, side, phase)
+                    error = fail(_run_error_code(side, kind), detail, side, phase)
+                    error.kind = kind  # compare's verdict mapping needs the kind, not only the code (a spawn and a nonzero exit share a code)
+                    return error
 
-                elapsed, stdout = _execute(side, argv, root, scratch, env, timeout_seconds, adapt)
+                try:
+                    elapsed, stdout = _execute(side, argv, root, scratch, env, timeout_seconds, adapt, guard=spawn_guard)
+                except _IdentityChanged as changed:  # not a BenchmarkGateError: it passes the handler below; give it the attributes of the others
+                    changed.side, changed.phase, changed.kind = side, phase, "harness"
+                    changed.partial = {"order": order, "base_ns": list(base_ns), "head_ns": list(head_ns)} if phase == "timed" else None
+                    raise
                 return elapsed, _digest_of(stdout)
 
             def record(side: str, phase: str, digest: str | None, first_round: bool) -> None:
@@ -3850,7 +5002,7 @@ def _trace_result(raw: bytes | None, nonce: str) -> _TraceResult | None:
 
 
 def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, target: str, *, timeout_seconds: float,
-                 argv_builder=None, ini_path: str | None = None) -> dict:
+                 argv_builder=None, ini_path: str | None = None, spawn_guard: Callable[[str, str], None] | None = None) -> dict:
     """One untimed, traced run per side (base, then head) and a comparison of what the harness-owned plugin counted in the test body.
     Returns ``{"base": int, "head": int, "interpreter": "<version> <impl>", "argv": {"base": [...], "head": [...]},
     "body_has_control_flow": bool}`` (the last is advisory: computed from the base root's benchmark file before the first run).
@@ -3860,12 +5012,17 @@ def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, t
     machinery (a temp directory, the plugin file, its hash, a path separator in the directory) is ``MEASURE_FAILED`` (``side`` ``None``);
     what the child did (a failed run, a missing or malformed result, ``.failed``, differing counts or interpreters) is
     ``TRACE_MISMATCH``, or ``TRACE_UNAVAILABLE`` when both sides report the same unavailability. A hard failure on either side raises at
-    once. Every error carries ``kind``, one of ``TRACE_FAILURE_KINDS`` (the ``_execute`` kinds are the first four). An error raised after
+    once. Every error raised after the validation carries ``kind``, one of ``TRACE_FAILURE_KINDS`` (the ``_execute`` kinds are the first four;
+    the validation errors have ``kind`` ``None``, and ``measure_paired`` and ``run_benchmark_once`` also set ``kind``, to an ``_execute`` kind, on a failed run). An error raised after
     BOTH sides produced a result (the kinds ``unavailable_one_side``, ``unavailable_tokens_differ``, ``unavailable_interpreters_differ``,
     ``interpreters_differ``, ``counts_differ``, ``unavailable``) also carries ``trace``: ``{"base": {"kind": "lines"|"unavailable", "value":
     int count | str token, "interpreter": "<ver> <impl>"}, "head": {...}, "argv": {"base": [...], "head": [...]}, "body_has_control_flow":
     bool}``; ``trace`` is ``None`` for an error raised during a side's run. The run's timeout is ``_TRACE_TIMEOUT_FACTOR * timeout_seconds``. The digest is not checked and stdout is not parsed.
-    ``argv_builder(side, bin_dir, root, target) -> argv`` is the test seam."""
+    ``argv_builder(side, bin_dir, root, target) -> argv`` is the test seam.
+
+    ``spawn_guard(side, root)`` (``None``: no guard; ``compare`` always passes one) is called immediately before EVERY spawn (with the side and the root the child will run in) and returns silently or
+    raises ``_IdentityChanged``: not a ``BenchmarkGateError``, propagated unchanged after the side's work directory is removed, with ``side``
+    (the side about to be spawned), ``phase`` ``"trace"``, ``kind`` ``"harness"``, ``partial`` ``None`` and ``trace`` ``None``."""
     if os.name != "posix":
         raise BenchmarkGateError("UNSUPPORTED_PLATFORM", "the harness needs POSIX process groups")
     _check_timeout(timeout_seconds)
@@ -3879,12 +5036,7 @@ def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, t
     def run_side(side: str) -> tuple[_TraceResult, list[str]]:
         root, bin_dir = sides[side]
         with tempfile.TemporaryDirectory(prefix="bench-run-") as work:
-            ini = ini_path
-            if ini is None:
-                ini = os.path.join(work, "empty.ini")
-                with open(ini, "w", encoding="ascii") as handle:
-                    handle.write(_EMPTY_INI)
-            scratch, env = _prepare_run(side, bin_dir, work, 1)
+            scratch, env, ini = _prepare_run(side, bin_dir, work, ini_path)
             plugin_dir = tempfile.mkdtemp(dir=work, prefix="plugin-")
             out_dir = tempfile.mkdtemp(dir=work, prefix="out-")  # a sibling of scratch: _execute removes scratch before the result is read
             out_path = os.path.join(out_dir, "trace.out")
@@ -3899,7 +5051,11 @@ def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, t
                     detail += f" ({_TRACE_TIMEOUT_FACTOR}x the per-run timeout)"
                 return fail("TRACE_MISMATCH", f"{kind}: {detail}", kind, side)
 
-            _execute(side, argv, root, scratch, env, _TRACE_TIMEOUT_FACTOR * timeout_seconds, adapt)
+            try:
+                _execute(side, argv, root, scratch, env, _TRACE_TIMEOUT_FACTOR * timeout_seconds, adapt, guard=spawn_guard)
+            except _IdentityChanged as changed:
+                changed.side, changed.phase, changed.kind, changed.partial = side, "trace", "harness", None
+                raise
             if os.path.lexists(out_path + ".failed"):
                 raise fail("TRACE_MISMATCH", "plugin reported failure", "plugin_failed", side)
             result = _trace_result(_read_regular_file(out_path, _TRACE_RESULT_MAX, True), nonce)
@@ -3940,6 +5096,1144 @@ def trace_paired(base_root: str, head_root: str, base_bin: str, head_bin: str, t
     if base.value != head.value:
         raise after("TRACE_MISMATCH", f"line counts differ: base {base.value}, head {head.value}", "counts_differ")
     return {"base": base.value, "head": head.value, "interpreter": base.interpreter, "argv": argvs, "body_has_control_flow": has_control_flow}
+
+
+def run_benchmark_once(root: str, bin_dir: str, target: str, *, timeout_seconds: float, side: str = "head", argv_builder=None,
+                       ini_path: str | None = None) -> dict:
+    """One untimed run of the benchmark in ``root`` with ``bin_dir``'s interpreter, through the same ``_prepare_run``/``_execute`` chain as
+    ``measure_paired`` (own scratch and ini, removed afterwards). Returns ``{"digest", "argv"}``; the digest is what the child printed and
+    is NOT evidence. Nothing in ``root`` is sealed, hashed or written by this function.
+    The caller's ``PYTHONPATH`` is IGNORED (``side_env`` builds the whole child environment): a base-isolated run needs a base export with its own venv
+    and install; ``PYTHONPATH=<base>/src`` has no effect. Raises ``BenchmarkGateError``: ``MEASURE_ARGS_INVALID``,
+    ``UNSUPPORTED_PLATFORM``, ``<SIDE>_NONZERO_EXIT`` (also a spawn failure), ``<SIDE>_TIMEOUT``, ``OUTPUT_TOO_LARGE``, ``DIGEST_MISSING``
+    (each with ``side`` set; ``kind`` is the ``_execute`` kind, ``None`` for ``DIGEST_MISSING``) or ``MEASURE_FAILED`` (a harness fault)."""
+    if os.name != "posix":
+        raise BenchmarkGateError("UNSUPPORTED_PLATFORM", "the harness needs POSIX process groups")
+    if side not in ("base", "head"):
+        raise BenchmarkGateError("MEASURE_ARGS_INVALID", "side must be 'base' or 'head'")
+    _check_timeout(timeout_seconds)
+    real_root, real_bin, _ = _check_one_side(root, bin_dir, target, ini_path)
+
+    def fail(code: str, detail: str, kind: str | None) -> BenchmarkGateError:
+        error = BenchmarkGateError(code, detail)
+        error.side, error.phase, error.partial, error.kind = side, None, None, kind
+        return error
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="bench-run-") as work:
+            scratch, env, ini = _prepare_run(side, real_bin, work, ini_path)
+            argv = argv_builder(side, real_bin, real_root, target) if argv_builder else pytest_argv(real_bin, real_root, target, ini)
+            _, stdout = _execute(side, argv, real_root, scratch, env, timeout_seconds,
+                                 lambda kind, detail: fail(_run_error_code(side, kind), detail, kind))
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:  # no disk space, no thread, a host spawn fault: a harness fault
+        error = BenchmarkGateError("MEASURE_FAILED", f"{type(exc).__name__}: {exc}")
+        error.side, error.phase, error.partial = side, None, None
+        raise error from exc
+    digest = _digest_of(stdout)
+    if digest is None:
+        raise fail("DIGEST_MISSING", "the run printed no digest", None)
+    return {"digest": digest, "argv": argv}
+
+
+# ---------------------------------------------------------------------------
+# C4d-3 compare: vocabularies, `Side`, the internal verdict, result assembly and the result writer
+# ---------------------------------------------------------------------------
+
+class Side(NamedTuple):
+    """One side of a comparison: its export root and commit, its venv's ``bin`` directory, and the snapshot of that venv with the
+    sha256 pins the Orchestrator minted (``snapshot-venv``) before any install."""
+    root: str
+    commit: str
+    bin_dir: str
+    snapshot: str
+    snapshot_sha256: str
+    interpreter_sha256: str
+
+
+COMPARE_RESULTS = frozenset({"IMPROVED", "NOT_IMPROVED", "INCONCLUSIVE", "REJECTED"})
+COMPARE_STAGES = ("pre_overlay", "overlaid", "ran")
+# The `detail` of an ISOLATION_REJECTED result.
+ISOLATION_DETAILS = (
+    "ROOT_HAS_GIT", "BIN_NOT_ISOLATED", "NOT_PROVISIONED", "INTERPRETER_DIFFERS", "INTERPRETER_WRITABLE", "HARNESS_FILE_UNDER_ROOT",
+    "TRACKED_FILE_DIFFERS", "UNTRACKED_PYTHON_FILE", "DEPENDENCY_PARITY", "BENCHMARK_BYTES_DIFFER", "VENV_NOT_ISOLATED", "VENV_HOOK_REJECTED",
+    "SNAPSHOT_CHANGED", "INTERPRETER_CHANGED", "EXPORT_CHANGED", "VENV_CHANGED", "HASH_UNREADABLE", "FINGERPRINT_FAILED",
+)
+# The closed set of a result's `detail`'s first word is derived below from the one table of reasons.
+_HOSTILE_TREE_CODES = ("SEAL_FAILED", "TREE_UNREADABLE", "TREE_TOO_LARGE", "GIT_OUTPUT_TOO_LARGE")  # codes a hostile export tree can raise (spec 2.1)
+_READ_BENCHMARK_CODES = ("OVERLAY_PATH_REJECTED", "OVERLAY_NOT_REGULAR")  # `read_benchmark` refusals of a hostile export: EXPORT_REJECTED too (steps 7 and 8)
+_GATE_REJECTION_CODES = ("GATE_MISSING", "KEY_MISSING", "KEY_UNKNOWN", "TYPE_REJECTED", "PATH_REJECTED", "SYMBOL_REJECTED", "COMMAND_REJECTED",
+                         "BOUNDS_REJECTED", "BUDGET_REJECTED")  # the codes of `validate_benchmark_gate`
+_NO_DETAIL = ("",)
+_PRE, _OVERLAID, _RAN = COMPARE_STAGES
+_TRACE_MISMATCH_KINDS = tuple(kind for kind in TRACE_FAILURE_KINDS if kind not in _KIND_SUFFIX and kind not in ("unavailable", "harness"))
+
+# THE table of what a `compare` result can say: reason -> (result, the stages it can end at, the details it can carry; `""` is "no detail").
+# `COMPARE_RESULT_OF_REASON` and `COMPARE_DETAIL_TOKENS` are derived from it and `_result_dict` validates every verdict against it. A detail
+# is exactly one of these tokens (nothing produces a detail with numbers). Pinned by an exact-contents test and by the test that every step-ending row agrees with it.
+COMPARE_REASONS = {
+    "GATE_REJECTED": ("REJECTED", (_PRE,), _GATE_REJECTION_CODES),
+    "ISOLATION_REJECTED": ("REJECTED", COMPARE_STAGES, ISOLATION_DETAILS),
+    "PROTECTED_PATH_CHANGED": ("REJECTED", (_PRE,), ("PROTECTED_PATH_CHANGED",)),
+    "BENCHMARK_AWARE_CODE": ("REJECTED", (_PRE,), ("BENCHMARK_AWARE_CODE",)),
+    "DIFF_UNCHECKABLE": ("REJECTED", (_PRE,), ("GIT_OUTPUT_TOO_LARGE", "TREE_TOO_LARGE")),
+    "EXPORT_REJECTED": ("REJECTED", COMPARE_STAGES, EXPORT_REFUSAL_CODES + _HOSTILE_TREE_CODES + _READ_BENCHMARK_CODES),
+    "OVERLAY_REJECTED": ("REJECTED", (_PRE,), tuple(code for code in OVERLAY_REFUSAL_CODES if code != "BENCHMARK_MODIFIED")),
+    "BENCHMARK_MODIFIED": ("REJECTED", (_PRE,), ("BENCHMARK_MODIFIED",)),
+    "LINT_REJECTED": ("REJECTED", (_OVERLAID,), VIOLATION_CODES),
+    "TRACE_MISMATCH": ("REJECTED", (_RAN,), _TRACE_MISMATCH_KINDS),
+    "BASE_NONZERO_EXIT": ("REJECTED", (_RAN,), ("nonzero",)),
+    "DIGEST_MISSING": ("REJECTED", (_RAN,), _NO_DETAIL),
+    "DIGEST_UNSTABLE": ("REJECTED", (_RAN,), _NO_DETAIL),
+    "WORKLOAD_TOO_SHORT": ("REJECTED", (_RAN,), _NO_DETAIL),
+    "HEAD_NONZERO_EXIT": ("NOT_IMPROVED", (_RAN,), ("nonzero",)),
+    "HEAD_TIMEOUT": ("NOT_IMPROVED", (_RAN,), ("timeout",)),
+    "HEAD_OUTPUT_TOO_LARGE": ("NOT_IMPROVED", (_RAN,), ("oversize",)),
+    "DIGEST_MISMATCH": ("NOT_IMPROVED", (_RAN,), _NO_DETAIL),
+    "BELOW_HALF_THRESHOLD": ("NOT_IMPROVED", (_RAN,), _NO_DETAIL),
+    "UNSUPPORTED_PLATFORM": ("INCONCLUSIVE", (_PRE,), _NO_DETAIL),
+    "HOST_BUSY_START": ("INCONCLUSIVE", (_PRE,), _NO_DETAIL),
+    "HOST_BUSY_END": ("INCONCLUSIVE", (_RAN,), _NO_DETAIL),
+    "TRACE_UNAVAILABLE": ("INCONCLUSIVE", (_RAN,), ("unavailable",)),
+    "BASE_TIMEOUT": ("INCONCLUSIVE", (_RAN,), ("timeout",)),
+    "BASE_OUTPUT_TOO_LARGE": ("INCONCLUSIVE", (_RAN,), ("oversize",)),
+    "NOISY": ("INCONCLUSIVE", (_RAN,), _NO_DETAIL),
+    "INCONSISTENT": ("INCONCLUSIVE", (_RAN,), _NO_DETAIL),
+    "BORDERLINE": ("INCONCLUSIVE", (_RAN,), _NO_DETAIL),
+    "INVALID_INPUT": ("INCONCLUSIVE", (_RAN,), _NO_DETAIL),
+    "IMPROVED_CLEAR": ("IMPROVED", (_RAN,), _NO_DETAIL),
+}
+# Every reason a `compare` result can carry, and the result it belongs to.
+COMPARE_RESULT_OF_REASON = {reason: row[0] for reason, row in COMPARE_REASONS.items()}
+# The tokens a result's `detail` can start with: only what really is a detail (not every reason or refusal name). A published vocabulary for the
+# Orchestrator and C4e (tests and the spec pin it); no production code reads it back.
+COMPARE_DETAIL_TOKENS = tuple(dict.fromkeys(token for _, _, details in COMPARE_REASONS.values() for token in details if token))
+
+# THE retry rule, machine-readable (spec 2.3, "Retry on the same exports"): the `(reason, stage, detail)` triples of a `compare` result for
+# which a second `compare` on the SAME exports (always with a new `out_path`) can give another outcome. There are two sets because they are
+# retried by different actors: a busy host is waited out AUTOMATICALLY (capped: the module docstring, "Retry budget"); a writable interpreter is retried ONLY after a human has set
+# `--allow-writable-interpreter` (never automatically). Nothing else is retryable on the same exports: every other outcome is a function of the
+# exports, the venvs and their pins (all minted once, before the install), so only fresh provisioning can change it.
+COMPARE_RETRYABLE_AUTOMATIC = frozenset({
+    ("HOST_BUSY_START", _PRE, ""),
+})
+COMPARE_RETRYABLE_WITH_HUMAN_FLAG = frozenset({
+    ("ISOLATION_REJECTED", _PRE, "INTERPRETER_WRITABLE"),
+})
+# The only reasons that allow the one per-task ``attempt=2`` re-measure on fresh exports (the parent design's rule). Not derived from the stage column of
+# ``COMPARE_REASONS``: that records where a run ended, not whether it may be measured again. C4e enforces the cap.
+COMPARE_REMEASURABLE_REASONS = ("NOISY", "INCONSISTENT", "BORDERLINE")
+
+
+def _detail_allowed(detail: object, allowed: tuple[str, ...]) -> bool:
+    """``detail`` is ``""`` (when the reason allows no detail) or exactly one token of ``allowed``. No producer builds a detail with numbers
+    after the token (the kinds and codes are bare words), so none is accepted: a detail that carries text can only be a harness bug."""
+    return isinstance(detail, str) and detail in allowed
+
+
+COMPARE_SCHEMA = "software-builder-bench-compare-v1"
+COMPARE_RESULT_KEYS = (
+    "schema", "result", "reason", "detail", "kind", "stage", "trace_mismatch_seen", "trace_fault", "untrusted_text", "benchmark_origin",
+    "improvement", "ratios", "mad_over_median", "n", "repeats", "min_improvement", "max_noise", "base_median_ns", "head_median_ns", "base_ns",
+    "head_ns", "order", "order_salt", "digest", "base_commit", "head_commit", "benchmark_sha256", "gate_sha256", "harness_sha256", "argv",
+    "trace", "python", "interpreter_home", "interpreter_writable", "loadavg", "cpu_count", "host_check", "attempt", "side", "phase", "partial",
+)
+_VERDICT_OWNED_KEYS = frozenset({"schema", "result", "reason", "detail", "kind", "stage"})
+# Defence in depth: the closed value sets of the short string fields (`detail` has its own table). None is allowed for each.
+_ENUM_FIELDS = {
+    "kind": frozenset(TRACE_FAILURE_KINDS),
+    "trace_fault": frozenset({"base", "head"}),
+    "side": frozenset({"base", "head"}),
+    "phase": frozenset({"warmup", "timed", "trace"}),
+    "host_check": frozenset({"skipped_probe_failed", "start_only", "checked", "end_skipped_few_cpus"}),
+    "benchmark_origin": frozenset({"PRE_EXISTING", "BUILDER_AUTHORED"}),
+}
+_UNTRUSTED_TEXT_MAX_ENTRIES = 20
+_UNTRUSTED_TEXT_MAX_CHARS = 200
+
+
+class _WrittenResult(dict):
+    """The result dict `_compare_impl` returns (equal to the plain dict, JSON-serialisable as is), carrying ``written_sha256``: what
+    ``_write_result`` returned for the bytes it wrote. The CLI prints the RESULT line from this object and never re-reads the file (a
+    same-user process could rewrite the file in place after the write: spec 2.9). ``None`` until a write happened: the CLI treats anything
+    but 64 lowercase hex characters as a failure (exit 2)."""
+    written_sha256: str | None = None
+
+
+class _Verdict(Exception):
+    """The internal end of a `compare` step: a result, not an error. Raised through the pipeline and caught by ``_compare_impl``, which adds
+    the common fields. Subclasses ``Exception`` only, so a ``BaseException`` (a signal) is never mistaken for a verdict. ``extra`` carries
+    result keys the step knows (``untrusted_text``, ``benchmark_origin``, ``ratios``, ...)."""
+
+    def __init__(self, result: str, reason: str, detail: str = "", *, kind: str | None = None, stage: str,
+                 extra: dict | None = None) -> None:
+        super().__init__(reason)
+        self.result, self.reason, self.detail, self.kind, self.stage = result, reason, detail, kind, stage
+        self.extra = dict(extra) if extra else {}
+
+
+def _jsonable(value):
+    """Plain JSON data for a result value: Fractions become floats, tuples lists; anything else unexpected is a harness bug."""
+    if isinstance(value, Fraction):
+        return float(value)
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, dict) and all(isinstance(key, str) for key in value):
+        return {key: _jsonable(item) for key, item in value.items()}
+    raise ValueError(f"not a JSON value: {type(value).__name__}")
+
+
+def _result_dict(verdict: _Verdict, common: dict) -> dict:
+    """The 2.8 result: every key present, ``None`` for not applicable. ``common`` holds the fields every result has (commits, hashes,
+    attempt, ...); the verdict's ``extra`` overrides it. Attacker-influenced strings are escaped HERE, once: ``untrusted_text`` entries
+    (at most 20, each capped), ``detail``, ``python`` and ``interpreter_home``. Raises ``ValueError`` for an inconsistent verdict or an
+    unknown key (a harness bug, never PR content)."""
+    row = COMPARE_REASONS.get(verdict.reason)
+    if row is None or row[0] != verdict.result:
+        raise ValueError("verdict result does not belong to its reason")
+    if verdict.stage not in row[1]:
+        raise ValueError("verdict stage is not one its reason can end at")
+    if not _detail_allowed(verdict.detail, row[2]):
+        raise ValueError("verdict detail is not in the closed set of its reason")
+    fields: dict = {}
+    for source in (common, verdict.extra):
+        if any(key not in COMPARE_RESULT_KEYS or key in _VERDICT_OWNED_KEYS for key in source):
+            raise ValueError("unknown or verdict-owned result key")
+        fields.update(source)
+    texts = fields.pop("untrusted_text", None) or []
+    result = dict.fromkeys(COMPARE_RESULT_KEYS)
+    result.update(fields)
+    result.update(kind=verdict.kind)
+    for key, allowed in _ENUM_FIELDS.items():
+        if result[key] is not None and not (type(result[key]) is str and result[key] in allowed):
+            raise ValueError(f"{key} is not in its closed set")
+    result.update(schema=COMPARE_SCHEMA, result=verdict.result, reason=verdict.reason, kind=verdict.kind, stage=verdict.stage,
+                  detail=escape_diagnostic(verdict.detail, _UNTRUSTED_TEXT_MAX_CHARS))
+    result["untrusted_text"] = [escape_diagnostic(text, _UNTRUSTED_TEXT_MAX_CHARS) for text in list(texts)[:_UNTRUSTED_TEXT_MAX_ENTRIES]]
+    for key in ("python", "interpreter_home"):
+        if result[key] is not None:
+            result[key] = escape_diagnostic(result[key], 200)
+    return _jsonable(result)
+
+
+def _result_bytes(result: dict) -> bytes:
+    """The bytes of the result file: ASCII JSON (``ensure_ascii``), no NaN/Infinity, one trailing newline."""
+    return (json.dumps(result, ensure_ascii=True, allow_nan=False) + "\n").encode("ascii")
+
+
+_OUT_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", re.ASCII)
+
+
+def _validate_out_path(out_path: object, forbidden: object) -> tuple[tuple[int, int], str]:
+    """Step 1: ``out_path`` is an absolute, normalized path with a plain file name, in an existing real directory owned by this user and not
+    group/other writable; nothing exists at it (``lexists``); and it is not under (by ``realpath``) any ``forbidden`` path (roots, bins,
+    venvs, snapshots, the dispatch root). Returns ``((st_dev, st_ino) of the directory, file name)``. ``MEASURE_ARGS_INVALID`` otherwise."""
+    def bad(why: str) -> BenchmarkGateError:
+        return BenchmarkGateError("MEASURE_ARGS_INVALID", f"out_path: {why}")
+
+    if not isinstance(out_path, str) or not out_path or "\0" in out_path or not os.path.isabs(out_path):
+        raise bad("not an absolute path")
+    if posixpath.normpath(out_path) != out_path:
+        raise bad("not normalized")
+    directory, name = os.path.split(out_path)
+    if _OUT_NAME_RE.fullmatch(name) is None or name in (".", ".."):
+        raise bad("not a plain file name")
+    try:
+        info = os.lstat(directory)  # lstat: a symlinked directory is refused (the writer opens it with O_NOFOLLOW)
+        real_directory = os.path.realpath(directory)
+        exists = os.path.lexists(out_path)
+        real_forbidden = [os.path.realpath(path) for path in forbidden]
+    except (OSError, ValueError, TypeError) as exc:
+        raise bad(f"{type(exc).__name__}") from exc
+    if not stat.S_ISDIR(info.st_mode):
+        raise bad("directory missing or a symlink")
+    if info.st_uid != os.getuid() or info.st_mode & 0o022:
+        raise bad("directory not owned by the user or writable by others")
+    if exists:
+        raise bad("already exists")
+    target = os.path.join(real_directory, name)
+    if any(_inside(target, path) for path in real_forbidden):
+        raise bad("under a harness-owned path")
+    return (info.st_dev, info.st_ino), name
+
+
+# follow_symlinks=False: linkat without AT_SYMLINK_FOLLOW (a symlink planted as the temp name is never followed); supported on Linux and macOS
+_LINK_NO_FOLLOW = {"follow_symlinks": False} if os.link in os.supports_follow_symlinks else {}
+
+
+def _write_result(out_path: str, dir_ident: tuple[int, int], name: str, data: bytes) -> str:
+    """Write ``data`` to ``out_path`` exclusively and return its sha256. The directory is opened ``O_DIRECTORY|O_NOFOLLOW`` and must be the
+    one recorded at validation; a random-named temp is written through that descriptor and hard-linked to ``name`` (``link`` fails if the
+    name exists, ``replace`` would not); the temp is unlinked in a ``finally``; the final ``lstat`` of ``out_path`` must be the written
+    inode. A child that plants the name or swaps the directory turns the verdict into an error (``MEASURE_FAILED``), never into a
+    different file."""
+    def fault(why: str) -> BenchmarkGateError:
+        return BenchmarkGateError("MEASURE_FAILED", f"result write: {why}")
+
+    directory = os.path.dirname(out_path)
+    temp = ".bench-result-" + os.urandom(8).hex() + ".tmp"
+    dir_fd = -1
+    temp_made = False
+    try:
+        dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        info = os.fstat(dir_fd)
+        if (info.st_dev, info.st_ino) != tuple(dir_ident):
+            raise fault("the directory was replaced")
+        fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=dir_fd)
+        temp_made = True
+        try:
+            written = os.fstat(fd)
+            view = memoryview(data)
+            while view:
+                view = view[os.write(fd, view):]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.link(temp, name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd, **_LINK_NO_FOLLOW)
+        final = os.stat(out_path, follow_symlinks=False)
+        if (final.st_dev, final.st_ino) != (written.st_dev, written.st_ino):
+            raise fault("the file is not the one written")
+    except BenchmarkGateError:
+        raise
+    except OSError as exc:
+        raise fault(f"{type(exc).__name__}: {exc}") from exc
+    finally:
+        if temp_made:
+            try:
+                os.unlink(temp, dir_fd=dir_fd)
+            except OSError:
+                pass
+        if dir_fd >= 0:
+            os.close(dir_fd)
+    return hashlib.sha256(data).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# C4d-3 compare: steps 1 to 6 (arguments, gate, ancestry, isolation, diff checks, host load) and the `compare` entry points
+# ---------------------------------------------------------------------------
+
+_SHA256_RE = re.compile(r"[0-9a-f]{64}", re.ASCII)
+_SALT_RE = re.compile(r"[0-9a-f]{1,64}", re.ASCII)
+
+class _Run:
+    """The bookkeeping of one `compare` call, shared by its step functions: ``common`` holds the result fields known so far (each step adds
+    what it learned, so a verdict raised later carries it) and ``out`` the validated ``(directory identity, file name)`` of ``out_path``."""
+
+    def __init__(self) -> None:
+        self.common: dict = {}
+        self.out: tuple[tuple[int, int], str] | None = None
+
+
+class _Checked(NamedTuple):
+    """What steps 1 to 6 learned and the later steps use."""
+    gate: dict          # the normalized gate
+    target: str
+    order_salt: str
+    attempt: int
+    base_pin: InterpreterPin
+    head_pin: InterpreterPin
+    load: tuple | None  # the start `(load1, cpu_count)`, None when the probe failed
+    roots: tuple[str, str]  # the resolved base and head export roots (`_export_root`), computed once at step 4
+
+
+def _default_load_probe() -> tuple[float, int]:
+    """`(1-minute load average, usable CPU count)` of this host."""
+    load1 = os.getloadavg()[0]
+    try:
+        cpus = len(os.sched_getaffinity(0))  # type: ignore[attr-defined]  # Linux only
+    except AttributeError:
+        cpus = os.cpu_count() or 1
+    return load1, cpus
+
+
+def _arg_error(why: str) -> BenchmarkGateError:
+    return BenchmarkGateError("MEASURE_ARGS_INVALID", why)
+
+
+def _check_side_argument(side: object, label: str) -> None:
+    """A `Side` of the right type whose strings have the right shape; nothing is looked at on disk."""
+    if type(side) is not Side:
+        raise _arg_error(f"{label} must be a Side")
+    for name in ("root", "bin_dir", "snapshot"):
+        value = getattr(side, name)
+        if type(value) is not str or not value or "\0" in value or not os.path.isabs(value):
+            raise _arg_error(f"{label}.{name} must be an absolute path")
+    if type(side.commit) is not str:
+        raise _arg_error(f"{label}.commit must be a string")
+    for name in ("snapshot_sha256", "interpreter_sha256"):
+        value = getattr(side, name)
+        if type(value) is not str or _SHA256_RE.fullmatch(value) is None:
+            raise _arg_error(f"{label}.{name} must be 64 lowercase hex characters")
+
+
+def _interpreter_seam(interpreter_of: Callable[[str], InterpreterPin] | None, roots: tuple[str, str]) -> Callable[[str], InterpreterPin]:
+    """The function that pins one side's interpreter: the test seam when given, else `interpreter_pin` told to stay outside the two exports."""
+    return interpreter_of or (lambda bin_dir: interpreter_pin(bin_dir, outside=roots))
+
+
+# The three interpreter/venv error maps differ on purpose, so they are NOT one function: `_pin_error` (steps 4 and 9) classifies why a pin could
+# not be MADE (`INTERPRETER_DIFFERS` vs `NOT_PROVISIONED`); `_check_venvs`/`_check_parity` map their own codes and read the stage (an over-budget tree
+# is `NOT_PROVISIONED` at step 4 but `VENV_CHANGED` later); step 12 maps every failure of an interpreter that pinned fine at step 9 to
+# `INTERPRETER_CHANGED` (it changed), and `VENV_NOT_ISOLATED` to `VENV_CHANGED`.
+def _pin_error(exc: BenchmarkGateError, which: str, stage: str = _PRE) -> _Verdict:
+    """The interpreter helper's errors as an ISOLATION_REJECTED verdict (spec 2.1: `VENV_NOT_ISOLATED` is `INTERPRETER_DIFFERS`, the size, stdlib
+    and I/O errors are `NOT_PROVISIONED`); any other code is re-raised."""
+    if exc.code == "VENV_NOT_ISOLATED":
+        detail = "INTERPRETER_DIFFERS"
+    elif exc.code in ("TREE_TOO_LARGE", "DEST_REJECTED", "TREE_UNREADABLE"):
+        detail = "NOT_PROVISIONED"
+    else:
+        raise exc
+    return _Verdict("REJECTED", "ISOLATION_REJECTED", detail, stage=stage, extra={"untrusted_text": [f"{which}: {exc.detail or exc.code}"]})
+
+
+def _isolation(detail: str, texts: list | tuple = (), stage: str = _PRE) -> _Verdict:
+    return _Verdict("REJECTED", "ISOLATION_REJECTED", detail, stage=stage, extra={"untrusted_text": [str(t) for t in texts]})
+
+
+def _host_load(load_probe: Callable[[], tuple]) -> tuple | None:
+    """The start probe's `(load1, cpu_count)`, or None when it raised or returned anything but a finite non-negative real and a positive int."""
+    try:
+        load1, cpus = load_probe()
+    except Exception:  # noqa: BLE001 - a failing probe skips the host checks, whatever it raised
+        return None
+    if isinstance(load1, bool) or not isinstance(load1, (int, float, Fraction)) or not math.isfinite(load1) or load1 < 0:
+        return None
+    if type(cpus) is not int or cpus <= 0:
+        return None
+    return load1, cpus
+
+
+def _check_snapshots(base: Side, head: Side, stage: str) -> None:
+    """Each side's snapshot file must hash to its pin (`SNAPSHOT_CHANGED`); steps 4 and 9 (and 12) share this."""
+    for label, side in (("base", base), ("head", head)):
+        try:
+            data = _read_bounded(side.snapshot, _VENV_MAX_SNAPSHOT_BYTES, nofollow=True)
+        except (OSError, ValueError) as exc:
+            raise BenchmarkGateError("VENV_SNAPSHOT_INVALID", f"{label} snapshot unreadable: {_describe(exc)}") from exc
+        if len(data) > _VENV_MAX_SNAPSHOT_BYTES or hashlib.sha256(data).hexdigest() != side.snapshot_sha256:
+            raise _isolation("SNAPSHOT_CHANGED", [label], stage)
+
+
+def _check_venvs(base: Side, head: Side, roots: tuple[str, str], stage: str) -> list:
+    """`check_venv` per side (its errors mapped) and the two venv roots distinct; returns the real venv roots. A size error
+    (`TREE_TOO_LARGE`) is `NOT_PROVISIONED` at step 4 (the same word as the interpreter helper's and `dependency_parity`'s over-budget) and
+    `VENV_CHANGED` at steps 9 and 12 (the venv was within the limit before)."""
+    real_venvs = []
+    for label, side, root, other in (("base", base, roots[0], roots[1]), ("head", head, roots[1], roots[0])):
+        try:
+            real_venvs.append(check_venv(side.bin_dir, side.snapshot, root, (other,)))
+        except BenchmarkGateError as exc:
+            if exc.code in ("VENV_NOT_ISOLATED", "VENV_HOOK_REJECTED"):
+                detail = exc.code
+            elif exc.code in ("TREE_UNREADABLE", "DEST_REJECTED"):
+                detail = "VENV_NOT_ISOLATED"
+            elif exc.code == "TREE_TOO_LARGE":  # more hook candidates than the limit (spec 2.1): a verdict about the venv, never a raise
+                detail = "NOT_PROVISIONED" if stage == _PRE else "VENV_CHANGED"  # step 4: over budget from the start; later: it grew since step 4
+            else:
+                raise
+            hits = [f"{label}: {h.get('path')} ({h.get('reason')})" for h in exc.hits] or [f"{label}: {exc.detail or exc.code}"]
+            raise _isolation(detail, hits, stage) from exc
+    if real_venvs[0] == real_venvs[1]:
+        raise _isolation("VENV_NOT_ISOLATED", ["the two sides share one venv"], stage)
+    return real_venvs
+
+
+def _check_parity(base: Side, head: Side, roots: tuple[str, str], stage: str) -> None:
+    """`dependency_parity` with its errors and findings mapped."""
+    try:
+        findings = dependency_parity(base.bin_dir, head.bin_dir, roots[0], roots[1])
+    except BenchmarkGateError as exc:
+        if exc.code == "TREE_TOO_LARGE":
+            raise _isolation("NOT_PROVISIONED", [exc.detail or exc.code], stage) from exc
+        if exc.code in ("VENV_NOT_ISOLATED", "TREE_UNREADABLE"):
+            raise _isolation("VENV_NOT_ISOLATED", [exc.detail or exc.code], stage) from exc
+        raise
+    if findings:
+        raise _isolation(findings[0][0], [text for _, text in findings], stage)
+
+
+def _check_exports(repo: object, sides: tuple[Side, Side], roots: tuple[str, str], allows: tuple[dict, dict], stage: str) -> None:
+    """`verify_export_against_commit` per side (base first) with that side's allowance; hostile-tree errors are `EXPORT_REJECTED`."""
+    for label, side, root, allow in zip(("base", "head"), sides, roots, allows):
+        try:
+            found = verify_export_against_commit(repo, side.commit, root, allow=allow) if allow else verify_export_against_commit(repo, side.commit, root)
+        except BenchmarkGateError as exc:
+            if exc.code.startswith("EXPORT_") or exc.code in _HOSTILE_TREE_CODES:
+                raise _Verdict("REJECTED", "EXPORT_REJECTED", exc.code, stage=stage,
+                               extra={"untrusted_text": [f"{label}: {exc.detail or exc.code}"]}) from exc
+            raise
+        if found:
+            raise _isolation(found[0][0], [f"{label}: {rel}" for _, rel in found], stage)
+
+
+def _compare_checks(gate: object, repo: object, base: Side, head: Side, *, attempt: object, out_path: object, allow_writable_interpreter: bool,
+                    load_probe: Callable[[], tuple] | None, order_salt: object, interpreter_of: Callable[[str], InterpreterPin] | None,
+                    run: _Run) -> _Checked:
+    """Steps 1 to 6 of the pipeline. Returns what they learned, raises `_Verdict` for a result and `BenchmarkGateError` for a caller or
+    harness fault. Nothing here starts a BENCHMARK child, seals an export or writes inside one. It does run the interpreter probe (``python -I -S``,
+    `_startup_probe`, up to ~20 s each) which IS a child (steps 4, 9 and 12), before the sealed runs; the wait floor counts it."""
+    # 1: every argument is validated before anything is touched
+    _check_side_argument(base, "base")
+    _check_side_argument(head, "head")
+    if type(attempt) is not int or attempt not in (1, 2):
+        raise _arg_error("attempt must be 1 or 2")
+    if type(allow_writable_interpreter) is not bool:
+        raise _arg_error("allow_writable_interpreter must be a bool")
+    if order_salt is not None and (type(order_salt) is not str or _SALT_RE.fullmatch(order_salt) is None):
+        raise _arg_error("order_salt must be 1 to 64 lowercase hex characters")
+    _check_commits(base.commit, head.commit)
+    dispatch = os.path.dirname(os.path.abspath(base.root))
+    run.out = _validate_out_path(out_path, [base.root, head.root, dispatch, *(
+        path for side in (base, head) for path in (side.bin_dir, os.path.dirname(os.path.abspath(side.bin_dir)), side.snapshot))])
+    salt = os.urandom(8).hex() if order_salt is None else order_salt
+    common = run.common
+    common.update(base_commit=base.commit, head_commit=head.commit, attempt=attempt, order_salt=salt)
+    if os.name != "posix":
+        raise _Verdict("INCONCLUSIVE", "UNSUPPORTED_PLATFORM", stage=_PRE)
+    # 2: the gate (the harness hash is taken now: every later result names the code that produced it)
+    common["harness_sha256"] = harness_sha256()
+    normalized, code = validate_benchmark_gate(gate)
+    if normalized is None:
+        raise _Verdict("REJECTED", "GATE_REJECTED", code, stage=_PRE)
+    target = benchmark_target(normalized)
+    common.update(gate_sha256=gate_sha256(normalized), repeats=normalized["repeats"], min_improvement=normalized["min_improvement"],
+                  max_noise=normalized["max_noise"])
+    # 3: ancestry is a caller error, not a verdict
+    if not is_ancestor(repo, base.commit, head.commit):
+        raise BenchmarkGateError("BASE_NOT_ANCESTOR", "the base commit is not an ancestor of the head commit")
+    # 4: isolation, no child yet, in the order of the spec
+    roots = (_export_root(base.root, "base root"), _export_root(head.root, "head root"))
+    if roots[0] == roots[1] or os.path.dirname(roots[0]) != os.path.dirname(roots[1]):
+        raise BenchmarkGateError("DEST_REJECTED", "the two roots must be distinct siblings of one dispatch root")
+    for side, root in zip((base, head), roots):
+        if export_commit(root) != side.commit:
+            raise BenchmarkGateError("OVERLAY_COMMIT_MISMATCH", "an export is not at the commit it was given")
+    for label, root in zip(("base", "head"), roots):
+        if os.path.lexists(os.path.join(root, ".git")):
+            raise _isolation("ROOT_HAS_GIT", [label])
+    bins = [os.path.realpath(base.bin_dir), os.path.realpath(head.bin_dir)]
+    if bins[0] == bins[1] or any(_inside(path, root) or _inside(root, path) for path in bins for root in map(os.path.realpath, roots)):
+        raise _isolation("BIN_NOT_ISOLATED")
+    seam = _interpreter_seam(interpreter_of, roots)
+    pins = []
+    for label, side in (("base", base), ("head", head)):
+        if not os.path.exists(os.path.join(side.bin_dir, "python")):
+            raise _isolation("NOT_PROVISIONED", [f"{label}: no bin/python"])
+        try:
+            pins.append(seam(side.bin_dir))
+        except BenchmarkGateError as exc:
+            raise _pin_error(exc, label) from exc
+    if pins[0].real_python != pins[1].real_python:
+        raise _isolation("INTERPRETER_DIFFERS", ["the sides resolve to different interpreters"])
+    real_python = os.path.realpath(pins[0].real_python)
+    venvs = [os.path.realpath(os.path.dirname(os.path.abspath(side.bin_dir))) for side in (base, head)]
+    if any(_inside(real_python, path) for path in (*venvs, *map(os.path.realpath, roots))):
+        raise _isolation("INTERPRETER_DIFFERS", ["the interpreter lies inside a venv or an export"])
+    writable = bool(pins[0].writable or pins[1].writable)
+    common.update(python=pins[0].real_python, interpreter_home=os.path.dirname(os.path.dirname(pins[0].real_python)), interpreter_writable=writable)
+    for label, side, pin in (("base", base, pins[0]), ("head", head, pins[1])):
+        if pin.sha256 != side.interpreter_sha256:
+            raise _isolation("INTERPRETER_CHANGED", [label])
+    if writable and not allow_writable_interpreter:
+        raise _isolation("INTERPRETER_WRITABLE")
+    here = os.path.realpath(__file__)
+    if any(_inside(here, path) for path in map(os.path.realpath, roots)):
+        raise _isolation("HARNESS_FILE_UNDER_ROOT")
+    _check_snapshots(base, head, _PRE)
+    _check_venvs(base, head, roots, _PRE)
+    _check_parity(base, head, roots, _PRE)
+    _check_exports(repo, (base, head), roots, ({}, {}), _PRE)
+    # 5: the diff checks
+    try:
+        diff_checks(repo, base.commit, head.commit, normalized["benchmark_paths"][0])
+    except BenchmarkGateError as exc:
+        if exc.code in DIFF_REFUSAL_CODES:
+            raise _Verdict("REJECTED", exc.code, exc.code, stage=_PRE,
+                           extra={"untrusted_text": [" | ".join(str(v) for v in hit.values()) for hit in exc.hits]}) from exc
+        if exc.code in COMPARE_REASONS["DIFF_UNCHECKABLE"][2]:
+            raise _Verdict("REJECTED", "DIFF_UNCHECKABLE", exc.code, stage=_PRE) from exc
+        raise
+    # 6: the host must be quiet before anything is sealed (the end check is step 13's)
+    load = _host_load(load_probe or _default_load_probe)
+    if load is None:
+        common.update(host_check="skipped_probe_failed", loadavg={"start": None, "end": None}, cpu_count={"start": None, "end": None})
+    else:
+        common.update(host_check="start_only", loadavg={"start": float(load[0]), "end": None}, cpu_count={"start": load[1], "end": None})
+        if Fraction(str(load[0])) * 10 > 7 * load[1]:
+            raise _Verdict("INCONCLUSIVE", "HOST_BUSY_START", stage=_PRE)
+    return _Checked(normalized, target, salt, attempt, pins[0], pins[1], load, roots)
+
+
+class _Baseline(NamedTuple):
+    """The step-9 fingerprints (spec 2.5), taken immediately before the first child and compared by step 12. Index 0 is the base, 1 the head."""
+    exports: tuple[str, str]               # `fingerprint_tree` of each export (`_MAX_TREE_ENTRIES`)
+    venvs: tuple[str, str]                 # `fingerprint_tree` of each venv root (`_VENV_FINGERPRINT_LIMIT`)
+    snapshots: tuple[tuple, tuple]         # a stat record of each snapshot file
+    dispatch: tuple[tuple, tuple]          # (sorted names of the dispatch root, ((".", (dev, ino, ctime_ns)) for the root itself, then (name, (dev, ino, size, ctime_ns)) for every non-export entry))
+    cfg_sha256: tuple[str, str]            # sha256 of each venv's `pyvenv.cfg`
+    real_python: tuple[str, str]           # the interpreter each side resolved to at step 4
+    bins: tuple[str, str]                  # the resolved `bin_dir` of each side (what the children run, passed on instead of resolving again)
+    identities: tuple                      # `(resolved path, st_dev, st_ino, label, ctime_ns or None)` of the dispatch root, both exports, both bin dirs, both venv roots (ctime only for the roots the harness never modifies after sealing)
+
+
+class _Prepared(NamedTuple):
+    """What steps 7 to 9 learned and the run steps use."""
+    gate: dict              # the normalized gate
+    target: str
+    benchmark: str          # the benchmark path (relative, as in the gate)
+    origin: str             # `PRE_EXISTING` or `BUILDER_AUTHORED`, derived from the base commit, not from the overlay's return value
+    benchmark_sha256: str
+    h0: tuple[str, str]     # `hash_export` of the base and the head export just after the seal
+    roots: tuple[str, str]
+    baseline: _Baseline
+
+
+def _benchmark_origin(repo: object, base_commit: str, path: str) -> str:
+    """`PRE_EXISTING` when the base COMMIT lists `path`, else `BUILDER_AUTHORED`: read from git, never from the exports (the overlay's own
+    return value reads the installed base export, which a build step could have written to)."""
+    length = _check_commits(base_commit)
+    with _PrivateGit(repo, length) as git:
+        git.require_commit(base_commit)
+        raw = git.run("ls-tree", "-z", "--full-tree", base_commit, "--", path)
+    return "PRE_EXISTING" if any(record.partition(b"\t")[2] == path.encode() for record in raw.split(b"\0")) else "BUILDER_AUTHORED"
+
+
+def _export_rejected(exc: BenchmarkGateError, label: str, stage: str) -> _Verdict:
+    return _Verdict("REJECTED", "EXPORT_REJECTED", exc.code, stage=stage, extra={"untrusted_text": [f"{label}: {exc.detail or exc.code}"]})
+
+
+def _compare_prepare(repo: object, base: Side, head: Side, checked: _Checked, *, interpreter_of: Callable[[str], InterpreterPin] | None,
+                     run: _Run) -> _Prepared:
+    """Steps 7 to 9. Raises `_Verdict` for a result and `BenchmarkGateError` for a caller or harness fault. Stage `pre_overlay` until the
+    overlay has succeeded, `overlaid` after. Nothing here starts a child; at the end both exports are sealed and hashed."""
+    common = run.common
+    roots = checked.roots
+    benchmark = checked.gate["benchmark_paths"][0]
+    # 7: the lint's import allowlist is read BEFORE the overlay and after the install; then the overlay itself
+    try:
+        top = repo_top_levels(roots[0])
+        overlay_benchmark_file(roots[0], roots[1], base.commit, benchmark, head_ref_commit=head.commit)
+    except BenchmarkGateError as exc:
+        if exc.code == "BENCHMARK_MODIFIED":
+            raise _Verdict("REJECTED", "BENCHMARK_MODIFIED", exc.code, stage=_PRE) from exc
+        if exc.code in COMPARE_REASONS["OVERLAY_REJECTED"][2]:  # every other `OVERLAY_REFUSAL_CODES` member (a new one must not raise here)
+            raise _Verdict("REJECTED", "OVERLAY_REJECTED", exc.code, stage=_PRE, extra={"untrusted_text": [exc.detail or exc.code]}) from exc
+        if exc.code in _HOSTILE_TREE_CODES:
+            raise _export_rejected(exc, "base", _PRE) from exc
+        raise
+    # the file exists in the base from here: a retry needs fresh exports
+    # the overlay's return value is not authoritative (a build step could have written the file); the base commit decides, and an
+    # installed-but-untracked file is then allowed only by its sha256 at step 9
+    origin = _benchmark_origin(repo, base.commit, benchmark)
+    common["benchmark_origin"] = origin
+    stage = _OVERLAID
+    # 8: seal, read, compare, hash, lint, hash, re-read
+    try:
+        seal_export(roots[0])
+        seal_export(roots[1])
+        data = [read_benchmark(root, benchmark) for root in roots]
+    except BenchmarkGateError as exc:
+        if exc.code in _HOSTILE_TREE_CODES or exc.code in _READ_BENCHMARK_CODES:
+            raise _export_rejected(exc, "export", stage) from exc
+        raise
+    if data[0] != data[1]:
+        raise _isolation("BENCHMARK_BYTES_DIFFER", [benchmark], stage)
+    benchmark_sha = hashlib.sha256(data[0]).hexdigest()
+    common["benchmark_sha256"] = benchmark_sha
+    violations = validate_benchmark_content(data[0], checked.gate["benchmark_symbol"], top)
+    if violations:
+        raise _Verdict("REJECTED", "LINT_REJECTED", violations[0], stage=stage, extra={"untrusted_text": list(violations)})
+    try:
+        h0 = (hash_export(roots[0]), hash_export(roots[1]))
+        again = [hashlib.sha256(read_benchmark(root, benchmark)).hexdigest() for root in roots]
+    except BenchmarkGateError as exc:
+        if exc.code in _HOSTILE_TREE_CODES or exc.code in _READ_BENCHMARK_CODES:
+            raise _export_rejected(exc, "export", stage) from exc
+        raise
+    if again != [benchmark_sha, benchmark_sha]:
+        raise _isolation("EXPORT_CHANGED", [benchmark], stage)
+    # 9: immediately before the first child, the step 4 checks again, with the overlay allowance on the base only
+    _check_snapshots(base, head, stage)
+    _check_venvs(base, head, roots, stage)
+    seam = _interpreter_seam(interpreter_of, roots)
+    for label, side, before in (("base", base, checked.base_pin), ("head", head, checked.head_pin)):
+        try:
+            pin = seam(side.bin_dir)
+        except BenchmarkGateError as exc:
+            raise _pin_error(exc, label, stage) from exc
+        if pin.sha256 != side.interpreter_sha256 or pin.real_python != before.real_python:
+            raise _isolation("INTERPRETER_CHANGED", [label], stage)
+    _check_parity(base, head, roots, stage)
+    _check_exports(repo, (base, head), roots, ({benchmark: benchmark_sha} if origin == "BUILDER_AUTHORED" else {}, {}), stage)
+    baseline = _baseline_fingerprints(base, head, roots, (checked.base_pin.real_python, checked.head_pin.real_python), stage)
+    return _Prepared(checked.gate, checked.target, benchmark, origin, benchmark_sha, h0, roots, baseline)
+
+
+def _stat_record(path: str) -> tuple:
+    """`lstat` of a file as the tuple the baseline compares (`ctime` cannot be set by a user, so a restore still shows)."""
+    st = os.lstat(path)
+    return (st.st_dev, st.st_ino, st.st_mode, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+
+
+def _fingerprint_or_verdict(path: str, limit: int, fallback: str, label: str, stage: str) -> str:
+    """`fingerprint_tree` with its errors as `ISOLATION_REJECTED`: over the limit is `FINGERPRINT_FAILED` (the Builder cannot fix it), any
+    other fault is `fallback`. The module-level limits are read by the caller at call time."""
+    try:
+        return fingerprint_tree(path, limit=limit)
+    except BenchmarkGateError as exc:
+        detail = "FINGERPRINT_FAILED" if exc.code == "TREE_TOO_LARGE" else fallback
+        raise _isolation(detail, [f"{label}: {exc.detail or exc.code}"], stage) from exc
+
+
+def _dispatch_state(roots: tuple[str, str], fallback: str, stage: str) -> tuple:
+    """The dispatch root's sorted name list and every entry that is not one of the two exports as `(dev, ino, size, ctime_ns)` (and the
+    root itself, as `"."`: `(dev, ino, ctime_ns)`), so a swapped sidecar, marker or sibling, or a renamed-and-restored dispatch root, shows (the exports are covered by their own fingerprint)."""
+    dispatch = os.path.dirname(roots[0])
+    export_names = {os.path.basename(root) for root in roots}
+    try:
+        names = []
+        with os.scandir(dispatch) as listing:  # bounded: a hostile run could fill the dispatch root with entries
+            for entry in listing:
+                names.append(entry.name)
+                if len(names) > _MAX_TREE_ENTRIES:
+                    raise _isolation("FINGERPRINT_FAILED", ["dispatch root: too many entries"], stage)
+        names.sort()
+        own = os.lstat(dispatch)  # the dispatch root itself: a rename-and-restore of it moves its ctime
+        entries = [(".", (own.st_dev, own.st_ino, own.st_ctime_ns))]
+        for name in names:
+            if name not in export_names:
+                st = os.lstat(os.path.join(dispatch, name))
+                entries.append((name, (st.st_dev, st.st_ino, st.st_size, st.st_ctime_ns)))
+    except OSError as exc:
+        raise _isolation(fallback, [f"dispatch root: {_describe(exc)}"], stage) from exc
+    return tuple(names), tuple(entries)
+
+
+def _cfg_sha256(side: Side, label: str, stage: str) -> str:
+    cfg = os.path.join(os.path.dirname(os.path.abspath(side.bin_dir)), "pyvenv.cfg")
+    try:
+        return hashlib.sha256(_read_bounded(cfg, _MAX_INPUT_BYTES, nofollow=True)).hexdigest()
+    except (OSError, ValueError) as exc:
+        raise _isolation("VENV_CHANGED", [f"{label}: pyvenv.cfg unreadable: {_describe(exc)}"], stage) from exc
+
+
+def _venv_roots(base: Side, head: Side) -> tuple[str, str]:
+    return tuple(os.path.dirname(os.path.abspath(side.bin_dir)) for side in (base, head))  # type: ignore[return-value]
+
+
+def _snapshot_records(base: Side, head: Side, stage: str) -> tuple[tuple, tuple]:
+    try:
+        return _stat_record(base.snapshot), _stat_record(head.snapshot)
+    except OSError as exc:
+        raise _isolation("SNAPSHOT_CHANGED", [_describe(exc)], stage) from exc
+
+
+def _identity_of(path: str, label: str, stage: str, *, sealed: bool = False) -> tuple[str, int, int, str, int | None]:
+    """`(resolved path, st_dev, st_ino, label, st_ctime_ns or None)` of a directory the children run in or from; it must be a real directory
+    (not a symlink) whose own path is already resolved, else `ISOLATION_REJECTED`/`HASH_UNREADABLE` (nothing a child could have done yet:
+    step 9). The ctime is kept only for `sealed` directories (the two export roots and the dispatch root): the harness never modifies
+    those after sealing (their entries are only read), so a rename-and-restore or an entry added or removed moves it. The bin and venv
+    roots are NOT sealed: pip, `pyvenv.cfg` readers and the interpreter may legitimately touch them, so they stay `(dev, ino)`."""
+    resolved = os.path.realpath(path)
+    try:
+        st = os.lstat(resolved)
+    except OSError as exc:
+        raise _isolation("HASH_UNREADABLE", [f"{label}: {_describe(exc)}"], stage) from exc
+    if not stat.S_ISDIR(st.st_mode):
+        raise _isolation("HASH_UNREADABLE", [f"{label}: not a directory"], stage)
+    return resolved, st.st_dev, st.st_ino, label, (st.st_ctime_ns if sealed else None)
+
+
+def _spawn_guard(identities: tuple) -> Callable[[str, str], None]:
+    """The guard `_execute` calls before every child (arguments: the side about to be spawned and the root it will run in): the root must be
+    the recorded one (so the path the harness resolved for the spawn is the step-9 path: fail closed), and each recorded directory must still resolve to
+    itself (no symlink or renamed ancestor in its path), still be the same inode and, for a sealed directory, still have its recorded ctime.
+    A dispatch root swapped for a planted copy (and put back later, inodes and all) shows here at the next spawn, or at step 12 (ctime).
+    Raises `_IdentityChanged` (its text starts with the label, so a length cap cannot cut it); `compare` turns it into
+    `ISOLATION_REJECTED`/`EXPORT_CHANGED`, stage `ran`."""
+    roots = {label: path for path, _dev, _ino, label, _ctime in identities}
+
+    def guard(side: str, root: str) -> None:
+        recorded = roots.get(f"{side} root")
+        if recorded is not None and root != recorded:
+            raise _IdentityChanged(f"{side} root: the child would run in {root}, not the recorded {recorded}", side)
+        for path, dev, ino, label, ctime in identities:
+            try:
+                now = os.lstat(path)
+                same = (os.path.realpath(path) == path and (now.st_dev, now.st_ino) == (dev, ino)
+                        and (ctime is None or now.st_ctime_ns == ctime))
+            except OSError:
+                same = False
+            if not same:
+                raise _IdentityChanged(f"{label}: directory replaced or modified before the {side} spawn: {path}", side)
+    return guard
+
+
+def _baseline_fingerprints(base: Side, head: Side, roots: tuple[str, str], real_python: tuple[str, str], stage: str) -> _Baseline:
+    """The end of step 9: fingerprints of both exports, both venvs, both snapshot files, the dispatch root and each `pyvenv.cfg`. Errors are
+    `ISOLATION_REJECTED` (`FINGERPRINT_FAILED` over a limit, else the side's own change token)."""
+    labels = ("base", "head")
+    bins = tuple(os.path.realpath(side.bin_dir) for side in (base, head))
+    sealed_labels = ("dispatch root", "base root", "head root")
+    identities = tuple(_identity_of(path, label, stage, sealed=label in sealed_labels) for path, label in (
+        (os.path.dirname(roots[0]), "dispatch root"), (roots[0], "base root"), (roots[1], "head root"), (bins[0], "base bin"), (bins[1], "head bin"),
+        *((root, f"{label} venv") for label, root in zip(labels, _venv_roots(base, head)))))
+    exports = tuple(_fingerprint_or_verdict(root, _MAX_TREE_ENTRIES, "HASH_UNREADABLE", label, stage) for label, root in zip(labels, roots))
+    venvs = tuple(_fingerprint_or_verdict(root, _VENV_FINGERPRINT_LIMIT, "VENV_CHANGED", label, stage)
+                  for label, root in zip(labels, _venv_roots(base, head)))
+    return _Baseline(exports, venvs, _snapshot_records(base, head, stage),  # type: ignore[arg-type]
+                     _dispatch_state(roots, "HASH_UNREADABLE", stage),
+                     tuple(_cfg_sha256(side, label, stage) for label, side in zip(labels, (base, head))), tuple(real_python),  # type: ignore[arg-type]
+                     bins, identities)  # type: ignore[arg-type]
+
+
+def _post_run_check(prepared: _Prepared, repo: object, base: Side, head: Side, *,
+                    interpreter_of: Callable[[str], InterpreterPin] | None) -> _Verdict | None:
+    """Step 12 (spec 2.5): everything step 9 fixed must still hold. In this order, and the first failure names the detail: snapshot pins
+    (`SNAPSHOT_CHANGED`), interpreter pin (`INTERPRETER_CHANGED`), `hash_export` and the export fingerprints and dispatch root
+    (`HASH_UNREADABLE`/`EXPORT_CHANGED`), `check_venv` and the venv fingerprints (`VENV_HOOK_REJECTED`/`VENV_CHANGED`), `dependency_parity`,
+    `verify_export_against_commit` with the step-9 allowance. Returns the `ISOLATION_REJECTED` (or `EXPORT_REJECTED`, stage `ran`: it beats
+    everything below too) verdict, or None. An
+    integrity error is a verdict; a git or host fault (`GIT_TIMEOUT`, `GIT_FAILED`, `REPO_UNREADABLE`) raises, as everywhere else."""
+    stage = _RAN
+    roots, before = prepared.roots, prepared.baseline
+    labels = ("base", "head")
+    sides = (base, head)
+    try:
+        # 1: snapshot pins, then the files themselves (a rewritten-and-restored snapshot moves ctime)
+        try:
+            _check_snapshots(base, head, stage)
+        except BenchmarkGateError as exc:
+            if exc.code != "VENV_SNAPSHOT_INVALID":
+                raise
+            raise _isolation("SNAPSHOT_CHANGED", [exc.detail or exc.code], stage) from exc
+        if _snapshot_records(base, head, stage) != before.snapshots:
+            raise _isolation("SNAPSHOT_CHANGED", ["snapshot file replaced or touched"], stage)
+        # 2: the interpreter
+        seam = _interpreter_seam(interpreter_of, roots)
+        for label, side, real in zip(labels, sides, before.real_python):
+            try:
+                pin = seam(side.bin_dir)
+            except BenchmarkGateError as exc:  # any failure of an interpreter that pinned at step 9 is a change (see the note at `_pin_error`)
+                raise _isolation("INTERPRETER_CHANGED", [f"{label}: {exc.detail or exc.code}"], stage) from exc
+            if pin.sha256 != side.interpreter_sha256 or pin.real_python != real:
+                raise _isolation("INTERPRETER_CHANGED", [label], stage)
+        # 3: the exports (content hash, then ctime fingerprints, then the dispatch root)
+        try:
+            hashes = tuple(hash_export(root) for root in roots)
+        except BenchmarkGateError as exc:  # DEST_REJECTED and OVERLAY_FAILED from the root check are integrity errors here
+            raise _isolation("HASH_UNREADABLE", [exc.detail or exc.code], stage) from exc
+        if hashes != prepared.h0:
+            raise _isolation("EXPORT_CHANGED", [label for label, now, then in zip(labels, hashes, prepared.h0) if now != then], stage)
+        prints = tuple(_fingerprint_or_verdict(root, _MAX_TREE_ENTRIES, "HASH_UNREADABLE", label, stage) for label, root in zip(labels, roots))
+        if prints != before.exports:
+            raise _isolation("EXPORT_CHANGED", [label for label, now, then in zip(labels, prints, before.exports) if now != then], stage)
+        if _dispatch_state(roots, "HASH_UNREADABLE", stage) != before.dispatch:
+            raise _isolation("EXPORT_CHANGED", ["dispatch root"], stage)
+        # 4: the venvs (the hook check, then the fingerprints, then pyvenv.cfg)
+        try:
+            _check_venvs(base, head, roots, stage)
+        except _Verdict as verdict:
+            if verdict.detail == "VENV_NOT_ISOLATED":  # it was isolated at step 9: it changed
+                verdict.detail = "VENV_CHANGED"
+            raise
+        except BenchmarkGateError as exc:
+            if exc.code != "VENV_SNAPSHOT_INVALID":
+                raise
+            raise _isolation("SNAPSHOT_CHANGED", [exc.detail or exc.code], stage) from exc
+        vprints = tuple(_fingerprint_or_verdict(root, _VENV_FINGERPRINT_LIMIT, "VENV_CHANGED", label, stage)
+                        for label, root in zip(labels, _venv_roots(base, head)))
+        if vprints != before.venvs:
+            raise _isolation("VENV_CHANGED", [label for label, now, then in zip(labels, vprints, before.venvs) if now != then], stage)
+        cfgs = tuple(_cfg_sha256(side, label, stage) for label, side in zip(labels, sides))
+        if cfgs != before.cfg_sha256:
+            raise _isolation("VENV_CHANGED", ["pyvenv.cfg"], stage)
+        # 5: the dependency inventory, 6: the exports against their commits (the base keeps the step-9 overlay allowance)
+        try:
+            _check_parity(base, head, roots, stage)
+        except _Verdict as verdict:
+            if verdict.detail == "VENV_NOT_ISOLATED":  # it was isolated at step 9: it changed (the word `_check_venvs` uses here)
+                verdict.detail = "VENV_CHANGED"
+            raise
+        except BenchmarkGateError as exc:
+            if exc.code in _RAISING_CODES:  # a harness invariant or a caller fault is not the Builder's DEPENDENCY_PARITY
+                raise
+            raise _isolation("DEPENDENCY_PARITY", [exc.detail or exc.code], stage) from exc
+        allow = {prepared.benchmark: prepared.benchmark_sha256} if prepared.origin == "BUILDER_AUTHORED" else {}
+        _check_exports(repo, (base, head), roots, (allow, {}), stage)
+    except _Verdict as verdict:
+        return verdict
+    return None
+
+
+# --- steps 10 and 11: the paired runs and the 2.7 mapping -------------------------------------------------------------------------
+
+_TRACE_ARGV_NOTE = "harness-only: temporary ini and plugin directory"
+_RAISING_CODES = frozenset({"MEASURE_FAILED", "MEASURE_ARGS_INVALID"})  # T1 and M4: a harness or caller fault, never a verdict
+_TRACE_AT_ONCE_KINDS = frozenset(COMPARE_REASONS["TRACE_MISMATCH"][2]) - {"counts_differ"}  # T6 (`counts_differ` is T5: pending)
+_RUN_FAILURE_KINDS = frozenset(_KIND_SUFFIX) - {"spawn"}  # T4 (the `_execute` kinds that are not a spawn failure)
+# M1, M2, M3: a measure refusal is a verdict under the reason of its own name, except these two (`UNSUPPORTED_PLATFORM`: step 1 handled it;
+# `OUTPUT_TOO_LARGE`: split by side, see `_map_measure_error`)
+_MEASURE_NOT_A_VERDICT = frozenset({"UNSUPPORTED_PLATFORM", "OUTPUT_TOO_LARGE"})
+
+
+class _RunOutcome(NamedTuple):
+    """What steps 10 and 11 leave for step 13 to merge, after step 12 found nothing."""
+    trace: dict | None             # the normalised trace of 2.8, None when no trace result was seen
+    pending: _Verdict | None       # the `counts_differ` TRACE_MISMATCH (T5), not yet raised
+    measured: dict | None          # `measure_paired`'s return value when it succeeded
+    measure_verdict: _Verdict | None  # the mapped INCONCLUSIVE (M3) of a measure refusal; REJECTED/NOT_IMPROVED never get here (item 3 raises)
+
+
+def _normalise_trace(trace: dict | None) -> dict | None:
+    """The 2.8 shape from a `trace_paired` error's ``trace`` (both sides' results) or its success dict; None when there is no result to show."""
+    if trace is None:
+        return None
+    if "interpreter" in trace:  # the success dict: one count and one interpreter for both sides
+        sides = {name: {"kind": "lines", "value": trace[name], "interpreter": trace["interpreter"]} for name in ("base", "head")}
+    else:
+        sides = {name: dict(trace[name]) for name in ("base", "head")}
+    return {**sides, "body_has_control_flow": trace["body_has_control_flow"], "argv": trace["argv"], "argv_note": _TRACE_ARGV_NOTE}
+
+
+def _error_extra(error: BenchmarkGateError) -> dict:
+    """The result keys an error of `trace_paired`/`measure_paired` supplies (its text is child-derived: `untrusted_text`)."""
+    return {"side": error.side, "phase": error.phase, "partial": error.partial, "untrusted_text": [error.detail or error.code]}
+
+
+def _map_trace_error(error: BenchmarkGateError) -> _Verdict:
+    """Rows T2 to T6 of 2.7 for an error of `trace_paired` (the order: the raising codes, `kind == "spawn"`, the code, the kind). Returns the
+    verdict (the caller decides whether `counts_differ`, T5, is pending); anything not in the table, and every harness fault, is re-raised."""
+    if error.code in _RAISING_CODES:  # T1
+        raise error
+    kind, extra = error.kind, _error_extra(error)
+    if kind == "spawn":  # T3: the side could not be started (stage `ran` even though no child ran)
+        return _Verdict("REJECTED", "ISOLATION_REJECTED", "NOT_PROVISIONED", kind=kind, stage=_RAN, extra=extra)
+    if error.code == "TRACE_UNAVAILABLE":  # T2
+        return _Verdict("INCONCLUSIVE", "TRACE_UNAVAILABLE", kind or "", kind=kind, stage=_RAN, extra=extra)
+    if error.code != "TRACE_MISMATCH":
+        raise error
+    if kind in _RUN_FAILURE_KINDS and error.side in ("base", "head"):  # T4: by side, with the measure rows
+        reason = f"{error.side.upper()}_{_KIND_SUFFIX[kind]}"
+        return _Verdict(COMPARE_RESULT_OF_REASON[reason], reason, kind, kind=kind, stage=_RAN, extra={**extra, "trace_fault": error.side})
+    if kind == "counts_differ" or kind in _TRACE_AT_ONCE_KINDS:  # T5 (pending, by the caller) and T6
+        return _Verdict("REJECTED", "TRACE_MISMATCH", kind, kind=kind, stage=_RAN, extra=extra)
+    raise error  # `harness` or a kind this table does not know: no verdict
+
+
+def _map_measure_error(error: BenchmarkGateError) -> _Verdict:
+    """Rows T3, M1 to M3 of 2.7 for an error of `measure_paired` (the raising codes first, then `kind == "spawn"`, then the code, then the side)."""
+    if error.code in _RAISING_CODES:  # M4
+        raise error
+    kind, extra = error.kind, _error_extra(error)
+    if kind == "spawn":  # T3
+        return _Verdict("REJECTED", "ISOLATION_REJECTED", "NOT_PROVISIONED", kind=kind, stage=_RAN, extra=extra)
+    if error.code == "OUTPUT_TOO_LARGE" and error.side in ("base", "head"):
+        reason = f"{error.side.upper()}_OUTPUT_TOO_LARGE"
+    elif error.code in MEASURE_REFUSAL_CODES and error.code not in _MEASURE_NOT_A_VERDICT and error.code in COMPARE_RESULT_OF_REASON:
+        reason = error.code
+    else:
+        raise error  # UNSUPPORTED_PLATFORM (step 1 handled it) or a code this table does not know: no verdict
+    return _Verdict(COMPARE_RESULT_OF_REASON[reason], reason, kind or "", kind=kind, stage=_RAN, extra=extra)
+
+
+def _identity_ending(error: _IdentityChanged) -> _Verdict:
+    """The outcome of a spawn guard that objected (``ISOLATION_REJECTED``/``EXPORT_CHANGED``, stage ``ran``): the result carries what the exception
+    knows (``side`` the side about to be spawned, ``phase`` and ``partial`` the completed timed rounds, as the errors of ``measure_paired`` and
+    ``trace_paired`` do), so an operator can see where the swap was caught."""
+    verdict = _isolation("EXPORT_CHANGED", [error.detail], _RAN)
+    verdict.extra.update({"side": error.side, "phase": error.phase, "partial": error.partial})
+    return verdict
+
+
+def _replaced_after_invalid(error: BenchmarkGateError, guard: Callable[[str, str], None], root: str) -> _Verdict | None:
+    """A `MEASURE_ARGS_INVALID` out of `trace_paired`/`measure_paired` is a caller fault, unless a child replaced a directory the argument
+    checks look at (it renamed its export root or venv bin, or symlinked one side to the other): the checks then fail BEFORE any spawn and
+    so before the spawn guard. Run the guard again: if it objects, the outcome is `ISOLATION_REJECTED`/`EXPORT_CHANGED` (stage `ran`), the
+    same as the guard's own; if it is silent the error stands (None) and the caller maps it as before (a raise, exit 2)."""
+    if error.code != "MEASURE_ARGS_INVALID":
+        return None
+    try:
+        guard("base", root)
+    except _IdentityChanged as changed:
+        return _identity_ending(changed)
+    return None
+
+
+def _compare_runs(prepared: _Prepared, repo: object, base: Side, head: Side, checked: _Checked, *, run: _Run, argv_builder=None,
+                  min_base_ns: int = _MIN_BASE_NS, interpreter_of: Callable[[str], InterpreterPin] | None = None) -> _RunOutcome:
+    """Steps 10 to 12 (step 13, `_merge_outcome`, merges what is returned). A `BenchmarkGateError` raised by a run (a raise of 2.7: T1, M4,
+    any 2.1 raise) propagates and step 12 does not run, EXCEPT a `MEASURE_ARGS_INVALID` while a directory the children use was replaced
+    (a child that renamed its export root or symlinked one side to the other makes the argument checks fail): the spawn guard is run again,
+    and if it objects that is `_IdentityChanged`'s outcome, not a caller fault. An `_IdentityChanged` (the spawn guard, before a spawn)
+    is caught here, ends the runs with `ISOLATION_REJECTED`/`EXPORT_CHANGED` (stage `ran`) and step 12 DOES run (it wins with its own finding).
+    Every other path started a child (a T3 spawn too, even if none ran), so step 12 runs: its `ISOLATION_REJECTED` (or `EXPORT_REJECTED`, stage `ran`) beats everything. Then
+    the at-once trace results (items 2) and a measure-raised REJECTED/NOT_IMPROVED (item 3) are raised as `_Verdict`; what is left for the
+    precedence list (pending trace mismatch, measure INCONCLUSIVE, success: items 4 to 6) is returned."""
+    gate, common = prepared.gate, run.common
+    common["trace_mismatch_seen"] = False
+    sides = (prepared.roots[0], prepared.roots[1], *prepared.baseline.bins)  # the step-9 resolved paths, not resolved again after a child ran
+    guard = _spawn_guard(prepared.baseline.identities)
+    if not set(sides) <= {path for path, *_ in prepared.baseline.identities}:  # local invariant: only recorded (step-9 resolved) paths are spawned
+        raise BenchmarkGateError("MEASURE_FAILED", "internal invariant: a path to be spawned from was not recorded at step 9")
+    ending: _Verdict | None = None
+    pending: _Verdict | None = None
+    trace: dict | None = None
+    measured: dict | None = None
+    measure_verdict: _Verdict | None = None
+    # 10: the paired trace run
+    try:
+        guard("base", sides[0])  # nothing may have been replaced since step 9
+        traced = trace_paired(*sides, prepared.target, timeout_seconds=gate["per_run_timeout_seconds"], argv_builder=argv_builder,
+                              spawn_guard=guard)
+        trace = _normalise_trace(traced)
+    except _IdentityChanged as error:  # a directory was replaced between runs: nothing more is run or measured (step 12 still runs)
+        ending = _identity_ending(error)
+    except BenchmarkGateError as error:
+        ending = _replaced_after_invalid(error, guard, sides[0])
+        if ending is None:
+            mapped = _map_trace_error(error)
+            trace = _normalise_trace(error.trace)
+            if mapped.kind == "counts_differ":
+                pending = mapped  # T5: the measurement still runs
+            else:
+                ending = mapped
+    common["trace"] = trace
+    # 11: the paired measurement, unless the trace already ended it
+    if ending is None:
+        try:
+            guard("base", sides[0])  # before measure_paired's own argument checks: a child of the trace run may have replaced a directory
+            measured = measure_paired(*sides, prepared.target, repeats=gate["repeats"], timeout_seconds=gate["per_run_timeout_seconds"],
+                                      base_commit=base.commit, head_commit=head.commit, benchmark_sha256=prepared.benchmark_sha256,
+                                      attempt=checked.attempt, warmup=gate["warmup_runs"], min_base_ns=min_base_ns, argv_builder=argv_builder,
+                                      order_salt=checked.order_salt, spawn_guard=guard)
+        except _IdentityChanged as error:
+            ending = _identity_ending(error)
+        except BenchmarkGateError as error:
+            replaced = _replaced_after_invalid(error, guard, sides[0])
+            if replaced is not None:
+                ending = replaced
+            else:
+                mapped = _map_measure_error(error)
+                if mapped.result == "INCONCLUSIVE":  # M3: item 4 (a pending mismatch stands) or item 5; step 13 decides
+                    measure_verdict = mapped
+                else:  # item 3
+                    ending = mapped
+        if ending is not None and pending is not None:  # a trace mismatch still pending when the measurement ended it: say so (an ending before the measurement had none pending)
+            ending.extra["trace_mismatch_seen"] = True
+    # 12: beats everything but a raise. Note for C4e: when a step-12 finding beats a pending `counts_differ` (or an ending that carried
+    # `trace_mismatch_seen`), the result is the finding's and `trace_mismatch_seen` STAYS False (spec 2.7 item 3 sets it only on a result that the
+    # measure or a guard ended); the pending mismatch is still visible in `trace`.
+    finding = _post_run_check(prepared, repo, base, head, interpreter_of=interpreter_of)
+    if finding is not None:
+        raise finding
+    if ending is not None:
+        raise ending
+    return _RunOutcome(trace, pending, measured, measure_verdict)
+
+
+# --- step 13: the one merge point of steps 10 to 12 (spec 2.6, 2.7) ---------------------------------------------------------------
+
+_HOST_BUSY_MIN_CPUS = 3  # below this the gate's own one-process load is too large a share of the machine for the end check to mean anything
+
+
+def _host_busy_end(checked: _Checked, load_probe: Callable[[], tuple] | None, common: dict) -> bool:
+    """The end host check (2.6), probed once: `(load1 - 1) * 10 > 7 * cpu_count` in exact arithmetic (`Fraction(str(load1))`), the 1 being
+    the gate's own load. Records `host_check`, `loadavg.end` and `cpu_count.end`. A failed start probe already skipped both checks (no end
+    probe); a bad end probe or fewer than `_HOST_BUSY_MIN_CPUS` cpus skips this one."""
+    if checked.load is None:
+        return False
+    load = _host_load(load_probe or _default_load_probe)
+    if load is None:
+        common["host_check"] = "skipped_probe_failed"
+        return False
+    common["loadavg"] = {**common["loadavg"], "end": float(load[0])}
+    common["cpu_count"] = {**common["cpu_count"], "end": load[1]}
+    if load[1] < _HOST_BUSY_MIN_CPUS:
+        common["host_check"] = "end_skipped_few_cpus"
+        return False
+    common["host_check"] = "checked"
+    return (Fraction(str(load[0])) - 1) * 10 > 7 * load[1]
+
+
+def _measured_fields(measured: dict) -> dict:
+    """The result keys a successful `measure_paired` fills (raw samples kept so a consumer can recompute): the ratios head/base per pair,
+    `improvement = 1 - median(ratios)`, `mad_over_median`, the two median times. Fractions become floats in `_result_dict`."""
+    base_ns, head_ns = measured["base_ns"], measured["head_ns"]
+    ratios, median, mad = _ratio_stats(base_ns, head_ns)
+    return {"order": measured["order"], "base_ns": base_ns, "head_ns": head_ns, "digest": measured["digest"], "argv": measured["argv"],
+            "n": len(base_ns), "ratios": ratios, "improvement": 1 - median, "mad_over_median": mad / median,
+            "base_median_ns": _median([Fraction(v) for v in base_ns]), "head_median_ns": _median([Fraction(v) for v in head_ns])}
+
+
+def _merge_outcome(outcome: _RunOutcome, prepared: _Prepared, checked: _Checked, run: _Run, load_probe: Callable[[], tuple] | None) -> _Verdict:
+    """Items 4 to 6 of the precedence list (2.7); items 0 to 3 already left `_compare_runs` as a raise or a `_Verdict`. 4: a pending
+    `counts_differ` mismatch beats a measure-raised INCONCLUSIVE and the statistics; whatever was measured stays in the result and the end
+    host check is not probed. 5: a measure-raised INCONCLUSIVE with nothing pending. 6: the statistics, then `HOST_BUSY_END` replaces an
+    IMPROVED, NOT_IMPROVED or INCONCLUSIVE of `evaluate_paired_samples`, never `INVALID_INPUT`."""
+    pending, refused, measured = outcome.pending, outcome.measure_verdict, outcome.measured
+    if pending is not None:
+        if measured is not None:
+            pending.extra.update(_measured_fields(measured))
+        elif refused is not None:
+            pending.extra["partial"] = refused.extra.get("partial")
+            pending.extra["untrusted_text"] = [*pending.extra.get("untrusted_text", []), *refused.extra.get("untrusted_text", [])]
+        return pending
+    if refused is not None:
+        return refused
+    if measured is None:  # no pending error and no refusal: the measurement succeeded (an invariant, not an input)
+        raise BenchmarkGateError("MEASURE_FAILED", "internal invariant: no measurement and no verdict")
+    fields = _measured_fields(measured)
+    gate = prepared.gate
+    result, reason = evaluate_paired_samples(measured["base_ns"], measured["head_ns"], repeats=gate["repeats"],
+                                             min_improvement=gate["min_improvement"], max_noise=gate["max_noise"])
+    if reason != "INVALID_INPUT" and _host_busy_end(checked, load_probe, run.common):
+        result, reason = "INCONCLUSIVE", "HOST_BUSY_END"
+    return _Verdict(result, reason, stage="ran", extra=fields)
+
+
+def _compare_impl(gate: object, repo: object, base: Side, head: Side, *, attempt: object = 1, out_path: object,
+                  allow_writable_interpreter: bool = False, argv_builder=None, load_probe=None, min_base_ns: int = _MIN_BASE_NS,
+                  order_salt: object = None, interpreter_of=None) -> _WrittenResult:
+    """The pipeline behind `compare`, with the test seams (`argv_builder`, `load_probe`, `min_base_ns`, `order_salt`, `interpreter_of`).
+    A result (a `_Verdict`) is assembled, written to ``out_path`` after step 12 and returned; a caller or harness fault raises
+    `BenchmarkGateError`."""
+    run = _Run()
+    try:
+        checked = _compare_checks(gate, repo, base, head, attempt=attempt, out_path=out_path, allow_writable_interpreter=allow_writable_interpreter,
+                                  load_probe=load_probe, order_salt=order_salt, interpreter_of=interpreter_of, run=run)
+        prepared = _compare_prepare(repo, base, head, checked, interpreter_of=interpreter_of, run=run)
+        outcome = _compare_runs(prepared, repo, base, head, checked, run=run, argv_builder=argv_builder, min_base_ns=min_base_ns,
+                                interpreter_of=interpreter_of)
+        verdict = _merge_outcome(outcome, prepared, checked, run, load_probe)
+    except _Verdict as ended:
+        verdict = ended
+    result = _result_dict(verdict, run.common)
+    if run.out is None:  # a verdict only exists after step 1 validated out_path (an invariant, not an input)
+        raise BenchmarkGateError("MEASURE_FAILED", "internal invariant: a verdict before out_path was validated")
+    written = _WrittenResult(result)
+    written.written_sha256 = _write_result(str(out_path), run.out[0], run.out[1], _result_bytes(result))
+    return written
+
+
+def compare(gate: object, repo: object, base: Side, head: Side, *, attempt: object = 1, out_path: object,
+            allow_writable_interpreter: bool = False) -> _WrittenResult:
+    """Compare two exports of one benchmark (spec 2.2): a result dict (a ``_WrittenResult``) for every outcome that PR content, the children or the host can cause,
+    `BenchmarkGateError` for a caller or harness fault. A thin wrapper over `_compare_impl` with the default seams.
+    ``allow_writable_interpreter`` must be a ``bool`` (a ``BenchmarkGateError`` ``MEASURE_ARGS_INVALID`` otherwise); it is a human signal and
+    must never be set by an automatic retry of ``INTERPRETER_WRITABLE``.
+    Known residuals: the module docstring ("Known residuals of ``compare``", the labels ``[R1]`` and following) is their single source; read them there.
+    ``parse_compare_outcome`` is the reference implementation of the reading protocol for this command's outcome (module docstring,
+    "Reading the outcome"). Retry on the
+    same exports is keyed on (reason, stage, detail): ``COMPARE_RETRYABLE_AUTOMATIC`` (``HOST_BUSY_START``) and, only after a human sets the flag,
+    ``COMPARE_RETRYABLE_WITH_HUMAN_FLAG`` (``INTERPRETER_WRITABLE``) are the complete list; every other
+    ``ISOLATION_REJECTED`` at ``pre_overlay`` (``INTERPRETER_CHANGED``, ``INTERPRETER_DIFFERS``, ``SNAPSHOT_CHANGED``, ``DEPENDENCY_PARITY``,
+    ``TRACKED_FILE_DIFFERS``, ...) is not (spec 2.3). The returned dict (a `_WrittenResult`: a ``dict`` subclass that also carries
+    ``written_sha256``, the sha256 of the bytes written to ``out_path``) is the
+    in-memory result; the file is not read back."""
+    return _compare_impl(gate, repo, base, head, attempt=attempt, out_path=out_path, allow_writable_interpreter=allow_writable_interpreter)
 
 
 # ---------------------------------------------------------------------------
@@ -4086,11 +6380,39 @@ def _cmd_export(args: argparse.Namespace) -> int:
 
 
 def _cmd_snapshot_venv(args: argparse.Namespace) -> int:
-    """Record a fresh venv's `.pth` and startup files before the project install (exit 0; 2 on any failure, with the code on stderr)."""
+    """Record a fresh venv's `.pth` and startup files before the project install, then print the two pins `compare` takes:
+    ``snapshot_sha256: <hex>`` (the written file's bytes) and ``interpreter_sha256: <hex>`` (`interpreter_pin`). Exit 0; 2 on any failure,
+    with the code on stderr and nothing on stdout. The interpreter pin is computed BEFORE the file is written: `snapshot_venv` refuses an
+    existing path, so a pin failure after the write would leave a file that blocks the retry. A snapshot larger than ``_VENV_MAX_SNAPSHOT_BYTES`` (the
+    one limit every reader uses) is a failure, never the hash of a truncated read: no later step could load it; the file this call wrote is then removed (best effort), so a
+    retry on the same ``--out`` is possible."""
+    written = False
     try:
+        pin = interpreter_pin(args.bin)
         snapshot_venv(args.bin, args.out)
+        written = True
+        data = _read_bounded(args.out, _VENV_MAX_SNAPSHOT_BYTES, nofollow=True)
+        if len(data) > _VENV_MAX_SNAPSHOT_BYTES:
+            raise BenchmarkGateError("VENV_SNAPSHOT_INVALID", "the snapshot is larger than the limit every later step reads")
+    except (BenchmarkGateError, OSError, ValueError) as exc:
+        if written:  # unusable: remove the file at `--out` (best effort, by path: a same-user process could have swapped it), or it blocks the retry
+            with contextlib.suppress(OSError):
+                os.unlink(args.out)
+        return _fail(exc if isinstance(exc, BenchmarkGateError) else BenchmarkGateError("TREE_UNREADABLE", escape_diagnostic(str(exc), 120)))
+    print(f"snapshot_sha256: {hashlib.sha256(data).hexdigest()}")
+    print(f"interpreter_sha256: {pin.sha256}")
+    return 0
+
+
+def _cmd_harness_sha256(_args: argparse.Namespace) -> int:
+    """Print ``harness_sha256: <hex>`` (`harness_sha256()`), exit 0; 2 with the code on stderr when the harness cannot be digested. Run it in a
+    TRUSTED copy of the harness (the pinned release or a clean checkout) to get the EXPECTED value C4e compares with a `compare` result's; the value
+    of a previous `compare` result is never a source for it (circular)."""
+    try:
+        digest = harness_sha256()
     except BenchmarkGateError as exc:
         return _fail(exc)
+    print(f"harness_sha256: {digest}")
     return 0
 
 
@@ -4106,46 +6428,170 @@ def _cmd_cleanup(args: argparse.Namespace) -> int:
     process" means retry later). SIGINT, SIGTERM and SIGHUP become
     ``KeyboardInterrupt`` (the first also ignores the others, so a second Ctrl-C cannot interrupt the put-back): the claimed tree is
     put back, exit 1; other fatal signals leave ``.gone-<root>-<hex>`` (see ``cleanup_root``)."""
-    import signal
-
-    numbers = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
-
-    def interrupt(_signum, _frame):
-        for number in numbers:
-            signal.signal(number, signal.SIG_IGN)
-        raise KeyboardInterrupt
-
-    old = [(number, signal.signal(number, interrupt)) for number in numbers]
     try:
-        code = cleanup_root(args.root)
+        with _with_signal_handlers():
+            code = cleanup_root(args.root)
     except KeyboardInterrupt:
         print("cleanup interrupted; run it again to finish", file=sys.stderr)
         return 1
-    finally:
-        for number, handler in old:
-            signal.signal(number, handler or signal.SIG_DFL)
     print(code)
     if code == "REMOVE_FAILED":
         print(f"REMOVE_FAILED: {_failure or 'no detail'}", file=sys.stderr)
     return 0 if code in ("REMOVED", "ABSENT") else 1
 
 
+def _crash_message(exc: BaseException) -> str:
+    """The crash contract's one stderr line (spec 2.9): ``usage error: <CODE or INTERNAL>: <type>``. Never the exception's text: it may carry
+    attacker bytes. ``CODE`` is a ``BenchmarkGateError`` code from the closed ``ERROR_CODES``; anything else is ``INTERNAL``."""
+    code = exc.code if isinstance(exc, BenchmarkGateError) and exc.code in ERROR_CODES else "INTERNAL"
+    return f"usage error: {code}: {escape_diagnostic(type(exc).__name__, 64)}"
+
+
+# What `run-once` reports as a reason (exit 1): every code `_run_error_code` can give for either side, plus the missing digest. Derived from
+# `_KIND_SUFFIX`: a new `_execute` kind cannot turn `run-once` into exit 2.
+_RUN_ONCE_REASONS = frozenset(_run_error_code(side, kind) for side in ("base", "head") for kind in _KIND_SUFFIX) | {"DIGEST_MISSING"}
+
+
+def _read_gate_file(path: str) -> object:
+    """The raw ``benchmark_gate`` JSON of ``--gate`` (a bounded read; not the whole specialist inputs). ``OSError`` or ``ValueError`` otherwise."""
+    data = _read_bounded(path, _MAX_INPUT_BYTES)
+    if len(data) > _MAX_INPUT_BYTES:
+        raise ValueError("gate file too large")
+    return json.loads(data.decode("utf-8"))
+
+
+def _cmd_compare(args: argparse.Namespace) -> int:
+    """Compare two exports (spec 2.9). This function returns 0 only for an ``IMPROVED`` result, 1 for any other result, 2 for usage, a raised
+    ``BenchmarkGateError`` or a crash. Reading contract: exit 0 means ``IMPROVED`` ONLY together with a valid ``RESULT: IMPROVED ...`` line whose
+    ``sha256=`` matches the bytes of the file; a bare exit 0 (``compare --help``, which argparse ends with exit 0 and no ``RESULT:`` line) is NOT an
+    ``IMPROVED``. Abbreviated options are refused (``allow_abbrev=False``, exit 2). An exit 1 WITHOUT a valid ``RESULT:`` line counts as exit 2, and on exit 2 a file at
+    ``--out`` is to be IGNORED. The file can exist on exit 2: ``compare`` writes it (step 13) and only then does this function validate the
+    in-memory result (a failure there raises ``ValueError``, exit 2, with the file already on disk); a crash BEFORE ``compare`` returns, or
+    inside it before the write, leaves none. The crash handler itself writes nothing. ``INTERPRETER_WRITABLE`` must never be auto-retried
+    with ``--allow-writable-interpreter`` (a human signal; see ``COMPARE_RETRYABLE_WITH_HUMAN_FLAG``).
+    The ``RESULT: <result> <reason> interpreter_writable=<0|1|n/a> sha256=<hex>`` line is printed AFTER the
+    result file exists, from the in-memory result and the sha256 ``_write_result`` returned for the bytes it wrote (the file is NOT read back:
+    a same-user process can rewrite it in place, and the exit code must not follow such a rewrite; the Orchestrator's check of the line
+    against the bytes it reads from the file, once, is what catches one). A crash catches ``BenchmarkGateError``, ``OSError``, ``ValueError``, ``RecursionError``,
+    ``Exception`` and ``KeyboardInterrupt`` (a SIGTERM, SIGHUP or SIGINT) and prints ``usage error: <CODE or INTERNAL>: <type>`` on stderr
+    (never attacker text) and exits 2; sealed exports stay sealed (``cleanup`` restores them). The line is built by ``format_result_line``; the reference
+    reader of the protocol is ``parse_compare_outcome``."""
+    try:
+        with _with_signal_handlers():
+            gate = _read_gate_file(args.gate)
+            base = Side(args.base_root, args.base_commit, args.base_bin, args.base_snapshot, args.base_snapshot_sha256, args.base_interpreter_sha256)
+            head = Side(args.head_root, args.head_commit, args.head_bin, args.head_snapshot, args.head_snapshot_sha256, args.head_interpreter_sha256)
+            outcome = compare(gate, args.repo, base, head, attempt=args.attempt, out_path=args.out,
+                              allow_writable_interpreter=args.allow_writable_interpreter)
+            # everything below comes from the in-memory result and the hash `_write_result` returned for the bytes it wrote: the file on
+            # disk is not read back (a same-user process could have rewritten it in place since, with the same inode)
+            result = outcome["result"]
+            digest = getattr(outcome, "written_sha256", None)
+            print(format_result_line(result, outcome["reason"], outcome["interpreter_writable"], digest))  # raises ValueError for anything off the closed sets
+    except (BenchmarkGateError, OSError, ValueError, RecursionError, Exception, KeyboardInterrupt) as exc:
+        print(_crash_message(exc), file=sys.stderr)
+        return 2
+    return 0 if result == "IMPROVED" else 1
+
+
+def _cmd_run_once(args: argparse.Namespace) -> int:
+    """One untimed run of the benchmark (spec 2.9). Exit 0 prints ``digest: <64 hex>`` (what the child printed: NOT evidence); 1 prints the
+    reason on stdout (``<SIDE>_NONZERO_EXIT``, ``<SIDE>_TIMEOUT``, ``OUTPUT_TOO_LARGE``, ``DIGEST_MISSING`` or ``REJECT:<gate code>``) and the
+    escaped detail on stderr (child text: untrusted); 2 for usage or a crash (the crash contract of ``_cmd_compare``)."""
+    try:
+        with _with_signal_handlers():
+            normalized, code = validate_benchmark_gate(_read_gate_file(args.gate))
+            if normalized is None:
+                print(f"REJECT:{code}")
+                return 1
+            outcome = run_benchmark_once(args.root, args.bin, benchmark_target(normalized), timeout_seconds=normalized["per_run_timeout_seconds"], side=args.side)
+            print(f"digest: {outcome['digest']}")
+            return 0
+    except BenchmarkGateError as exc:
+        if exc.code in _RUN_ONCE_REASONS:
+            print(exc.code)
+            print(f"detail: {escape_diagnostic(exc.detail, 200)}", file=sys.stderr)
+            return 1
+        print(_crash_message(exc), file=sys.stderr)
+        return 2
+    except (OSError, ValueError, RecursionError, Exception, KeyboardInterrupt) as exc:
+        print(_crash_message(exc), file=sys.stderr)
+        return 2
+
+
+_WRITABLE_TOKENS = {True: "1", False: "0", None: "n/a"}  # `interpreter_writable` of the result -> its token in the RESULT line
+_RESULT_LINE_RE = re.compile(r"RESULT: ([A-Z_]+) ([A-Z_]+) interpreter_writable=(0|1|n/a) sha256=([0-9a-f]{64})")  # the same line as `format_result_line` prints
+
+
+def _is_result_reason_pair(result: object, reason: object) -> bool:
+    """Whether (`result`, `reason`) is one pair of ``COMPARE_RESULT_OF_REASON`` (the one check the printer and the reader share)."""
+    return type(result) is str and type(reason) is str and result in COMPARE_RESULTS and COMPARE_RESULT_OF_REASON.get(reason) == result
+
+
+def format_result_line(result: object, reason: object, interpreter_writable: object, sha256: object) -> str:
+    """The ``RESULT:`` line of ``compare`` (the ONE place that builds it; ``_RESULT_LINE_RE`` and ``parse_compare_outcome`` read what it prints).
+    ``ValueError`` unless the pair is a pair of ``COMPARE_RESULT_OF_REASON``, `interpreter_writable` is exactly ``True``, ``False`` or ``None`` (printed
+    ``1``, ``0``, ``n/a``) and `sha256` is 64 lower-case hex digits."""
+    if (not _is_result_reason_pair(result, reason) or all(interpreter_writable is not known for known in _WRITABLE_TOKENS)
+            or type(sha256) is not str or _SHA256_RE.fullmatch(sha256) is None):
+        raise ValueError("compare returned an unknown result or reason, or no hash of what it wrote")
+    return f"RESULT: {result} {reason} interpreter_writable={_WRITABLE_TOKENS[interpreter_writable]} sha256={sha256}"
+
+
+def parse_compare_outcome(returncode: int, stdout: str, file_bytes: bytes | None) -> tuple[int, dict | None]:
+    """The REFERENCE READER of one ``compare`` run for C4e (spec 2.9; stdlib only): `(exit_code, parsed)`, the exit code the Orchestrator may act
+    on and the parsed result file. `returncode` and `stdout` are the process's; `file_bytes` is the result file read ONCE into bytes (``None``
+    when it does not exist). An exit 0 or 1 counts only with exactly ONE valid ``RESULT:`` line (the one `format_result_line` prints) whose ``sha256=`` is
+    the hash of `file_bytes` and whose result, reason and ``interpreter_writable=`` (``n/a`` is the file's ``null``) equal those of the parsed file (and the
+    result and reason are a pair of ``COMPARE_RESULT_OF_REASON``), and the exit agrees with the result: 0 only for
+    ``IMPROVED`` (a bare exit 0, such as ``compare --help``, is NOT an ``IMPROVED``), 1 only for any other result. Anything else, including Python's own
+    exit 1 for an uncaught exception, a file that is not a JSON object and a file too deeply nested to parse, is `(2, None)`: "ignore the file". `stage` and
+    `detail` are to be read from `parsed`, never from the line."""
+    ignore: tuple[int, dict | None] = (2, None)
+    if type(returncode) is not int or returncode not in (0, 1) or file_bytes is None:
+        return ignore
+    lines = [m for m in map(_RESULT_LINE_RE.fullmatch, stdout.splitlines()) if m]
+    if len(lines) != 1 or lines[0].group(4) != hashlib.sha256(file_bytes).hexdigest():
+        return ignore
+    try:
+        parsed = json.loads(file_bytes)
+    except (ValueError, RecursionError):
+        return ignore
+    if not isinstance(parsed, dict) or (parsed.get("result"), parsed.get("reason")) != (lines[0].group(1), lines[0].group(2)) \
+            or not _is_result_reason_pair(parsed["result"], parsed["reason"]):
+        return ignore
+    writable = {token: value for value, token in _WRITABLE_TOKENS.items()}[lines[0].group(3)]
+    if "interpreter_writable" not in parsed or parsed["interpreter_writable"] is not writable:
+        return ignore
+    improved = parsed["result"] == "IMPROVED"
+    return (returncode, parsed) if (returncode == 0) == improved else ignore
+
+
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point: ``validate`` (C4a), ``lint`` (C4b), ``export``, ``fixed-parent`` (C4c-1a) and ``cleanup`` (C4c-1b, C4c-1c) and ``snapshot-venv`` (C4c-2c). Later
-    PRs add ``compare`` and ``run-once`` (C4d) by adding a subparser with ``set_defaults(func=...)``. There is no catch-all
-    here on purpose: C4d owns the exit-code contract for a crash."""
-    parser = argparse.ArgumentParser(prog="benchmark_gate.py", description="Benchmark gate: validate, lint, export, fixed-parent, cleanup, snapshot-venv.")
+    """CLI entry point: ``validate`` (C4a), ``lint`` (C4b), ``export``, ``fixed-parent`` (C4c-1a), ``cleanup`` (C4c-1b, C4c-1c), ``snapshot-venv``
+    (C4c-2c), and ``compare`` and ``run-once`` (C4d-3). Every other subcommand lets an unexpected exception escape (Python exits 1); ``compare`` and
+    ``run-once`` own the crash contract: every error, ``KeyboardInterrupt`` included, becomes ``usage error: <CODE or INTERNAL>: <type>`` and
+    exit 2 (see ``_cmd_compare``). An unexpected crash in ``harness-sha256``, ``snapshot-venv``, ``fixed-parent`` and the other non-compare
+    subcommands is Python's uncaught exception and exits 1, so a caller must treat ANY non-zero exit of those as a failure. ``harness-sha256`` prints the harness digest. Reading contract for ``compare``: exit 0 is ``IMPROVED`` ONLY with a
+    valid ``RESULT: IMPROVED ...`` line whose ``sha256=`` matches the file's bytes (``main`` returns an argparse ``SystemExit`` code unchanged, so
+    ``compare --help`` is a bare exit 0 and NOT an ``IMPROVED``); exit 1 without a valid ``RESULT:`` line counts as 2, and exit 2 means
+    any result file is to be IGNORED; ``INTERPRETER_WRITABLE`` must never be auto-retried with ``--allow-writable-interpreter``. ``parse_compare_outcome`` is the
+    reference implementation of this reading protocol. Every parser has
+    ``allow_abbrev=False``: an abbreviated option is a usage error (exit 2), never the human flag."""
+    # `allow_abbrev=False` on the parser and on every subparser: an abbreviation such as `--allow-writable-i` must not set the human signal
+    parser = argparse.ArgumentParser(prog="benchmark_gate.py", allow_abbrev=False,
+                                     description="Benchmark gate: validate, lint, export, fixed-parent, cleanup, snapshot-venv, harness-sha256, compare, run-once.")
     sub = parser.add_subparsers(dest="command", required=True)
-    validate = sub.add_parser("validate", help="validate specialist_inputs.benchmark_gate")
+    validate = sub.add_parser("validate", allow_abbrev=False, help="validate specialist_inputs.benchmark_gate")
     validate.add_argument("--specialist-inputs", required=True, metavar="FILE")
     validate.set_defaults(func=_cmd_validate)
-    lint = sub.add_parser("lint", help="lint one benchmark file (exit 0 clean, 1 violations, 2 usage)")
+    lint = sub.add_parser("lint", allow_abbrev=False, help="lint one benchmark file (exit 0 clean, 1 violations, 2 usage)")
     lint.add_argument("--benchmark", required=True, metavar="FILE")
     lint.add_argument("--symbol", required=True, metavar="SYMBOL")
     lint.add_argument("--repo-root", metavar="DIR", help="derive the repo's top-level names from DIR and DIR/src")
     lint.add_argument("--top-level", action="append", default=[], metavar="NAME", help="add one top-level name")
     lint.set_defaults(func=_cmd_lint)
-    export = sub.add_parser("export", help="export a commit's tree (exit 0, 1 refused, 2 usage); requires git >= 2.43")
+    export = sub.add_parser("export", allow_abbrev=False, help="export a commit's tree (exit 0, 1 refused, 2 usage); requires git >= 2.43")
     export.add_argument("--repo", required=True, metavar="DIR")
     export.add_argument("--commit", required=True, metavar="SHA")
     export.add_argument("--dest", required=True, metavar="DIR", help="<fixed parent>/<root>/<leaf>, root [A-Za-z0-9][A-Za-z0-9_-]{7,63}, leaf [A-Za-z0-9][A-Za-z0-9_-]{0,63}; must not exist; see fixed-parent")
@@ -4153,16 +6599,32 @@ def main(argv: list[str] | None = None) -> int:
                         help="pid in a NEW root's marker, a positive int below 2**31 (default: this short-lived process, so cleanup is "
                              "allowed at once; ignored for an existing root)")
     export.set_defaults(func=_cmd_export)
-    snapshot = sub.add_parser("snapshot-venv", help="record a fresh venv's .pth and startup files; run BEFORE installing the project (exit 0, 2 failure)")
+    snapshot = sub.add_parser("snapshot-venv", allow_abbrev=False, help="record a fresh venv's .pth and startup files; run BEFORE installing the project; prints snapshot_sha256 and interpreter_sha256 (exit 0, 2 failure)")
     snapshot.add_argument("--bin", required=True, metavar="DIR", help="the venv's bin directory")
     snapshot.add_argument("--out", required=True, metavar="FILE", help="a new file")
     snapshot.set_defaults(func=_cmd_snapshot_venv)
-    fixed = sub.add_parser("fixed-parent", help="print the per-user directory that roots live in")
+    harness = sub.add_parser("harness-sha256", allow_abbrev=False, help="print harness_sha256 (take the EXPECTED value from a trusted copy of the harness, never from a compare result)")
+    harness.set_defaults(func=_cmd_harness_sha256)
+    fixed = sub.add_parser("fixed-parent", allow_abbrev=False, help="print the per-user directory that roots live in")
     fixed.set_defaults(func=_cmd_fixed_parent)
-    cleanup = sub.add_parser("cleanup", help="remove a dispatch-unique root (exit 0 removed/absent, 1 refused or interrupted, no code on stdout = retry; "
+    cleanup = sub.add_parser("cleanup", allow_abbrev=False, help="remove a dispatch-unique root (exit 0 removed/absent, 1 refused or interrupted, no code on stdout = retry; "
                              "REMOVE_FAILED 'claimed root is locked by another process' = retry later)")
     cleanup.add_argument("--root", required=True, metavar="DIR")
     cleanup.set_defaults(func=_cmd_cleanup)
+    compare_p = sub.add_parser("compare", allow_abbrev=False, help="compare two exports of one benchmark (exit 0 IMPROVED, 1 any other result, 2 usage or crash; prints a RESULT line)")
+    for flag in ("gate", "repo", "base-root", "head-root", "base-commit", "head-commit", "base-bin", "head-bin", "base-snapshot", "base-snapshot-sha256",
+                 "base-interpreter-sha256", "head-snapshot", "head-snapshot-sha256", "head-interpreter-sha256", "out"):
+        compare_p.add_argument(f"--{flag}", required=True, metavar="FILE" if flag in ("gate", "out") or flag.endswith("snapshot") else "VALUE",
+                               help="the raw benchmark_gate JSON (bounded read)" if flag == "gate" else "a new result file" if flag == "out" else None)
+    compare_p.add_argument("--attempt", type=int, default=1, metavar="N")
+    compare_p.add_argument("--allow-writable-interpreter", action="store_true")
+    compare_p.set_defaults(func=_cmd_compare)
+    run_once = sub.add_parser("run-once", allow_abbrev=False, help="one untimed run of the benchmark (exit 0 digest, 1 reason, 2 usage or crash)")
+    run_once.add_argument("--gate", required=True, metavar="FILE", help="the raw benchmark_gate JSON")
+    run_once.add_argument("--root", required=True, metavar="DIR")
+    run_once.add_argument("--bin", required=True, metavar="DIR", help="the venv's bin directory")
+    run_once.add_argument("--side", choices=("base", "head"), default="head")
+    run_once.set_defaults(func=_cmd_run_once)
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:  # argparse exits 2 on usage errors (and 0 on --help)

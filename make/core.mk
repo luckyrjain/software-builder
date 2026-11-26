@@ -34,15 +34,19 @@
 # so `make lint` still works in a bare pytest environment -- xdist's -n flag would
 # otherwise error as unrecognized.
 #
-# Deliberately NOT reused for the smaller per-skill suites (skills/pr-review/tests/,
-# skills/k8s-overprovisioning-datadog/tests/, skills/incident-rca/tests/,
-# skills/squad-map/tests/, skills/migration-program-manager/tests/): those targets
+# Deliberately NOT reused for the smaller per-skill suites (skills/pr-review/tests/, skills/k8s-overprovisioning-datadog/tests/,
+# skills/incident-rca/tests/, skills/squad-map/tests/, skills/migration-program-manager/tests/; the one exception is
+# lint-loop-task-implementer-scripts, below): those targets
 # already run concurrently with each other and with this one under `make -j`
 # (lint-suites), so each also spawning its own
 # `-n auto` (= nproc) worker pool oversubscribes CI runners by up to 6x and was the
 # source of sporadic broken-pipe/flaky failures in the dangling-link checker after
 # lint-suites moved to `make -j`. Those suites are small enough that make-level
 # parallelism across targets is all the parallelism they need.
+#
+# The one per-skill exception is lint-loop-task-implementer-scripts: its compare test file alone holds ~600 tests and ran about 25 minutes
+# serial, so that target takes PYTEST_XDIST_FLAG too (with `--dist loadgroup`). It inherits the oversubscription caveat of the paragraph
+# above, which PYTEST_XDIST_WORKERS (below) is there to cap.
 #
 # This suite itself still spawns "-n auto" (= nproc) workers, and it runs concurrently
 # with ~18 other lint-suites targets under `make -j"$(nproc)"` (.github/workflows/lint.yml)
@@ -54,8 +58,8 @@
 # plain local `make lint` (no outer -j) leaves it at "auto" and keeps full parallelism.
 PYTEST_XDIST_WORKERS ?= auto
 # Recursively (not immediately) expanded: the probe spawns a Python interpreter,
-# and only the pytest recipe at lint-framework-tests references this. `:=` made
-# every `make` invocation pay it, `make install-pr-review` included.
+# and only the pytest recipes that use it (lint-framework-tests and lint-loop-task-implementer-scripts) reference
+# it. `:=` made every `make` invocation pay it, `make install-pr-review` included.
 PYTEST_XDIST_FLAG = $(shell python3 -c "import xdist" >/dev/null 2>&1 && echo "-n $(PYTEST_XDIST_WORKERS)" || true)
 
 install:
@@ -212,8 +216,8 @@ lint: lint-static lint-suites
 # CI (.github/workflows/lint.yml) runs lint-static and lint-suites as two parallel jobs:
 # lint-static is pure grep/structural checks (no pytest) and fails fast; lint-suites is
 # every pytest-bearing target -- the dominant test cost -- and parallelizes it two ways,
-# across skills via `make -jN` and, only for the dominant scripts/tests/ suite, within
-# it via pytest-xdist (see PYTEST_XDIST_FLAG above). `make lint` still runs both groups
+# across skills via `make -jN` and, for the dominant scripts/tests/ suite and (the one exception)
+# the loop-task-implementer scripts suite, within it via pytest-xdist (see PYTEST_XDIST_FLAG above). `make lint` still runs both groups
 # locally, in this order.
 lint-static: lint-platform-files validate-registry validate-agent-skills validate-hosts generate-check validate-evals validate-operational-upkeep lint-framework lint-incident-triage-agent lint-who-owns-x-bot lint-new-hire-guide lint-release-readiness-checker lint-cost-optimization-sprint-planner lint-backlog-runner lint-test-writer lint-prd-architect lint-architecture-review lint-system-design lint-api-design-review lint-database-review lint-security-review lint-performance-review lint-capacity-planner lint-observability-review lint-deployment-risk-review lint-dependency-upgrade-review lint-tech-debt-assessor lint-module-design lint-domain-modeling lint-codebase-architecture-review lint-architecture-remediation-loop lint-engineering-decision-discovery lint-local-diff-review lint-bug-diagnosis lint-research-brief lint-issue-triage lint-initiative-mapper lint-merge-conflict-analysis lint-stakeholder-questionnaire lint-requirements-lock lint-python lint-actions-pinning lint-plugin-version-sync lint-actions-security verify-install verify-install-all validate-review-contracts lint-scripts-shellcheck
 
@@ -591,7 +595,11 @@ lint-mysql-to-postgres-sql:
 lint-loop-task-implementer: lint-loop-task-implementer-skill lint-loop-task-implementer-scripts
 
 # Mirrors lint-pr-review-scripts: the skill ships a validator, so its own tests are
-# co-located with it and run from the target that lints it.
+# co-located with it and run from the target that lints it. Parallel via PYTEST_XDIST_FLAG with
+# `--dist loadgroup`: the rows marked xdist_group("real-timing") (real pytest children, real pip) share one worker, so they are serialized only
+# against EACH OTHER: not against the other workers' tests, nor against sibling make targets under `make -j`, so a real-timing row can still
+# see load from them. The real rows are asserted as a speedup ONLY when the host is quiet: ONE row (`test_real_improved_overlay_origin`) retries a noisy outcome up to 3 times and then
+# skips only its timing assertion (its non-timing assertions run on every attempt); the other real rows are single attempts.
 lint-loop-task-implementer-scripts:
 	@echo "py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/validate_loop_lifecycle.py"
 	@echo "py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/run_log.py"
@@ -602,7 +610,7 @@ lint-loop-task-implementer-scripts:
 	python3 -m py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/validate_loop_lifecycle.py || exit 1; \
 	python3 -m py_compile $(SKILLS_DIR)/loop-task-implementer/scripts/run_log.py || exit 1; \
 	if python3 -c "import pytest" >/dev/null 2>&1; then \
-		python3 -m pytest $(SKILLS_DIR)/loop-task-implementer/tests/ -q || exit 1; \
+		python3 -m pytest $(PYTEST_XDIST_FLAG) $(if $(PYTEST_XDIST_FLAG),--dist loadgroup) $(SKILLS_DIR)/loop-task-implementer/tests/ -q || exit 1; \
 	else \
 		echo "pytest not installed — install with 'python3 -m pip install pytest' to run script tests" >&2; \
 		exit 1; \
