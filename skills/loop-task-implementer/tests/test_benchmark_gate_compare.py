@@ -164,11 +164,15 @@ def test_the_provisioning_contract_and_the_c4e_write_back_list_name_the_two_pins
 
 
 RETRY_COMMON = ("attempt=2", "60 s", "fresh exports", "same exports", "attempt unchanged")
-RETRY_FULL = (*RETRY_COMMON, "at most 3 retries", "one allowed re-measure", "third call is out of contract", "enforced by c4e", "count of compare results")
+RETRY_FULL = (*RETRY_COMMON, "at most 3 retries per dispatch", "one allowed re-measure per task", "second attempt=2 measurement for the same task is out of contract",
+              "counts as the one re-measure", "enforced by c4e", "count of compare results")
 
 
-def _measure_stage_inconclusive():
-    return sorted(reason for reason, (result, stages, _d) in bg.COMPARE_REASONS.items() if result == "INCONCLUSIVE" and stages == ("ran",))
+def test_the_remeasurable_reasons_are_the_parent_designs_three_noise_reasons():
+    assert bg.COMPARE_REMEASURABLE_REASONS == ("NOISY", "INCONSISTENT", "BORDERLINE")
+    for reason in bg.COMPARE_REMEASURABLE_REASONS:
+        result, stages, _details = bg.COMPARE_REASONS[reason]
+        assert (result, stages) == ("INCONCLUSIVE", ("ran",)), reason
 
 
 @pytest.mark.parametrize("width", DOC_WIDTHS)
@@ -177,16 +181,15 @@ def test_the_retry_budget_and_the_attempt_semantics_are_stated_in_spec_2_3_the_m
     section_2_3 = spec[re.search(r"^###\s+2\.3\s", spec, re.M).start():re.search(r"^###\s+2\.4\s", spec, re.M).start()]
     deviations = spec[re.search(r"^##\s+9\.\s+Deviations", spec, re.M).start():]
     module = _docstrings(width)[0]
-    measure_stage = _measure_stage_inconclusive()
-    assert measure_stage == sorted("HOST_BUSY_END TRACE_UNAVAILABLE BASE_TIMEOUT BASE_OUTPUT_TOO_LARGE NOISY INCONSISTENT BORDERLINE INVALID_INPUT".split())
     for where, text, keywords in (("spec 2.3", section_2_3, RETRY_FULL), ("module docstring", module, RETRY_FULL), ("spec 9", deviations, RETRY_COMMON)):
         flat = _normal(text)
         for keyword in keywords:
             assert keyword in flat, f"{keyword!r} is missing from {where}"
+    expected = [reason.lower() for reason in bg.COMPARE_REMEASURABLE_REASONS]
     for where, text in (("spec 2.3", section_2_3), ("module docstring", module)):
-        flat = _normal(text)
-        for reason in measure_stage:  # the allowed re-measure reasons come from COMPARE_REASONS, and both places list them all
-            assert reason.lower() in flat, f"{reason} is missing from {where}"
+        # parse the one list itself: a name that merely appears elsewhere in the section must not satisfy this, and an extra name must fail it
+        listed = re.findall(r"re-measure reasons: ([a-z_]+(?:, [a-z_]+)*)\.", _normal(text))
+        assert [item.split(", ") for item in listed] == [expected], f"the re-measure list of {where} is {listed}"
     assert "enforce" in _normal(deviations) and "attempt cap" in _normal(deviations)
 
 

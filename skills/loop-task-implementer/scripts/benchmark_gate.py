@@ -61,10 +61,12 @@ protocol and C4e should call it, not re-write it): exit 0 is ``IMPROVED`` ONLY t
 Exit 1 is any other result, but an exit 1 WITHOUT a valid ``RESULT:`` line counts as exit 2; exit 2 (usage error, a raised ``BenchmarkGateError``,
 a crash) means any file at ``--out`` is to be IGNORED (the file can exist: ``compare`` writes it before the CLI validates the in-memory result).
 Retry budget and ``attempt`` (C4e owns the exact numbers, but must cap them): (a) ``HOST_BUSY_START`` is retried automatically on the SAME exports with
-``attempt`` unchanged, at most 3 retries with a wait of at least 60 s between them; then the Orchestrator stops and reports ``INCONCLUSIVE``/``HOST_BUSY_START`` to the human.
-(b) ``attempt=2`` is the one allowed re-measure: only after a first measured result that was ``INCONCLUSIVE`` with a measure-stage reason (the ``INCONCLUSIVE``
-reasons whose ``COMPARE_REASONS`` stage is ``ran``: ``HOST_BUSY_END``, ``TRACE_UNAVAILABLE``, ``BASE_TIMEOUT``, ``BASE_OUTPUT_TOO_LARGE``, ``NOISY``, ``INCONSISTENT``,
-``BORDERLINE``, ``INVALID_INPUT``), only once per task, and on FRESH exports (head-first provisioning again); a third call is out of contract. (c) ``compare`` validates
+``attempt`` unchanged, at most 3 retries per dispatch with a wait of at least 60 s between them; then the Orchestrator stops and reports ``INCONCLUSIVE``/``HOST_BUSY_START`` to the human.
+(b) ``attempt=2`` is the one allowed re-measure per task: a new Lens B dispatch on FRESH exports (head-first provisioning again), allowed only after a
+measured result with one of these re-measure reasons: ``NOISY``, ``INCONSISTENT``, ``BORDERLINE``. No other reason allows it
+(``COMPARE_REMEASURABLE_REASONS``). ``HOST_BUSY_END`` is not retried either; it follows a full run, so it counts as the one re-measure. Only ``attempt=2``
+measurements use up the allowance: the busy-start retries of (a) and a dispatch for a new head or merge-base do not. A second ``attempt=2`` measurement
+for the same task is out of contract. (c) ``compare`` validates
 ``attempt`` as 1 or 2 and nothing more: the cap on the number of calls is enforced by C4e, not here. (d) The acceptance screen shows the count of ``compare`` results.
 Option abbreviations are refused (``allow_abbrev=False``: ``--allow-writable-i`` is a usage error, exit 2, not the human flag). Retry on the same
 exports is keyed on (reason, stage, detail), not on the reason alone, and two constants are the complete list: ``COMPARE_RETRYABLE_AUTOMATIC``
@@ -5213,6 +5215,9 @@ COMPARE_RETRYABLE_AUTOMATIC = frozenset({
 COMPARE_RETRYABLE_WITH_HUMAN_FLAG = frozenset({
     ("ISOLATION_REJECTED", _PRE, "INTERPRETER_WRITABLE"),
 })
+# The only reasons that allow the one per-task ``attempt=2`` re-measure on fresh exports (the parent design's rule). Not derived from the stage column of
+# ``COMPARE_REASONS``: that records where a run ended, not whether it may be measured again. C4e enforces the cap.
+COMPARE_REMEASURABLE_REASONS = ("NOISY", "INCONSISTENT", "BORDERLINE")
 
 
 def _detail_allowed(detail: object, allowed: tuple[str, ...]) -> bool:
